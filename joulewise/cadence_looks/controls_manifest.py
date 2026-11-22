@@ -15,6 +15,7 @@ from .qualification_manifest import _decode
 
 
 SCHEMA_ID = "joulewise.cadence_look_manifest.controls.v1"
+STAGE1_SCHEMA = "joulewise.cadence_ctl_stage1.v2"
 LOOK_DIR = "docs/process/cadence/looks/"
 INSTRUMENT_ID = "lm-inst-01"
 INSTRUMENT_SCHEMA_PATH = LOOK_DIR + "lm-inst-01.restricted.schema.json"
@@ -38,8 +39,25 @@ CODE_PATHS = {
     "output_schema": LOOK_DIR + "lm-ctl-01.output.schema.json",
     "restricted_schema": LOOK_DIR + "lm-ctl-01.restricted.schema.json",
     "controls_route": LOOK_DIR + "look_manifest.controls.v1.schema.json",
+    "print_code/launcher": "scripts/cadence_controls_run.py",
+    "print_code/worker": "joulewise/cadence_looks/controls_run.py",
+    "print_code/inputs": "joulewise/cadence_looks/controls_inputs.py",
+    "print_code/reader": "joulewise/cadence_looks/controls_reader.py",
+    "print_code/rail_join": "joulewise/align/apple/episode_bundle.py",
+    "print_code/sampler": "joulewise/align/apple/sampler.py",
+    "print_code/dc_decoder": "joulewise/external/km003c_parse.py",
+    "print_code/clock": "joulewise/clock.py",
+    "print_code/time_fields": "joulewise/cadence_looks/controls_time_fields.py",
+    "print_code/custody_pins": "joulewise/cadence_looks/custody_pins.py",
+    "print_code/pinned_inputs": "joulewise/cadence_looks/description_inputs.py",
+    "print_code/book": "joulewise/cadence_looks/controls_book.py",
+    "print_code/layout": "joulewise/cadence_looks/controls_layout.py",
+    "stage1_schema": LOOK_DIR + "lm-ctl-01.stage1.schema.json",
+    "inventory_schema": LOOK_DIR + "lm-ctl-01.inputs.schema.json",
+    "hold_reasons": LOOK_DIR + "lm-ctl-01.hold-reasons.v1.json",
 }
 ROLES = frozenset(CODE_PATHS) | {"instrument_manifest", "instrument_floor_schema", "hold", "edges"}
+OPERATIONAL_FIELDS = {"host", "uid", "bindings_sha256", "sources_sha256"}
 WITHHELD = ("no_dc_in_floor", "no_prefill_size", "dose_under_floor_at_k2")
 ISSUED_SETTINGS = {"hidden_tokens": (128, 256, 512), "recovery_s": 600, "gap_s": 60, "prefill_tokens": 2000}
 
@@ -78,7 +96,7 @@ def _validate_layout(layout):
 def validate_manifest(raw):
     document = _decode(raw)
     identity_fields = {"schema", "status", "look_id", "look_kind", "kit_id", "pins", "release_layout"}
-    instrument_fields = {"instrument_output_schema", "instrument_stage1"}
+    instrument_fields = {"instrument_output_schema", "instrument_stage1", "execution"}
     if (type(document) is not dict
             or not identity_fields <= document.keys() <= identity_fields | instrument_fields
             or (document["schema"], document["status"], document["look_id"],
@@ -101,6 +119,12 @@ def validate_manifest(raw):
         raise ValueError("controls_pins")
     if pins["instrument_floor_schema"] != schema["sha256"]:
         raise ControlsRefusal(Refusal.INSTRUMENT_SCHEMA_BINDING)
+    execution = document.get("execution")
+    if "execution" in document and (type(execution) is not dict or execution.keys() != OPERATIONAL_FIELDS
+            or type(execution["host"]) is not str or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]*", execution["host"])
+            or type(execution["uid"]) is not int or execution["uid"] <= 0
+            or not all(_hex_pin(execution[name], 64) for name in ("bindings_sha256", "sources_sha256"))):
+        raise ValueError("controls_execution")
     return document
 
 
@@ -152,6 +176,7 @@ class Stage1Leg:
 class VerifiedStage1:
     public: dict
     legs: tuple[Stage1Leg, ...]
+    inventory_sha256: str | None = None
 
 
 def verify_stage1(freeze, committed, candidate):
@@ -171,7 +196,15 @@ def verify_stage1(freeze, committed, candidate):
         raise ValueError("stage1_commitment")
 
     roster = _decode(raw)
-    if (type(roster) is not dict or roster.keys() != {"n_legs", "legs"}
+    roster_keys = {"n_legs", "legs"}
+    inventory = None
+    if type(roster) is dict and ("schema" in roster or "input_inventory_sha256" in roster):
+        roster_keys |= {"schema", "input_inventory_sha256"}
+        inventory = roster.get("input_inventory_sha256")
+        if (roster.get("schema") != STAGE1_SCHEMA or not _hex_pin(inventory, 64)
+                or canonical(roster) != raw):
+            raise ValueError("stage1_roster")
+    if (type(roster) is not dict or roster.keys() != roster_keys
             or type(roster["n_legs"]) is not int or roster["n_legs"] != count
             or type(roster["legs"]) is not dict or roster["legs"].keys() != set(ids)):
         raise ValueError("stage1_roster")
@@ -208,7 +241,7 @@ def verify_stage1(freeze, committed, candidate):
         raise ValueError("stage1_roster")
     public = dict(look_id=LOOK_ID, manifest_sha256=freeze.manifest_sha256, commit=revision,
                   stage1_sha256=digest, n_legs=count)
-    return VerifiedStage1(public, tuple(legs))
+    return VerifiedStage1(public, tuple(legs), inventory)
 
 
 def _instrument_schema(snapshot, committed, pin):
@@ -281,7 +314,7 @@ def _instrument_members(committed, history, pin, instrument, manifest_digest):
         raise ControlsRefusal(Refusal.INSTRUMENT_STAGE1_BINDING) from error
 
 
-def _hold_pool(raw, members, channels, reasons):
+def _hold_pool(raw, members, channels, reasons, *, whole_reasons=None):
     try:
         hold = _decode(raw)
         if type(hold) is not dict or hold.keys() != members.keys():
@@ -293,36 +326,53 @@ def _hold_pool(raw, members, channels, reasons):
                 raise ValueError("instrument hold member")
             if record.keys() - channels.keys():
                 # The schema has a singleton unavailable member shape.
-                if record.keys() != {"value", "reason"} or record["value"] is not None or record["reason"] not in reasons:
+                if (record.keys() != {"value", "reason"} or record["value"] is not None
+                        or record["reason"] not in (reasons if whole_reasons is None else whole_reasons)):
                     raise ValueError("instrument hold member")
                 rows.extend(analysis.HoldWindow(member, channel, width, 0, None, record["reason"])
                             for channel in _INSTRUMENT_CHANNELS for width in analysis.FLOOR_WINDOWS)
                 continue
+            if whole_reasons is not None and "reference_source_leg_id" in record:
+                reference = record["reference_source_leg_id"]
+                if type(reference) is not str or not re.fullmatch(r"L(?:00[1-9]|01[0-2])", reference):
+                    raise ValueError("instrument hold reference")
             for channel in _INSTRUMENT_CHANNELS:
                 leaf = record[channel]
                 rule = channels[channel]
                 if type(leaf) is not dict or not set(rule["required"]) <= leaf.keys() <= rule["properties"].keys():
                     raise ValueError("instrument hold channel")
                 kept = leaf["kept"]
-                if type(kept) is not list:
+                dropped = leaf.get("dropped")
+                if (type(kept) is not list or (whole_reasons is not None and (
+                        type(dropped) is not list or len(dropped) != len(analysis.FLOOR_WINDOWS)
+                        or any(type(value) is not int or value < 0 for value in dropped)))):
                     raise ValueError("instrument hold counts")
+                if whole_reasons is not None:
+                    for field in ("mean_w", "drift_w_per_600s"):
+                        _hold_value(leaf[field], reasons)
                 for width, retained in zip(analysis.FLOOR_WINDOWS, kept, strict=True):
-                    sd = leaf[f"sd{width}_w"]
-                    reason = None
-                    if type(sd) is dict:
-                        if (not {"value", "reason"} <= sd.keys() <= {"value", "reason", "bound_s"}
-                                or sd["value"] is not None or sd["reason"] not in reasons):
-                            raise ValueError("instrument hold reason")
-                        sd, reason = None, sd["reason"]
-                    elif type(sd) not in (int, float):
-                        raise ValueError("instrument hold SD")
+                    sd, reason = _hold_value(leaf[f"sd{width}_w"], reasons)
                     rows.append(analysis.HoldWindow(member, channel, width, retained, sd, reason))
-        return analysis.pool_hold_windows(rows, set(members.values()), reason_enum=reasons)
+        return analysis.pool_hold_windows(rows, set(members.values()), reason_enum=reasons | (whole_reasons or set()))
     except (AttributeError, KeyError, TypeError, ValueError, OverflowError) as error:
         raise ControlsRefusal(Refusal.INSTRUMENT_HOLD_BINDING) from error
 
 
-def verify_freeze(*, current_revision, committed, working, history):
+def _hold_value(value, reasons):
+    if type(value) is dict:
+        if (not {"value", "reason"} <= value.keys() <= {"value", "reason", "bound_s"}
+                or value["value"] is not None or value["reason"] not in reasons):
+            raise ValueError("instrument hold reason")
+        bound = value.get("bound_s", 0)
+        if not analysis._finite(bound) or bound < 0:
+            raise ValueError("instrument hold bound")
+        return None, value["reason"]
+    if not analysis._finite(value):
+        raise ValueError("instrument hold value")
+    return value, None
+
+
+def verify_freeze(*, current_revision, committed, working, history, private=None):
     """Join exact artifact bytes to a prior design pass, byte pass and receipt.
 
     committed is a read-only revision-to-blob projection from the bound commit
@@ -339,9 +389,15 @@ def verify_freeze(*, current_revision, committed, working, history):
         digest = sha256(manifest).hexdigest()
         document = validate_manifest(manifest)
         pins = document["pins"]
+        operational = "execution" in document
+        if operational and (type(private) is not dict or private.keys() != {"hold", "edges"}):
+            raise ValueError("private operands are absent")
         for role, pin in pins.items():
-            artifact = snapshot.get(role)
-            if type(artifact) is not bytes or sha256(artifact).hexdigest() != pin or artifact != working.get(role):
+            separate = operational and role in private
+            artifact = private[role] if separate else snapshot.get(role)
+            if (type(artifact) is not bytes or sha256(artifact).hexdigest() != pin
+                    or (not separate and artifact != working.get(role))
+                    or (separate and (role in snapshot or role in working))):
                 if role in ("instrument_manifest", "instrument_floor_schema"):
                     raise ControlsRefusal(Refusal.INSTRUMENT_SCHEMA_BINDING)
                 if role == "hold":
@@ -393,6 +449,13 @@ def verify_freeze(*, current_revision, committed, working, history):
     instrument, channels, reasons = _instrument_schema(snapshot, committed, document["instrument_output_schema"])
     members = _instrument_members(committed, history, document["instrument_stage1"], instrument,
                                   pins["instrument_manifest"])
-    pool = _hold_pool(snapshot["hold"], members, channels, reasons)
+    whole = None
+    if operational:
+        vocab = _decode(snapshot["hold_reasons"])
+        if (sha256(snapshot["hold_reasons"]).hexdigest()
+                != "cbbab90b76b235c0d08fd89db0a65d738c74efbed5dd57e646cd169e26437d79"):
+            raise ValueError("ctl hold vocabulary pin")
+        reasons, whole = frozenset(vocab["leaf_reasons"]), frozenset(vocab["whole_member_reasons"])
+    pool = _hold_pool((private if operational else snapshot)["hold"], members, channels, reasons, whole_reasons=whole)
     return VerifiedFreeze(current_revision, digest, pins["instrument_manifest"], snapshot["output_schema"],
                           snapshot["restricted_schema"], pool, pins, stage1_entry, document["release_layout"])

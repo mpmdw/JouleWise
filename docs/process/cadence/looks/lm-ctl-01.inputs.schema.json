@@ -1,0 +1,356 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "kit_sha256",
+    "runner_commit",
+    "spans",
+    "positions"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "joulewise.cadence_ctl_inputs.v1"
+    },
+    "kit_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "runner_commit": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "spans": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {},
+      "minProperties": 2,
+      "maxProperties": 2,
+      "patternProperties": {
+        "^[A-Za-z0-9][A-Za-z0-9._-]*$": {
+          "$ref": "#/$defs/span"
+        }
+      }
+    },
+    "positions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006",
+        "L007",
+        "L008",
+        "L009",
+        "L010",
+        "L011",
+        "L012"
+      ],
+      "properties": {
+        "L001": {
+          "$ref": "#/$defs/position"
+        },
+        "L002": {
+          "$ref": "#/$defs/position"
+        },
+        "L003": {
+          "$ref": "#/$defs/position"
+        },
+        "L004": {
+          "$ref": "#/$defs/position"
+        },
+        "L005": {
+          "$ref": "#/$defs/position"
+        },
+        "L006": {
+          "$ref": "#/$defs/position"
+        },
+        "L007": {
+          "$ref": "#/$defs/position"
+        },
+        "L008": {
+          "$ref": "#/$defs/position"
+        },
+        "L009": {
+          "$ref": "#/$defs/position"
+        },
+        "L010": {
+          "$ref": "#/$defs/position"
+        },
+        "L011": {
+          "$ref": "#/$defs/position"
+        },
+        "L012": {
+          "$ref": "#/$defs/position"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "path",
+        "size",
+        "sha256",
+        "parent_sha256"
+      ],
+      "properties": {
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "parent_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attempt",
+        "role",
+        "reference_sha256",
+        "kind",
+        "admitted",
+        "g0_released",
+        "leg_status",
+        "script_complete",
+        "hidden_delivered",
+        "spec_sha256",
+        "span_id",
+        "bundle",
+        "run_id",
+        "files",
+        "span_index",
+        "disposition_sha256",
+        "certificate"
+      ],
+      "properties": {
+        "attempt": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "capture",
+            "consume"
+          ]
+        },
+        "reference_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "cpu",
+            "extra-turn",
+            "hidden",
+            "plain",
+            "split"
+          ]
+        },
+        "admitted": {
+          "type": "boolean"
+        },
+        "g0_released": {
+          "type": "boolean"
+        },
+        "leg_status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "script_complete": {
+          "type": "boolean"
+        },
+        "hidden_delivered": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "spec_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "span_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bundle": {
+          "type": "string",
+          "minLength": 1
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "files": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "leg_record",
+            "leg_spec",
+            "terminal_map",
+            "result"
+          ],
+          "properties": {
+            "leg_record": {
+              "$ref": "#/$defs/file"
+            },
+            "leg_spec": {
+              "$ref": "#/$defs/file"
+            },
+            "terminal_map": {
+              "$ref": "#/$defs/file"
+            },
+            "result": {
+              "$ref": "#/$defs/file"
+            },
+            "reference": {
+              "$ref": "#/$defs/file"
+            },
+            "script": {
+              "$ref": "#/$defs/file"
+            },
+            "episode": {
+              "$ref": "#/$defs/file"
+            },
+            "config": {
+              "$ref": "#/$defs/file"
+            },
+            "metadata": {
+              "$ref": "#/$defs/file"
+            },
+            "rails": {
+              "$ref": "#/$defs/file"
+            }
+          }
+        },
+        "span_index": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "disposition_sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "certificate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/file"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "span": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layout_index",
+        "close_item",
+        "check_item",
+        "offload_manifest_sha256",
+        "close_receipt",
+        "streams",
+        "capture_leg",
+        "capture_attempt",
+        "reference_sha256",
+        "capture_run_id",
+        "capture_config_sha256",
+        "reference"
+      ],
+      "properties": {
+        "layout_index": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "close_item": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "check_item": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "offload_manifest_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "close_receipt": {
+          "$ref": "#/$defs/file"
+        },
+        "streams": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/file"
+          }
+        },
+        "capture_leg": {
+          "type": "string",
+          "pattern": "^L0(0[1-9]|1[012])$"
+        },
+        "capture_attempt": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "reference_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "capture_run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "capture_config_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "reference": {
+          "$ref": "#/$defs/file"
+        }
+      }
+    }
+  }
+}

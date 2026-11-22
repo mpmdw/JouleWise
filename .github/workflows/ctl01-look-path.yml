@@ -1,0 +1,135 @@
+name: ctl01-look-path
+
+on:
+  pull_request:
+    paths:
+      - "joulewise/cadence_looks/**"
+      - "joulewise/align/**"
+      - "joulewise/external/km003c_parse.py"
+      - "scripts/cadence_controls_run.py"
+      - "docs/process/cadence/looks/**"
+      - "tests/contracts/cadence_looks/**"
+      - ".github/workflows/ctl01-look-path.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ctl01-look-path-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  frozen-print:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Run v3.1 and hand vectors on installed source
+        run: |
+          cd tests/contracts/cadence_looks/frozen_v3_1
+          sha256sum -c SUITE-v3.1.sha256
+          cd "${GITHUB_WORKSPACE}"
+          python3 -B - <<'PY'
+          import sys
+          import unittest
+          from pathlib import Path
+
+          sys.path.insert(0, str(Path("tests/contracts/cadence_looks/frozen_v3_1").resolve()))
+          import test_ctl01_hand_vectors as vectors
+          import test_ctl01_print_v2 as frozen
+
+          vectors.V2_DIGEST = "1a0f8ab045e56d614b2872082ee02ecd7e4b356c6ec9ba54b04c6a5d4f1359e6"
+          vectors.v2 = frozen
+          loader = unittest.defaultTestLoader
+          suite = unittest.TestSuite((loader.loadTestsFromModule(frozen), loader.loadTestsFromModule(vectors)))
+          raise SystemExit(not unittest.TextTestRunner().run(suite).wasSuccessful())
+          PY
+
+  frozen-bundles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Check the three frozen manifests
+        working-directory: tests/contracts/cadence_looks/look_path
+        run: sha256sum -c SUITE.sha256 -c SUITE-v2.sha256 -c SUITE-v3.sha256
+      - name: Execute bundle cases on the synthetic owner-enforcing filesystem
+        run: >-
+          python3 -B tests/contracts/cadence_looks/run_look_path_ci.py run
+          "${{ runner.temp }}/ctl01-results" --shard ${{ matrix.shard }} --total 8
+      - name: Retain the raw bundle outcomes
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: ctl01-bundle-results-${{ matrix.shard }}
+          path: ${{ runner.temp }}/ctl01-results/*.json
+          if-no-files-found: error
+
+  paired-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Check the three frozen manifests
+        working-directory: tests/contracts/cadence_looks/look_path
+        run: sha256sum -c SUITE.sha256 -c SUITE-v2.sha256 -c SUITE-v3.sha256
+      - name: Compare two isolated publications with ruled and zero H
+        run: |
+          ctl_pair_dir="$(mktemp -d "${RUNNER_TEMP}/ctl-pair.XXXXXX")"
+          export CTL_PAIR_MOUNT="${ctl_pair_dir}/mounted"
+          mkdir "${CTL_PAIR_MOUNT}"
+          truncate -s 256M "${ctl_pair_dir}/original.ext4"
+          mkfs.ext4 -q -F "${ctl_pair_dir}/original.ext4"
+          CTL_PAIR_LOOP="$(sudo -n losetup --find --show "${ctl_pair_dir}/original.ext4")"
+          export CTL_PAIR_LOOP
+          finish_pair() {
+            if mountpoint -q "${CTL_PAIR_MOUNT}"; then
+              sudo -n umount "${CTL_PAIR_MOUNT}"
+            fi
+            sudo -n losetup -d "${CTL_PAIR_LOOP}"
+          }
+          trap finish_pair EXIT
+          sudo -n mount -o nosuid,nodev "${CTL_PAIR_LOOP}" "${CTL_PAIR_MOUNT}"
+          sudo -n chown "$(id -u):$(id -g)" "${CTL_PAIR_MOUNT}"
+          if ! TMPDIR="${CTL_PAIR_MOUNT}" python3 -B tests/contracts/cadence_looks/run_look_path_ci.py run \
+            "${RUNNER_TEMP}/ctl01-results" --paired; then
+            if [ -f "${ctl_pair_dir}/pair-failure.txt" ]; then
+              cat "${ctl_pair_dir}/pair-failure.txt"
+            fi
+            exit 1
+          fi
+      - name: Retain the raw paired outcome
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: ctl01-bundle-results-paired
+          path: ${{ runner.temp }}/ctl01-results/*.json
+          if-no-files-found: error
+
+  cumulative-bundles:
+    needs: [frozen-bundles, paired-release]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: ctl01-bundle-results-*
+          path: ${{ runner.temp }}/ctl01-results
+      - name: Require 79 raw outcomes and exact evidence for the four superseded assertions
+        run: python3 -B tests/contracts/cadence_looks/run_look_path_ci.py check "${{ runner.temp }}/ctl01-results"

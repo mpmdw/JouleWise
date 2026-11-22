@@ -1,0 +1,19 @@
+{
+  "schema": "joulewise.lm_ctl_01.hold_reasons.v1",
+  "instrument_commit": "321357e431ae17ade5186ab84666235e077c2119",
+  "writer": {
+    "path": "joulewise/cadence_looks/description.py",
+    "sha256": "11c5b5555456f2307f3680f107e40455755d22c4f0170e65987438cc4a78c10c"
+  },
+  "leaf_reasons": [
+    "coverage",
+    "fewer_than_two",
+    "meter_absent",
+    "meter_contaminated",
+    "meter_gap",
+    "rail_manifest"
+  ],
+  "whole_member_reasons": [
+    "interval_ledger_mismatch"
+  ]
+}

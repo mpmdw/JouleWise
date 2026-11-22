@@ -55,17 +55,29 @@ def validate_shape(value, schema, definitions, *, instrument_reasons=()):
         raise ValueError("controls_output_schema")
     if kind == "object":
         fields = schema["properties"]
-        if value.keys() - fields.keys() or set(schema["required"]) - value.keys():
+        if (set(schema.get("required", ())) - value.keys()
+                or not schema.get("minProperties", 0) <= len(value) <= schema.get("maxProperties", len(value))):
             raise ValueError("controls_output_schema")
         for name, item in value.items():
-            validate_shape(item, fields[name], definitions, instrument_reasons=instrument_reasons)
+            matching = [rule for pattern, rule in schema.get("patternProperties", {}).items()
+                        if re.fullmatch(pattern, name)]
+            if name in fields:
+                matching.append(fields[name])
+            if not matching:
+                raise ValueError("controls_output_schema")
+            for field in matching:
+                validate_shape(item, field, definitions, instrument_reasons=instrument_reasons)
     elif kind == "array":
         if not schema.get("minItems", 0) <= len(value) <= schema.get("maxItems", len(value)):
             raise ValueError("controls_output_schema")
-        for item in value:
-            validate_shape(item, schema["items"], definitions, instrument_reasons=instrument_reasons)
+        prefix = schema.get("prefixItems", ())
+        if schema.get("uniqueItems") and len({canonical(item) for item in value}) != len(value):
+            raise ValueError("controls_output_schema")
+        for index, item in enumerate(value):
+            field = prefix[index] if index < len(prefix) else schema["items"]
+            validate_shape(item, field, definitions, instrument_reasons=instrument_reasons)
     elif kind in ("number", "integer"):
-        if not math.isfinite(value) or "minimum" in schema and value < schema["minimum"]:
+        if not math.isfinite(value) or not schema.get("minimum", value) <= value <= schema.get("maximum", value):
             raise ValueError("controls_output_schema")
     elif kind == "string" and "pattern" in schema and re.fullmatch(schema["pattern"], value) is None:
         raise ValueError("controls_output_schema")
@@ -107,9 +119,12 @@ def _write_outputs_at(restricted, publication, public_name, private_bytes, publi
     pending = ".publication"
     _write_at(restricted, pending, public_bytes, 0o644)
     try:
+        os.fsync(restricted)
         os.link(pending, public_name, src_dir_fd=restricted, dst_dir_fd=publication, follow_symlinks=False)
+        os.fsync(publication)
     finally:
         os.unlink(pending, dir_fd=restricted)
+        os.fsync(restricted)
 
 
 def write_outputs(restricted, public, private_bytes, public_bytes):
@@ -175,10 +190,16 @@ def _reserve_at(private_parent, publication):
 
 
 def _redirect_at(restricted):
+    from .controls_layout import require_private
+
     for target, name in ((1, "stdout"), (2, "stderr")):
         stream = os.open(name, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600, dir_fd=restricted)
         try:
+            require_private(stream, directory=False)
             os.dup2(stream, target)
+            if _identity(target) != _identity(stream):
+                raise OSError("controls stream redirection differs")
+            os.fsync(stream)
         finally:
             os.close(stream)
     os.fsync(restricted)
@@ -224,6 +245,14 @@ class LegRead:
     work_bytes: bytes | None
 
 
+@dataclass(frozen=True)
+class NativeRead:
+    """Verified launcher inputs and retained output directory descriptors."""
+
+    inputs: object
+    directories: tuple[int, int]
+
+
 def _verify_member_bytes(payload, expected_digest):
     if expected_digest is None:
         valid = payload is None
@@ -264,7 +293,9 @@ def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, l
     """Run once, with the first reader given the committed stage-1 bindings."""
     from .manifest_dispatch import PRE_READ_REFUSAL
     from .transfer_release import POST_READ_FAILURE, _failure_type
+    from .controls_layout import GateRefusal, claim
 
+    native = first_read if type(first_read) is NativeRead else None
     saved_stderr = None
     confined = False
     read_started = False
@@ -278,14 +309,24 @@ def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, l
         sys.stdout.flush()
         sys.stderr.flush()
         saved_stderr = os.dup(2)
-        with _registered_directories(freeze.release_layout) as (private_parent, publication), ExitStack() as stack:
-            restricted = _reserve_at(private_parent, publication)
+        with ExitStack() as stack:
+            if native is None:
+                private_parent, publication = stack.enter_context(_registered_directories(freeze.release_layout))
+                restricted = _reserve_at(private_parent, publication)
+                _redirect_at(restricted)
+            else:
+                private_parent, publication = native.directories
+                restricted = claim(private_parent, publication, stage1.public, _redirect_at)
             stack.callback(os.close, restricted)
-            _redirect_at(restricted)
             confined = True
             read_started = True
-            requests = tuple(replace(leg, binding=replace(leg.binding)) for leg in stage1.legs)
-            positions = _bound_positions(stage1.legs, first_read(requests))
+            if native is None:
+                requests = tuple(replace(leg, binding=replace(leg.binding)) for leg in stage1.legs)
+                positions = _bound_positions(stage1.legs, first_read(requests))
+            else:
+                from . import controls_reader
+
+                positions = controls_reader.first_read(native.inputs, stage1)
             private_bytes = calculate_private(
                 positions, kernel=kernel, pooled=freeze.instrument_pool,
                 instrument_manifest_sha256=freeze.instrument_manifest_sha256,
@@ -298,8 +339,16 @@ def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, l
         if confined:
             with suppress(BaseException):
                 traceback.print_exception(error)
-        notice = f"stage2_error\n{_failure_type(error)}\n" if read_started else "REFUSE controls look before read\n"
+        status = POST_READ_FAILURE if read_started else PRE_READ_REFUSAL
+        if read_started:
+            notice = f"stage2_error\n{_failure_type(error)}\n"
+        elif native is None:
+            notice = "REFUSE controls look before read\n"
+        elif isinstance(error, GateRefusal):
+            status, notice = error.status, error.notice
+        else:
+            notice = "REFUSE PREFLIGHT FREEZE\n"
         with suppress(BaseException):
             os.write(saved_stderr if saved_stderr is not None else 2, notice.encode("ascii"))
-        os._exit(POST_READ_FAILURE if read_started else PRE_READ_REFUSAL)
+        os._exit(status)
     os._exit(0)

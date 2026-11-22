@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "n_legs",
+    "legs",
+    "input_inventory_sha256"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "joulewise.cadence_ctl_stage1.v2"
+    },
+    "n_legs": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 12
+    },
+    "legs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006",
+        "L007",
+        "L008",
+        "L009",
+        "L010",
+        "L011",
+        "L012"
+      ],
+      "properties": {
+        "L001": {
+          "$ref": "#/$defs/leg"
+        },
+        "L002": {
+          "$ref": "#/$defs/leg"
+        },
+        "L003": {
+          "$ref": "#/$defs/leg"
+        },
+        "L004": {
+          "$ref": "#/$defs/leg"
+        },
+        "L005": {
+          "$ref": "#/$defs/leg"
+        },
+        "L006": {
+          "$ref": "#/$defs/leg"
+        },
+        "L007": {
+          "$ref": "#/$defs/leg"
+        },
+        "L008": {
+          "$ref": "#/$defs/leg"
+        },
+        "L009": {
+          "$ref": "#/$defs/leg"
+        },
+        "L010": {
+          "$ref": "#/$defs/leg"
+        },
+        "L011": {
+          "$ref": "#/$defs/leg"
+        },
+        "L012": {
+          "$ref": "#/$defs/leg"
+        }
+      }
+    },
+    "input_inventory_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "$defs": {
+    "leg": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identity",
+        "role",
+        "reference",
+        "script_sha",
+        "kind",
+        "admitted",
+        "g0_released",
+        "episode_id",
+        "episode_sha256"
+      ],
+      "properties": {
+        "identity": {
+          "type": "array",
+          "items": false,
+          "minItems": 6,
+          "maxItems": 6,
+          "prefixItems": [
+            {
+              "type": "string",
+              "const": "cl-ctl-01"
+            },
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40}$"
+            },
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2
+            },
+            {
+              "type": "string",
+              "pattern": "^L0(0[1-9]|1[012])$"
+            },
+            {
+              "type": "integer",
+              "minimum": 0
+            }
+          ]
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "capture",
+            "consume"
+          ]
+        },
+        "reference": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "script_sha": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "cpu",
+            "extra-turn",
+            "hidden",
+            "plain",
+            "split"
+          ]
+        },
+        "admitted": {
+          "type": "boolean"
+        },
+        "g0_released": {
+          "type": "boolean"
+        },
+        "episode_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "episode_sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

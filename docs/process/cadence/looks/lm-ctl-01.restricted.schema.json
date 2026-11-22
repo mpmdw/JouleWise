@@ -21,6 +21,24 @@
       "type": "number",
       "const": 1.0
     },
+    "rail_gap_marks": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["leg_id", "channel", "part"],
+        "properties": {
+          "leg_id": {"type": "string", "pattern": "^L0(0[1-9]|1[012])$"},
+          "channel": {"type": "string", "enum": ["cpu_rail", "gpu_rail", "rail_sum"]},
+          "part": {
+            "type": "string",
+            "enum": ["prefill", "decode", "tool", "hidden", "hidden_prefill", "hidden_decode", "cpu", "gap", "recovery", "remainder"]
+          }
+        }
+      }
+    },
     "aligned_power": {
       "anyOf": [
         {
@@ -744,7 +762,8 @@
                 "step_order_or_episode_bounds",
                 "envelope_counts",
                 "envelope_stamps",
-                "other_partition"
+                "other_partition",
+                "leg_record_invalid"
               ]
             }
           }

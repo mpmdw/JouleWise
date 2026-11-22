@@ -104,7 +104,7 @@ CODES = ("meter.absent", "meter.drops_excess", "meter.duplicates", "meter.clock_
 # Loading and decoding
 
 
-def load(path: str | Path) -> tuple[dict | None, dict | None, list[dict], list[dict]]:
+def load(path: str | Path | None, *, payload: bytes | None = None) -> tuple[dict | None, dict | None, list[dict], list[dict]]:
     """(header, trailer, batches, errors) of one stream file.
 
     A truncated last line (a writer killed mid-line) is ignored.  Any other
@@ -113,11 +113,15 @@ def load(path: str | Path) -> tuple[dict | None, dict | None, list[dict], list[d
     protocol error; the samples it carried show up as dropped samples.
     """
 
+    if payload is None:
+        with open(path) as handle:
+            text = handle.read()
+    else:
+        text = payload.decode("utf-8")
     header = trailer = None
     batches: list[dict] = []
     errors: list[dict] = []
-    with open(path) as handle:
-        lines = handle.read().split("\n")
+    lines = text.split("\n")
     for number, line in enumerate(lines, 1):
         if not line.strip():
             continue
@@ -157,6 +161,15 @@ class Samples:
 
 
 def samples(header: Mapping[str, Any], batches: Sequence[Mapping[str, Any]]) -> Samples:
+    return _samples(header, batches, decode_values=True)
+
+
+def sample_times(header: Mapping[str, Any], batches: Sequence[Mapping[str, Any]]) -> Samples:
+    """Unwrap time-only batches whose seq lists contain only device counters."""
+    return _samples(header, batches, decode_values=False)
+
+
+def _samples(header, batches, *, decode_values):
     step = STEP_MS[header["rate_idx"]]
     dev_ms: list[int] = []
     vbus: list[float] = []
@@ -168,8 +181,14 @@ def samples(header: Mapping[str, Any], batches: Sequence[Mapping[str, Any]]) -> 
     running_max = None
     previous_rx = None
     for j, batch in enumerate(batches):
-        raw = bytes.fromhex(batch["p"]) if batch.get("p") else b""
-        for k, (seq, _marker, v_uv, i_ua, *_aux) in enumerate(SAMPLE.iter_unpack(raw)):
+        if decode_values:
+            raw = bytes.fromhex(batch["p"]) if batch.get("p") else b""
+            records = SAMPLE.iter_unpack(raw)
+        else:
+            raw = batch.get("seq") or ()
+            records = ((seq,) for seq in raw)
+        for k, record in enumerate(records):
+            seq = record[0]
             if previous_seq is None:
                 current = 0
             else:
@@ -186,8 +205,9 @@ def samples(header: Mapping[str, Any], batches: Sequence[Mapping[str, Any]]) -> 
                 continue
             running_max = current
             dev_ms.append(current)
-            vbus.append(v_uv / 1e6)
-            ibus.append(i_ua / 1e6)
+            if decode_values:
+                vbus.append(record[2] / 1e6)
+                ibus.append(record[3] / 1e6)
             index.append(j)
         if raw:
             previous_rx = batch["rx"]
@@ -338,7 +358,15 @@ class Stream:
 
 
 def parse(path: str | Path) -> Stream:
-    header, trailer, batches, errors = load(path)
+    return _parse_loaded(*load(path))
+
+
+def parse_bytes(payload: bytes) -> Stream:
+    """Decode the caller's already authenticated immutable stream bytes."""
+    return _parse_loaded(*load(None, payload=payload))
+
+
+def _parse_loaded(header, trailer, batches, errors):
     if header is not None and "status" not in header:
         header = {**header, "status": "streaming"}  # the probe's streams predate the field
     if header is None or header.get("status") != "streaming":
@@ -356,7 +384,7 @@ def parse(path: str | Path) -> Stream:
                   [b["rx"] for b in polls], [dict(b.get("smc") or {}) for b in polls], fit_error)
 
 
-def raw_offset_ns(stream: Stream) -> int | None:
+def raw_offset_ns(stream: Stream, *, allow_unclosed: bool = False) -> int | None:
     """CLOCK_MONOTONIC_RAW minus ``time.monotonic_ns`` for this stream, or None.
 
     Member spans are stamped in the controller's ``time.monotonic_ns``; the
@@ -368,9 +396,20 @@ def raw_offset_ns(stream: Stream) -> int | None:
     raw_ns = monotonic_ns + offset.
     """
 
-    header, trailer = stream.header or {}, stream.trailer or {}
+    return raw_anchor_offset_ns(stream.header, stream.trailer, allow_unclosed=allow_unclosed)
+
+
+def raw_anchor_offset_ns(header, trailer, *, allow_unclosed=False):
+    """Apply the decoder's anchor check without decoding sample values."""
+    if header is None:
+        return None
     try:
         start = header["start_raw_ns"] - header["start_mono_ns"]
+    except (KeyError, TypeError):
+        return None
+    if trailer is None:
+        return start if allow_unclosed else None
+    try:
         end = trailer["end_raw_ns"] - trailer["end_mono_ns"]
     except (KeyError, TypeError):
         return None
