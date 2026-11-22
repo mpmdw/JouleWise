@@ -83,6 +83,43 @@ class SuccessorKitsTests(unittest.TestCase):
         self.assertEqual(set(verified), {path.relative_to(root).as_posix()
                                         for path in (root / "queues-1leg").glob("*.json")})
 
+    def test_multileg_queues_cover_each_consecutive_start_and_bind_retained_kits(self):
+        rows = json.loads((AUDIT / INDEX).read_bytes())["rows"]
+        for week, week_rows in ((W2, rows[:16]), (W3, rows[16:])):
+            root = AUDIT / week
+            readme = (root / "README.md").read_text(encoding="utf-8")
+            declared = re.findall(r"^\| \[([^\]]+)\]\(\1\) \| `([a-f0-9]{64})` \|$",
+                                  readme.split("## Multi-leg stability queues")[1], flags=re.MULTILINE)
+            verified = {}
+            for row in week_rows:
+                kit_id = row["kit_id"]
+                kit_raw = (AUDIT / row["path"]).read_bytes()
+                self.assertEqual(digest(kit_raw), row["sha256"])
+                kit = json.loads(kit_raw)
+                self.assertTrue(kit["frozen"]["commit"].startswith(row["runner_pin"]))
+                ordered = [leg["leg_id"] for leg in kit["legs"]]
+                for length in (2, 3):
+                    for offset in range(len(ordered) - length + 1):
+                        legs = ordered[offset:offset + length]
+                        span_id = "-".join([kit_id, *(leg.lower() for leg in legs)])
+                        filename = f"queues-{length}leg/{span_id}.json"
+                        with self.subTest(week=week.name, queue=filename):
+                            raw = (root / filename).read_bytes()
+                            verified[filename] = digest(raw)
+                            queue = json.loads(raw)
+                            self.assertEqual(queue["queue_id"], f"cq-{span_id}")
+                            self.assertEqual(queue["expires_at"], "2026-12-08T12:35:29-08:00" if week == W2 else EXPIRES)
+                            self.assertEqual(queue["spans"], [{
+                                "seq": offset + 1, "span_id": span_id, "block_id": kit_id,
+                                "kit": {key: row[key] for key in ("path", "sha256")},
+                                "legs": legs, "attempt": 1,
+                                "not_before": "2026-11-17" if week == W2 else NOT_BEFORE,
+                            }])
+            self.assertEqual(len(declared), len(verified))
+            self.assertEqual(dict(declared), verified)
+            self.assertEqual(set(verified), {path.relative_to(root).as_posix()
+                                            for path in root.glob("queues-[23]leg/f2-stab-*.json")})
+
 
 if __name__ == "__main__":
     unittest.main()
