@@ -16,7 +16,7 @@ from .controls_reader import (
 from .custody_pins import PinRefusal, safe_relative
 from .description_inputs import PinnedInput
 from .qualification_manifest import _decode
-from .time_fields import TimeFieldError, project_json
+from .controls_time_fields import TimeFieldError, project_json
 
 
 IDS = PILOT + REMAINDER

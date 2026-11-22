@@ -19,7 +19,7 @@ from joulewise.schemas import BenchmarkConfig
 
 from . import controls_analysis as analysis
 from .qualification_manifest import _decode
-from .time_fields import RAIL_COLUMNS, TimeFieldError, project_json, rail_rows, stream_fields
+from .controls_time_fields import RAIL_COLUMNS, TimeFieldError, project_json, rail_rows, stream_fields
 
 
 METHOD = "km003c_raw_monotonic_pairs.v1"

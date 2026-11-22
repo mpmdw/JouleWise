@@ -47,7 +47,7 @@ CODE_PATHS = {
     "print_code/sampler": "joulewise/align/apple/sampler.py",
     "print_code/dc_decoder": "joulewise/external/km003c_parse.py",
     "print_code/clock": "joulewise/clock.py",
-    "print_code/time_fields": "joulewise/cadence_looks/time_fields.py",
+    "print_code/time_fields": "joulewise/cadence_looks/controls_time_fields.py",
     "print_code/custody_pins": "joulewise/cadence_looks/custody_pins.py",
     "print_code/pinned_inputs": "joulewise/cadence_looks/description_inputs.py",
     "print_code/book": "joulewise/cadence_looks/controls_book.py",

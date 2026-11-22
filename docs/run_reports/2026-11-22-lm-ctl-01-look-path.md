@@ -97,6 +97,13 @@ case. The follow-up corrects the registrar and also verifies the public
 authority tip before importing checkout code and again before claiming.
 The paired case and all fixtures retain their original bytes.
 
+The frozen checks on `f87743177afdb0f2039defd89a1fd871d7c29830` recorded v1
+29/29, v2 26/30, v3 20/20 and v3.1 846/846. The standard suite caught three
+integration issues. The ctl time lexer now has a ctl-only module path so
+it does not replace the registered interim lexer. The extracted input
+reader has only the verified-byte functions that ctl calls. The synthetic
+registrar uses the repository's Git fixture helper. [Frozen checks](https://github.com/mpmdw/JouleWise/actions/runs/45041180148) · [Standard integration checks](https://github.com/mpmdw/JouleWise/actions/runs/45041180095)
+
 [Draft PR #951](https://github.com/mpmdw/JouleWise/pull/951) · [Initial frozen checks](https://github.com/mpmdw/JouleWise/actions/runs/45039449189)
 
 ## NEEDS_SPEC
