@@ -884,3 +884,16 @@ assertions. The Git-fixture census recognizes the frozen test package's
 two named initialization calls only at their exact supplied file digest.
 All six targeted checks passed. The frozen files and production code are
 identical to the preceding tested head.
+
+Shard 12 reported a refusal-census mismatch and an outstanding
+executing-review gate. The census now identifies the four C1 refusal
+keys and the prepare-only series dependency. Both focused census
+contracts passed. The existing guards and their classifications retain
+their prior rows.
+
+The B6 executing-review check names `3ae356e818e1b8bd9cec88597f9ba36d62bddd1a`
+and `949298c7c1eb52f10223b6d7fe2237e30bf2d590`. An authorized reviewer
+owes an executing-review record for those exact commits. No review row,
+issued registration or signer decision was entered by the builder. The
+draft remains held on this gate even though the frozen local tape and
+the focused regression checks passed.
