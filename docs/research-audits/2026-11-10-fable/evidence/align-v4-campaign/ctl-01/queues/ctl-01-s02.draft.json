@@ -15,7 +15,7 @@
       "block_id": "ctl-01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/ctl-01/kits/cl-ctl-01.draft.json",
-        "sha256": "39ad1bd43719af42942207c2109ce6099b944d74146a55046611549c1d3f4e3a"
+        "sha256": "936e866cb03d547f54ec08b280712db6f6ac24e4e8cee7b5f643d07679b0cea1"
       },
       "legs": [
         "L004",

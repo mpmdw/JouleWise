@@ -7,7 +7,7 @@
   "authorizes_spans": false
  },
  "frozen": {
-  "commit": "043b972f999913d248769237f1901d78119ceb72",
+  "commit": "99b672142d31e683986813f75d48e4168abd862c",
   "paths": {
    "configs/align/v4/qwen38-27b-8bit-hf-pins.json": "3a1835342b4576b53fb715eb18e53877b54de8e9d04b1f71854d302c9d3635b8",
    "configs/align/v4/r1_runtime.json": "272aecb8bc0d9e33defd7f686b129ea236b925fdfbf68137697120dd63232f46",
