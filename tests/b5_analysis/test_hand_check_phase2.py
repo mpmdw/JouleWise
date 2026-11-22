@@ -772,7 +772,8 @@ class Round5DeltaTests(unittest.TestCase):
     def test_default_fill_checks_merged_working_paper(self):
         fill = self.module('fill_check_b5.py')
         with redirect_stdout(io.StringIO()):
-            self.assertEqual(fill.main(), 0)
+            status = fill.main()
+        self.assertEqual(status, 0, '\n'.join(failure.split(':\n', 1)[0] for failure in fill.FAILURES))
 
     def test_round4_native_replay_preserves_later_append_and_write_refuses(self):
         r4 = self.module('hand_check_rl55_round4.py')

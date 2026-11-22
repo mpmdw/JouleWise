@@ -1106,7 +1106,7 @@ SITES.append(('Section 6.6, monitor cost', ['P1-B5-MONITOR'], MONITOR, 1, [LBL_S
 SITES.append(('Section 6.7, primary-block recomputation (RL-4 vii)', ['P1-RECOMPUTE-SUMMARY'], RECOMPUTE_B5, 1, []))
 SITES.append(('Table S8, comparator families', [], TABLE_S8, 1, []))
 SITES.append(('Section 11, branch 9.D', ['CP-X02-conclusion'], CONCLUSION_9D, 1, []))
-SITES.append(('Section 11, branch 9.C', ['CP-X08-decode-a-conclusion'], CONCLUSION_9C, 1, []))
+SITES.append(('Section 11, branch 9.C', ['CP-X08-decode-a-conclusion'], CONCLUSION_9C, 1, LABEL_T5))
 SITES.append(('Section 5.1, identities (RL-60 (5))', ['CP-X01-identity'], '({c:identity})', 1, []))
 SITES.append(('Section 5.1, prefill length record (RL-60 (5))', ['CP-X01-length'], '({c:length})', 1, []))
 SITES.append(('Section 6.3, floor class (RL-66 F07)', [], FLOOR_CLASS, 1, []))
@@ -1118,9 +1118,10 @@ SITES.append(('Section 5.7, recompute pointer (RL-147 §8)', ['P1-RECOMPUTE'],
               'separate reader checks.', 1, []))
 SITES.append(('Table 4 caption (RL-60 (2))', [], TABLE4_CAPTION, 1, []))
 
-# A print-labelled row in a table cell carries its label in the table note (RL-42), which is its own site.
+# The separately checked Table 5 caption supplies the claim-gate label for its cells and the conclusion recap.
 LABEL_SITE = {'Table 5, decode': 'Table 5 caption, claim level (RL-41 b)',
-              'Table 5, prefill': 'Table 5 caption, claim level (RL-41 b)'}
+              'Table 5, prefill': 'Table 5 caption, claim level (RL-41 b)',
+              'Section 11, branch 9.C': 'Table 5 caption, claim level (RL-41 b)'}
 
 # Ids whose placeholders the two fills replaced.
 FILLED = sorted({i for _, ids, _, _, _ in SITES for i in ids})
