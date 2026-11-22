@@ -113,6 +113,32 @@ class SessionFlagTests(unittest.TestCase):
             self.assertLess(codes[0], "battery.assist")
 
 
+class ScienceMeterEligibilityTests(unittest.TestCase):
+    def test_all_invalid_members_skip_meter_joins_and_keep_refused_cells(self):
+        model = "qwen3-30b-a3b-4bit"
+        rows = [{
+            "session_id": "s1", "role": "science", "model_name": model, "config_key": "science",
+            "run_id": f"r{index}", "order_index": index, "status": "succeeded" if code else "failed",
+            "excluded": bool(code), "exclusion_codes": code, "flag_codes": "battery.assist",
+            "_unblinded": True,
+        } for index, code in enumerate(["", *sorted(bt.VALIDITY_CODES)])]
+        archive = {"session_id": "s1", "session_flags": ["audit.session"]}
+        with patch.object(bt, "unblind", return_value=rows), patch.object(bt, "dc_join") as join:
+            result = bt.analyse(rows, {name: {} for name in bt.ROSTER}, [archive],
+                                stage="2", key_dir="synthetic", listed={"s1": {"pass_id": 1}})
+
+        join.assert_not_called()
+        block = result["cells"][model]["pass1"]
+        self.assertEqual(block["dc_join_status"], {})
+        for boundary in bt.BOUNDARIES:
+            with self.subTest(boundary=boundary):
+                cell = block["boundaries"][boundary]
+                self.assertEqual(cell["assist_members"], [])
+                quantity = cell["quantities"]["gross"]
+                self.assertEqual(quantity["status"], "refused_below_minimum")
+                self.assertEqual(set(quantity["flags"]), {"audit.session", "battery.assist", *bt.VALIDITY_CODES})
+
+
 class MissingWithheldFlagTests(unittest.TestCase):
     """RL-82 reading A, F1: a cell whose withheld store is missing lists {withheld_missing} | session codes."""
 

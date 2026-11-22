@@ -2092,6 +2092,7 @@
     "edge_locked",
     "withheld",
     "no_point_labels",
+    "no_point_labels_invalid_assist",
     "invalid_anchor",
     "marker_incomplete",
     "late_start",

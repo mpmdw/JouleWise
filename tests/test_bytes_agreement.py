@@ -107,14 +107,20 @@ EDGE_LOCKED_KNOBS = {"sample_phase_ms": 19, "edge_phase": False, "min_receive_la
 # collected (R6's optional pass).
 WITHHELD_KNOBS = {"subpack_sessions": True, "uncollected_sessions": ("bytes-s4-p2",)}
 MISSING_STORES = ("bytes-s2-p2", "bytes-s6-p1", "bytes-s6-p2")
-# RL-92 §§3–4: two refused models (one MoE) and a dense model with one
-# missing store and one refusal. Six invalid repeats leave four in either selection.
-LABEL_DEFECTS = [
-    (pass_id, model, ordinal, "strict_validation")
-    for model, pass_ids in (("Qwen3-32B-4bit", (1, 2)), ("Qwen3-Next-80B-A3B-Instruct-4bit", (1, 2)),
-                            ("Llama-3.3-70B-Instruct-4bit", (2,)))
-    for pass_id in pass_ids for ordinal in range(4, 10)
-]
+
+
+def label_defects(repeats):
+    # RL-92 §§3–4: two refused models (one MoE) and one dense model with a
+    # missing store and a refusal. Six invalid repeats leave four in either selection.
+    return [
+        (pass_id, model, ordinal, "strict_validation")
+        for model, pass_ids in (("Qwen3-32B-4bit", (1, 2)), ("Qwen3-Next-80B-A3B-Instruct-4bit", (1, 2)),
+                                ("Llama-3.3-70B-Instruct-4bit", (2,)))
+        for pass_id in pass_ids for ordinal in repeats
+    ]
+
+
+LABEL_KNOBS = {**NR1_KNOBS, "subpack_sessions": True, "battery_assist": True}
 # name: (world, seed, planted defects, generator knobs, withheld stores removed after export).
 CAMPAIGNS = {
     "bytes": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True, "battery_publication": "delayed", "battery_reference_assist": True}, ()),
@@ -124,8 +130,9 @@ CAMPAIGNS = {
     "minimum": ("bytes", 1100, DEFECTS_MINIMUM, NR1_KNOBS, ()),
     "edge_locked": ("resident", 3100, [], EDGE_LOCKED_KNOBS, ()),
     "withheld": ("bytes", 1100, [], {**NR1_KNOBS, **WITHHELD_KNOBS}, MISSING_STORES),
-    "no_point_labels": ("bytes", 1100, LABEL_DEFECTS,
-                        {**NR1_KNOBS, "subpack_sessions": True, "battery_assist": True}, ("bytes-s5-p1",)),
+    "no_point_labels": ("bytes", 1100, label_defects(range(4, 10)), LABEL_KNOBS, ("bytes-s5-p1",)),
+    # Audit round 1: the same refusals, with the assisted repeats among the invalid records.
+    "no_point_labels_invalid_assist": ("bytes", 1100, label_defects(range(6)), LABEL_KNOBS, ("bytes-s5-p1",)),
     "invalid_anchor": ("bytes", 1100, ANCHOR_DEFECTS, NR1_KNOBS, ()),
     "marker_incomplete": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
                            "truncate_marker_window": True}, ()),
@@ -2125,6 +2132,28 @@ class AgreementTests(unittest.TestCase):
                     if stage == "a-held":
                         self.assertTrue({"registration.default_used", "battery.assist", "member.strict_validation_failed",
                                          "bytes.decode_battery_assist", WITHHELD_MISSING}.issubset(row["flags"]))
+
+    def test_invalid_runs_contribute_no_meter_assist_flags(self):
+        name = "no_point_labels_invalid_assist"
+        recorder = campaign(name)
+        counts = recorder.counts()
+        self.assertEqual(counts["above_bar"], 0)
+        print(f"\nagreement {name}: compared {counts['compared']}, equal {counts['equal']}, "
+              f"under the bar {counts['under_bar']}, above the bar {counts['above_bar']}")
+        exits = {r["key"]: (r["a"], r["t"]) for r in recorder.rows if r["group"] == "exit"}
+        self.assertEqual(exits["heldout/stage2"], (0, 0))
+        moe, mixed = "qwen3-next-80b-a3b-instruct-4bit", "llama-3.3-70b-instruct-4bit"
+        rows = [r for r in recorder.rows if r["stage"] == "heldout" and r["key"] == "flags"]
+        checks = {
+            "cell": [r for r in rows if r["group"].startswith((f"cell/{moe}/", f"cell/{mixed}/pass2/"))],
+            "h1": [r for r in rows if r["group"].startswith("h1/") and r["group"].endswith((moe, mixed))],
+            "moe": [r for r in rows if r["group"].startswith("moe/")],
+        }
+        self.assertEqual({table: len(flags) for table, flags in checks.items()}, {"cell": 36, "h1": 6, "moe": 3})
+        for flag_rows in checks.values():
+            for row in flag_rows:
+                self.assertIn("battery.assist", row["a"])
+                self.assertNotIn("bytes.decode_battery_assist", row["a"])
 
     def test_time_world(self):
         self.check("time", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),

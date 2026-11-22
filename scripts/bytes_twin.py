@@ -1430,18 +1430,19 @@ def _units_of(row):
     return None, None, None
 
 
+def _valid_record(row):
+    return row["status"] == "succeeded" and not VALIDITY_CODES.intersection(
+        (row.get("exclusion_codes") or "").split(";"))
+
+
 def restorable(row) -> bool:
     """Addendum 7 D5: any catalog exclusion of a run with a valid energy record, validity failures excepted."""
-    if row["status"] != "succeeded" or not is_number(row.get("phase_decode_j")) or not is_number(row.get("dur_decode_s")):
-        return False
-    codes = [c for c in (row.get("exclusion_codes") or "").split(";") if c]
-    return bool(codes) and not any(c in VALIDITY_CODES for c in codes)
+    return (_valid_record(row) and is_number(row.get("phase_decode_j")) and is_number(row.get("dur_decode_s"))
+            and any((row.get("exclusion_codes") or "").split(";")))
 
 
 def _kept(row, *, restore_load_correlated=False):
-    if row["status"] != "succeeded":
-        return False
-    if set((row.get("exclusion_codes") or "").split(";")) & VALIDITY_CODES:
+    if not _valid_record(row):
         return False
     if not row["excluded"]:
         return True
@@ -2248,38 +2249,48 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
             srows = [r for r in sessions[session_id] if r["role"] == "science" and canon(r["model_name"]) == model]
             unblinded = all(r["_unblinded"] for r in srows)
             archive = archive_by_session.get(session_id)
+            can_join_archive = archive is not None and unblinded
             dc_by_run = {}
             anchor_status = {}
-            if archive is not None and unblinded:
-                for r in srows:
-                    dc_by_run[r["run_id"]] = dc_join(archive, r["run_id"])
-            elif archive is not None:
+            if archive is not None and not unblinded:
                 notes.append(f"{model} {session_id}: DC-input skipped, rows still blinded (raw meter cannot be blinded)")
             for r in srows:
                 r["_session_flags"] = archive.get("session_flags", []) if archive is not None and stage in ("1", "2") else []
-                r["_decode_assisted"] = dc_by_run.get(r["run_id"], {}).get("decode_assisted")
-                r["_decode_assist_reason"] = ("not evaluated at the blinded stage" if not unblinded else
-                    dc_by_run.get(r["run_id"], {}).get("decode_assist_evaluated_reason",
-                        f"decode marker not evaluated: archive unavailable (run {r['run_id']})"))
-                valid = r["status"] == "succeeded" and not (
-                    set((r.get("exclusion_codes") or "").split(";")) & VALIDITY_CODES)
+                r["_decode_assisted"] = None
+                r["_meter_flags"] = []
                 if stage in ("1", "2"):
+                    r["_operative_anchor_j"] = None
+                # Invalid records still disclose their recorded codes, but
+                # only valid records can acquire flags from the science join.
+                if not _valid_record(r):
+                    continue
+                run_id = r["run_id"]
+                joined = {}
+                if can_join_archive:
+                    joined = dc_join(archive, run_id)
+                    dc_by_run[run_id] = joined
+                r["_decode_assisted"] = joined.get("decode_assisted")
+                r["_decode_assist_reason"] = ("not evaluated at the blinded stage" if not unblinded else
+                    joined.get("decode_assist_evaluated_reason",
+                        f"decode marker not evaluated: archive unavailable (run {run_id})"))
+                if stage in ("1", "2") and can_join_archive:
                     # §7's operative decode-phase bound supplies every rails
                     # and rest variant and their attribution floors via _member.
-                    r["_operative_anchor_j"] = None
-                    if valid and unblinded and archive is not None:
-                        try:
-                            r["_operative_anchor_j"] = decode_anchor_bound(archive, r["run_id"])
-                            anchor_status[r["run_id"]] = "ok"
-                        except (OSError, ValueError, KeyError, TypeError) as exc:
-                            anchor_status[r["run_id"]] = str(exc)
-                r["_meter_flags"] = (["bytes.decode_battery_assist"] if r["_decode_assisted"] else [])
-                if valid and unblinded and dc_by_run.get(r["run_id"], {}).get("status") != "ok":
-                    r["_meter_flags"].append("bytes.meter_gap" if
-                        dc_by_run.get(r["run_id"], {}).get("status") == "meter_gap" else "bytes.meter_decode_unavailable")
+                    try:
+                        r["_operative_anchor_j"] = decode_anchor_bound(archive, run_id)
+                        anchor_status[run_id] = "ok"
+                    except (OSError, ValueError, KeyError, TypeError) as exc:
+                        anchor_status[run_id] = str(exc)
+                if r["_decode_assisted"]:
+                    r["_meter_flags"].append("bytes.decode_battery_assist")
+                if unblinded and joined.get("status") != "ok":
+                    r["_meter_flags"].append("bytes.meter_gap" if joined.get("status") == "meter_gap"
+                                             else "bytes.meter_decode_unavailable")
             per_boundary = {}
             for boundary in BOUNDARIES:
-                if boundary != "rails" and not dc_by_run:
+                # A released archive can have zero valid members. Its cell
+                # still prints a refusal on every boundary.
+                if boundary != "rails" and not can_join_archive:
                     per_boundary[boundary] = {"status": "no_archive_join"}
                     continue
                 cell = compute_cell(srows, boundary, dc_by_run, allowances[session_id], alpha_h1)
