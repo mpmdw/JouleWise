@@ -112,20 +112,40 @@ and its exact count intact.
 
 [Draft PR #951](https://github.com/mpmdw/JouleWise/pull/951) · [Initial frozen checks](https://github.com/mpmdw/JouleWise/actions/runs/45039449189)
 
-## NEEDS_SPEC
+## Prospective cumulative bundle disposition
 
-The two original questions are resolved by RL-202a. One freeze disposition
-remains open. The four archived v2 cases below expect `meter_absent` for
-a leg whose sibling streams contain samples elsewhere in the span.
-RL-202a requires `not_bracketed` for that condition. The frozen bytes are
-preserved. The v3 replacement profiles exercise the current rule.
+The lead resolved the four archived v2 expected-code assertions. RL-202a
+§2.4 gives `meter_absent` when no receipt-listed stream in the span is
+streaming with samples. It gives `not_bracketed` when sampled streams exist
+outside the leg's candidate window. A missing or wrong-code disposition
+refuses fresh with `INPUT_CHANNELS`. An eligible disposition names the
+exact leg, code and certificate SHA-256. [RL-202a §2](https://github.com/mpmdw/JouleWise/blob/af98a171364799372025be8e7d1609706829c6f1/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L25355)
 
-| Archived v2 case | Incompatible expected code | Required code |
+Only the archived expected code on the named legs is superseded.
+
+| Frozen v2 case | Affected legs | Governing frozen v3 checks |
 | --- | --- | --- |
-| `meter_absent_fresh` | `meter_absent` | `not_bracketed` |
-| `meter_absent_disposed` | `meter_absent` | `not_bracketed` |
-| `dc_only_three_hidden` | `meter_absent` | `not_bracketed` |
-| `dc_four_hidden_two_levels` | `meter_absent` | `not_bracketed` |
+| `meter_absent_fresh` | L002 | `other_streams_exist_outside_leg` establishes the code for sampled siblings outside the leg. `no_streaming_samples_fresh` establishes the fresh refusal for span-wide absence. |
+| `meter_absent_disposed` | L002 | `other_streams_exist_outside_leg` accepts a matching `not_bracketed` disposition. `no_streaming_samples_disposed` accepts matching `meter_absent` dispositions. |
+| `dc_only_three_hidden` | L002, L005, L008 | `correct_code_too_few_hidden_legs` refuses fresh with three hidden legs after matching dispositions. |
+| `dc_four_hidden_two_levels` | L005, L012 | `correct_code_too_few_hidden_levels` refuses fresh with four hidden legs across two delivered levels. |
 
-The release lead and research lead need to record which frozen assertions
-the v3 cases supersede before the cumulative byte pass can pass.
+CI retains the raw exit code, stdout and stderr for each of the 79 cases
+as workflow artifacts. For each superseded assertion it proves the first
+raw failure occurs in the original certificate comparator with the correct
+leg identity and code-only mismatch. It then rechecks the complete
+projection against the same observations with only the expected code
+changed for the affected legs. Any other failure, missing result, repeated
+result or unexpected historical pass blocks the cumulative bundle gate.
+The required result is v1 29/29, all 26 unaffected v2 cases, v3 20/20, and
+all four exact mismatch proofs. Report it as **75/79 raw, with four
+superseded assertions**. The independent installed byte pass and the
+bound-host blind preflight retain their separate gates.
+
+The targeted local replay observed exit 1 at the original v2 comparator
+in each of the four named cases. It confirmed the leg identity and
+`not_bracketed` code on all seven affected case rows and rechecked every
+other certificate. The gate tests rejected a generic comparator message,
+an incorrect identity, an incorrect code, an unrelated failure and an
+unexpected historical pass. The cumulative checksum manifest verified
+without a byte change to any of the three suites.

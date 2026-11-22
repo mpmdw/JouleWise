@@ -64,7 +64,16 @@ jobs:
         working-directory: tests/contracts/cadence_looks/look_path
         run: sha256sum -c SUITE.sha256 -c SUITE-v2.sha256 -c SUITE-v3.sha256
       - name: Execute bundle cases on the synthetic owner-enforcing filesystem
-        run: python3 -B tests/contracts/cadence_looks/run_look_path_ci.py ${{ matrix.shard }} 8
+        run: >-
+          python3 -B tests/contracts/cadence_looks/run_look_path_ci.py run
+          "${{ runner.temp }}/ctl01-results" --shard ${{ matrix.shard }} --total 8
+      - name: Retain the raw bundle outcomes
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: ctl01-bundle-results-${{ matrix.shard }}
+          path: ${{ runner.temp }}/ctl01-results/*.json
+          if-no-files-found: error
 
   paired-release:
     runs-on: ubuntu-latest
@@ -74,6 +83,9 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
+      - name: Check the three frozen manifests
+        working-directory: tests/contracts/cadence_looks/look_path
+        run: sha256sum -c SUITE.sha256 -c SUITE-v2.sha256 -c SUITE-v3.sha256
       - name: Compare two isolated publications with ruled and zero H
         run: |
           ctl_pair_dir="$(mktemp -d "${RUNNER_TEMP}/ctl-pair.XXXXXX")"
@@ -92,10 +104,32 @@ jobs:
           trap finish_pair EXIT
           sudo -n mount -o nosuid,nodev "${CTL_PAIR_LOOP}" "${CTL_PAIR_MOUNT}"
           sudo -n chown "$(id -u):$(id -g)" "${CTL_PAIR_MOUNT}"
-          if ! TMPDIR="${CTL_PAIR_MOUNT}" python3 -B tests/contracts/cadence_looks/look_path/suite-v3/run_cases.py \
-            --driver tests/contracts/cadence_looks/look_path_driver.py --case h_byte_identity; then
+          if ! TMPDIR="${CTL_PAIR_MOUNT}" python3 -B tests/contracts/cadence_looks/run_look_path_ci.py run \
+            "${RUNNER_TEMP}/ctl01-results" --paired; then
             if [ -f "${ctl_pair_dir}/pair-failure.txt" ]; then
               cat "${ctl_pair_dir}/pair-failure.txt"
             fi
             exit 1
           fi
+      - name: Retain the raw paired outcome
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: ctl01-bundle-results-paired
+          path: ${{ runner.temp }}/ctl01-results/*.json
+          if-no-files-found: error
+
+  cumulative-bundles:
+    needs: [frozen-bundles, paired-release]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: ctl01-bundle-results-*
+          path: ${{ runner.temp }}/ctl01-results
+      - name: Require 79 raw outcomes and exact evidence for the four superseded assertions
+        run: python3 -B tests/contracts/cadence_looks/run_look_path_ci.py check "${{ runner.temp }}/ctl01-results"
