@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """The twin's side of RL-194 condition 4: check the look's content pins, then run the reviewed child unchanged.
 
-    python3 -I -B scripts/cadence_interim_twin_pins.py
-        [--custody-pins PINS.json --custody-pins-sha256 HEX] <the child's arguments>
+    python3 -I -B scripts/cadence_interim_twin_pins.py <the child's arguments>
 
 The reviewed child (``fit.twin``) is byte-identical to its #816 review. This wrapper is the code, not the
 primary's, that checks the twin's inputs first:
 
-* the pin list is the file the manifest pins, read against the manifest's own digest (a draft look names its own
-  list, and only when the stage-1 file says it was made under ``--allow-draft``);
+* the pin list is the manifest's own (``inputs.pins``), read from the manifest the child is given, against the
+  manifest's own digest: there is no other list (audit 2, lead ruling);
 * the pinned spans are exactly the stage-1 roster's;
 * each span's pins rebuild the offload manifest digest the span carries;
 * each span directory holds exactly its pinned files: no symlink, no other file, none missing;
@@ -29,7 +28,6 @@ import re
 import sys
 
 PINS_SCHEMA = "joulewise.cadence_look_input_pins.v1"
-OWN_FLAGS = ("--custody-pins", "--custody-pins-sha256")
 
 
 def bound(path, sha256):
@@ -46,23 +44,6 @@ def unique(pairs):
             raise ValueError("duplicate input field")
         out[key] = value
     return out
-
-
-def split_arguments(argv):
-    """(this wrapper's own options, the child's arguments exactly as given)."""
-    own, child, index = {}, [], 0
-    while index < len(argv):
-        if argv[index] in OWN_FLAGS:
-            if index + 1 >= len(argv) or argv[index] in own:
-                raise ValueError("invalid wrapper arguments")
-            own[argv[index]] = argv[index + 1]
-            index += 2
-        else:
-            child.append(argv[index])
-            index += 1
-    if len(own) not in (0, 2):
-        raise ValueError("invalid wrapper arguments")
-    return own, child
 
 
 def option(arguments, flag, *, many=False):
@@ -133,21 +114,14 @@ def check_span(span, directory):
 
 def verify(argv):
     """Check every pin; return the reviewed child's path and its untouched arguments."""
-    own, child = split_arguments(argv)
+    child = list(argv)
+    if any(word in ("--custody-pins", "--custody-pins-sha256") for word in child):
+        raise ValueError("a pin list other than the manifest's")       # there is no other (audit 2, lead ruling)
     repository = Path(__file__).resolve().parents[1]
     manifest = json.loads(bound(option(child, "--manifest"), option(child, "--manifest-sha256")),
                           object_pairs_hook=unique)
     stage1 = json.loads(bound(option(child, "--stage1"), option(child, "--stage1-sha256")), object_pairs_hook=unique)
-    if own:
-        if stage1.get("allow_draft") is not True:
-            raise ValueError("pin list override outside a draft look")
-        raw = bound(own["--custody-pins"], own["--custody-pins-sha256"])
-    else:
-        pin = manifest["inputs"]["pins"]
-        if Path(pin["path"]).is_absolute() or ".." in Path(pin["path"]).parts:
-            raise ValueError("invalid input pin list path")
-        raw = bound(repository / pin["path"], pin["sha256"])
-    document = json.loads(raw, object_pairs_hook=unique)
+    document = manifest["inputs"]["pins"]
     if (not isinstance(document, dict) or set(document) != {"schema", "spans"} or document["schema"] != PINS_SCHEMA
             or not isinstance(document["spans"], list)):
         raise ValueError("invalid input pin list")

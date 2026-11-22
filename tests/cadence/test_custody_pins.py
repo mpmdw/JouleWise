@@ -172,9 +172,8 @@ class CheckChain(unittest.TestCase):
         self.assertTrue(P.check_chain_problems(moved, text))
 
     def test_an_abbreviation_binds_when_every_printed_character_matches(self):
-        """RL-194a section 2: prefix and suffix exactly as the Check prints them, however many they are. The rule is
-        character matching: it sets no least number of digits (audit 1 on 2082c1a51, LOW: seven correct digits were
-        read as no digest at all)."""
+        """RL-194a section 2: prefix and suffix exactly as the Check prints them. Audit 2's lead ruling sets the floor:
+        an abbreviation binds with at least eight printed hex digits; fewer is ``short`` and holds the span."""
         doc = pins()
         span = doc["spans"][0]
         digest, number, sid = span["offload_manifest_sha256"], span["check_item"], span["span_id"]
@@ -184,8 +183,9 @@ class CheckChain(unittest.TestCase):
         for printed, form in ((digest, "full"), (f"{digest[:8]}…{digest[-3:]}", "abbreviated"),
                               (f"{digest[:8]}...{digest[-7:]}", "abbreviated"), (f"{digest[:8]}…", "abbreviated"),
                               (f"{digest[:5]}…{digest[-3:]}", "abbreviated"),
-                              (f"{digest[:7]}…", "abbreviated"),                  # seven digits, as the audit printed
-                              (f"{digest[:4]}…{digest[-3:]}", "abbreviated"),
+                              (f"{digest[:7]}…", "short"),                        # seven digits: under the floor
+                              (f"{digest[:4]}…{digest[-3:]}", "short"),
+                              (f"{digest[:4]}…{digest[-4:]}", "abbreviated"),       # eight, split
                               (f"{digest[:7]}{other if digest[7] != other else 'f'}…{digest[-3:]}", "mismatch"),
                               (f"{digest[:8]}…{digest[-3:-1]}{other}", "mismatch"),
                               (f"{digest[:40]}…{digest[-40:]}", "mismatch"),      # more than a digest's characters
@@ -195,7 +195,8 @@ class CheckChain(unittest.TestCase):
                 self.assertEqual(got["form"], form)
                 self.assertEqual(got["as_printed"], printed if form != "absent" else None)
                 self.assertEqual(got["check_item"], number)
-                self.assertEqual(bool(P.check_chain_problems(doc, item(printed))), form in ("absent", "mismatch"))
+                self.assertEqual(bool(P.check_chain_problems(doc, item(printed))),
+                                 form in ("absent", "mismatch", "short"))
 
     def test_only_a_digest_labelled_as_the_manifest_s_binds(self):
         """Audit 1 on 2082c1a51: the Check printed a wrong offload manifest digest and, under the archive's label, an
@@ -248,7 +249,14 @@ class CheckChain(unittest.TestCase):
                 f"`dev-01-s01` OUT (226 files, manifest sha256 `{digest}`) and a second OUT `r1-partc-f0` (133 "
                 f"files, manifest sha256 `{other}`) copied", "full", digest),
             "a prefix alone": (
+                f"dev-01-s01 copy done (`copy_span.sh --go`, 222 files manifest `{digest[:8]}…`)", "abbreviated",
+                f"{digest[:8]}…"),
+            # a second manifest printed with no other name between belongs to the span too: it must match as well
+            "a second manifest under the same name": (
                 f"dev-01-s01 copy done (`copy_span.sh --go`, 222 files manifest `{digest[:8]}…`, second Part C "
+                f"131 files manifest `{other[:8]}…`)", "mismatch", f"{other[:8]}…"),
+            "another directory named between": (
+                f"dev-01-s01 copy done, 222 files manifest `{digest[:8]}…`; OUT `r1-partc-f0-20261115T211611Z` "
                 f"131 files manifest `{other[:8]}…`)", "abbreviated", f"{digest[:8]}…"),
             "the sums file by name": (
                 f"`cq-dev-01-s01-a1-20261117T080153Z.mbp.SHA256SUMS` (255 files, sha256 `{digest}`)", "full", digest),
@@ -848,7 +856,8 @@ class GuardedReads(_Custody):
 
 
 class ManifestInputs(unittest.TestCase):
-    """The manifest pins one inputs file; the tool writes it from offload manifests and checks its chain."""
+    """The manifest carries the one pin list (audit 2: no other copy); the tool writes it from offload manifests
+    and checks its chain."""
     MANIFEST = "docs/process/cadence/looks/lm-interim-01.json"
 
     def setUp(self):
@@ -864,7 +873,6 @@ class ManifestInputs(unittest.TestCase):
         self.doc = json.loads((real / self.MANIFEST).read_text(encoding="utf-8"))
         self.doc["status"] = "draft"
         self.manifest.write_text(json.dumps(self.doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        (self.repo / M.INPUTS_PATH).write_text(json.dumps({"schema": P.SCHEMA, "spans": []}) + "\n")
         self.custody = Path(self.tmp.name) / "custody"
         self.plan = Path(self.tmp.name) / "plan.json"
         rows = []
@@ -883,17 +891,30 @@ class ManifestInputs(unittest.TestCase):
             code = self.cli.main([str(a) for a in argv])
         return code, buffer.getvalue()
 
+    def pins_now(self):
+        """The pin list as the manifest carries it now."""
+        return json.loads(self.manifest.read_text(encoding="utf-8"))["inputs"]["pins"]
+
+    def set_pins(self, pins):
+        doc = json.loads(self.manifest.read_text(encoding="utf-8"))
+        doc["inputs"]["pins"] = pins
+        self.manifest.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
     def pin_inputs(self, *extra):
         return self.run_cli("pin-inputs", self.manifest, "--repo", self.repo, "--plan", self.plan, *extra)
 
-    def test_the_manifest_names_the_inputs_file_and_cites_the_ruling(self):
+    def test_the_manifest_carries_the_one_pin_list_and_cites_the_ruling(self):
+        """Audit 2, lead ruling (one source of pins): the list is in the manifest itself; no file holds another."""
         self.M.validate_manifest(self.doc)
-        self.assertEqual(self.doc["inputs"]["pins"]["path"], self.M.INPUTS_PATH)
-        self.assertIn(("inputs.pins", self.M.INPUTS_PATH, self.doc["inputs"]["pins"]["sha256"]), self.M.code_refs(self.doc))
+        self.assertEqual(self.doc["inputs"]["pins"], {"schema": P.SCHEMA, "spans": []})
+        self.assertFalse(any(where.startswith("inputs") for where, _, _ in self.M.code_refs(self.doc)))
+        self.assertFalse((Path(__file__).resolve().parents[2] / "docs/process/cadence/looks/lm-interim-01.inputs.json").exists())
         self.assertIn("joulewise/cadence_looks/custody_pins.py", self.M.REQUIRED_CODE_PATHS["interim"])
         self.assertIn("joulewise/cadence_looks/custody_pins.py", self.M.STAGE1_CODE)
         for label, change in {"no inputs": lambda d: d.pop("inputs"),
-                              "another path": lambda d: d["inputs"]["pins"].update(path="docs/other.json"),
+                              "a pin list in another file": lambda d: d["inputs"].update(
+                                  pins={"path": "docs/process/cadence/looks/lm-interim-01.inputs.json", "sha256": "0" * 64}),
+                              "a pin list of another schema": lambda d: d["inputs"]["pins"].update(schema="other"),
                               "no ruling": lambda d: d["inputs"].update(cite=["RL-184 §3.3"]),
                               "no rule": lambda d: d["inputs"].update(rule=""),
                               "an unknown member": lambda d: d["inputs"].update(spans=[])}.items():
@@ -908,7 +929,7 @@ class ManifestInputs(unittest.TestCase):
         inputs are final only with no span HELD and every roster span pinned."""
         self.assertEqual(self.pin_inputs("--write")[0], 0)
         self.assertEqual(self.run_cli("pin", self.manifest, "--repo", self.repo, "--write")[0], 0)
-        pins = json.loads((self.repo / self.M.INPUTS_PATH).read_text())
+        pins = self.pins_now()
         first, second = pins["spans"]
         state = Path(self.tmp.name) / "RUN_STATE.md"
         later = first["check_item"] + 20
@@ -927,8 +948,10 @@ class ManifestInputs(unittest.TestCase):
         self.assertIn(f"HELD {first['span_id']}: digests printed after the span is named: item {later} under enc; "
                       f"item {later} under manifest; item {first['check_item']} under no label", out)
         self.assertIn("1 span(s) HELD: the manifest cannot be final", out)
-        self.assertNotIn(first["offload_manifest_sha256"][:8] + "…", out)        # labels and items, no digest printed
-        self.assertEqual(self.M.inputs_final_problems(self.repo, self.doc, state.read_text())[-1:],
+        self.assertNotIn(first["offload_manifest_sha256"][:8], out)        # labels and items, no digest printed
+        self.assertIn(second["offload_manifest_sha256"], out)                # a bound span's digest is printed
+        self.assertEqual(self.M.inputs_final_problems(self.repo, json.loads(self.manifest.read_text()),
+                                                      state.read_text())[-1:],
                          [f"inputs: 1 span(s) HELD ({first['span_id']}): the manifest cannot be final while a span is "
                           "held, and a held span stays on the roster (RL-195 section 2.3)"])
         correct = lambda *extra: self.run_cli("correct-check", self.manifest, "--repo", self.repo, "--run-state", state,
@@ -936,14 +959,14 @@ class ManifestInputs(unittest.TestCase):
         code, out = correct("--item", second["check_item"])            # another span's Check: refused, still HELD
         self.assertEqual(code, 1, out)
         self.assertIn("the span stays HELD", out)
-        before = (self.repo / self.M.INPUTS_PATH).read_bytes()
+        before = self.manifest.read_bytes()
         code, out = correct("--item", later)                             # dry run
         self.assertEqual(code, 0, out)
-        self.assertEqual((self.repo / self.M.INPUTS_PATH).read_bytes(), before)
+        self.assertEqual(self.manifest.read_bytes(), before)
         code, out = correct("--item", later, "--write")
         self.assertEqual(code, 0, out)
         self.assertIn(f"Check item {first['check_item']} (held) -> {later} (abbreviated; bound)", out)
-        fixed = json.loads((self.repo / self.M.INPUTS_PATH).read_text())
+        fixed = self.pins_now()
         self.assertEqual((fixed["spans"][0]["check_item"], fixed["spans"][0]["check_corrected_from"]),
                          (later, first["check_item"]))
         self.assertEqual([s["span_id"] for s in fixed["spans"]], [first["span_id"], second["span_id"]])
@@ -966,7 +989,7 @@ class ManifestInputs(unittest.TestCase):
         with self.assertRaisesRegex(self.M.ManifestError, "empty"):
             self.M.input_pins(self.repo, self.doc, complete=True)
         pins, digest = self.M.input_pins(self.repo, self.doc, complete=False)
-        self.assertEqual((pins["spans"], digest), ([], sha((self.repo / self.M.INPUTS_PATH).read_bytes())))
+        self.assertEqual((pins["spans"], digest), ([], sha(P.pin_list_bytes(self.doc["inputs"]["pins"]))))
 
     def test_pin_inputs_writes_each_span_s_offload_lines_and_hashes_nothing_in_custody(self):
         for path in self.custody.rglob("*"):                    # a custody file that cannot be opened is still pinned
@@ -976,14 +999,14 @@ class ManifestInputs(unittest.TestCase):
             code, out = self.pin_inputs()
             self.assertEqual(code, 0, out)
             self.assertIn("(dry run", out)
-            self.assertEqual(json.loads((self.repo / self.M.INPUTS_PATH).read_text())["spans"], [])
+            self.assertEqual(self.pins_now()["spans"], [])
             code, out = self.pin_inputs("--write")
         finally:
             for path in self.custody.rglob("*"):
                 if path.is_file():
                     os.chmod(path, 0o600)
         self.assertEqual(code, 0, out)
-        written = json.loads((self.repo / self.M.INPUTS_PATH).read_text())
+        written = self.pins_now()
         self.assertEqual(written, {"schema": P.SCHEMA, "spans": [
             P.span_pins(sid, offload_manifest(files_for(sid)), {n: len(d) for n, d in files_for(sid).items()},
                         runner_commit=COMMIT, close_item=318 + i, check_item=317 - i)
@@ -1006,7 +1029,7 @@ class ManifestInputs(unittest.TestCase):
             with self.subTest(label):
                 self.assertEqual(code, 1, out)
                 self.assertIn(text, out)
-                self.assertEqual(json.loads((self.repo / self.M.INPUTS_PATH).read_text())["spans"], [])
+                self.assertEqual(self.pins_now()["spans"], [])
         self.plan.write_text(json.dumps([dict(self.rows[0], note="x")]))
         self.assertEqual(self.pin_inputs("--write")[0], 1)
         self.plan.write_text(json.dumps(self.rows))
@@ -1018,9 +1041,7 @@ class ManifestInputs(unittest.TestCase):
     def test_check_inputs_follows_the_chain_from_each_pin_to_its_public_check(self):
         self.assertEqual(self.pin_inputs("--write")[0], 0)
         self.assertEqual(self.run_cli("pin", self.manifest, "--repo", self.repo, "--write")[0], 0)
-        doc = json.loads(self.manifest.read_text())
-        self.assertEqual(doc["inputs"]["pins"]["sha256"], sha((self.repo / self.M.INPUTS_PATH).read_bytes()))
-        pins = json.loads((self.repo / self.M.INPUTS_PATH).read_text())
+        pins = self.pins_now()
         state = Path(self.tmp.name) / "RUN_STATE.md"
         roster = Path(self.tmp.name) / "roster.json"
         roster.write_text(json.dumps([{"span_id": "dev-01-s03"}, {"span_id": "dev-01-s01"}]))
@@ -1062,24 +1083,25 @@ class ManifestInputs(unittest.TestCase):
         for key in ("files", "offload_manifest_sha256"):
             exchanged["spans"][0][key], exchanged["spans"][1][key] = shared["spans"][1][key], shared["spans"][0][key]
         for label, document, expected in (("as pinned", shared, 0), ("exchanged", exchanged, 1)):
-            (self.repo / self.M.INPUTS_PATH).write_text(json.dumps(document, indent=1) + "\n")
+            self.set_pins(document)
             self.assertEqual(self.run_cli("pin", self.manifest, "--repo", self.repo, "--write")[0], 0)
             code, out = check()
             with self.subTest(label):
                 self.assertEqual(code, expected, out)
-        (self.repo / self.M.INPUTS_PATH).write_text(json.dumps(pins, indent=1) + "\n")
+        self.set_pins(pins)
         self.assertEqual(self.run_cli("pin", self.manifest, "--repo", self.repo, "--write")[0], 0)
         state.write_text(run_state(pins))
         roster.write_text(json.dumps([{"span_id": "dev-01-s01"}]))
         code, out = check("--roster", roster)
         self.assertEqual(code, 1, out)
         self.assertIn("not exactly the roster's spans", out)
-        # the inputs file edited after the manifest pinned it
-        path = self.repo / self.M.INPUTS_PATH
-        path.write_text(path.read_text() + "\n")
+        # Audit 2 (one source of pins): a list on disk is never read. A stale two-span file where the old list lived,
+        # one span short of the manifest's, changes nothing: the manifest's spans are the ones checked
+        stale = self.repo / "docs/process/cadence/looks/lm-interim-01.inputs.json"
+        stale.write_text(json.dumps(dict(pins, spans=pins["spans"][:1])) + "\n")
         code, out = check()
-        self.assertEqual(code, 1, out)
-        self.assertIn("differs from the manifest's pin", out)
+        self.assertEqual(code, 0, out)
+        self.assertIn("2 spans", out)
 
 
 if __name__ == "__main__":

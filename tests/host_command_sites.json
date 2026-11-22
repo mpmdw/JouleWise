@@ -7,7 +7,7 @@
   },
   {
     "file": "scripts/cadence_interim_twin_pins.py",
-    "locator": "<module>:78267d3cb7422d05",
+    "locator": "<module>:39420b1906b12418",
     "command": "python-isolated",
     "seam": "Usage line in the wrapper's docstring; no command runs at import."
   },

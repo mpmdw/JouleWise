@@ -1338,7 +1338,8 @@
         "disclosure",
         "pre_run_check",
         "cite",
-        "pin_check"
+        "pin_check",
+        "root"
       ],
       "properties": {
         "runs_by": {
@@ -1377,6 +1378,12 @@
         },
         "pin_check": {
           "$ref": "#/$defs/text"
+        },
+        "root": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },
@@ -1453,15 +1460,15 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "path",
-            "sha256"
+            "schema",
+            "spans"
           ],
           "properties": {
-            "path": {
-              "const": "docs/process/cadence/looks/lm-interim-01.inputs.json"
+            "schema": {
+              "const": "joulewise.cadence_look_input_pins.v1"
             },
-            "sha256": {
-              "$ref": "#/$defs/sha_or_pending"
+            "spans": {
+              "type": "array"
             }
           }
         },

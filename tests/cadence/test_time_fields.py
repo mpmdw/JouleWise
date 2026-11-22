@@ -34,6 +34,7 @@ from joulewise.external import km003c_parse as kp
 
 try:  # the stage CLI needs numpy (CI's look-fit job installs it)
     from joulewise.cadence_looks import fit_interim as F
+    from tests.cadence import look_layout_fixture as LF
     from scripts import cadence_look_run as R
     from scripts import cadence_look_synth as synth
     from tests.cadence import test_look_run as TLR
@@ -491,12 +492,12 @@ class Perturbation(unittest.TestCase):
             from tests.cadence import custody_pin_fixture as PF
             (cwd / "pins.json").write_bytes(PF.dump(PF.synthetic_pins(
                 {span["span_id"]: cwd / "custody" / span["span_id"] for span in rj(cwd / "custody/roster.json")})))
-            s1 = subprocess.run([sys.executable, "-I", "-B", str(REPO / "scripts/cadence_look_run.py"), "stage1",
-                                 "--roster", "custody/roster.json", "--custody", "custody", "--rules-3-4", "v.json",
-                                 "--write-input", "li.json", "--out", "s1.json", "--manifest", man, "--allow-draft",
-                                 "--custody-pins", "pins.json"],
-                                cwd=cwd, capture_output=True, text=True, timeout=600)
-            self.assertEqual(s1.returncode, 0, s1.stdout + s1.stderr)
+            # the executor takes no path: the test harness places these files at their fixed names (audit 2)
+            rc, out, err = TLR.run_cli(["stage1", "--roster", cwd / "custody/roster.json", "--custody", cwd / "custody",
+                                        "--rules-3-4", cwd / "v.json", "--write-input", cwd / "li.json",
+                                        "--out", cwd / "s1.json", "--manifest", man, "--allow-draft",
+                                        "--custody-pins", cwd / "pins.json"])
+            self.assertEqual(rc, 0, out + err)
             outs[name] = {f: (cwd / f).read_bytes() for f in ("v.json", "detail.json", "li.json", "s1.json")}
         return outs
 
@@ -521,8 +522,13 @@ class Perturbation(unittest.TestCase):
         self.assertEqual(sa.host_ns, sb.host_ns)
         self.assertNotEqual(sa.watts, sb.watts)
         outs = self.run_both(d, TLR.pinned_manifest())
-        for f in ("v.json", "detail.json", "li.json", "s1.json"):
+        for f in ("v.json", "detail.json", "li.json"):
             self.assertEqual(outs["a"][f], outs["b"][f], f)
+        # the manifest carries the pin list (audit 2), and the pins of the perturbed streams differ: the stage-1
+        # file's manifest_sha256 (a hash) is the one byte range that differs; every other byte is the same
+        a1, b1 = json.loads(outs["a"]["s1.json"]), json.loads(outs["b"]["s1.json"])
+        self.assertNotEqual(a1["manifest_sha256"], b1["manifest_sha256"])
+        self.assertEqual(R.F.dump(dict(a1, manifest_sha256=None)), R.F.dump(dict(b1, manifest_sha256=None)))
         li = json.loads(outs["a"]["li.json"])
         self.assertTrue(any(leg["trace_holes"] for leg in li["legs"]))       # the clauses read both channels
         self.assertTrue(all(sp["custody"]["meter_time_sha256"] for sp in li["spans"]))
@@ -629,9 +635,9 @@ class TraceClausesThroughTheCli(unittest.TestCase):
         rc, _, err = TLR.run_cli(["stage2", "--stage1", str(p1), "--stage1-sha256", R.sha256_file(p1), "--custody",
                                   str(self.c.root), "--span-dir", f"{sid}={sdir}", "--out", str(fit)])
         self.assertEqual(rc, 0, err)                                  # the backstop (on at 2 s) admits B's 2.0 s
-        files = {Path(entry["path"]) for entry in rj(fit)["custody"]["files"]}
-        self.assertIn(bundle_of(sdir, B["leg_key"]).resolve() / "power_trace.csv", files)
-        self.assertNotIn(bundle_of(sdir, A["leg_key"]).resolve() / "power_trace.csv", files)
+        files = {Path(entry["path"]) for entry in rj(fit)["custody"]["files"]}     # span-relative: <root>/<span id>
+        self.assertIn(bundle_of(sdir, B["leg_key"]).relative_to(d) / "power_trace.csv", files)
+        self.assertNotIn(bundle_of(sdir, A["leg_key"]).relative_to(d) / "power_trace.csv", files)
 
     def test_meter_attacks_are_excluded_in_stage_1(self):
         """Stage 1 excludes, by rule 4's DC-in clause, each shape of the round-5 reports; none reaches stage 2."""
@@ -710,7 +716,7 @@ class TraceClausesThroughTheCli(unittest.TestCase):
             self.assertEqual((got["inclusion"]["km003c_clean"], got["in_energy_fit"]), (False, False), L["leg_key"])
         n_dc = sum(1 for L in s1["legs"] if L["trace_holes"] and L["trace_holes"]["dc_in"]["excluded"])
         self.assertEqual(s1["counts"]["excluded_by_trace_clause"]["dc_in"], n_dc)
-        R.stage2_preflight(s1, R.span_dirs(root, None))         # what stage 2 would open: only admitted legs
+        R.stage2_preflight(s1, LF.span_dirs(root, None))         # what stage 2 would open: only admitted legs
 
     def test_a_zst_sibling_refuses_stage_1_and_inclusion(self):
         sid = "dev-01-s02"
@@ -835,6 +841,12 @@ class StageTwoBackstops(unittest.TestCase):
         span = next(sp for sp in s1["roster"]["spans"] if sp["span_id"] == sid)
         span["custody"]["meter_time_sha256"] = TF.SpanMeter(sdir).digest()
         L["trace_holes"]["gpu_rail"]["rows_sha256"] = TF.rows_digest(TF.gpu_rows(bundle_of(sdir, L["leg_key"])))
+        # by hand, too: the manifest that pins the changed copy (the pins are the manifest's, audit 2), so that only
+        # the backstop stands between this stage-1 file and the fit
+        scratch = d / "s1-scratch.json"                 # a stage-1 file no stage 1 made: its pins are the copy's own
+        scratch.write_bytes(F.dump(s1))
+        s1["manifest_sha256"] = hashlib.sha256(TLR.placed_manifest_bytes(
+            ["stage2", "--stage1", str(scratch), "--custody", str(self.c.root), "--span-dir", f"{sid}={sdir}"])).hexdigest()
         s1p.write_bytes(F.dump(s1))
         return s1p, sdir, L
 
@@ -945,19 +957,22 @@ class CustodyBinding(unittest.TestCase):
             sdir = d / "dev-01-s02"
             shutil.copytree(self.c.root / "dev-01-s02", sdir)
             change(sdir)
+            # RL-194: stage 2 runs under the pins stage 1 ran under, so another copy is refused by its pins first,
+            # before the reservation and before any file is parsed
             rc, err, run = self.stage2(sdir, d / "fit.json")
-            if name in ("meter", "trace"):
-                self.assertEqual(rc, 1, name)
-                self.assertEqual(err, "stage2_error\nOtherError\n")
-                err = run["private_stderr"]
-            else:
-                self.assertEqual(rc, 2, name)
-            self.assertIn(fragment, err, name)
+            self.assertEqual(rc, 2, name)
+            self.assertIn("custody pins: dev-01-s02/", err, name)
+            self.assertIn("its bytes are not its pin", err, name)
             self.assertFalse((d / "fit.json").exists(), name)
-            energy = [(p, who) for p, who in run["frames"] if p.endswith(("power_trace.csv", ".jsonl"))
-                      and ("power_trace" in p or "/hazards/meter/" in p.replace(os.sep, "/"))]
-            # only the time reader opened an energy file (for its time fields), never the decoder or step 3
-            self.assertEqual({who for _, who in energy} - {"joulewise/cadence_looks/time_fields.py"}, set(), name)
+            self.assertEqual(run["served"], [], name)
+            # behind the pins, the custody binding (defense in depth) still refuses the same copy
+            sdir_of = LF.span_dirs(self.c.root, [f"dev-01-s02={sdir}"])
+            found = M.nonenergy_problems(self.s1, sdir_of, ["dev-01-s02"], include_native_pm=False)
+            if name in ("meter", "trace"):
+                with self.assertRaises(R.F.LookInputError) as caught:
+                    R.custody_check(self.s1, sdir_of)
+                found = [str(caught.exception)]
+            self.assertTrue(any(fragment in problem for problem in found), (name, found))
 
     def test_the_fit_records_its_custody(self):
         d = tmpdir(self)
@@ -966,9 +981,10 @@ class CustodyBinding(unittest.TestCase):
         rc, err, _ = self.stage2(sdir, d / "fit.json")
         self.assertEqual(rc, 0, err)
         cust = rj(d / "fit.json")["custody"]
-        self.assertEqual(cust["root"], str(self.c.root.resolve()))
-        self.assertEqual(cust["span_dirs"], [{"span_id": "dev-01-s02", "path": str(sdir.resolve())}])
-        sdir_of = R.span_dirs(self.c.root, [f"dev-01-s02={sdir}"])
+        root = Path(cust["root"])                       # the registered root: every span is read at <root>/<span id>
+        self.assertEqual(cust["span_dirs"], [])
+        self.assertTrue((root / "dev-01-s02" / "runner_receipt.json").is_file())
+        sdir_of = LF.span_dirs(self.c.root, [f"dev-01-s02={sdir}"])
         want = set()
         for L in self.s1["legs"]:
             if L["in_energy_fit"]:
@@ -981,9 +997,7 @@ class CustodyBinding(unittest.TestCase):
         expected = {}
         for path in want:
             sid, rest = path.split("/", 1)
-            source = sdir_of(sid) / rest
-            key = source if sid == "dev-01-s02" else Path(path)
-            expected[key] = R.sha256_file(source)
+            expected[Path(path)] = R.sha256_file(sdir_of(sid) / rest)
         self.assertEqual(recorded, expected)
 
     def test_changed_operational_sources_refuse_before_later_readers(self):
@@ -1002,14 +1016,18 @@ class CustodyBinding(unittest.TestCase):
                 p.write_bytes(b" " + p.read_bytes())          # layout only: admitted (F3), but not the bytes stage 1 read
                 rc, err, run = self.stage2(sdir, d / "fit.json")
                 self.assertEqual(rc, 2, err)
-                self.assertIn(f"custody: dev-01-s02/{rel}", err)
+                self.assertIn(f"custody pins: dev-01-s02/{rel}: its bytes are not its pin", err)   # RL-194, first
                 energy = [(p, who) for p, who in run["frames"] if p.endswith("power_trace.csv")
                           or "/hazards/meter/" in p.replace(os.sep, "/")]
                 self.assertFalse(energy, energy)
+                # behind the pins, the binding still names the file (defense in depth)
+                self.assertTrue(any(f"custody: dev-01-s02/{rel}" in problem for problem in M.nonenergy_problems(
+                    self.s1, LF.span_dirs(self.c.root, [f"dev-01-s02={sdir}"]), ["dev-01-s02"],
+                    include_native_pm=False)))
                 from joulewise.cadence_looks import step3_roster as s3
                 with unittest.mock.patch.object(s3, "entries_from_stage1", side_effect=AssertionError("late read")):
                     self.assertTrue(s3.custody_problems(self.s1,
-                                    R.span_dirs(self.c.root, [f"dev-01-s02={sdir}"])))
+                                    LF.span_dirs(self.c.root, [f"dev-01-s02={sdir}"])))
 
     def test_native_pm_state_swap_refuses_without_hashing_energy_values(self):
         d = tmpdir(self)
@@ -1023,11 +1041,11 @@ class CustodyBinding(unittest.TestCase):
         self.assertGreater(hits, 0)
         p.write_bytes(raw)
         rc, err, run = self.stage2(sdir, d / "fit.json")
-        self.assertEqual(rc, 1, err)
-        self.assertIn("native PM time/state projection", run["private_stderr"])
+        self.assertEqual(rc, 2, err)                                    # RL-194: the pins refuse it first
+        self.assertIn("powermetrics.plist: its bytes are not its pin", err)
         from joulewise.cadence_looks import step3_roster as s3
         self.assertTrue(s3.custody_problems(self.s1,
-                        R.span_dirs(self.c.root, [f"dev-01-s02={sdir}"])))
+                        LF.span_dirs(self.c.root, [f"dev-01-s02={sdir}"])))
 
 # ============================================================================================ 6. the ledger
 @NEEDS_NUMPY
@@ -1176,7 +1194,7 @@ class SupersededStage1(unittest.TestCase):
         args = ("--ruled-exclusion", f"{leg}=km003c_clean=RL-999")
         r, out = self.stage1(*args)
         self.assertEqual(r.returncode, 2)
-        self.assertIn("needs --superseded-stage1 and --superseded-input", r.stderr)
+        self.assertIn("needs the kept stage-1 and level-R files", r.stderr)
         old_input = old.with_suffix(".input.json")
         bad = self.d / "bad-old.json"
         bad.write_bytes(old.read_bytes() + b" ")
@@ -1277,7 +1295,7 @@ class SupersededStage1(unittest.TestCase):
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("the pinned spans are not exactly the roster's; no span is dropped", r.stdout)
         self.assertEqual(looks.read_bytes(), before)
-        pins = json.loads((self.mini / M.INPUTS_PATH).read_text())
+        pins = json.loads((self.mini / self.mr.MANIFEST).read_text())["inputs"]["pins"]
         held = pins["spans"][0]
         state = self.mini / "RUN_STATE.md"
         state.write_text(state.read_text().replace(held["offload_manifest_sha256"], "0" * 64))
@@ -1451,7 +1469,7 @@ class RealHeaderShape(unittest.TestCase):
         edit_polls(p, lambda f, doc: dict(doc, rt=doc["rt"] + 500_000_000))      # wall clock 0.5 s off the raw
         sm, _ = R.span_meter(sdir)
         self.assertEqual(R.meter_offsets(sm), (off, off + 500_000_000))
-        li = R.read_look_input(rj(c.paths["roster.json"]), R.span_dirs(c.root, [f"{sid}={sdir}"]),
+        li = R.read_look_input(rj(c.paths["roster.json"]), LF.span_dirs(c.root, [f"{sid}={sdir}"]),
                                rj(c.paths["rules_3_4.json"]))
         mc = F.stage1(li, "0" * 64)["meter_clock"]
         self.assertAlmostEqual(mc["spans"][sid]["end_minus_header_s"], 0.5, places=6)
@@ -1556,15 +1574,15 @@ class N9Survivors(unittest.TestCase):
         li, _, _ = synth.build("exact")
         (d / "li.json").write_bytes(synth.dump(li))
         env = {**os.environ, "TMPDIR": str(private)}
-        r = subprocess.run([sys.executable, "-I", "-B", str(REPO / "scripts/cadence_look_run.py"), "stage1",
-                            "--input", str(d / "li.json"), "--out", str(d / "s1.json"), "--manifest",
-                            TLR.pinned_manifest(), "--allow-draft"], capture_output=True, text=True, timeout=600,
-                           env=env)
+        from tests.cadence import look_minirepo as mr
+        mini = mr.mini_repo(self)                   # a copy whose manifest registers its root (audit 2)
+        placed = mr.place_in(mini, ["stage1", "--input", d / "li.json", "--out", d / "s1.json", "--allow-draft"])
+        r = subprocess.run([sys.executable, "-I", "-B", str(mini / "scripts/cadence_look_run.py"), *placed.argv],
+                           capture_output=True, text=True, timeout=600, env=env)
         self.assertEqual(r.returncode, 0, r.stderr)
-        r = subprocess.run([sys.executable, "-I", "-B", str(REPO / "scripts/cadence_look_run.py"), "stage1",
-                            "--input", str(d / "missing.json"), "--out", str(d / "s2.json"), "--manifest",
-                            TLR.pinned_manifest(), "--allow-draft"], capture_output=True, text=True, timeout=600,
-                           env=env)
+        placed = mr.place_in(mini, ["stage1", "--input", d / "missing.json", "--out", d / "s2.json", "--allow-draft"])
+        r = subprocess.run([sys.executable, "-I", "-B", str(mini / "scripts/cadence_look_run.py"), *placed.argv],
+                           capture_output=True, text=True, timeout=600, env=env)
         self.assertEqual(r.returncode, 2)                       # a failing run cleans up too
         self.assertEqual(sorted(p.name for p in private.iterdir()), [])
         r = subprocess.run([sys.executable, "-I", "-B", "-c",

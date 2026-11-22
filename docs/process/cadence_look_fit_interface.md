@@ -455,18 +455,41 @@ literal nested bundle locators, including under a staged span override.
 Campaign execution awaits Astra's paired census rerun and Fable's manifest
 cold pass.
 
+**No command takes a path (audit 2 on 98fedf875, lead ruling).** The manifest at
+`docs/process/cadence/looks/lm-interim-01.json` registers the look's one root
+(`custody.root`), and every path is that root and the look id
+(`manifest.LookLayout`):
+
+| Fixed place | What | Former option |
+| --- | --- | --- |
+| `<root>/<span id>/` | a roster span's custody copy | `--custody`, `--span-dir` |
+| `<root>/lm-interim-01/roster.json`, `rules_3_4.json` | stage 1's two committed inputs | `--roster`, `--rules-3-4` |
+| `<root>/lm-interim-01/stage1.json`, `level_r.json` | stage 1's outputs, created once; stage 2 reads `stage1.json` | `--out`, `--write-input`, `--stage1` |
+| `<root>/lm-interim-01/superseded_stage1.json`, `superseded_level_r.json` | a ruled rerun's kept files | `--superseded-stage1`, `--superseded-input` |
+| `<root>/lm-interim-01/archives/<span id>.tar`, `.SHA256SUMS`, `.marker.json` | pulled archives, read with `stage1 --stage-archives` | the staging plan, `--staging-root` |
+| `<root>/lm-interim-01/input_level_r.json`, `input_level_e.json` | synthetic `--allow-draft` inputs (`--level-r`, `--level-e`) | `--input`, `--energy` |
+| `<root>/lm-interim-01/RESTRICTED/` | stage 2's reservation; the public report goes only to the ledger's registered public root | |
+
+The commands are `stage1 [--allow-draft] [--ledger-ref REF] [--ruled-exclusion ...] [--stage-archives] [--level-r]`,
+`stage2 --stage1-sha256 HEX [--allow-draft] [--ledger-ref REF] [--level-e]`, `post-no-maxima` and `host-id`.
+Every path is checked before use: absolute, its own realpath, no symlink component, inside its root, and no name
+beside it that differs only in case. The root lies outside the repository; an archive is expanded into a fresh
+private directory outside the root and the repository and removed when the stage ends. Stage 2 also refuses a file
+beside `RESTRICTED` or `PUBLIC.json` that differs from it only in case, and a ledger `custody_root` other than the
+manifest's root. The sections below that name a former option describe the same file at its fixed place.
+
 **Admission is by content address (RL-194).** The roster is a closed set, so
-the manifest pins one inputs file (`inputs.pins`,
-`docs/process/cadence/looks/lm-interim-01.inputs.json`) and that file pins every
-file of every roster span by sha256 and size
-(`joulewise/cadence_looks/custody_pins.py`).
+the manifest carries one pin list (`inputs.pins`), the only copy there is (audit 2:
+one source of pins), and that list pins every file of every roster span by sha256 and
+size (`joulewise/cadence_looks/custody_pins.py`). Every reader (check-inputs, both
+stages, the twin's wrapper, the cold review and its checker) reads it from the manifest.
 
 - **The pins are not hashes of today's copy.** A span's pins are the lines of
   its offload manifest (`<sha256>  ./<path>`) in their order. They rebuild that
   manifest's sha256, and the span's public RUN_STATE Check item names it.
   A changed, added, dropped or reordered pin breaks the chain in the pin list
-  itself. `cadence_look_manifest.py pin-inputs` writes the file from the offload
-  manifests and opens no custody file; `check-inputs` follows the chain.
+  itself. `cadence_look_manifest.py pin-inputs` writes the list into the manifest from
+  the offload manifests and opens no custody file; `check-inputs` follows the chain.
 - **The pin list comes first.** Before a stage touches custody (a span directory, an archive, a staging root)
   it admits the pin list: the manifest's own, naming exactly the roster's spans, each chained to its Check.
 - **A separate verifier runs next (RL-194a §1).** `scripts/cadence_look_verify_inputs.py` is a hash-only
@@ -478,8 +501,8 @@ file of every roster span by sha256 and size
 - **A pulled archive is staged by its own process** (`scripts/cadence_look_stage_archive.py`, RL-174 D.3), after
   the pin list is admitted and only if the SHA256SUMS is the span's pinned offload manifest. Stage 1 never opens
   or hashes the archive.
-- **Stage 1 writes `--out` and `--write-input` last,** after every check. A refused run creates no file, and
-  neither name may be `PUBLIC.json` or lie under `RESTRICTED`.
+- **Stage 1 writes `stage1.json` and `level_r.json` last,** after every check, each created once in the look's
+  private directory. A refused run creates no file.
 - **Stage 1 never hashes an energy stream (RL-179 F-12).** After the verifier's pass the stage reads each
   operational file it parses once into memory, hashes it and compares, and parses those bytes. It checks each
   span directory by name: a missing or unpinned file or a symlink refuses. It reads a stream's time fields
@@ -490,15 +513,15 @@ file of every roster span by sha256 and size
   as energy or power (the step-3 name rule) is left as a shield, never converted, and the grammar admits the
   shield there.
 - **Stage 2 re-checks a stream's pin at each open,** immediately before decoding it, and decodes those bytes.
-  A mismatch there is inside the reservation and spends the look under RL-180's ordinary rule. A `--span-dir`
-  override that is a symlink refuses as supplied, before anything resolves it.
+  A mismatch there is inside the reservation and spends the look under RL-180's ordinary rule.
 - **An open of a roster path outside the pin list refuses,** and so does any open that bypasses the pinned
   reads. A committed run also requires each span's Check item on `origin/main` to name its offload manifest
-  (RL-194a §2). The Check's digests for a span are those it prints as the span's manifest: after the item
-  names the span, the first digest labelled `manifest` (or `manifest_sha256`, or the `SHA256SUMS` file's name)
-  before it names another pinned span. A digest under another label (an archive's, a marker's) binds nothing.
-  The span binds when it has at least one and every printed character of each matches, in full or as an
-  abbreviation of any length; otherwise it is HELD. A digest with `outer` just before it (the close-time
+  (RL-194a §2; audit 2, lead ruling). The binding is keyed by span: the Check's digests for a span are those it
+  prints labelled `manifest` (or `manifest_sha256`, or the `SHA256SUMS` file's name) after a name of that span with
+  no other name between (a name is a span id, an offload directory such as `cq-<span>-a1`, another series' span or
+  a kit). A digest after another name belongs to it and never binds; a digest under another label binds nothing.
+  Equality is exact: the full digest, or an abbreviation of at least eight printed hex digits every one of which
+  matches. Every digest the item prints for the span must match; one mismatch holds it. Otherwise it is HELD. A digest with `outer` just before it (the close-time
   `outer.sha256`) never binds; it is cited as a second record only (RL-195 §2.2).
 - **A HELD span (RL-195 §2).** It keeps the manifest from being final and stays on the roster and in the pins:
   every stage refuses while it is held, `check-inputs` exits 1 and lists, for each held span, the item numbers and
@@ -514,8 +537,8 @@ file of every roster span by sha256 and size
 - **The twin.** The reviewed child is byte-identical to its #816 review. The parent launches
   `scripts/cadence_interim_twin_pins.py`, which checks every roster file against the pins with its own code
   and then becomes the child with the child's arguments untouched.
-- **Draft runs.** A synthetic `--allow-draft` run names its generated
-  custody's pin list with `--custody-pins`, and a RUN_STATE with `--run-state`.
+- **Draft runs.** A synthetic `--allow-draft` run reads the same fixed layout under its copy's registered
+  root, the pin list in its copy's manifest, and its copy's own `RUN_STATE.md`; there is no other source.
 - **The review record.** `scripts/cadence_look_input_review.py` produces the
   one-time record RL-194 §1 specifies. Its first act is the stage's: each span
   directory is its pin list by name (no symlink at any depth) and each operational
@@ -736,16 +759,16 @@ including optional presence, join the source hash map checked by both stage-2 re
 ```
 
 **The roster** is `manifest.resolve_roster`'s list `[{span_id, block_id, role, t0_local_date}]`; a span's
-directory is `<custody>/<span_id>` unless `--span-dir SPAN_ID=PATH` says otherwise. The span ledger requires valid
+directory is `<root>/<span_id>`, and nothing else. The span ledger requires valid
 calendar dates. Stage 1 derives the Los Angeles date from `runner_receipt.json`'s `started.epoch_s` and requires
 the roster date to match. Direct level-R input must satisfy the same epoch-to-date check.
 
 **Stage 2 opens** each energy-fit leg's (never an hp-01 leg's) `leg_record.json` and `power_trace.csv` through the pinned step 3 reader, and that span's meter streams through the pinned decoder. Before reservation it verifies the operational sources and checks the full design and each required leave-one-day-out design for column rank. The reserved process checks the time projections before decoding responses. Both channels use the same fold onsets and factorizations and retain their own residuals and covariance.
 
-**Pins and commit (#793's helpers).** Both stages take `--manifest` (and `--allow-draft` for synthetic runs) and call
+**Pins and commit (#793's helpers).** Both stages read the fixed manifest (and take `--allow-draft` for synthetic runs) and call
 `manifest.verify_pins(manifest, repo, allow_draft=..., running=(fit_interim.py, cadence_look_run.py))` before any
 input is opened. In committed mode stage 2 calls `manifest.require_stage1_committed(repo, "lm-interim-01",
-stage1_sha256, stage1_doc=...)` against committed `LOOKS.json`; `--looks` is a synthetic draft override only. The gate runs after the stage-1 hash check and before any energy is opened.
+stage1_sha256, stage1_doc=...)` against committed `LOOKS.json`; a synthetic draft reads its copy's own `LOOKS.json`. The gate runs after the stage-1 hash check and before any energy is opened.
 
 **Round 7 fixes (cold Sol on ac2e1ce33; builder round 8).**
 - R7-H1: GPU gap checks use the union of touching/overlapping fitted intervals in stage 1 and the independent
@@ -848,7 +871,7 @@ reader's four unsupported malformed shapes, and the registered cadence twin inte
   step 3 file, and fit.dependencies except `configs/align/v4/r1_runtime.json`. Before writing, each stage refuses if
   `manifest.unpinned_loaded_modules` names any module.
 - **`--allow-draft`** refuses input that is not synthetic (stage 1: every receipt's `"synthetic": true`, or the level-R
-  flag; stage 2: the stage-1 file's flag). `stage1 --input`, `stage2 --energy` and `stage2 --looks` run only with it.
+  flag; stage 2: the stage-1 file's flag). `stage1 --level-r` and `stage2 --level-e` run only with it.
 - **Commit gate.** Without `--allow-draft`, stage 2 calls `manifest.require_stage1_committed(repo, look_id,
   stage1_sha256, stage1_doc=..., ledger_ref=...)` on the committed ledger (`--ledger-ref`). With it, a scratch
   LOOKS row naming the stage-1 hash at `stage1_committed` or later stands in.

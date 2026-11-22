@@ -69,18 +69,17 @@ class Wrapper(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(data + sid.encode())
         self.doc = PF.synthetic_pins({sid: self.custody / sid for sid in SPANS})
-        self.pins = self.repo / "docs/pins.json"
-        self.pins.write_bytes(PF.dump(self.doc))
         self.stage1 = self.tmp / "stage1.json"
         self.manifest = self.tmp / "manifest.json"
         self.write(allow_draft=False)
 
-    def write(self, *, allow_draft, spans=SPANS):
+    def write(self, *, allow_draft, spans=SPANS, pins=None):
+        """The stage-1 file and the manifest; the manifest carries the one pin list (audit 2, lead ruling)."""
         self.stage1.write_text(json.dumps({"roster": {"spans": [{"span_id": sid} for sid in spans]},
                                            "allow_draft": allow_draft}))
         self.manifest.write_text(json.dumps({
             "fit": {"twin": {"path": "scripts/child.py", "sha256": sha(self.child.read_bytes())}},
-            "inputs": {"pins": {"path": "docs/pins.json", "sha256": sha(self.pins.read_bytes())}}}))
+            "inputs": {"pins": self.doc if pins is None else pins}}))
 
     def child_args(self):
         return ["--manifest", str(self.manifest), "--manifest-sha256", sha(self.manifest.read_bytes()),
@@ -136,39 +135,42 @@ class Wrapper(unittest.TestCase):
 
     def test_the_pin_list_the_roster_and_the_child_are_each_bound(self):
         cases = {
-            "the pin list is not the manifest's": lambda: self.pins.write_bytes(self.pins.read_bytes() + b"\n"),
             "the roster names another span": lambda: self.write(allow_draft=False, spans=(*SPANS, "dev-02-s02")),
             "the roster lacks a pinned span": lambda: self.write(allow_draft=False, spans=SPANS[:1]),
             "the child is not at its pin": lambda: self.child.write_text(ECHO_CHILD + "# changed\n"),
         }
         for label, change in cases.items():
-            self.pins.write_bytes(PF.dump(self.doc))
             self.child.write_text(ECHO_CHILD)
             self.write(allow_draft=False)
             self.assertEqual(self.run_wrapper().returncode, 0)
             change()
             with self.subTest(label):
                 self.refused(self.run_wrapper())
-        self.pins.write_bytes(PF.dump(self.doc))
         self.child.write_text(ECHO_CHILD)
         self.write(allow_draft=False)
+        args = self.child_args()
+        self.manifest.write_text(self.manifest.read_text() + "\n")       # the manifest is not the bytes its digest names
+        self.refused(self.run_wrapper(args=args))
         forged = json.loads(json.dumps(self.doc))
         forged["spans"][0]["files"][0]["sha256"] = "0" * 64         # the pins no longer rebuild their offload manifest
-        self.pins.write_bytes(PF.dump(forged))
-        self.write(allow_draft=False)
+        self.write(allow_draft=False, pins=forged)
         self.refused(self.run_wrapper())
 
-    def test_only_a_draft_look_may_name_its_own_pin_list(self):
+    def test_the_only_pin_list_is_the_manifest_s(self):
+        """Audit 2, lead ruling (one source of pins): no option names another list, draft or not, and a list on disk
+        beside the manifest is never read."""
         own = self.tmp / "own-pins.json"
         own.write_bytes(PF.dump(self.doc))
-        flags = ("--custody-pins", str(own), "--custody-pins-sha256", sha(own.read_bytes()))
-        self.refused(self.run_wrapper(*flags))                           # the stage-1 file is not a draft's
-        self.write(allow_draft=True)
-        done = self.run_wrapper(*flags)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(json.loads(done.stdout)["argv"], self.child_args())   # its own two options are not passed on
-        self.refused(self.run_wrapper("--custody-pins", str(own), "--custody-pins-sha256", "0" * 64))
-        self.refused(self.run_wrapper("--custody-pins", str(own)))
+        for allow_draft in (False, True):
+            self.write(allow_draft=allow_draft)
+            for flags in (("--custody-pins", str(own), "--custody-pins-sha256", sha(own.read_bytes())),
+                          ("--custody-pins", str(own))):
+                with self.subTest(allow_draft=allow_draft, flags=len(flags)):
+                    self.refused(self.run_wrapper(*flags))
+        self.write(allow_draft=False, pins={"schema": PF.custody_pins.SCHEMA, "spans": []})
+        (self.repo / "docs/process/cadence/looks").mkdir(parents=True)
+        (self.repo / "docs/process/cadence/looks/lm-interim-01.inputs.json").write_bytes(PF.dump(self.doc))
+        self.refused(self.run_wrapper())              # the manifest's (empty) list is the list; the file is not read
 
     def test_it_requires_the_isolated_interpreter_and_a_span_that_is_a_directory(self):
         self.refused(self.run_wrapper(isolated=False))

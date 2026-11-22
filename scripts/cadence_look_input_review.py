@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """The one-time review record of a look's pinned inputs (RL-194 section 1, conditions 5 and 6).
 
-    python3 -B scripts/cadence_look_input_review.py template --manifest MANIFEST.json --repo DIR
-    python3 -B scripts/cadence_look_input_review.py review --manifest MANIFEST.json --repo DIR --custody ROOT
-        [--span-dir SPAN_ID=PATH ...] [--run-state RUN_STATE.md] --seat-model NAME --seat-family NAME
-        --out RECORD.json
-    python3 -B scripts/cadence_look_input_review.py check RECORD.json --manifest MANIFEST.json --repo DIR
-        [--run-state RUN_STATE.md]
+    python3 -B scripts/cadence_look_input_review.py template --repo DIR
+    python3 -B scripts/cadence_look_input_review.py review --repo DIR [--run-state RUN_STATE.md]
+        --seat-model NAME --seat-family NAME
+    python3 -B scripts/cadence_look_input_review.py check --repo DIR [--run-state RUN_STATE.md]
+
+The manifest is DIR's docs/process/cadence/looks/lm-interim-01.json, and its pin list (``inputs.pins``) is the only
+one read: the record certifies "N of N" for the manifest's N spans (audit 2, lead ruling). Each span is read from
+the manifest's registered root (``<root>/<span id>``), and the record is written once to, and checked from,
+``<root>/lm-interim-01/input_review.json`` (``manifest.LookLayout``); no command takes a custody path.
 
 ``template`` prints the record with every slot the seat and the lead fill left null. ``review`` is the executing
 seat's run. Its first act is the stage's own (``custody_pins.PinnedCustody.verify``): every span directory holds
@@ -29,8 +32,8 @@ from __future__ import annotations
 
 import argparse
 from datetime import date
+import hashlib
 import json
-import os
 from pathlib import Path
 import sys
 
@@ -189,7 +192,9 @@ def review(pin_list, pin_list_sha256, manifest_sha256, sdir_of, *, seat_model, s
                 records[leg_id if isinstance(leg_id, str) else repr(leg_id)] = (
                     admission.decode(raw, f"{span['span_id']}/legs/{leg_id}/leg_record.json") if raw is not None else None)
             frozen = (receipt.get("kit") or {}).get("frozen_commit") if isinstance(receipt.get("kit"), dict) else None
-            pin = row["receipt"]["writer_pin"] or admission.PINS.get(frozen)
+            # The writer is the span's pinned runner revision, never the receipt's own claim (audit 2, MED): a
+            # runner commit with no pinned writer leaves every citation empty and the checker refuses the record
+            pin = admission.PINS.get(span["runner_commit"])
             row["receipt"].update(writer_pin=pin, kit_frozen_commit=frozen,
                                   kit_frozen_commit_is_runner_commit=frozen == span["runner_commit"])
             for rule, found in receipt_shapes(receipt, records, pin).items():
@@ -254,6 +259,12 @@ def record_problems(record, pin_list, pin_list_sha256, manifest_sha256, run_stat
                             "prints for the span's manifest")
         if check.get("second_record") is not None and not (isinstance(check["second_record"], str) and check["second_record"]):
             problems.append(f"{sid}: check.second_record is a citation or null")
+        receipt = row.get("receipt") or {}
+        writer = admission.PINS.get(span["runner_commit"])
+        if writer is None or receipt.get("writer_pin") != writer:
+            problems.append(f"{sid}: the receipt's writer is not the pinned writer of the span's runner commit")
+        if receipt.get("kit_frozen_commit_is_runner_commit") is not True:
+            problems.append(f"{sid}: the receipt's kit commit is not the span's runner commit")
         shapes = ((row.get("receipt") or {}).get("shapes") or {})
         for rule in RULES:
             slot = shapes.get(rule) or {}
@@ -279,9 +290,11 @@ def record_problems(record, pin_list, pin_list_sha256, manifest_sha256, run_stat
 
 
 def _load(args):
-    doc = lm.load_json(Path(args.manifest))
+    """(the manifest's pin list, its sha256, the manifest's sha256, the manifest) from the repository's manifest."""
+    path = Path(args.repo) / lm.INTERIM_MANIFEST_PATH
+    doc = lm.load_json(path)
     pin_list, sha = lm.input_pins(args.repo, doc, complete=True)
-    return pin_list, sha, lm.sha256_file(Path(args.manifest))
+    return pin_list, sha, lm.sha256_file(path), doc
 
 
 def dump(record):
@@ -293,43 +306,37 @@ def main(argv=None):
     sub = parser.add_subparsers(dest="cmd", required=True)
     for name in ("template", "review", "check"):
         command = sub.add_parser(name)
-        if name == "check":
-            command.add_argument("record")
-        command.add_argument("--manifest", required=True)
         command.add_argument("--repo", required=True)
     run = sub.choices["review"]
-    run.add_argument("--custody", required=True)
-    run.add_argument("--span-dir", action="append", default=[])
     for command in (run, sub.choices["check"]):
         command.add_argument("--run-state", help="a RUN_STATE file; the default is RUN_STATE.md on origin/main")
     run.add_argument("--seat-model", required=True)
     run.add_argument("--seat-family", required=True)
-    run.add_argument("--out", required=True)
     args = parser.parse_args(argv)
     try:
-        pin_list, sha, manifest_sha = _load(args)
+        pin_list, sha, manifest_sha, doc = _load(args)
         if args.cmd == "template":
             sys.stdout.buffer.write(dump(template(pin_list, sha, manifest_sha)))
             return 0
+        layout = lm.LookLayout(args.repo, doc)
         run_state = (Path(args.run_state).read_text(encoding="utf-8") if args.run_state
                      else lm.public_run_state(args.repo))
         if args.cmd == "check":
-            problems = record_problems(json.loads(Path(args.record).read_bytes()), pin_list, sha, manifest_sha,
-                                       run_state)
+            raw = layout.read("input_review")
+            problems = record_problems(json.loads(raw), pin_list, sha, manifest_sha, run_state)
             for problem in problems:
                 print(f"REFUSE {problem}")
             if not problems:
-                print(f"ok {len(pin_list['spans'])} of {len(pin_list['spans'])} spans admissible; the desk and the "
-                      f"executing seat agree on all; record sha256 {lm.sha256_file(Path(args.record))}")
+                n = len(pin_list["spans"])          # the manifest's spans: never a count taken from the record
+                print(f"ok {n} of {n} spans admissible; the desk and the executing seat agree on all; record sha256 "
+                      f"{hashlib.sha256(raw).hexdigest()}")
             return 1 if problems else 0
-        overrides = dict(pair.partition("=")[::2] for pair in args.span_dir)
-        record = review(pin_list, sha, manifest_sha,
-                        lambda sid: Path(overrides.get(sid) or os.path.join(args.custody, sid)),
+        record = review(pin_list, sha, manifest_sha, layout.span,
                         run_state=run_state, seat_model=args.seat_model, seat_family=args.seat_family,
                         command=[Path(sys.argv[0]).name, *(argv if argv is not None else sys.argv[1:])])
-        Path(args.out).write_bytes(dump(record))
+        written = layout.create("input_review", dump(record))
         seat = [row["verdicts"]["executing_seat"] for row in record["spans"]]
-        print(f"wrote {args.out} sha256={lm.sha256_file(Path(args.out))}: {seat.count('admissible')} admissible, "
+        print(f"wrote {lm.LOOK_FILES['input_review']} sha256={written}: {seat.count('admissible')} admissible, "
               f"{seat.count('inadmissible')} inadmissible by the executing seat; "
               f"{len(record['header']['files_opened'])} operational files opened")
         return 0

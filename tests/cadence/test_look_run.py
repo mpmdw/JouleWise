@@ -24,6 +24,7 @@ import unittest.mock
 
 try:  # the fit needs numpy; the dependency-free core shards run without it (CI's look-fit job installs it)
     from joulewise.cadence_looks import fit_interim as F
+    from tests.cadence import look_layout_fixture as LF
     from scripts import cadence_look_run as R
     from scripts import cadence_look_synth as synth
     from joulewise.cadence_looks import manifest as M
@@ -148,10 +149,15 @@ class AstraPreResponse(unittest.TestCase):
 
     def assert_rank_refusal_before_responses(self, stage1, reason):
         sha = hashlib.sha256(F.dump(stage1)).hexdigest()
-        args = R.argparse.Namespace(stage1="frozen-stage1", stage1_sha256=sha, allow_draft=True,
-                                    energy="unopened-responses", looks=None)
+        args = R.argparse.Namespace(stage1_sha256=sha, allow_draft=True, level_e=True, ledger_ref=None)
+
+        class Layout:                       # the look's fixed files: stage1.json, and responses that must stay shut
+            def read(self, key):
+                if key != "stage1":
+                    raise AssertionError("opened responses")
+                return F.dump(stage1)
         with unittest.mock.patch.object(R, "_VERIFIED", [({}, None)]), \
-             unittest.mock.patch.object(builtins, "open", return_value=io.BytesIO(F.dump(stage1))), \
+             unittest.mock.patch.object(R, "layout_of", return_value=Layout()), \
              unittest.mock.patch.object(R, "_json", side_effect=[{}, AssertionError("opened responses")]) as read, \
              unittest.mock.patch.object(R, "draft_ledger_check"), \
              unittest.mock.patch.object(R, "stage2_energy_preflight"):
@@ -198,7 +204,7 @@ class PrefixPublication(unittest.TestCase):
         cls.predictions = {
             leg["leg_key"]: F.predict(cls.co, cls.legs[leg["leg_key"]], refs[leg["span_id"]], held_out_day=leg["day"])
             for leg in cls.s1["legs"] if leg["in_energy_fit"]}
-        cls.energy, _ = R.read_segment_energy(cls.s1, R.span_dirs(cls.custody, None))
+        cls.energy, _ = R.read_segment_energy(cls.s1, LF.span_dirs(cls.custody, None))
 
     def test_unequal_day_bias_estimate_and_interval_from_cli_responses(self):
         for ch in F.CHANNELS:
@@ -457,7 +463,7 @@ class _Custody:
     def read_r(cls):
         """Level R as stage 1 reads it from the custody copy (custody digests and trace clauses filled in)."""
         if getattr(cls, "_r", None) is None:
-            cls._r = R.read_look_input(rj(cls.paths["roster.json"]), R.span_dirs(cls.root, None),
+            cls._r = R.read_look_input(rj(cls.paths["roster.json"]), LF.span_dirs(cls.root, None),
                                        rj(cls.paths["rules_3_4.json"]))
         return copy.deepcopy(cls._r)
 
@@ -550,6 +556,18 @@ def copy_bytecode_fixture(root):
     mr.copy_missing_fixture_sources(root)
 
 
+def placed_manifest_bytes(argv):
+    """The bytes of the manifest the harness names to the executor for ``argv`` (its root and pins set)."""
+    from tests.cadence import look_layout_fixture as layout_fixture
+    argv = list(argv)
+    if "--manifest" not in argv:
+        if not _DEFAULT_MANIFEST:
+            _DEFAULT_MANIFEST.append(pinned_manifest())
+        argv += ["--manifest", _DEFAULT_MANIFEST[0]]
+    placed = layout_fixture.place(argv, repo=REPO)
+    return (json.dumps(placed.manifest, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+
+
 def run_cli(argv, trap=False, mock_stage2=False, extra=None):
     """The CLI with a draft manifest whose pins match this tree, and, for stage 2, a LOOKS.json that names the
     stage-1 hash, unless the test passes its own."""
@@ -570,6 +588,7 @@ def run_cli(argv, trap=False, mock_stage2=False, extra=None):
 _HARNESS = os.path.join(_PIN_DIR, "cli_harness.py")
 _HARNESS_SRC = r'''
 import json, os, re, sys, tempfile
+from pathlib import Path
 sys.dont_write_bytecode = True
 sys.pycache_prefix = tempfile.mkdtemp(prefix="jw-harness-pyc-")   # as the CLI does: no cached bytecode is read
 opts = json.loads(sys.argv[1]); argv = sys.argv[2:]
@@ -620,6 +639,12 @@ if opts.get("trap"):
         raise AssertionError("plist parsed")
     plistlib.loads = plistlib.load = _no_plist
 from scripts import cadence_look_run as R
+if opts.get("manifest"):                     # the test's manifest stands in for the repository's fixed one
+    R.manifest_path = lambda: Path(opts["manifest"])
+if opts.get("run_state") is not None:
+    R.run_state_text = lambda allow_draft: opts["run_state"]
+if opts.get("ledger"):
+    R.ledger_path = lambda: Path(opts["ledger"])
 if "host_probe" in opts:
     import subprocess
     real_run = subprocess.run
@@ -665,12 +690,12 @@ if opts["exports"]:
     public = temp / "PUBLIC.json"
     R.release.destinations = lambda *a: (private, public)
     real_validate = R.validate_execution_row
-    def validate(row, stage1, custody):
+    def validate(row, stage1, layout):
         holds = {flag: "RL-999" for flag in R.M.STAGE2_HOLD_FLAGS["interim"]
                  if stage1[flag.split(".")[0]].get(flag.split(".")[1]) is True}
-        record = dict(row, execution_host="hw1:" + "a" * 64, custody_root=str(custody or temp),
+        record = dict(row, execution_host="hw1:" + "a" * 64, custody_root=str(layout.root),
                       public_root="fixture", holds_cleared=holds)
-        return real_validate(record, stage1, custody)
+        return real_validate(record, stage1, layout)
     R.validate_execution_row = validate
     if not opts.get("real_twin"):
         R.require_twin_runner = lambda doc: None
@@ -723,64 +748,44 @@ _SPIES = []           # active spy_opens lists: a subprocess's opens are appende
 LAST_RUN = {}
 
 
-def synthetic_custody_pins(argv):
-    """RL-194: a generated custody has no offload manifest, so its pin list is made from its bytes as they are when
-    the CLI is called (the generator's ``synthetic_pins``), unless the test names its own with ``--custody-pins``.
-    A test that changes custody after generation therefore still reaches the check it is about; the tests of the
-    pins themselves pass ``--custody-pins``. Returns the arguments to add."""
-    from tests.cadence import custody_pin_fixture as fixture, look_minirepo
-    if "--custody" not in argv or "--custody-pins" in argv or "--allow-draft" not in argv:
-        return []
-    try:
-        dirs = look_minirepo.stage_span_dirs(argv)         # read below ``open``: a test's spy does not see it
-        if dirs is None:
-            return []
-        if "--stage-archives" in argv:       # a staged span exists only after the run: its pins are its SHA256SUMS
-            import tarfile
-            from joulewise.cadence_looks import custody_pins
-            staged = {}
-            for entry in json.loads(fixture.quiet_bytes(argv[argv.index("--stage-archives") + 1])):
-                with tarfile.open(fileobj=io.BytesIO(fixture.quiet_bytes(entry["archive"]))) as tar:
-                    sizes = {m.name.split("/", 1)[1]: m.size for m in tar if m.isfile()}
-                staged[entry["span_id"]] = custody_pins.span_pins(
-                    entry["span_id"], fixture.quiet_bytes(entry["manifest"]), sizes, runner_commit="0" * 40,
-                    close_item=2, check_item=1)
-            doc = fixture.synthetic_pins({sid: path for sid, path in dirs.items() if sid not in staged})
-            doc["spans"] += list(staged.values())
-        else:
-            doc = fixture.synthetic_pins(dirs)
-    except Exception:  # noqa: BLE001 - a malformed roster, plan or custody is the CLI's to refuse, not the harness's
-        return []
-    _pin_dir()
-    path = os.path.join(_PIN_DIR, f"custody-pins-{len(os.listdir(_PIN_DIR))}.json")
-    with io.FileIO(path, "w") as handle:
-        handle.write(fixture.dump(doc))
-    return ["--custody-pins", path]
-
-
 def _cli_subprocess(argv, trap=False, mock_stage2=False, repo=None, extra=None):
+    """Run the executor in its own ``python -I -B`` process through the harness. The executor takes no path
+    (audit 2): a former command line is placed on the fixed layout first (``look_layout_fixture``), and its outputs
+    are copied back to the names it asked for. In the repository the harness names this run's manifest (which
+    registers the root and carries the pins) to the executor; a copy (``look_minirepo``) carries its own."""
     import subprocess
     import sys
+    from tests.cadence import look_layout_fixture as layout_fixture, look_minirepo
     repo = Path(repo or REPO)
     _pin_dir()
     report = os.path.join(_PIN_DIR, f"report-{len(os.listdir(_PIN_DIR))}.json")
     argv = list(map(str, argv))
-    argv += synthetic_custody_pins(argv)
     extra = dict(extra or {})
-    if extra.pop("pin_custody", True) and repo != REPO:      # a committed stage in a copy: its custody pinned first
-        from tests.cadence import look_minirepo
-        look_minirepo.pin_custody(repo, argv)
     exports = {}
-    if argv[0] == "stage2":
+    if argv and argv[0] == "stage2":
         for flag, name in (("--out", "fit.json"), ("--coefficients-out", "coefficients.json")):
             if flag in argv:
                 i = argv.index(flag)
                 exports[name] = argv[i + 1]
                 del argv[i:i + 2]
-    opts = {"repo": str(repo), "spy": bool(_SPIES), "trap": trap, "mock_stage2": mock_stage2, "report": report, "exports": exports | (extra or {}).get("artifacts", {}),
-            **(extra or {})}
-    r = subprocess.run([sys.executable, "-I", "-B", _HARNESS, json.dumps(opts), *argv], cwd=repo,
+    pin = extra.pop("pin_custody", True)
+    layout_opts = {}
+    if repo != REPO:
+        placed = look_minirepo.place_in(repo, argv, pin=pin)
+        if placed.ledger:                   # a draft copy's scratch ledger, in place of the copy's LOOKS.json
+            layout_opts = {"ledger": placed.ledger}
+    else:
+        placed = layout_fixture.place(argv, repo=REPO)
+        if placed.placed:
+            manifest = os.path.join(_PIN_DIR, f"placed-manifest-{len(os.listdir(_PIN_DIR))}.json")
+            with io.FileIO(manifest, "w") as handle:
+                handle.write((json.dumps(placed.manifest, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
+            layout_opts = {"manifest": manifest, "run_state": placed.run_state, "ledger": placed.ledger}
+    opts = {"repo": str(repo), "spy": bool(_SPIES), "trap": trap, "mock_stage2": mock_stage2, "report": report,
+            "exports": exports | extra.get("artifacts", {}), **layout_opts, **extra}
+    r = subprocess.run([sys.executable, "-I", "-B", _HARNESS, json.dumps(opts), *placed.argv], cwd=repo,
                        capture_output=True, text=True, timeout=900)
+    placed.collect()
     got = rj(report) if os.path.exists(report) else {"opened": [], "frames": [], "stage2_calls": 0}
     for spy in _SPIES:
         spy.extend(got["opened"])
@@ -920,7 +925,7 @@ class Stage2Custody(unittest.TestCase):
 
     def test_energy_reader_reproduces_level_e(self):
         s1 = self.s1()
-        got, files = R.read_segment_energy(s1, R.span_dirs(self.c.root, None), self.s3)
+        got, files = R.read_segment_energy(s1, LF.span_dirs(self.c.root, None), self.s3)
         self.assertEqual(set(got["legs"]), set(self.c.en["legs"]))
         # the custody record: every energy file opened, by path under the root and sha256 (no value)
         traces = {f["path"] for f in files if f["path"].endswith("/power_trace.csv")}
@@ -1053,7 +1058,7 @@ class NoHpEnergy(unittest.TestCase):
             self.skipTest("no pinned step 3 module")
         s1 = F.stage1(c.li, hashlib.sha256(synth.dump(c.li)).hexdigest())
         with spy_opens() as opened:
-            e, _ = R.read_segment_energy(s1, R.span_dirs(c.root, None), s3)
+            e, _ = R.read_segment_energy(s1, LF.span_dirs(c.root, None), s3)
         self.assertFalse([p for p in opened if "/hp-01-" in p.replace(os.sep, "/")])
         self.assertFalse([k for k in e["legs"] if k.startswith("hp-01")])
 
@@ -1139,7 +1144,7 @@ class ColdSeatFixes(unittest.TestCase):
         self.assertEqual(span["marks"], ["reference from an excluded leg"])
 
     def test_m13_custody_carries_the_synthetic_flag(self):
-        li = R.read_look_input(self.roster, R.span_dirs(self.c.root, None), self.rules)
+        li = R.read_look_input(self.roster, LF.span_dirs(self.c.root, None), self.rules)
         self.assertTrue(li["synthetic"])
         with tempfile.TemporaryDirectory() as d:
             sid = self.roster[0]["span_id"]
@@ -1150,7 +1155,7 @@ class ColdSeatFixes(unittest.TestCase):
             # The generator's receipt without its flag is no pinned writer's receipt either, so admission refuses it;
             # a written span's `synthetic` False is the frozen admission matrix's path (test_interim_admission_closure).
             with self.assertRaisesRegex(F.LookInputError, "admission: .*runner_receipt.json"):
-                R.read_look_input([self.roster[0]], R.span_dirs(d, None), self.rules)
+                R.read_look_input([self.roster[0]], LF.span_dirs(d, None), self.rules)
 
     def test_m14_unrun_leg_has_no_cell_and_cannot_be_included(self):
         with tempfile.TemporaryDirectory() as d:
@@ -1181,7 +1186,7 @@ class ColdSeatFixes(unittest.TestCase):
 
     def test_roster_is_one_shape(self):
         with self.assertRaises(F.LookInputError):
-            R.read_look_input({"roster": self.roster}, R.span_dirs(self.c.root, None), self.rules)
+            R.read_look_input({"roster": self.roster}, LF.span_dirs(self.c.root, None), self.rules)
 
     def test_m4_meter_stream_without_samples_is_skipped(self):
         sid = self.roster[0]["span_id"]
@@ -1197,14 +1202,14 @@ class ColdSeatFixes(unittest.TestCase):
 
     def test_m4_stage1_preflight_refuses_a_missing_power_trace_before_stage_2(self):
         s1 = self.c.s1_custody()
-        R.stage2_preflight(s1, R.span_dirs(self.c.root, None))
+        R.stage2_preflight(s1, LF.span_dirs(self.c.root, None))
         # RL-173 E.1: an energy-fit leg without both trace clauses (a level-R file the custody reader did not make)
         with self.assertRaisesRegex(F.LookInputError, "in the energy fit without both trace clauses"):
-            R.stage2_preflight(F.stage1(self.c.li, "0" * 64), R.span_dirs(self.c.root, None))
+            R.stage2_preflight(F.stage1(self.c.li, "0" * 64), LF.span_dirs(self.c.root, None))
         L = next(x for x in s1["legs"] if x["in_energy_fit"])
         with tempfile.TemporaryDirectory() as d:
             self.span_copy(d, L["span_id"])               # the copy carries no power_trace.csv
-            sdir_of = R.span_dirs(self.c.root, [f"{L['span_id']}={d}/{L['span_id']}"])
+            sdir_of = LF.span_dirs(self.c.root, [f"{L['span_id']}={d}/{L['span_id']}"])
             with self.assertRaisesRegex(F.LookInputError, "power_trace"):
                 R.stage2_preflight(s1, sdir_of)
 
@@ -1387,7 +1392,7 @@ class MeterSupport(unittest.TestCase):
             (sdir / "hazards/meter/stream-0001.jsonl").write_text("\n".join([head] + a + [trailer]) + "\n")
             (sdir / "hazards/meter/stream-0002.jsonl").write_text("\n".join([head] + empty + [trailer]) + "\n")
             (sdir / "hazards/meter/stream-0003.jsonl").write_text("\n".join([head] + c_ + [trailer]) + "\n")
-            sdir_of = R.span_dirs(c.root, [f"{L['span_id']}={sdir}"])
+            sdir_of = LF.span_dirs(c.root, [f"{L['span_id']}={sdir}"])
             with self.assertRaisesRegex(F.LookInputError, rf"DC-in: {L['leg_key']}: a gap of [0-9.]+ s between meter"):
                 R.read_segment_energy(s1, sdir_of, step3_path())
             self.assertGreater(off, 0)
@@ -1429,7 +1434,8 @@ class RoundTwoCli(unittest.TestCase):
         d = rj(p)
         self.assertIs(d["allow_draft"], True)
         self.assertIsNone(d["ledger_gate"])                 # no committed-ledger gate under --allow-draft
-        self.assertEqual(d["manifest_sha256"], R.sha256_file(_DEFAULT_MANIFEST[0]))
+        # the manifest the executor was given: the default draft with the registered root and pins (audit 2)
+        self.assertEqual(d["manifest_sha256"], hashlib.sha256(placed_manifest_bytes(["stage1", "--input", self.ip])).hexdigest())
         # code_sha256 = the repository files that stage loaded (M.loaded_repo_files): exactly manifest.STAGE1_CODE,
         # the time reader and the meter decoder's closure included whatever the input (RL-173 E.1), and no test module
         for k in ("joulewise/cadence_looks/fit_interim.py", "scripts/cadence_look_run.py",
@@ -1462,17 +1468,13 @@ class RoundTwoCli(unittest.TestCase):
         self.assertEqual(rc, 2)
         rc, p, h, _ = self.s1()
         # without --allow-draft a draft manifest already refuses; the guards below are checked in the stage itself
-        a = R.argparse.Namespace(stage1=p, stage1_sha256=h, energy=self.ep, custody=None, span_dir=None,
-                                 step3_module=None, looks=None, ledger_ref=None, allow_draft=False, manifest=man)
-        with self.assertRaisesRegex(F.LookInputError, "--energy"):
+        # a committed look reads custody: level R and level E are synthetic only, and no command names another
+        # ledger (audit 2: no option takes a path; CommandLine in test_look_layout)
+        a = R.argparse.Namespace(stage1_sha256=h, level_e=True, ledger_ref=None, allow_draft=False)
+        with self.assertRaisesRegex(F.LookInputError, "--level-e"):
             R.cmd_stage2(a)
-        a = R.argparse.Namespace(stage1=p, stage1_sha256=h, energy=None, custody=str(self.c.root), span_dir=None,
-                                 step3_module=None, looks=looks_file(h), ledger_ref=None, allow_draft=False,
-                                 manifest=man)
-        with self.assertRaisesRegex(F.LookInputError, "--looks"):
-            R.cmd_stage2(a)
-        a = R.argparse.Namespace(input=self.ip, allow_draft=False)
-        with self.assertRaisesRegex(F.LookInputError, "--input"):
+        a = R.argparse.Namespace(level_r=True, allow_draft=False)
+        with self.assertRaisesRegex(F.LookInputError, "--level-r"):
             R.cmd_stage1(a)
 
     def test_n3_own_shaped_supplier_excluded_marks_the_span(self):
@@ -1674,9 +1676,13 @@ class RoundThree(unittest.TestCase):
             with spy_opens() as opened:
                 rc, _, err = run_cli(["stage2", "--stage1", p, "--stage1-sha256", h, "--custody", str(self.c.root),
                                       "--span-dir", f"{sid}={sdir}", "--out", os.path.join(d, "o.json")])
-        self.assertEqual(rc, 2)
-        self.assertIn("synthetic custody only", err)
-        self.assertEqual(energy_opens(opened), [])
+            # RL-194: stage 2 runs under the pins stage 1 ran under, so the changed receipt is refused by its pin
+            # first; behind the pins, the synthetic-only check still refuses it (Mythos r3 N1)
+            self.assertEqual(rc, 2)
+            self.assertIn("runner_receipt.json: its bytes are not its pin", err)
+            self.assertEqual(energy_opens(opened), [])
+            with self.assertRaisesRegex(F.LookInputError, "synthetic custody only"):
+                R.synthetic_custody_only(rj(p), LF.span_dirs(self.c.root, [f"{sid}={sdir}"]))
 
     def test_n2_another_manifest_refuses_before_energy(self):
         p, h = self.stage1_custody()
@@ -1718,7 +1724,9 @@ class RoundThree(unittest.TestCase):
         self.assertIn("joulewise/desk_restore.py (not pinned)", err)
         self.assertFalse(os.path.exists(out))
         doc = rj(p)
-        doc["manifest_sha256"] = R.sha256_file(man)
+        # the stage-1 file stamped with the manifest the executor will be given (the harness sets its root and pins)
+        doc["manifest_sha256"] = hashlib.sha256(placed_manifest_bytes(
+            ["stage2", "--stage1", p, "--custody", str(self.c.root), "--manifest", man])).hexdigest()
         q = os.path.join(self.d, "s1-other-manifest.json")
         wb(q, F.dump(doc))
         with spy_opens() as opened:
@@ -1757,7 +1765,7 @@ class RoundThree(unittest.TestCase):
             pt.write_text("\n".join(keep) + "\n")
             only = {k: v for k, v in s1.items()}
             only["legs"] = [x if x["leg_key"] == L["leg_key"] else dict(x, in_energy_fit=False) for x in s1["legs"]]
-            sdir_of = R.span_dirs(self.c.root, [f"{L['span_id']}={copy_dir}"])
+            sdir_of = LF.span_dirs(self.c.root, [f"{L['span_id']}={copy_dir}"])
             R.read_segment_energy(only, sdir_of)                     # default: integrates
             R.read_segment_energy(only, sdir_of, gpu_max_gap_s=10.0)  # a 6 s hole under a 10 s bound: integrates
             with self.assertRaisesRegex(F.LookInputError, "GPU rail"):
@@ -1784,8 +1792,12 @@ class RoundThree(unittest.TestCase):
             man = pinned_manifest()
             s1p, op = root / "s1.json", root / "o.json"
             cli = str(root / "scripts/cadence_look_run.py")
-            r = subprocess.run([sys.executable, "-I", "-B", cli, "stage1", "--input", self.ip, "--out", str(s1p),
-                                "--manifest", man, "--allow-draft"], capture_output=True, text=True, cwd=d)
+            # the copy's own manifest registers the look's root; the level-R input is at its fixed place
+            placed = LF.place(["stage1", "--input", self.ip, "--out", s1p, "--manifest", man, "--allow-draft"],
+                              repo=root)
+            (root / M.INTERIM_MANIFEST_PATH).write_text(json.dumps(placed.manifest, indent=2), encoding="utf-8")
+            r = subprocess.run([sys.executable, "-I", "-B", cli, *placed.argv], capture_output=True, text=True, cwd=d)
+            placed.collect()
             self.assertEqual(r.returncode, 0, r.stderr)
             h = R.sha256_file(s1p)
             rc, _, err = _cli_subprocess(["stage2", "--stage1", s1p, "--stage1-sha256", h, "--energy", self.ep,
@@ -1852,12 +1864,12 @@ class LegBracket(unittest.TestCase):
             self.assertEqual(dc["reason"], "an energy-fit interval not bracketed by decoded meter samples")
             self.assertFalse(got["inclusion"]["km003c_clean"])
             self.assertTrue(got["inclusion"]["sidecar_coverage"])
-            sdir_of = R.span_dirs(c.root, [f"{sid}={sdir}"])
+            sdir_of = LF.span_dirs(c.root, [f"{sid}={sdir}"])
             only = dict(s1, legs=[x if x["leg_key"] == L["leg_key"] else dict(x, in_energy_fit=False)
                                   for x in s1["legs"]])
             with self.assertRaisesRegex(F.LookInputError, f"DC-in: {L['leg_key']}: .*not bracketed"):
                 R.read_segment_energy(only, sdir_of)
-        R.stage2_preflight(s1, R.span_dirs(c.root, None))      # the intact custody passes
+        R.stage2_preflight(s1, LF.span_dirs(c.root, None))      # the intact custody passes
 
 
 class RoundFour(unittest.TestCase):
@@ -1943,8 +1955,11 @@ class RoundFour(unittest.TestCase):
                                "import joulewise.cadence_looks.fit_interim\n"      # from __pycache__
                                "from scripts import cadence_look_run as R\n"
                                "sys.exit(R.main(sys.argv[1:]))\n" % str(root))
-            r = subprocess.run([sys.executable, "-I", str(wrapper), "stage1", "--input", str(ip), "--out",
-                                str(Path(d) / "s1.json"), "--manifest", pinned_manifest(), "--allow-draft"],
+            # the copy's own manifest registers the look's root and the level-R input is at its fixed place
+            placed = LF.place(["stage1", "--input", ip, "--out", Path(d) / "s1.json", "--manifest", pinned_manifest(),
+                               "--allow-draft"], repo=root)
+            (root / M.INTERIM_MANIFEST_PATH).write_text(json.dumps(placed.manifest, indent=2), encoding="utf-8")
+            r = subprocess.run([sys.executable, "-I", str(wrapper), *placed.argv],
                                capture_output=True, text=True, cwd=d)
         self.assertEqual(r.returncode, 2, r.stderr)
         self.assertIn("cached bytecode", r.stderr)

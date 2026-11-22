@@ -35,6 +35,7 @@ import math
 import os
 from pathlib import Path, PurePosixPath
 import re
+import stat
 import subprocess
 import sys
 from datetime import date
@@ -65,8 +66,8 @@ LOOK_ROW_REQUIRES = {"stage1_committed": _STAGE1_HASHES, "failed": _STAGE1_HASHE
 TOP_KEYS = {"schema", "look_id", "look_kind", "status", "title", "rulings", "when", "stages", "reads", "energy",
             "fit", "inclusion", "outputs", "decisions", "later_looks", "freeze1", "freeze2", "custody", "review",
             "open_questions", "inputs"}
-# RL-194: the one file that pins, by sha256 and size, every file of every roster span (custody_pins)
-INPUTS_PATH = "docs/process/cadence/looks/lm-interim-01.inputs.json"
+# The interim look's manifest, at its one fixed place in the repository: no run names another (audit 2, lead ruling)
+INTERIM_MANIFEST_PATH = f"docs/process/cadence/looks/{INTERIM_LOOK_ID}.json"
 # RL-194a: the hash-only verifier process each stage runs first, and the wrapper that checks the pins for the twin
 # before the reviewed child runs byte-identical. Neither is imported by a stage; both are pinned look code.
 VERIFIER_PATH = "scripts/cadence_look_verify_inputs.py"
@@ -419,8 +420,7 @@ def code_refs(doc, *, look_code_only=False):
             out.append((f"inclusion.rules[{i}].code", rule["code"].get("path"), rule["code"].get("sha256")))
     for where, node in (("outputs.schema", (doc.get("outputs") or {}).get("schema")),
                         ("stages.stage1.schema", ((doc.get("stages") or {}).get("stage1") or {}).get("schema")),
-                        ("freeze2.schema", (doc.get("freeze2") or {}).get("schema")),
-                        ("inputs.pins", (doc.get("inputs") or {}).get("pins"))):
+                        ("freeze2.schema", (doc.get("freeze2") or {}).get("schema"))):
         if isinstance(node, dict):
             out.append((where, node.get("path"), node.get("sha256")))
     return out
@@ -481,8 +481,8 @@ def validate_manifest(doc, *, final=None):
     _decisions(doc.get("decisions"), kind, problems, final)
     _later_looks(doc.get("later_looks"), problems)
     _freezes(doc.get("freeze1"), doc.get("freeze2"), problems, kind, final)
-    _custody(doc.get("custody"), problems)
-    _inputs(doc.get("inputs"), problems)
+    _custody(doc.get("custody"), problems, final=final)
+    _inputs(doc.get("inputs"), problems, final=final)
     _review(doc.get("review"), problems)
     _verbatim(doc, kind, problems)
     if kind == "interim":
@@ -1100,11 +1100,23 @@ def _freezes(f1, f2, problems, kind=None, final=None):
         _need_cite(f2, "freeze2", problems)
 
 
-def _custody(c, problems):
+def root_problems(root, *, final):
+    """The registered look root (``custody.root``): the one place every path a stage reads or writes derives from,
+    with the look id (audit 2, lead ruling). An absolute, normalized path; a draft may leave it null."""
+    if root is None:
+        return ["custody.root: a committed look registers its root"] if final else []
+    if (not isinstance(root, str) or not os.path.isabs(root) or os.path.normpath(root) != root or "\0" in root
+            or root == os.sep):
+        return ["custody.root: an absolute, normalized directory path (or null in a draft)"]
+    return []
+
+
+def _custody(c, problems, *, final=False):
     keys = {"runs_by", "seats", "lead_checks_output_against_schema", "custody_copy", "host", "no_import_by",
-            "fit_paths_outside_kit_frozen_paths", "disclosure", "pre_run_check", "pin_check", "cite"}
+            "fit_paths_outside_kit_frozen_paths", "disclosure", "pre_run_check", "pin_check", "cite", "root"}
     if not _closed(c, keys, "custody", problems):
         return
+    problems.extend(root_problems(c.get("root"), final=final))
     if c.get("runs_by") != "analyst_seat" or c.get("seats") != 1:
         problems.append("custody: runs_by 'analyst_seat', seats 1 (RL-149 §2.6; RL-166 Q1)")
     if c.get("lead_checks_output_against_schema") is not True:
@@ -1119,14 +1131,13 @@ def _custody(c, problems):
     _need_cite(c, "custody", problems)
 
 
-def _inputs(node, problems):
-    """RL-194: the manifest pins one inputs file; that file pins every file of every roster span (custody_pins)."""
+def _inputs(node, problems, *, final=False):
+    """RL-194: the manifest itself carries the pin list that pins every file of every roster span (custody_pins).
+    There is no other copy (audit 2, lead ruling: one source of pins). A committed manifest's list is filled."""
     if not _closed(node, {"pins", "rule", "cite"}, "inputs", problems):
         return
-    pins = node.get("pins")
-    if not (isinstance(pins, dict) and set(pins) == {"path", "sha256"} and pins["path"] == INPUTS_PATH
-            and isinstance(pins["sha256"], str) and (SHA_RE.fullmatch(pins["sha256"]) or pins["sha256"] == PENDING_CODE)):
-        problems.append(f"inputs.pins: path {INPUTS_PATH} and its sha256")
+    problems.extend(f"inputs.pins: {problem}"
+                    for problem in custody_pins.pin_list_problems(node.get("pins"), complete=final)[:6])
     if not _text(node.get("rule")):
         problems.append("inputs.rule: text")
     if not (_cites(node.get("cite")) and any(c.startswith("RL-194") for c in node["cite"])):
@@ -1134,13 +1145,15 @@ def _inputs(node, problems):
 
 
 def input_pins(repo, doc, *, complete):
-    """(pin list, its file's sha256) for a manifest whose pins ``verify_pins`` has checked. ``complete`` refuses the
-    unfilled list a draft may carry. Raises ManifestError."""
-    raw = (Path(repo) / doc["inputs"]["pins"]["path"]).read_bytes()
-    try:
-        return custody_pins.load_pin_list(raw, complete=complete), hashlib.sha256(raw).hexdigest()
-    except custody_pins.PinRefusal as error:
-        raise ManifestError([f"inputs: {error}"]) from None
+    """(the manifest's pin list, the sha256 of its canonical bytes). The list is read from the manifest and from
+    nowhere else, so every reader (check-inputs, both stages, the cold review and its checker, the twin's wrapper)
+    holds the same list. ``complete`` refuses the unfilled list a draft may carry. Raises ManifestError."""
+    del repo
+    pins = (doc.get("inputs") or {}).get("pins") if isinstance(doc, dict) else None
+    problems = custody_pins.pin_list_problems(pins, complete=complete)
+    if problems:
+        raise ManifestError([f"inputs.pins: {problem}" for problem in problems[:4]])
+    return pins, custody_pins.pin_list_sha256(custody_pins.pin_list_bytes(pins))
 
 
 def inputs_final_problems(repo, doc, run_state_text, roster_ids=None):
@@ -1160,6 +1173,164 @@ def inputs_final_problems(repo, doc, run_state_text, roster_ids=None):
     if roster_ids is not None and sorted(roster_ids) != sorted(span["span_id"] for span in pins["spans"]):
         problems.append("inputs: the pinned spans are not exactly the roster's; no span is dropped from either")
     return problems
+
+
+# ======================================================================================== the look's fixed layout
+# Audit 2, lead ruling: no stage takes a path. Every path is the registered root (custody.root) and the look id:
+#   <root>/<span id>/                         a span's custody copy
+#   <root>/<look id>/                         the look's private directory (it holds the reservation, RESTRICTED)
+#   <root>/<look id>/<name>                   the files below, by fixed name
+#   <root>/<look id>/archives/<span id>.tar, .SHA256SUMS, .marker.json     pulled, decrypted archives (RL-174 D.3)
+LOOK_FILES = {
+    "roster": "roster.json",                        # validate --span-ledger --roster-out
+    "rules_3_4": "rules_3_4.json",                  # inclusion_34.py's verdict file
+    "stage1": "stage1.json",                        # stage 1's output; stage 2's input
+    "level_r": "level_r.json",                      # stage 1's level-R input, written beside its output
+    "superseded_stage1": "superseded_stage1.json",  # a ruled rerun's kept stage-1 file (RL-173 E.1 item 4)
+    "superseded_level_r": "superseded_level_r.json",
+    "input_level_r": "input_level_r.json",          # a synthetic --allow-draft run from level R
+    "input_level_e": "input_level_e.json",          # a synthetic --allow-draft stage 2 from level E
+    "input_review": "input_review.json",            # the cold review's record (RL-194 section 1)
+}
+ARCHIVES_DIR = "archives"
+ARCHIVE_SUFFIXES = {"archive": ".tar", "manifest": ".SHA256SUMS", "marker": ".marker.json"}
+_RESERVED_NAMES = ("public.json", "restricted")     # the reservation step's names, never another file's
+_LAYOUT_SPAN = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._-]*")
+
+
+def _plain_path(path, what):
+    """Refuse unless ``path`` is absolute, already canonical (its realpath is itself) and no component is a
+    symlink. A component that does not exist yet ends the walk: the parent's checks are what remain."""
+    text = os.fspath(path)
+    if not os.path.isabs(text) or os.path.normpath(text) != text:
+        raise ManifestError([f"{what}: not an absolute, normalized path"])
+    current = os.sep
+    for part in Path(text).parts[1:]:
+        current = os.path.join(current, part)
+        try:
+            mode = os.lstat(current).st_mode
+        except FileNotFoundError:
+            break
+        if stat.S_ISLNK(mode):
+            raise ManifestError([f"{what}: a component is a symlink"])
+    if os.path.lexists(text) and os.path.realpath(text) != text:
+        raise ManifestError([f"{what}: not its own realpath"])
+    return Path(text)
+
+
+def _within(path, root, what):
+    if path != root and not Path(path).is_relative_to(root):
+        raise ManifestError([f"{what}: outside its root"])
+
+
+def name_collision(directory, name):
+    """The entry of ``directory`` whose name equals ``name`` case-insensitively but is spelled differently, or None.
+    On a case-insensitive volume the two are one file; on any volume one may stand for the other."""
+    try:
+        entries = os.listdir(directory)
+    except FileNotFoundError:
+        return None
+    folded = name.casefold()
+    return next((entry for entry in entries if entry != name and entry.casefold() == folded), None)
+
+
+class LookLayout:
+    """The fixed places of one look under its registered root. Every path is checked before it is used: absolute,
+    its own realpath, no symlink component, inside its root, and no differently-cased name beside it."""
+
+    def __init__(self, repo, doc):
+        root = (doc.get("custody") or {}).get("root") if isinstance(doc, dict) else None
+        problems = root_problems(root, final=True)
+        if problems:
+            raise ManifestError(problems)
+        self.look_id = doc["look_id"]
+        self.root = _plain_path(root, "custody.root")
+        if not self.root.is_dir():
+            raise ManifestError(["custody.root: the registered root is not a directory"])
+        repo = Path(os.path.realpath(repo))
+        if self.root == repo or self.root.is_relative_to(repo) or repo.is_relative_to(self.root):
+            raise ManifestError(["custody.root: the registered root must lie outside the repository and not hold it"])
+        self.repo = repo
+        self.look = self._child(self.root, self.look_id, "the look's private directory")
+        if not self.look.is_dir():
+            raise ManifestError([f"{self.look_id}: the look's private directory does not exist under the registered root"])
+
+    def _child(self, parent, name, what):
+        if not isinstance(name, str) or not _LAYOUT_SPAN.fullmatch(name) or name.casefold() in _RESERVED_NAMES:
+            raise ManifestError([f"{what}: not a plain name"])
+        other = name_collision(parent, name)
+        if other is not None:
+            raise ManifestError([f"{what}: {name} and {other} differ only in case"])
+        path = _plain_path(Path(parent) / name, what)
+        _within(path, self.root, what)
+        return path
+
+    def span(self, span_id):
+        """<root>/<span id>. The span id is a plain name and never the look's own directory."""
+        if isinstance(span_id, str) and span_id.casefold() == self.look_id.casefold():
+            raise ManifestError([f"{span_id}: a span id that names the look's own directory"])
+        return self._child(self.root, span_id, f"span {span_id}")
+
+    def file(self, key):
+        return self._child(self.look, LOOK_FILES[key], LOOK_FILES[key])
+
+    def read(self, key):
+        """A fixed input's bytes: a regular file, opened without following a link."""
+        path = self.file(key)
+        try:
+            descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        except FileNotFoundError:
+            raise ManifestError([f"{LOOK_FILES[key]}: absent from the look's directory"]) from None
+        except OSError:
+            raise ManifestError([f"{LOOK_FILES[key]}: not a regular file"]) from None
+        with os.fdopen(descriptor, "rb") as handle:
+            if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                raise ManifestError([f"{LOOK_FILES[key]}: not a regular file"])
+            return handle.read()
+
+    def exists(self, key):
+        return os.path.lexists(self.file(key))
+
+    def create(self, key, data):
+        """Write a fixed output once: created, never replaced, never through a link; returns its sha256."""
+        path = self.file(key)
+        try:
+            descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o644)
+        except FileExistsError:
+            raise ManifestError([f"{LOOK_FILES[key]}: already exists in the look's directory; it is never replaced"]) from None
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        return hashlib.sha256(data).hexdigest()
+
+    def archive(self, span_id):
+        """{archive, manifest, marker} paths of a span's pulled archive, or None when it has none."""
+        base = self.look / ARCHIVES_DIR
+        if not os.path.lexists(base):
+            return None
+        base = self._child(self.look, ARCHIVES_DIR, "the archives directory")
+        if not base.is_dir():
+            raise ManifestError(["archives: not a directory"])
+        paths = {kind: base / f"{span_id}{suffix}" for kind, suffix in ARCHIVE_SUFFIXES.items()}
+        present = [os.path.lexists(path) for path in paths.values()]
+        if not any(present):
+            return None
+        if not all(present):
+            raise ManifestError([f"archives: {span_id} lacks its archive, SHA256SUMS or marker"])
+        return {kind: self._child(base, path.name, f"archives/{path.name}") for kind, path in paths.items()}
+
+    def private_temp(self, prefix):
+        """A fresh private directory outside every registered root and outside the repository (where the public
+        roots are): staging never writes where a look's files or its public report live."""
+        import tempfile
+        made = Path(os.path.realpath(tempfile.mkdtemp(prefix=prefix)))
+        for other in (self.root, self.repo):
+            if made == other or made.is_relative_to(other) or other.is_relative_to(made):
+                import shutil
+                shutil.rmtree(made, ignore_errors=True)
+                raise ManifestError(["the private staging directory falls inside a registered root or the repository"])
+        return made
 
 
 PUBLIC_RUN_STATE_REF = "refs/remotes/origin/main"
@@ -2112,7 +2283,7 @@ def verify_pins(manifest_path, repo, *, allow_draft=False, running=(), ledger_re
             problems.append(f"{where}: {path} is not in the repository")
         elif sha256_file(f) != sha:
             problems.append(f"{where}: {path} sha256 differs from the pin")
-    if isinstance(doc.get("inputs"), dict) and (repo / INPUTS_PATH).is_file() and not problems:
+    if isinstance(doc.get("inputs"), dict) and not problems:
         try:                                    # RL-194: a committed look's pin list is filled and chains internally
             input_pins(repo, doc, complete=not allow_draft)
         except ManifestError as error:

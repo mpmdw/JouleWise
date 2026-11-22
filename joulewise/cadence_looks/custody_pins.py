@@ -231,42 +231,60 @@ def _manifest_labelled(item, at):
     return "outer" not in item[max(0, at - _OUTER_REACH):at].lower()     # "outer manifest", "outer.sha256 (manifest)"
 
 
-def _mentions(item, span_ids):
-    """[(position, span id)] of each pinned span id the item names, longest id first where one contains another.
-    ``cq-<id>-a1`` names ``<id>``; a longer word that merely contains the characters does not."""
-    names = "|".join(re.escape(name) for name in sorted(span_ids, key=len, reverse=True))
-    return [(match.start(), match.group(0))
-            for match in re.finditer(rf"(?<![A-Za-z0-9])(?:{names})(?![A-Za-z0-9])", item)]
+# A name in a RUN_STATE item that a digest after it belongs to: a span, an attempt's offload directory, a filler
+# series' span, a kit. Three or more hyphen-separated parts with a letter and a digit (``dev-01-s01``,
+# ``cq-dev-05-s02-a1``, ``f2-inst-01-s01``); a date, a ruling (``RL-194a``) or a digest is not one.
+_NAME = re.compile(r"(?<![A-Za-z0-9_.-])[A-Za-z0-9]+(?:-[A-Za-z0-9]+){2,}(?![A-Za-z0-9-])")
+ABBREVIATION_FLOOR = 8      # an abbreviated print binds with at least this many printed hex digits (lead ruling)
+
+
+def _names(item):
+    return [(match.start(), match.group(0)) for match in _NAME.finditer(item)
+            if re.search(r"[A-Za-z]", match.group(0)) and re.search(r"[0-9]", match.group(0))]
+
+
+def _named_span(name, span_ids):
+    """The pinned span a name stands for: the span id itself, or a longer name that holds it as whole parts (the
+    offload directory ``cq-<span>-a1``). The longest pinned id wins; None when the name is another thing."""
+    parts = name.split("-")
+    found = None
+    for sid in span_ids:
+        want = sid.split("-")
+        if any(parts[i:i + len(want)] == want for i in range(len(parts) - len(want) + 1)):
+            if found is None or len(sid) > len(found):
+                found = sid
+    return found
+
+
+def _owner(names, at, span_ids):
+    """The pinned span the digest printed at ``at`` belongs to: the one named by the nearest name before it in the
+    item, or None when that name is not a pinned span's (or there is none)."""
+    before = [name for start, name in names if start < at]
+    return _named_span(before[-1], span_ids) if before else None
 
 
 def check_binding(span, run_state_text, span_ids=()):
-    """How a span's public Check item names its offload manifest (RL-194a section 2). The full digest is the sha256
-    of the offload manifest file as custody holds it. The Check's digests for the span are the ones it prints as the
-    span's manifest: after each place the item names the span, the first digest labelled ``manifest`` before the
-    item names another pinned span (``span_ids``). A digest under another label, and a digest printed for another
-    span, bind nothing.
+    """How a span's public Check item names its offload manifest (RL-194a section 2; audit 2, lead ruling). The
+    binding is keyed by span: the Check's digests for the span are the ones the item prints under a manifest label
+    after a name of that span, with no other name between. A digest after another span's or another thing's name
+    belongs to it and never binds this span.
 
-    The span binds when the Check prints at least one such digest and every hex character of every one matches:
-    all 64, or an abbreviation's prefix and suffix exactly as printed, however many they are. Returns the item
-    number, the text as printed and the form: ``full``, ``abbreviated``, ``mismatch`` (the Check prints a manifest
-    digest for the span with a character that does not match; ``as_printed`` is that digest) or ``absent`` (it
-    prints none; ``as_printed`` is None). ``mismatch`` and ``absent`` hold the span."""
+    Equality is exact. A full print is the 64 hex digits; an abbreviation's prefix and suffix must match the digest
+    character for character. Every digest the item prints for the span must match: one mismatch holds the span. An
+    abbreviation binds only with at least ``ABBREVIATION_FLOOR`` printed hex digits. Returns the item number, the
+    text as printed and the form: ``full``, ``abbreviated``, ``mismatch`` (``as_printed`` is the digest that does
+    not match), ``short`` (only abbreviations under the floor) or ``absent``. Only ``full`` and ``abbreviated``
+    bind."""
     digest, number, sid = span["offload_manifest_sha256"], span["check_item"], span["span_id"]
+    ids = set(span_ids) | {sid}
     out = {"check_item": number, "as_printed": None, "form": "absent"}
     item = run_state_item(run_state_text, number)
     if item is None:
         return out
-    mentions = _mentions(item, set(span_ids) | {sid})
-    printed = [match for match in _PRINTED.finditer(item) if _manifest_labelled(item, match.start())]
-    claimed = []
-    for index, (at, name) in enumerate(mentions):
-        if name != sid:
-            continue
-        end = mentions[index + 1][0] if index + 1 < len(mentions) else len(item)
-        first = next((match for match in printed if at <= match.start() < end), None)
-        if first is not None:
-            claimed.append(first)
-    if not claimed:
+    names = _names(item)
+    owned = [match for match in _PRINTED.finditer(item)
+             if _manifest_labelled(item, match.start()) and _owner(names, match.start(), ids) == sid]
+    if not owned:
         return out
 
     def matches(match):
@@ -274,12 +292,15 @@ def check_binding(span, run_state_text, span_ids=()):
         if whole is not None:
             return whole == digest
         return len(prefix) + len(suffix) < 64 and digest.startswith(prefix) and digest.endswith(suffix)
-    for match in claimed:
+    for match in owned:
         if not matches(match):
             return dict(out, as_printed=match.group(0), form="mismatch")
-    if any(match.group(1) for match in claimed):
+    if any(match.group(1) for match in owned):
         return dict(out, as_printed=digest, form="full")
-    longest = max(claimed, key=lambda match: len(match.group(2)) + len(match.group(3)))
+    long_enough = [match for match in owned if len(match.group(2)) + len(match.group(3)) >= ABBREVIATION_FLOOR]
+    if not long_enough:
+        return dict(out, as_printed=owned[0].group(0), form="short")
+    longest = max(long_enough, key=lambda match: len(match.group(2)) + len(match.group(3)))
     return dict(out, as_printed=longest.group(0), form="abbreviated")
 
 
@@ -296,6 +317,9 @@ def check_chain_problems(doc, run_state_text):
         if form == "mismatch":
             problems.append(f"{span['span_id']}: Check item {span['check_item']} prints a manifest digest for the "
                             "span that is not its offload manifest's sha256; the span is held")
+        elif form == "short":
+            problems.append(f"{span['span_id']}: Check item {span['check_item']} prints the span's manifest digest "
+                            f"with fewer than {ABBREVIATION_FLOOR} hex digits; the span is held")
         elif form == "absent":
             problems.append(f"{span['span_id']}: Check item {span['check_item']} does not name its offload "
                             "manifest's sha256; the span is held")
@@ -366,27 +390,30 @@ _ANY_DIGEST = re.compile(r"(?<![0-9a-f])(?:[0-9a-f]{64}|[0-9a-f]{1,63}(?:…|\.\
 
 
 def digest_labels(span_id, run_state_text, span_ids=()):
-    """[(item number, label)] for every digest printed after an item names the span and before it names another
-    pinned span, in RUN_STATE order: the labels and item numbers RL-195 section 2.4 asks for, so that a HELD span can
-    go to the research lead without a digest. ``label`` is the nearest labelling word, or None."""
+    """[(item number, label)] for every digest that belongs to the span (the nearest name before it is the span's),
+    in RUN_STATE order: the labels and item numbers RL-195 section 2.4 asks for, so that a HELD span can go to the
+    research lead without a digest. ``label`` is the nearest labelling word, or None."""
     heads = [(int(match.group(1)), match.start()) for match in _ITEM_HEAD.finditer(run_state_text)]
     ids = set(span_ids) | {span_id}
     out = []
     for index, (number, start) in enumerate(heads):
         item = run_state_text[start:heads[index + 1][1] if index + 1 < len(heads) else len(run_state_text)]
-        mentions = _mentions(item, ids)
-        if not any(name == span_id for _, name in mentions):
+        names = _names(item)
+        if not any(_named_span(name, ids) == span_id for _, name in names):
             continue
-        for position, (at, name) in enumerate(mentions):
-            if name != span_id:
+        for match in _ANY_DIGEST.finditer(item):
+            if _owner(names, match.start(), ids) != span_id:
                 continue
-            end = mentions[position + 1][0] if position + 1 < len(mentions) else len(item)
-            for match in _ANY_DIGEST.finditer(item, at, end):
-                words = _label_words(item, match.start(), count=1)
-                entry = (number, words[0] if words else None)
-                if entry not in out:
-                    out.append(entry)
+            words = _label_words(item, match.start(), count=1)
+            entry = (number, words[0] if words else None)
+            if entry not in out:
+                out.append(entry)
     return out
+
+
+def pin_list_bytes(doc):
+    """The canonical bytes of a pin list: what the verifier process reads and what every reader's sha256 names."""
+    return (json.dumps(doc, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode("utf-8")
 
 
 def pin_list_sha256(raw):

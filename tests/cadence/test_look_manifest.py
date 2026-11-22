@@ -61,6 +61,12 @@ def finalize(doc, shas=None):
     drift = next(d for d in doc["decisions"] if d["id"] == "drift_tripwire")
     if drift.pop("pending", None) is not None:          # Mythos N10: Q11 disposed before commit (synthetic)
         drift["disposed_by"] = "RL-999"
+    # audit 2: a committed look registers its root and carries its filled pin list (synthetic here)
+    if doc["custody"].get("root") is None:
+        doc["custody"]["root"] = "/synthetic/look-root"
+    if not doc["inputs"]["pins"]["spans"]:
+        from tests.cadence import custody_pin_fixture
+        doc["inputs"]["pins"] = custody_pin_fixture.placeholder_pins()
     return doc
 
 
@@ -606,8 +612,7 @@ class RepoCheck(Base):
                  "scripts/cadence_legs_runner.py": runner_src,
                  "docs/process/cadence/looks/lm-interim-01.output.schema.json": "{}\n",
                  "docs/process/cadence/looks/lm-interim-01.stage1.schema.json": "{}\n",
-                 "docs/process/cadence/looks/lm-interim-01.coefficients.schema.json": "{}\n",
-                 lm.INPUTS_PATH: (REPO / lm.INPUTS_PATH).read_text(encoding="utf-8")}       # RL-194: the pinned inputs
+                 "docs/process/cadence/looks/lm-interim-01.coefficients.schema.json": "{}\n"}
         doc0 = draft()
         for where, rel, _ in lm.code_refs(doc0):
             if where.startswith("reads.blocks"):

@@ -13,6 +13,7 @@ from joulewise.cadence_looks import inclusion_34 as I34
 from joulewise.cadence_looks import manifest as M
 from joulewise.cadence_looks import step3_roster as S3
 from joulewise.cadence_looks import time_fields as TF
+from tests.cadence import look_layout_fixture as LF
 from tests.cadence import look_minirepo as MR
 
 try:
@@ -72,7 +73,7 @@ class Admission(unittest.TestCase):
         SY.write_custody(str(cls.source), li, en, tokens)
         cls.roster = read(cls.source / "roster.json")
         cls.selected = I34.keys(read(MR.REPO / I34.RUNTIME_CONFIG)["sensors"])
-        cls.verdicts = I34.judge_custody(cls.roster, R.span_dirs(cls.source, []), cls.selected)[0]
+        cls.verdicts = I34.judge_custody(cls.roster, LF.span_dirs(cls.source, []), cls.selected)[0]
         assert all(all(v.values()) for v in cls.verdicts.values())
         (cls.source / "rules_3_4.json").write_text(json.dumps(cls.verdicts))
 
@@ -84,7 +85,7 @@ class Admission(unittest.TestCase):
         return root
 
     def stage1(self, root):
-        li = R.read_look_input(self.roster, R.span_dirs(root, []), self.verdicts)
+        li = R.read_look_input(self.roster, LF.span_dirs(root, []), self.verdicts)
         return F.stage1(li, hashlib.sha256(F.dump(li)).hexdigest())
 
     def test_rl174_undecodable_span_excludes_even_fit_leg_without_turn(self):
@@ -171,7 +172,7 @@ class Admission(unittest.TestCase):
         gpu_hole(bundle_of(root / leg["span_id"], leg["leg_key"]) / "power_trace.csv", edge - 1.5, 3.0)
         # Bypass custody_check deliberately: exercise the independent backstop on decoded row supports.
         with self.assertRaisesRegex(F.LookInputError, leg["leg_key"] + r": 3\.000 s"):
-            R.read_segment_energy(stage1, R.span_dirs(root, []), gpu_max_gap_s=2.0)
+            R.read_segment_energy(stage1, LF.span_dirs(root, []), gpu_max_gap_s=2.0)
 
     def test_repeated_boundary_holes_cannot_hide_missing_coverage(self):
         root = self.source_copy()
@@ -213,10 +214,10 @@ class Admission(unittest.TestCase):
         leg = next(leg for leg in stage1["legs"] if leg["leg_key"] == key)
         self.assertTrue(leg["included"])
         self.assertFalse(leg["in_energy_fit"])
-        self.assertEqual(S3.custody_problems(stage1, R.span_dirs(root, [])), [])
+        self.assertEqual(S3.custody_problems(stage1, LF.span_dirs(root, [])), [])
         x = leg["segments"][3]["wall_start_s"] + 4
         gpu_hole(bundle / "power_trace.csv", x, 4.0)
-        problems = S3.custody_problems(stage1, R.span_dirs(root, []))
+        problems = S3.custody_problems(stage1, LF.span_dirs(root, []))
         self.assertTrue(problems, "Step 3 accepted timing stage 1 never judged")
         self.assertIn(key, "; ".join(problems))
         self.assertIn("row stamps", "; ".join(problems))

@@ -23,6 +23,7 @@ import tempfile
 import unittest
 import unittest.mock
 
+from joulewise.cadence_looks import custody_pins as PINS
 from tests.cadence import custody_pin_fixture as PF
 
 try:
@@ -172,14 +173,17 @@ class Stage1(_Copy):
         return ["stage1", "--roster", self.roster, "--custody", self.root, "--rules-3-4", self.rules,
                 "--custody-pins", pins or self.pins]
 
-    def test_a_refused_run_creates_no_file_at_any_name_its_caller_chose(self):
-        """A failed hash check wrote the verifier's result where ``--verification-out`` said, and that was the
-        look's public destination: the next registered execution refused on PUBLIC.json with no reservation taken.
-        The option is gone, the result stays in a directory the stage makes and removes, and stage 1 writes its
-        outputs only after its last check."""
-        public = self.tmp / "public" / "lm-interim-01"
-        public.mkdir(parents=True)
-        outputs = ["--out", public / "stage1.json", "--write-input", public / "level-r.json"]
+    def placed_root(self):
+        """The registered root the test harness made for this custody (``look_layout_fixture``)."""
+        from tests.cadence import look_layout_fixture as LF
+        return next(root for key, root in LF._ROOTS.items() if key[1] == os.path.realpath(self.root))
+
+    def test_a_refused_run_creates_no_file(self):
+        """Audit 1: a failed hash check wrote the verifier's result where ``--verification-out`` said, the look's
+        public destination. Audit 2: ``--out public.json`` occupied PUBLIC.json. No option names an output now: a
+        refused run creates nothing, and an admitted run writes its two fixed files in the look's private directory
+        only, once."""
+        outputs = ["--out", self.tmp / "stage1-copy.json", "--write-input", self.tmp / "level-r-copy.json"]
         undo = self.faults()["a changed trace"][0]()
         try:
             rc, _, err = TLR.run_cli([*self.base(), *outputs])
@@ -187,31 +191,23 @@ class Stage1(_Copy):
             undo()
         self.assertEqual(rc, 2, err)
         self.assertIn("its bytes are not its pin", err)
-        self.assertEqual(list(public.iterdir()), [])
-        rc, _, err = TLR.run_cli([*self.base(), *outputs, "--verification-out", public / "PUBLIC.json"])
+        look = self.placed_root() / "lm-interim-01"
+        self.assertEqual(sorted(path.name for path in look.iterdir()), ["roster.json", "rules_3_4.json"])
+        rc, _, err = TLR.run_cli([*self.base(), *outputs, "--verification-out", self.tmp / "PUBLIC.json"])
         self.assertEqual(rc, 2, err)
         self.assertIn("unrecognized arguments: --verification-out", err)
-        self.assertEqual(list(public.iterdir()), [])
-        # the last check of all refuses, after level R is built: still nothing, the kept level-R input included
+        self.assertFalse((self.tmp / "PUBLIC.json").exists())
+        # the last check of all refuses, after level R is built: still nothing, the level-R file included
         rc, _, err = TLR.run_cli([*self.base(), *outputs], extra={"stage1_problems": ["a planted late problem"]})
         self.assertEqual(rc, 2, err)
         self.assertIn("a planted late problem", err)
-        self.assertEqual(list(public.iterdir()), [])
-        # no output of stage 1 is named as stage 2's public record or lies in its reservation
-        for named in (["--out", public / "PUBLIC.json"],
-                      ["--out", public / "stage1.json", "--write-input", public / "PUBLIC.json"],
-                      ["--out", public / "RESTRICTED" / "stage1.json"]):
-            rc, _, err = TLR.run_cli([*self.base(), *named])
-            with self.subTest(named=[str(word) for word in named]):
-                self.assertEqual(rc, 2, err)
-                self.assertIn("may not be named PUBLIC.json or lie under RESTRICTED", err)
-                self.assertEqual(list(public.iterdir()), [])
-                self.assertEqual(TLR.LAST_RUN["served"], [])
+        self.assertEqual(sorted(path.name for path in look.iterdir()), ["roster.json", "rules_3_4.json"])
         rc, _, err = TLR.run_cli([*self.base(), *outputs])                # an admitted run writes both, and only those
         self.assertEqual(rc, 0, err)
-        self.assertEqual(sorted(path.name for path in public.iterdir()), ["level-r.json", "stage1.json"])
-        self.assertEqual(json.loads((public / "stage1.json").read_bytes())["input_sha256"],
-                         hashlib.sha256((public / "level-r.json").read_bytes()).hexdigest())
+        self.assertEqual(sorted(path.name for path in look.iterdir()),
+                         ["level_r.json", "roster.json", "rules_3_4.json", "stage1.json"])
+        self.assertEqual(json.loads((look / "stage1.json").read_bytes())["input_sha256"],
+                         hashlib.sha256((look / "level_r.json").read_bytes()).hexdigest())
 
     def test_an_archive_is_staged_only_after_the_pin_list_is_admitted_and_only_against_its_pins(self):
         """With an empty pin list stage 1 hashed and expanded a ``power_trace.csv`` into the staging root before it
@@ -386,7 +382,9 @@ class Stage1(_Copy):
         self.assertEqual(set(a), set(b))
         moved = {path for path in a if a[path] != b[path]}
         index = [span["span_id"] for span in first["roster"]["spans"]].index(self.ids[0])
-        self.assertEqual(moved, {("roster", "spans", index, "custody", "files_sha256", rel), ("input_sha256",)})
+        # the manifest carries the pin list (audit 2), so its sha256 moves with the journal's pin: a sha256 field
+        self.assertEqual(moved, {("roster", "spans", index, "custody", "files_sha256", rel), ("input_sha256",),
+                                 ("manifest_sha256",)})
 
         def masked(node, under=False):
             if isinstance(node, dict):
@@ -411,28 +409,32 @@ class Stage1(_Copy):
         self.assertIn("custody pins: the pin list names", err)
         self.assertFalse(out.exists())
 
-    def test_only_a_draft_run_may_name_its_own_pin_list_or_run_state(self):
-        for flags, text in (({"custody_pins": str(self.pins), "run_state": None}, "--custody-pins"),
-                            ({"custody_pins": None, "run_state": str(self.run_state)}, "--run-state")):
-            a = argparse.Namespace(allow_draft=False, **flags)
-            pinned = (json.loads(json.dumps(self.doc)), "0" * 64)
-            verified = [({"inputs": {"pins": {"path": "unused"}}}, None)]
-            with self.subTest(text), unittest.mock.patch.object(R, "_VERIFIED", verified), \
-                    unittest.mock.patch.object(R.M, "input_pins", return_value=pinned), \
-                    contextlib.ExitStack() as stack, self.assertRaisesRegex(F.LookInputError, text):
-                R.admit_custody(a, self.ids, R.span_dirs(self.root, None), stack, streams="pass")
+    def test_the_manifest_s_pin_list_is_the_only_one(self):
+        """Audit 2, lead ruling (one source of pins): a stage reads the manifest's list and no other, draft or not."""
+        doc = json.loads(Path(TLR.pinned_manifest()).read_bytes())
+        doc["inputs"]["pins"] = json.loads(json.dumps(self.doc))
+        for allow_draft in (True, False):
+            a = argparse.Namespace(allow_draft=allow_draft)
+            with self.subTest(allow_draft=allow_draft), unittest.mock.patch.object(R, "_VERIFIED", [(doc, None)]), \
+                    unittest.mock.patch.object(R, "run_state_text", return_value=PF.run_state(self.doc)):
+                pins, sha = R.load_pins(a, self.ids)
+                self.assertEqual((pins, sha), (self.doc, PINS.pin_list_sha256(PINS.pin_list_bytes(self.doc))))
+                with self.assertRaisesRegex(F.LookInputError, "not the same spans"):
+                    R.load_pins(a, self.ids[1:])
 
     def admitted(self, stack, streams):
-        manifest = TLR.pinned_manifest()
-        a = argparse.Namespace(allow_draft=True, custody_pins=str(self.pins), run_state=None)
-        stack.enter_context(unittest.mock.patch.object(R, "_VERIFIED", [(json.loads(Path(manifest).read_bytes()), manifest)]))
-        return R.admit_custody(a, self.ids, R.span_dirs(self.root, None), stack, streams=streams)[0]
+        doc = json.loads(Path(TLR.pinned_manifest()).read_bytes())
+        doc["inputs"]["pins"] = json.loads(json.dumps(self.doc))
+        a = argparse.Namespace(allow_draft=True)
+        stack.enter_context(unittest.mock.patch.object(R, "_VERIFIED", [(doc, None)]))
+        stack.enter_context(unittest.mock.patch.object(R, "run_state_text", return_value=PF.run_state(self.doc)))
+        return R.admit_custody(a, self.ids, lambda sid: self.root / sid, stack, streams=streams)[0]
 
     def test_the_operational_bytes_parsed_are_the_bytes_hashed(self):
         """After the stage's act an operational file is never read from disk again. Another process rewrites a
         receipt and a journal once the check has passed; level R is what it is for the pinned bytes."""
         roster, rules = json.loads(self.roster.read_bytes()), json.loads(self.rules.read_bytes())
-        sdir_of = R.span_dirs(self.root, None)
+        sdir_of = lambda sid: self.root / sid
         expected = F.dump(R.read_look_input(roster, sdir_of, rules))
         journal = sorted(self.span.glob("legs/*/runtime/runs/cadence-leg/events.jsonl"))[0]
         rewrite = "import sys\nfor p in sys.argv[1:]:\n    open(p, 'wb').write(b'rewritten after the check\\n')\n"
@@ -517,14 +519,23 @@ class Stage2(_Copy):
                     row["size"] += 1
         pins = self.tmp / "oversized-pins.json"
         pins.write_bytes(PF.dump(changed))
-        for attempt in (1, 2):                                       # and a retry meets the same refusal, not a spent look
+        # The pins are the manifest's (audit 2), so a stage 2 under them is under another manifest than its stage 1
+        # and refuses on that alone; a retry meets the same refusal, never a spent look
+        for attempt in (1, 2):
             rc, err, out = self.stage2(pins=pins)
             with self.subTest(attempt=attempt):
                 self.assertEqual(rc, 2, err)
-                self.assertIn("power_trace.csv: its byte count is not its pin", err)
                 self.assertNotIn("stage2_error", err)
                 self.assertNotIn("already has an execution reservation", err)
                 self.consumed_nothing(out)
+        # and stage 2's own first act, the verifier before the reservation, refuses the size on its own
+        doc = json.loads(Path(TLR.pinned_manifest()).read_bytes())
+        doc["inputs"]["pins"] = changed
+        with contextlib.ExitStack() as stack, unittest.mock.patch.object(R, "_VERIFIED", [(doc, None)]), \
+                unittest.mock.patch.object(R, "run_state_text", return_value=PF.run_state(changed)), \
+                self.assertRaisesRegex(F.LookInputError, "power_trace.csv: its byte count is not its pin"):
+            R.admit_custody(argparse.Namespace(allow_draft=True), self.ids, lambda sid: self.root / sid, stack,
+                            streams="verify")
 
     def test_a_linked_span_override_refuses_as_supplied(self):
         """Audit 1 on 2082c1a51: the verifier called a linked span directory ``symlink``, but stage 2 resolved its
@@ -532,19 +543,11 @@ class Stage2(_Copy):
         sid = self.ids[0]
         link = self.tmp / "linked-span"
         link.symlink_to(self.root / sid, target_is_directory=True)
-        rc, err, out = self.stage2("--span-dir", f"{sid}={link}")
+        rc, err, out = self.stage2("--span-dir", f"{sid}={link}")       # placed where it belongs, as a link
         self.assertEqual(rc, 2, err)
-        self.assertIn(f"the span override for {sid} is a symlink", err)
+        self.assertIn(f"span {sid}: a component is a symlink", err)
         self.consumed_nothing(out)
-        s1 = {"roster": {"spans": [{"span_id": name} for name in self.ids]}}
-        with self.assertRaisesRegex(F.LookInputError, "is a symlink"):
-            R.stage2_overrides([f"{sid}={link}"], s1)
-        with self.assertRaisesRegex(F.LookInputError, "is a symlink"):          # as supplied, in any spelling
-            R.stage2_overrides([f"{sid}={link}{os.sep}"], s1)
-        moved = self.tmp / "moved-span"                              # an override that is a real directory still runs
-        shutil.copytree(self.root / sid, moved)
-        self.assertEqual(dict(R.stage2_overrides([f"{sid}={moved}"], s1)), {sid: moved.resolve()})
-        # the default location linked: every check sees the link itself
+        # the span's own location linked: every check sees the link itself
         kept = self.tmp / "kept-span"
         (self.root / sid).rename(kept)
         (self.root / sid).symlink_to(kept, target_is_directory=True)

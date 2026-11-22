@@ -532,11 +532,11 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "2d48ed96594bb37467dec7ec063a0380bf51271a3f64ac40593e0331cfe1b598"
+        "sha256": "73c175cd17babfee202fd812f3a72ac50baae989a38a8d9400ac011379f61c18"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
-        "sha256": "e9dd6c8d9a63ac553676e865da14d1f79bbd63423c9154f1c6c0f8e6501abed3"
+        "sha256": "a36aed98a7f5aa8655fd52433de6b0fd85af5feeed5e9470d75c28ee4d1225cc"
       },
       {
         "path": "joulewise/cadence_looks/schema_check.py",
@@ -548,7 +548,7 @@
       },
       {
         "path": "joulewise/cadence_looks/interim_twin.py",
-        "sha256": "146d84529f020a198d9bb1757de4fa23cbf235ca9edf2c73a20b956db621fb14"
+        "sha256": "c7b3a92a2021698844063c3f3f11735823d9a2e519d8ea764937f704e9483216"
       },
       {
         "path": "joulewise/cadence_looks/admission.py",
@@ -572,7 +572,7 @@
       },
       {
         "path": "joulewise/cadence_looks/custody_pins.py",
-        "sha256": "5929b391216259f5e6598728b7cfc7c6123ca9fa638bbc654f69e51d5bd8c4df"
+        "sha256": "cd48ff80d4d4ed021c77c5d6e48e3886a15df554220ab8ca5b0ad49a9a21d1c8"
       },
       {
         "path": "scripts/cadence_look_verify_inputs.py",
@@ -580,7 +580,7 @@
       },
       {
         "path": "scripts/cadence_interim_twin_pins.py",
-        "sha256": "6c2f04855d3077da7ab3e36679fe7c9a54fad99d6b047a9e2ec6095fd2156d9b"
+        "sha256": "3e7ffbe19cc97a4d9458f06076c155ad2ef84bc95ab1ce7af4be0cd7f18dd7e4"
       },
       {
         "path": "scripts/cadence_look_stage_archive.py",
@@ -883,7 +883,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "5dcfa85bdb0c713b70d43857ab623887880434338732cedb569c4e836a835387"
+        "sha256": "7493f94b76d8f8bc02badad5a7dc04e5756fe51248aa687b479ded4390991eb2"
       },
       {
         "path": "joulewise/desk_compress.py",
@@ -1302,9 +1302,10 @@
   },
   "custody": {
     "runs_by": "analyst_seat",
+    "root": null,
     "seats": 1,
     "lead_checks_output_against_schema": true,
-    "custody_copy": "One verified custody copy of the roster's spans by the existing offload tooling, made while the MBP is unarmed; the look runs on that copy, never on the MBP's measurement root.",
+    "custody_copy": "One verified custody copy of the roster's spans by the existing offload tooling, made while the MBP is unarmed; the look runs on that copy, never on the MBP's measurement root. The copy lives under the one root this manifest registers (root): each span at <root>/<span id>, and the look's own files at fixed names in <root>/lm-interim-01. No stage takes a path.",
     "host": "Under RL-184 the lead records the admitted commit's host-id token from the named machine in the stage1_committed LOOKS.json row on main. Stage 2 recomputes it before reservation. A host change requires a new ledger row and confirmation that the first host has no reservation.",
     "no_import_by": [
       "scripts/cadence_legs_runner.py",
@@ -1345,10 +1346,10 @@
   "open_questions": [],
   "inputs": {
     "pins": {
-      "path": "docs/process/cadence/looks/lm-interim-01.inputs.json",
-      "sha256": "d00ace43b4c007ee2bc76606757b1386b80c3350e20c3174677bae14e1ace42d"
+      "schema": "joulewise.cadence_look_input_pins.v1",
+      "spans": []
     },
-    "rule": "The roster is a closed set, so stage 1 admits by content address. This file pins, by sha256 and size, every file of every roster span. A span's pins are the lines of its offload manifest in their order, so they rebuild that manifest's sha256, which the span's public RUN_STATE Check item names (in full, or by an abbreviation every printed character of which matches); no pin is hashed from today's copy. A separate hash-only verifier process runs first, before a stage parses anything and before the reservation: it reads every pinned file as opaque bytes and writes pass or fail with the pinned and observed digests. Each stage then reads the operational files it parses once, hashes them and parses those bytes, and refuses a missing, unpinned or symlinked file by name. Stage 1 never hashes an energy stream. Stage 2 re-checks a stream's pin immediately before decoding it, and the twin's wrapper checks every pin before the reviewed child runs byte-identical. The grammar validator still runs on the admitted bytes. A span whose Check item does not print its offload manifest's digest as the span's, with every printed character matching, is HELD: it keeps the manifest from being final and stays on the roster. Its check_item may be corrected only to an item that does (check_corrected_from keeps the item the pin table cited); a close-time outer.sha256 is cited as a second record only.",
+    "rule": "The roster is a closed set, so stage 1 admits by content address. This list, the manifest's own and its only copy, pins by sha256 and size every file of every roster span; every reader reads it from here. A span's pins are the lines of its offload manifest in their order, so they rebuild that manifest's sha256, which the span's public RUN_STATE Check item names (under a manifest label, after the span's own name: the full digest, or an abbreviation of at least eight hex digits every printed character of which matches; any mismatch holds the span); no pin is hashed from today's copy. A separate hash-only verifier process runs first, before a stage parses anything and before the reservation: it reads every pinned file as opaque bytes and writes pass or fail with the pinned and observed digests. Each stage then reads the operational files it parses once, hashes them and parses those bytes, and refuses a missing, unpinned or symlinked file by name. Stage 1 never hashes an energy stream. Stage 2 re-checks a stream's pin immediately before decoding it, and the twin's wrapper checks every pin before the reviewed child runs byte-identical. The grammar validator still runs on the admitted bytes. A span whose Check item does not print its offload manifest's digest as the span's, with every printed character matching, is HELD: it keeps the manifest from being final and stays on the roster. Its check_item may be corrected only to an item that does (check_corrected_from keeps the item the pin table cited); a close-time outer.sha256 is cited as a second record only.",
     "cite": [
       "RL-194 §1",
       "RL-194a §1",

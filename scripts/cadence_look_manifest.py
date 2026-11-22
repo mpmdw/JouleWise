@@ -29,12 +29,13 @@ pin (draft manifests only): set the sha256 of every pinned file that exists in t
 the manifest's row in LOOKS.json. Prints the changes; writes only with ``--write``. A committed manifest
 is never re-pinned: it changes only by a ruling and a new manifest id (RL-166 section 2).
 
-pin-inputs (RL-194; draft manifests only) writes the look's inputs file: for each roster span, the lines of the
-span's offload manifest (SHA256SUMS) become its pins, in order. PLAN.json is a list of
+pin-inputs (RL-194; draft manifests only) writes the look's pin list into the manifest (``inputs.pins``, the one
+copy there is): for each roster span, the lines of the span's offload manifest (SHA256SUMS) become its pins, in
+order. PLAN.json is a list of
 ``{span_id, runner_commit, close_item, check_item, offload_manifest, span_dir}``. No custody file is opened and no
 digest is computed from one: the digests are the offload manifest's, and each file's size is read from its directory
 entry. A span directory whose files are not exactly the offload manifest's, or that holds a symlink, refuses. Run
-``pin --write`` afterwards to bind the new inputs file in the manifest.
+``pin --write`` afterwards to bind the changed manifest in LOOKS.json.
 
 check-inputs (RL-194 condition 2) checks the pin list a manifest names: its shape, that each span's pins rebuild the
 offload manifest digest the span carries, and that each span's public RUN_STATE Check item names that digest
@@ -135,7 +136,10 @@ def validate(args):
 
 
 def _set_pins(node, repo, changes, path="$"):
-    """Fill {path, sha256} references in place from the repository's files; record each change."""
+    """Fill {path, sha256} references in place from the repository's files; record each change. The pin list of
+    custody files (``inputs.pins``) is not repository code and is never re-pinned here."""
+    if path == "$.inputs":
+        return
     if isinstance(node, dict):
         if set(node) == {"path", "sha256"} and isinstance(node.get("path"), str):
             f = Path(repo) / node["path"]
@@ -299,7 +303,7 @@ def _span_sizes(directory):
 
 
 def pin_inputs(args):
-    """RL-194: the inputs file from each roster span's offload manifest. Hashes nothing in custody."""
+    """RL-194: the manifest's pin list from each roster span's offload manifest. Hashes nothing in custody."""
     pins = lm.custody_pins
     repo = Path(args.repo)
     doc = lm.load_json(Path(args.manifest))
@@ -330,13 +334,17 @@ def pin_inputs(args):
         for problem in problems:
             print(f"REFUSE {problem}")
         return 1
-    text = json.dumps(out, indent=1) + "\n"
-    target = repo / doc["inputs"]["pins"]["path"]
-    print(f"inputs file sha256 {hashlib.sha256(text.encode('utf-8')).hexdigest()} "
+    print(f"pin list sha256 {pins.pin_list_sha256(pins.pin_list_bytes(out))} "
           f"({len(spans)} spans, {sum(len(s['files']) for s in spans)} files)")
+    return _write_pins(args, doc, out)
+
+
+def _write_pins(args, doc, pin_list):
+    """The manifest with ``pin_list`` as its inputs.pins: the one copy of the list (audit 2, lead ruling)."""
     if args.write:
-        target.write_text(text, encoding="utf-8")
-        print(f"wrote {doc['inputs']['pins']['path']}; now run: pin {args.manifest} --repo {args.repo} --write")
+        doc["inputs"]["pins"] = pin_list
+        Path(args.manifest).write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(f"wrote the pin list into {args.manifest}; now run: pin {args.manifest} --repo {args.repo} --write")
     else:
         print("(dry run; --write to apply)")
     return 0
@@ -348,8 +356,6 @@ def check_inputs(args):
     try:
         doc = lm.load_json(Path(args.manifest))
         pin_list, sha = lm.input_pins(args.repo, doc, complete=True)
-        if hashlib.sha256((Path(args.repo) / doc["inputs"]["pins"]["path"]).read_bytes()).hexdigest() != doc["inputs"]["pins"]["sha256"]:
-            raise lm.ManifestError(["inputs.pins: the inputs file's sha256 differs from the manifest's pin"])
         text = (Path(args.run_state).read_text(encoding="utf-8") if args.run_state else lm.public_run_state(args.repo))
     except lm.ManifestError as error:
         for problem in error.problems:
@@ -366,9 +372,12 @@ def check_inputs(args):
         state = states[span["span_id"]]
         corrected = (f" (corrected from item {state['corrected_from']}, RL-195 section 2.1)"
                      if state["corrected_from"] is not None else "")
+        # A HELD span's line carries no digest: this output may go to the research lead as RL-195 section 2.4's
+        # list of item numbers and labels (audit 2, LOW)
+        digest = ("offload manifest digest withheld" if state["state"] == pins.HELD
+                  else f"pins rebuild offload manifest {span['offload_manifest_sha256']}")
         print(f"{span['span_id']}: {len(span['files'])} files, {sum(f['size'] for f in span['files'])} bytes; "
-              f"pins rebuild offload manifest {span['offload_manifest_sha256']}; "
-              f"Check {span['check_item']}{corrected} names it: {state['form']}; "
+              f"{digest}; Check {span['check_item']}{corrected} names it: {state['form']}; "
               f"{'HELD' if state['state'] == pins.HELD else 'bound'}")
         if state["state"] == pins.HELD:
             # RL-195 section 2.4: item numbers and labels only, never a digest
@@ -382,7 +391,7 @@ def check_inputs(args):
     for problem in problems:
         print(f"REFUSE {problem}")
     if not problems:
-        print(f"ok inputs file sha256 {sha}: {len(pin_list['spans'])} spans, "
+        print(f"ok pin list sha256 {sha}: {len(pin_list['spans'])} spans, "
               f"{sum(len(s['files']) for s in pin_list['spans'])} files, each chained to its Check item")
     return 1 if problems else 0
 
@@ -408,14 +417,8 @@ def correct_check(args):
     after = pins.check_states(corrected, text)[args.span]
     print(f"{args.span}: Check item {before['check_item']} ({before['state']}) -> {args.item} ({after['form']}; "
           f"{after['state']}); cited first: item {after['corrected_from'] or args.item}")
-    text_out = json.dumps(corrected, indent=1) + "\n"
-    print(f"inputs file sha256 {hashlib.sha256(text_out.encode('utf-8')).hexdigest()}")
-    if args.write:
-        (Path(args.repo) / doc["inputs"]["pins"]["path"]).write_text(text_out, encoding="utf-8")
-        print(f"wrote {doc['inputs']['pins']['path']}; now run: pin {args.manifest} --repo {args.repo} --write")
-    else:
-        print("(dry run; --write to apply)")
-    return 0
+    print(f"pin list sha256 {pins.pin_list_sha256(pins.pin_list_bytes(corrected))}")
+    return _write_pins(args, doc, corrected)
 
 
 def main(argv=None):
@@ -441,7 +444,7 @@ def main(argv=None):
     w.add_argument("manifest")
     w.add_argument("--repo", required=True)
     w.add_argument("--write", action="store_true")
-    pi = sub.add_parser("pin-inputs", help="RL-194: write the inputs file from the roster's offload manifests")
+    pi = sub.add_parser("pin-inputs", help="RL-194: write the manifest's pin list from the roster's offload manifests")
     pi.add_argument("manifest")
     pi.add_argument("--repo", required=True)
     pi.add_argument("--plan", required=True)

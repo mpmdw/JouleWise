@@ -11,7 +11,7 @@ import re
 import tempfile
 import unittest
 
-from joulewise.cadence_looks import custody_pins, manifest as M
+from joulewise.cadence_looks import admission, custody_pins, manifest as M
 from scripts import cadence_look_input_review as RV
 from tests.cadence import custody_pin_fixture as PF
 
@@ -42,9 +42,16 @@ class ReviewRecord(unittest.TestCase):
                 self.write(sid, name, T.doc_bytes(name, doc))
             for name in PROTECTED:
                 self.write(sid, name, f"invented {sid} {name}\n".encode())
-        self.pins = PF.synthetic_pins({sid: self.root / sid for sid in SPANS})
-        self.sha = hashlib.sha256(PF.dump(self.pins)).hexdigest()
+        self.pins = self.pinned()
         self.run_state = PF.run_state(self.pins)
+
+    def pinned(self):
+        """The generated spans' pins, each span at the runner commit whose writer made its receipt."""
+        pins = PF.synthetic_pins({sid: self.root / sid for sid in SPANS})
+        for span in pins["spans"]:
+            span["runner_commit"] = next(rev for rev in admission.PINS if rev.startswith(SPANS[span["span_id"]][0]))
+        self.sha = custody_pins.pin_list_sha256(custody_pins.pin_list_bytes(pins))
+        return pins
 
     def write(self, sid, name, data):
         path = self.root / sid / name
@@ -214,24 +221,95 @@ class ReviewRecord(unittest.TestCase):
         # a record made against one RUN_STATE is not a record of another whose Check names another digest
         self.assertTrue(any("held" in problem for problem in self.problems(record, self.run_state.replace(digest, "0" * 64))))
 
+    def checkout(self, pins):
+        """A checkout whose manifest carries ``pins`` and registers the generated custody's root (audit 2)."""
+        repo = Path(os.path.realpath(self.root)).with_name(self.root.name + "-repo")
+        self.addCleanup(lambda: __import__("shutil").rmtree(repo, ignore_errors=True))
+        manifest = repo / M.INTERIM_MANIFEST_PATH
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        doc = json.loads((Path(__file__).resolve().parents[2] / M.INTERIM_MANIFEST_PATH).read_text(encoding="utf-8"))
+        doc["custody"]["root"] = os.path.realpath(self.root)
+        doc["inputs"]["pins"] = pins
+        manifest.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        (self.root / M.INTERIM_LOOK_ID).mkdir(exist_ok=True)
+        state = repo / "RUN_STATE.md"
+        state.write_text(PF.run_state(pins), encoding="utf-8")
+        return repo, manifest, state
+
+    def cli(self, *argv):
+        import contextlib
+        import io
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            code = RV.main([str(word) for word in argv])
+        return code, printed.getvalue()
+
     def test_the_check_command_reads_the_run_state_it_is_given(self):
+        repo, manifest, state = self.checkout(self.pins)
         record = self.review()
         for row in record["spans"]:
             row["verdicts"]["desk"] = "admissible"
+        record["header"]["manifest_sha256"] = M.sha256_file(manifest)
         check = record["spans"][0]["check"]
         check.update(as_printed=f"{check['as_printed'][:8]}…{check['as_printed'][-4:]}", form="abbreviated")
-        path, state = self.root / "record.json", self.root / "RUN_STATE.md"
+        (self.root / M.INTERIM_LOOK_ID / "input_review.json").write_bytes(RV.dump(record))
+        code, out = self.cli("check", "--repo", repo, "--run-state", state)
+        self.assertEqual(code, 1, out)
+        self.assertIn("REFUSE dev-01-s01: check.as_printed and check.form are not what Check item", out)
+
+    def test_the_review_and_its_checker_certify_the_manifest_s_spans_and_no_other_list(self):
+        """Audit 2 (HIGH): with three spans pinned in the manifest and two in the on-disk list, check-inputs refused
+        while the review and its checker certified "2 of 2". The manifest's list is now the only list: a stale file
+        where the old list lived is never read, both certify "3 of 3", and a record of another list refuses."""
+        repo, manifest, state = self.checkout(self.pins)
+        stale = repo / "docs/process/cadence/looks/lm-interim-01.inputs.json"
+        stale.write_bytes(PF.dump(dict(self.pins, spans=self.pins["spans"][:2])))
+        code, out = self.cli("review", "--repo", repo, "--run-state", state, "--seat-model", "seat", "--seat-family",
+                             "family")
+        self.assertEqual(code, 0, out)
+        self.assertIn("3 admissible", out)
+        path = self.root / M.INTERIM_LOOK_ID / "input_review.json"
+        record = json.loads(path.read_bytes())
+        self.assertEqual([row["span_id"] for row in record["spans"]], sorted(SPANS))
+        self.assertEqual(record["header"]["pin_list_sha256"], self.sha)
+        for row in record["spans"]:
+            row["verdicts"]["desk"] = "admissible"
         path.write_bytes(RV.dump(record))
-        state.write_text(self.run_state, encoding="utf-8")
-        import contextlib
-        import io
-        import unittest.mock
-        printed = io.StringIO()
-        with unittest.mock.patch.object(RV, "_load", return_value=(self.pins, self.sha, "m" * 64)), \
-                contextlib.redirect_stdout(printed):
-            code = RV.main(["check", str(path), "--manifest", "unused", "--repo", "unused", "--run-state", str(state)])
-        self.assertEqual(code, 1, printed.getvalue())
-        self.assertIn("REFUSE dev-01-s01: check.as_printed and check.form are not what Check item", printed.getvalue())
+        code, out = self.cli("check", "--repo", repo, "--run-state", state)
+        self.assertEqual(code, 0, out)
+        self.assertIn("ok 3 of 3 spans admissible", out)
+        # a record made against a two-span list is not a record of the manifest's three
+        two = dict(record, spans=record["spans"][:2])
+        two["header"] = dict(record["header"], pin_list_sha256=custody_pins.pin_list_sha256(
+            custody_pins.pin_list_bytes(dict(self.pins, spans=self.pins["spans"][:2]))))
+        path.write_bytes(RV.dump(two))
+        code, out = self.cli("check", "--repo", repo, "--run-state", state)
+        self.assertEqual(code, 1, out)
+        self.assertIn("pin_list_sha256 is not the manifest's", out)
+        self.assertIn("not the manifest's pinned spans", out)
+        # and the review writes its record once: it never replaces one
+        code, out = self.cli("review", "--repo", repo, "--run-state", state, "--seat-model", "seat", "--seat-family",
+                             "family")
+        self.assertEqual(code, 1, out)
+        self.assertIn("never replaced", out)
+
+    def test_the_record_cites_the_writer_of_the_span_s_pinned_runner_commit(self):
+        """Audit 2 (MED): with the span's runner commit changed to one no writer is pinned at, the review still cited
+        writer A from the receipt and the checker found nothing. The writer is the runner commit's, or none."""
+        record = self.review()
+        for row in record["spans"]:
+            row["verdicts"]["desk"] = "admissible"
+        self.assertEqual(self.problems(record), [])
+        self.pins["spans"][0]["runner_commit"] = "1" * 40
+        self.sha = custody_pins.pin_list_sha256(custody_pins.pin_list_bytes(self.pins))
+        record = self.review()
+        for row in record["spans"]:
+            row["verdicts"]["desk"] = "admissible"
+        receipt = record["spans"][0]["receipt"]
+        self.assertEqual((receipt["writer_pin"], receipt["kit_frozen_commit_is_runner_commit"]), (None, False))
+        problems = self.problems(record)
+        self.assertIn("dev-01-s01: the receipt's writer is not the pinned writer of the span's runner commit", problems)
+        self.assertIn("dev-01-s01: the receipt's kit commit is not the span's runner commit", problems)
 
     def test_the_review_refuses_a_linked_directory_a_linked_file_and_any_file_that_is_not_pinned(self):
         """Audit 1 on 2082c1a51: with a span's ``legs`` directory replaced by a link to the same files, the review
@@ -292,7 +370,7 @@ class ReviewRecord(unittest.TestCase):
                 data, count = re.subn(rb'("power_w_mean":)[^,}]+', lambda m: m.group(1) + b"9" * 5000, data)
                 self.assertEqual(count, 1)
             self.write(sid, name, data)
-        self.pins = PF.synthetic_pins({s: self.root / s for s in SPANS})
+        self.pins = self.pinned()
         self.run_state = PF.run_state(self.pins)
         seen = []
 
@@ -328,7 +406,7 @@ class ReviewRecord(unittest.TestCase):
         receipt = json.loads(path.read_bytes())
         receipt["unissued_member"] = True
         path.write_bytes(T.doc_bytes(T.RECEIPT, receipt))
-        self.pins = PF.synthetic_pins({sid: self.root / sid for sid in SPANS})
+        self.pins = self.pinned()
         row = self.review()["spans"][0]
         self.assertEqual(row["verdicts"]["executing_seat"], "inadmissible")
         self.assertIn("runner_receipt.json", row["verdicts"]["executing_seat_refusal"])

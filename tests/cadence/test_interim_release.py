@@ -509,9 +509,10 @@ class LookExecution(unittest.TestCase):
         self.stage1_sha = digest(self.stage1_path.read_bytes())
         self.commit = MR.git(self.mini, "rev-parse", "HEAD").stdout.strip()
         self.private_name = MR.synthetic_reservation_name(self.root)
-        self.private = self.root / "custody" / LOOK / self.private_name
+        registered = Path(self.manifest["custody"]["root"])          # the copy's registered root (audit 2)
+        self.private = registered / LOOK / self.private_name
         self.public = self.mini / "public" / LOOK / "PUBLIC.json"
-        self.private.parent.mkdir(parents=True)
+        self.private.parent.mkdir(parents=True, exist_ok=True)
         self.public.parent.mkdir(parents=True)
         self.row = M.load_json(self.mini / M.LOOK_LEDGER_PATH)["looks"][0]
         self.row.update(status="stage1_committed", execution_host=HOST_TOKEN, public_root="public",
@@ -577,21 +578,15 @@ class LookExecution(unittest.TestCase):
         root = Path(self.row["custody_root"])
         (root / successor).mkdir()
         (self.public.parent.parent / successor).mkdir()
-        for source, sha, args in (
-            (successor_stage1, successor_sha, ["--custody", root]),
-            (self.stage1_path, draft_sha, ["--allow-draft", "--looks", self.ledger, "--energy", responses]),
-        ):
-            with self.subTest(args=args[0]), cli_fixture.spy_opens() as opened:
-                rc, stdout, stderr = cli_fixture._cli_subprocess(
-                    ["stage2", "--manifest", path, "--stage1", source, "--stage1-sha256", sha, *args],
-                    repo=self.mini, extra={"host_probe": UUID_LINE, "twin_path": str(twin)})
-                self.assertEqual(cli_fixture.LAST_RUN["reservation_attempts"], 0)
-                reads = [item for item in opened if item in (str(source), str(responses))
-                         or Path(item).is_relative_to(root)]
-                self.assertEqual(reads, [])
-                self.assertEqual(cli_fixture.LAST_RUN["twin_launches"], 0)
-                self.assertEqual((rc, stdout), (2, ""))
-                self.assertIn("look_id: the v1 validator admits only lm-interim-01", stderr)
+        # Audit 2: the executor reads the repository's lm-interim-01 manifest at its fixed path and no other; a
+        # successor manifest cannot be named to it at all, draft or committed
+        for args in (["--custody", root], ["--allow-draft", "--looks", self.ledger, "--energy", responses]):
+            with self.subTest(args=args[0]):
+                done = subprocess.run([sys.executable, "-I", "-B", str(self.mini / "scripts/cadence_look_run.py"),
+                                       "stage2", "--manifest", str(path), "--stage1-sha256", successor_sha,
+                                       *map(str, args)], capture_output=True, text=True, timeout=300)
+                self.assertEqual((done.returncode, done.stdout), (2, ""))
+                self.assertIn("unrecognized arguments: --manifest", done.stderr)
         self.assertFalse(any(root.glob("*/RESTRICTED")))
         self.assertFalse(any(self.public.parent.parent.glob("*/PUBLIC.json")))
 
@@ -618,7 +613,8 @@ class LookExecution(unittest.TestCase):
     def test_exact_host_match_uses_the_same_gate_for_both_modes(self):
         with mock.patch.object(R.M, "execution_host", return_value=HOST_TOKEN) as probe:
             for synthetic in (True, False):
-                R.validate_execution_row(self.row, dict(self.stage1, synthetic=synthetic), self.row["custody_root"])
+                layout = mock.Mock(root=Path(self.row["custody_root"]), look=Path(self.row["custody_root"]) / LOOK)
+                R.validate_execution_row(self.row, dict(self.stage1, synthetic=synthetic), layout)
             self.assertEqual(probe.call_count, 2)
 
     def test_missing_malformed_and_duplicate_uuid_refuse_before_reservation(self):
@@ -777,7 +773,7 @@ class LookExecution(unittest.TestCase):
 
     def test_noisy_legwise_public_byte_invariance(self):
         prepared = R.F.stage2_preflight(self.stage1)
-        args = SimpleNamespace(energy=self.root / "response.json", stage1_sha256=self.stage1_sha)
+        args = SimpleNamespace(stage1_sha256=self.stage1_sha)
         coefficient_schema = M.coefficients_schema(REPO)
         from joulewise.cadence_looks import step3_roster as s3
 
@@ -785,7 +781,9 @@ class LookExecution(unittest.TestCase):
             dest = self.root / name
             dest.mkdir()
             private, public = dest / self.private_name, dest / "PUBLIC.json"
-            args.energy.write_bytes(C.dump(energy))
+            level_e = Path(self.manifest["custody"]["root"]) / LOOK / M.LOOK_FILES["input_level_e"]
+            level_e.unlink(missing_ok=True)             # the synthetic level E at its fixed place (audit 2)
+            level_e.write_bytes(C.dump(energy))
             # The planted level-E fixture has no Step 3 bundle. Feed the same response to the
             # decision and comparison stubs while exercising the normal primary fit and writer.
             def step3(*_args, **_kwargs):
@@ -829,10 +827,11 @@ class LookExecution(unittest.TestCase):
 TWIN_DRIVER = r'''
 import json, os, subprocess, sys
 from pathlib import Path
-repo, basename, fault = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+repo, basename, fault, ledger = Path(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4]
 sys.path.insert(0, str(repo))
 from scripts import cadence_look_run as look
 from joulewise.cadence_looks import interim_twin
+look.ledger_path = lambda: Path(ledger)          # a draft copy's scratch ledger, in place of its LOOKS.json
 
 original_destinations = look.release.destinations
 def destinations(repo, row):
@@ -919,7 +918,7 @@ def run(argv, *args, **kwargs):
         result.stdout = json.dumps(frame, sort_keys=True, separators=(",", ":")).encode() + b"\n"
     return result
 interim_twin.subprocess.run = run
-status = look.main(sys.argv[4:], keep_redirected=True)
+status = look.main(sys.argv[5:], keep_redirected=True)
 assert len(attempts) == 1, len(attempts)
 sys.exit(status)
 '''
@@ -944,7 +943,9 @@ class TwinThroughCLI(unittest.TestCase):
         self.manifest.write_bytes(C.dump(draft))
         tokens = {}
         look_input, energy, _ = S.build("exact", tokens=tokens)
-        source = self.root / "generated-bundles"
+        # the generated custody is written where the copy's manifest registers the look's root (audit 2): every
+        # stage reads <root>/<span id>, and the reservation is <root>/lm-interim-01/RESTRICTED
+        source = Path(draft["custody"]["root"])
         self.source = source
         locators = S.write_custody(source, look_input, energy, tokens)
         # Duplicate each GPU interval. Its two positive overlaps count in both readers (P01).
@@ -987,21 +988,27 @@ class TwinThroughCLI(unittest.TestCase):
         self.basename = MR.synthetic_reservation_name(self.root)
 
     def trial(self, fault, *, relocated=None):
-        private_root = self.source if relocated is None else self.root / fault
+        """One stage 2 through the driver. The reservation is the registered one, made fresh for each trial; with
+        ``relocated`` the spans are first placed back at <root>/<span id> from there (the test's stand-in for a
+        restored custody copy: no stage takes a span path)."""
+        private_root = self.source
         private = private_root / LOOK / self.basename
+        if private.exists():
+            shutil.rmtree(private)
         public_rel = f"generated-{fault}"
         public = self.mini / public_rel / LOOK / "PUBLIC.json"
-        private.parent.mkdir(parents=True)
+        private.parent.mkdir(parents=True, exist_ok=True)
         public.parent.mkdir(parents=True)
-        ledger = private_root / "ledger.json"
+        ledger = self.root / f"ledger-{fault}.json"
         row = dict(self.row, custody_root=str(private_root), public_root=public_rel)
         ledger.write_bytes(C.dump({"schema": M.LOOK_LEDGER_SCHEMA, "looks": [row]}))
-        argv = [sys.executable, "-I", "-B", self.driver, self.mini, self.basename, fault,
-                "stage2", "--manifest", self.manifest, "--stage1", self.stage1, "--stage1-sha256", self.response_sha,
-                "--looks", ledger, "--allow-draft", "--custody", private_root, "--custody-pins", self.pins]
+        legacy = ["stage2", "--manifest", self.manifest, "--stage1", self.stage1, "--stage1-sha256", self.response_sha,
+                  "--looks", ledger, "--allow-draft", "--custody", private_root, "--custody-pins", self.pins]
         if relocated is not None:
             for sid in self.spans:
-                argv.extend(("--span-dir", f"{sid}={relocated / sid}"))
+                legacy.extend(("--span-dir", f"{sid}={relocated / sid}"))
+        placed = MR.place_in(self.mini, legacy)
+        argv = [sys.executable, "-I", "-B", self.driver, self.mini, self.basename, fault, ledger, *placed.argv]
         result = subprocess.run(argv, cwd=self.root, capture_output=True, timeout=180)
         return result, private, public
 
@@ -1046,7 +1053,9 @@ class TwinThroughCLI(unittest.TestCase):
                     fit = M.load_json(private / "fit.json")
                     paths = [Path(f["path"]) for f in fit["custody"]["files"] if "/runtime/runs/cadence-leg/" in f["path"]]
                     self.assertTrue(paths)
-                    self.assertTrue(all(path.is_relative_to(relocated) for path in paths))
+                    # every span is read at <root>/<span id>: the record names each file relative to the root
+                    self.assertTrue(all(not path.is_absolute() and path.parts[0] in self.spans for path in paths))
+                    self.assertEqual(fit["custody"]["root"], str(self.source))
                     self.assertEqual(coefficients, direct_coefficients)
                     original = dict(row, twin_agrees=None)
                     original_coefficients = coefficients
@@ -1081,7 +1090,7 @@ class TwinThroughCLI(unittest.TestCase):
         ledger = self.root / "refusal-ledger.json"
         row = dict(self.row, custody_root=str(self.source), public_root="generated-refusal")
         ledger.write_bytes(C.dump({"schema": M.LOOK_LEDGER_SCHEMA, "looks": [row]}))
-        (self.source / LOOK).mkdir()
+        (self.source / LOOK).mkdir(exist_ok=True)
         (self.mini / row["public_root"] / LOOK).mkdir(parents=True)
         private = self.source / LOOK / "RESTRICTED"
         stage2 = ["stage2", "--stage1", self.stage1, "--stage1-sha256", self.response_sha, "--manifest", self.manifest,
@@ -1106,9 +1115,16 @@ class TwinThroughCLI(unittest.TestCase):
                     code, stdout, stderr = cli_fixture._cli_subprocess(args, repo=self.mini,
                                                                       extra={"host_probe": UUID_LINE})
                     self.assertEqual((code, stdout), (2, ""), stderr)
-                    # RL-194: a symlink in a span refuses at the pin check, before the locator is ever resolved
-                    self.assertRegex(stderr, "custody pins: .*runs/escaped: a symlink" if locator == "runs/escaped"
-                                     else reason)
+                    # RL-194: a symlink in a span refuses at the pin check, before the locator is ever resolved.
+                    # Stage 1 runs with the changed record pinned as it is, so its grammar refuses the locator; stage
+                    # 2 runs under the pins the stage-1 file was made under, so the changed record is not its pin
+                    if locator == "runs/escaped" and args[0] == "stage1":
+                        self.assertRegex(stderr, "custody pins: .*runs/escaped: a symlink")
+                    elif args[0] == "stage2":           # the first difference from the pins stage 1 ran under
+                        self.assertRegex(stderr, "custody pins: .*(leg_record.json: its bytes are not its pin|"
+                                                 "runs/escaped: a symlink)")
+                    else:
+                        self.assertRegex(stderr, reason)
                     self.assertFalse([path for path in cli_fixture.LAST_RUN["served"] if "/hazards/meter/" in path
                                       or Path(path).name in ("power_trace.csv", "rich_telemetry.jsonl",
                                                              "powermetrics.plist")])
@@ -1132,10 +1148,11 @@ class TwinThroughCLI(unittest.TestCase):
         out = self.root / "refused-stage1.json"
         private = self.source / LOOK / "RESTRICTED"
         public = self.mini / "public" / LOOK
-        private.parent.mkdir()
+        private.parent.mkdir(exist_ok=True)
         public.mkdir(parents=True)
         manifest = dict(M.load_json(self.manifest), status="committed")
-        self.manifest.write_bytes(C.dump(manifest))
+        # written as the copy writes its manifest (look_minirepo), so restoring the pins restores these bytes
+        self.manifest.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         ledger = self.mini / M.LOOK_LEDGER_PATH
         row = dict(self.row, sha256=digest(self.manifest.read_bytes()), status="committed",
                    custody_root=str(self.source), public_root="public")
@@ -1205,7 +1222,7 @@ class TwinThroughCLI(unittest.TestCase):
             if args[0] == "stage2":
                 for name, saved in files.items():
                     name.write_bytes(saved)
-                MR.pin_custody(self.mini, stage2)             # back to the pins the committed stage 1 ran under
+                MR.place_in(self.mini, stage2)             # back to the pins the committed stage 1 ran under
                 row.update(status="stage1_committed", stage1_sha256=stage1_sha,
                            sha256=digest(self.manifest.read_bytes()))
                 ledger.write_bytes(C.dump(ledger_doc))
