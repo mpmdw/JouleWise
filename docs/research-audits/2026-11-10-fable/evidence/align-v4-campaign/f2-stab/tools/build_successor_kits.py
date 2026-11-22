@@ -1,4 +1,4 @@
-"""Regenerate the RL-190 §1.3 stability mint and its single-position queues."""
+"""Regenerate the stability mint and the RL-200 stability queues."""
 
 import argparse
 import json
@@ -16,6 +16,7 @@ EXPIRES = "2026-12-15T12:35:29-08:00"
 INDEX = (STABILITY / "KITS.json").relative_to(AUDIT)
 W2 = (CAMPAIGN / "fillers-w2").relative_to(AUDIT)
 W3 = (CAMPAIGN / "fillers-w3").relative_to(AUDIT)
+MULTILEG_SECTION = "\n## Multi-leg stability queues\n"
 
 
 def intake_blob(path):
@@ -50,6 +51,78 @@ def single_position_queues(template, row, not_before):
         yield W3 / "queues-1leg" / f"{span_id}.json", json_bytes({
             **queue, "queue_id": f"cq-{span_id}", "spans": [{**span, "not_before": not_before}],
         })
+
+
+def multi_position_queues(week, template, positions):
+    """Write one alternative per possible start and length, as in W3."""
+    for size in (2, 3):
+        for offset in range(len(positions) - size + 1):
+            members = positions[offset:offset + size]
+            first = members[0]
+            legs = [leg for member in members for leg in member["legs"]]
+            if len(legs) != size or any(
+                member["seq"] != first["seq"] + index or len(member["legs"]) != 1
+                or any(member[key] != first[key] for key in ("block_id", "kit", "not_before", "attempt"))
+                for index, member in enumerate(members)
+            ):
+                raise ValueError(f"{first['span_id']}: expected consecutive one-leg queue positions")
+            span_id = "-".join([first["block_id"], *(leg.lower() for leg in legs)])
+            yield week / f"queues-{size}leg" / f"{span_id}.json", json_bytes({
+                **template, "queue_id": f"cq-{span_id}",
+                "spans": [{**first, "span_id": span_id, "legs": legs}],
+            })
+
+
+def multileg_readme(week, queues):
+    command = Path(__file__).resolve().relative_to(AUDIT)
+    rows = []
+    for path, raw in sorted(queues.items()):
+        name = path.relative_to(week).as_posix()
+        rows.append(f"| [{name}]({name}) | `{digest(raw)}` |")
+    return MULTILEG_SECTION + "\n".join([
+        "",
+        "Select the single-span queue under `queues-2leg/` or `queues-3leg/`",
+        "named by the kit and all selected leg IDs in lowercase, joined by hyphens.",
+        "Files give the contiguous roster alternatives. Dispatch selects only legs",
+        "that are still unrun, starting at the next unrun position in kit order.",
+        "Use the existing `queues-1leg/` entries for one-leg dispatch.",
+        "",
+        "Regenerate both weeks from the audit checkout root.",
+        "",
+        "```sh",
+        f"python3.13 -B {command} --stability-spans",
+        "```",
+        "",
+        "Pass `--check` to verify the multi-leg queue and README bytes.",
+        "",
+        "| Queue | SHA-256 |",
+        "| --- | --- |",
+        *rows,
+        "",
+    ])
+
+
+def generate_stability_spans():
+    """Extend the committed one-leg inventories without reminting kits."""
+    artifacts = {}
+    for week, kit_numbers in ((W2, range(1, 17)), (W3, range(17, 54))):
+        queues = {}
+        for number in kit_numbers:
+            kit_id = f"f2-stab-{number:02d}"
+            source = AUDIT / week / "queues-1leg"
+            if week == W2:
+                template = json.loads((source / f"{kit_id}.json").read_bytes())
+                positions = template["spans"]
+            else:
+                singles = [json.loads(path.read_bytes()) for path in sorted(source.glob(f"{kit_id}-l*.json"))]
+                template = singles[0]
+                positions = [item["spans"][0] for item in singles]
+            queues.update(multi_position_queues(week, template, positions))
+        artifacts.update(queues)
+        path = week / "README.md"
+        base = (AUDIT / path).read_text(encoding="utf-8").partition(MULTILEG_SECTION)[0]
+        artifacts[path] = (base + multileg_readme(week, queues)).encode("utf-8")
+    return artifacts
 
 
 def readme(queues, not_before):
@@ -92,7 +165,7 @@ def generate(not_before=None):
     index = json.loads(intake_blob(INDEX))
     old_rows = {row["kit_id"]: row for row in index["rows"]}
     reserved = reserved_seeds()
-    artifacts, queues = {}, {}
+    artifacts, queues, multi = {}, {}, {}
     with tempfile.TemporaryDirectory(prefix="stab-successor-") as temporary:
         for predecessor, numbers in ROSTERS:
             reference = old_rows[predecessor]
@@ -117,11 +190,15 @@ def generate(not_before=None):
                        "runner_pin": reference["runner_pin"], "sha256": digest(raw)}
                 index["rows"].append(row)
                 if not_before is not None:
-                    queues.update(single_position_queues(template, row, not_before))
+                    singles = dict(single_position_queues(template, row, not_before))
+                    queues.update(singles)
+                    docs = [json.loads(raw) for raw in singles.values()]
+                    multi.update(multi_position_queues(W3, docs[0], [doc["spans"][0] for doc in docs]))
     artifacts[INDEX] = (json.dumps(index, indent=2, sort_keys=True) + "\n").encode()
     if not_before is not None:
         artifacts.update(queues)
-        artifacts[W3 / "README.md"] = readme(queues, not_before)
+        artifacts.update(multi)
+        artifacts[W3 / "README.md"] = readme(queues, not_before) + multileg_readme(W3, multi).encode("utf-8")
     return artifacts
 
 
@@ -130,12 +207,13 @@ def main():
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--not-before", choices=(NOT_BEFORE,), help="earliest local start date")
     mode.add_argument("--kits-only", action="store_true")
+    mode.add_argument("--stability-spans", action="store_true", help="regenerate W2 and W3 multi-leg queues")
     parser.add_argument("--output-root", type=Path, default=AUDIT)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
-    artifacts = generate(args.not_before)
+    artifacts = generate_stability_spans() if args.stability_spans else generate(args.not_before)
     target_index = args.output_root / INDEX
-    if not args.check and target_index.is_file():
+    if not args.check and INDEX in artifacts and target_index.is_file():
         if target_index.read_bytes() not in (intake_blob(INDEX), artifacts[INDEX]):
             parser.exit(1, "KITS.json differs from both the pre-mint and regenerated index\n")
     for path, raw in artifacts.items():
