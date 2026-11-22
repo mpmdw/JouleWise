@@ -1008,9 +1008,9 @@ CONCLUSION_9D = ('Allowing each value to move within its registered timing uncer
 CONCLUSION_9C = (
     'The 8B model used more gross processor-rail energy per request than the 1.7B model in both phases: '
     'by {r15:e} J in decode (decision interval [{r48:lo}, {r49:hi}] J) and by {r16:e} J in 2,048-token '
-    'prefill ([{r50:lo}, {r51:hi}] J). Each contrast was *{r530:w}* at claim level {r532:id} in one session, '
-    'and each *replicated* under the registered definition: every one of the three replication contrast sessions '
-    'gave the same outcome word and sign. ' + D177
+    'prefill ([{r50:lo}, {r51:hi}] J). Each contrast was *{r530:w}* at claim level {r532:id} under the registered '
+    'claim gate in one session, and each *replicated* under the registered definition: every one of the three '
+    'replication contrast sessions gave the same outcome word and sign. ' + D177
 )
 
 # --- first-fill prose, re-rounded under RL-52
@@ -1106,7 +1106,7 @@ SITES.append(('Section 6.6, monitor cost', ['P1-B5-MONITOR'], MONITOR, 1, [LBL_S
 SITES.append(('Section 6.7, primary-block recomputation (RL-4 vii)', ['P1-RECOMPUTE-SUMMARY'], RECOMPUTE_B5, 1, []))
 SITES.append(('Table S8, comparator families', [], TABLE_S8, 1, []))
 SITES.append(('Section 11, branch 9.D', ['CP-X02-conclusion'], CONCLUSION_9D, 1, []))
-SITES.append(('Section 11, branch 9.C', ['CP-X08-decode-a-conclusion'], CONCLUSION_9C, 1, LABEL_T5))
+SITES.append(('Section 11, branch 9.C', ['CP-X08-decode-a-conclusion'], CONCLUSION_9C, 1, ['registered claim gate']))
 SITES.append(('Section 5.1, identities (RL-60 (5))', ['CP-X01-identity'], '({c:identity})', 1, []))
 SITES.append(('Section 5.1, prefill length record (RL-60 (5))', ['CP-X01-length'], '({c:length})', 1, []))
 SITES.append(('Section 6.3, floor class (RL-66 F07)', [], FLOOR_CLASS, 1, []))
@@ -1118,10 +1118,9 @@ SITES.append(('Section 5.7, recompute pointer (RL-147 §8)', ['P1-RECOMPUTE'],
               'separate reader checks.', 1, []))
 SITES.append(('Table 4 caption (RL-60 (2))', [], TABLE4_CAPTION, 1, []))
 
-# The separately checked Table 5 caption supplies the claim-gate label for its cells and the conclusion recap.
+# A print-labelled row in a table cell carries its label in the table note (RL-42), which is its own site.
 LABEL_SITE = {'Table 5, decode': 'Table 5 caption, claim level (RL-41 b)',
-              'Table 5, prefill': 'Table 5 caption, claim level (RL-41 b)',
-              'Section 11, branch 9.C': 'Table 5 caption, claim level (RL-41 b)'}
+              'Table 5, prefill': 'Table 5 caption, claim level (RL-41 b)'}
 
 # Ids whose placeholders the two fills replaced.
 FILLED = sorted({i for _, ids, _, _, _ in SITES for i in ids})

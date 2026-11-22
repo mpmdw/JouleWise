@@ -1861,7 +1861,7 @@ That sentence withholds the registered dominance statement; it does not withdraw
 <!-- Interpretive text (research lead, 2026-11-12), not a registered sentence; the branch-B sentence above is
 unchanged. Authority: analysis plan §6; RL-4(viii). -->
 
-The 8B model used more gross processor-rail energy per request than the 1.7B model in both phases: by 146.63 J in decode (decision interval [141.35, 151.91] J) and by 101.81 J in 2,048-token prefill ([95.80, 107.82] J). Each contrast was *direction supported* at claim level L2 in one session, and each *replicated* under the registered definition: every one of the three replication contrast sessions gave the same outcome word and sign. Phase attribution is reported without a measured instrument phase-accounting check.
+The 8B model used more gross processor-rail energy per request than the 1.7B model in both phases: by 146.63 J in decode (decision interval [141.35, 151.91] J) and by 101.81 J in 2,048-token prefill ([95.80, 107.82] J). Each contrast was *direction supported* at claim level L2 under the registered claim gate in one session, and each *replicated* under the registered definition: every one of the three replication contrast sessions gave the same outcome word and sign. Phase attribution is reported without a measured instrument phase-accounting check.
 <!-- FACT H22: RL-5 item 5; R2P P11; paper-audit C-10. Unconditional resolution gloss removed. -->
 
 **[BRANCH 9.B — BYTES]** {{FILL: P1-BY-CONCLUSION | one sentence: the H1 words for the MoE models and the active-or-resident answer at rails and DC input, and the primary ε, in the registered wording; with the dense-model sentence}} **[END BRANCH 9.B]**
