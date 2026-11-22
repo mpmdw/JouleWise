@@ -4,18 +4,23 @@
 from __future__ import annotations
 
 import argparse
+import base64
+from collections.abc import Mapping
 from contextlib import contextmanager
 import fcntl
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import stat
 import subprocess
 import sys
 import tempfile
 import time
+from urllib.parse import urlsplit, urlunsplit
 import uuid
 
 if __package__:
@@ -31,6 +36,7 @@ TOP_MARKER = items.TOP_MARKER_PREFIX + " newest first. Add with scripts/run_stat
 LEGACY_MARKER = "<!-- RUN_STATE LEGACY ITEMS below: prose, not typed; cutover {} -->"
 RESERVED = {RUN_STATE.as_posix().casefold(), CURRENT.as_posix().casefold()}
 SHA = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+SCP_REMOTE = re.compile(r"((?:[^@/:]+@)?(?:\[[^]]+\]|[^@/:]+)):(?!:)(.+)")
 
 
 class GitFailure(RuntimeError):
@@ -41,6 +47,10 @@ class GitFailure(RuntimeError):
 
 class RetriesExhausted(GitFailure):
     code = 4
+
+
+class InvalidBaseState(ValueError):
+    """The state being extended must be repaired before this request can land."""
 
 
 def render_item(number: int, heading: str, header: dict, body: str, pointer: str | None) -> str:
@@ -119,7 +129,7 @@ def _request_header(request: dict) -> dict:
 def _prepare(text: str, request: dict, header: dict) -> tuple[int, str, bytes]:
     parsed = _validated(text)
     if parsed.cutover is None:
-        raise ValueError("run init first")
+        raise InvalidBaseState("run init first")
     body = request["body"]
     for line in body.splitlines():
         if line.strip() in ("```item", "```pointer"):
@@ -203,14 +213,19 @@ def _repo_root(path: Path) -> Path:
     return root.resolve()
 
 
+def _with_path(filename: str) -> Path:
+    relative = Path(filename)
+    if (not relative.parts or relative.is_absolute() or ".." in relative.parts
+            or any(part.casefold() == ".git" for part in relative.parts)
+            or relative.as_posix().casefold() in RESERVED):
+        raise ValueError(f"--with must be a separate repository-relative file: {filename!r}")
+    return relative
+
+
 def _source_files(repo: Path, filenames: list[str]) -> dict[Path, Path]:
     sources = {}
     for filename in filenames:
-        relative = Path(filename)
-        if (not relative.parts or relative.is_absolute() or ".." in relative.parts
-                or any(part.casefold() == ".git" for part in relative.parts)
-                or relative.as_posix().casefold() in RESERVED):
-            raise ValueError(f"--with must be a separate repository-relative file: {filename!r}")
+        relative = _with_path(filename)
         source = repo / relative
         if source.resolve() != source or not source.is_file():
             raise ValueError(f"--with must be a regular file without symlinks: {filename!r}")
@@ -264,18 +279,30 @@ def _push(repo: Path, remote: str, ref: str, base: str) -> bool:
     raise GitFailure("git push did not confirm the requested destination")
 
 
-def _commit(path: Path, number: int, request: dict, sources: dict[Path, Path]) -> str:
+def _commit(path: Path, number: int, request: dict,
+            sources: Mapping[Path, Path | tuple[bytes, int]]) -> str:
     for relative, source in sources.items():
         target = path / relative
         if target.resolve() != target or (target.exists() and not target.is_file()):
             raise ValueError(f"--with requires a regular checkout path without symlinks: {relative}")
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
+        if isinstance(source, Path):
+            shutil.copy2(source, target)
+        else:
+            data, mode = source
+            target.write_bytes(data)
+            target.chmod(mode)
     allowed = {str(p) for p in (RUN_STATE, CURRENT, *sources)}
     _git(path, "--literal-pathspecs", "add", "--", *sorted(allowed))
     staged = set(_git(path, "diff", "--cached", "--name-only", "-z").strip("\0").split("\0"))
     if str(RUN_STATE) not in staged or staged - allowed:
         raise GitFailure("git staged an unexpected set of paths")
+    for relative, source in sources.items():
+        if isinstance(source, Path):
+            continue
+        blob = _git(path, "hash-object", "--no-filters", "--", str(relative)).strip()
+        if _git(path, "rev-parse", "--verify", f":{relative}").strip() != blob:
+            raise ValueError(f"Git staging changed the snapshotted --with bytes for {relative}")
     label = (request["message"] or request["heading"]).replace("{{self}}", str(number))
     subject = f"RUN_STATE {number}: {label}"[:100].rstrip()
     message = ["-m", subject]
@@ -300,62 +327,124 @@ def _remove_ref(repo: Path, private_ref: str) -> None:
         raise GitFailure("git left a private fetch ref behind")
 
 
-def _land(repo: Path, request: dict, remote: str, branch: str, attempts: int) -> tuple[int, str]:
+def _checked_base(path: Path) -> str:
+    source, current = path / RUN_STATE, path / CURRENT
+    try:
+        if source.resolve() != source or current.resolve() != current:
+            raise ValueError("RUN_STATE and CURRENT must be regular checkout paths")
+        text = source.read_bytes().decode("utf-8")
+        gen_current.render(text)
+    except ValueError as error:
+        raise InvalidBaseState(f"fetched state is invalid: {error}") from error
+    return text
+
+
+def _land(repo: Path, request: dict, remote: str, branch: str, attempts: int, *,
+          snapshots: dict[Path, tuple[bytes, int]] | None = None) -> tuple[int, str]:
     header = _request_header(request)
-    repo = _repo_root(repo)
-    sources = _source_files(repo, request["with"])
+    sources = _source_files(repo, request["with"]) if snapshots is None else snapshots
     ref = f"refs/heads/{branch}"
     if _git(repo, "check-ref-format", "--normalize", ref).rstrip("\n") != ref:
         raise ValueError(f"invalid target branch: {branch!r}")
     private_ref = f"refs/joulewise/run-state-add/{uuid.uuid4().hex}"
+    ref_needs_cleanup = False
     landed = None
+    limit = min(attempts, 5)
+    last_failure = "push rejected"
+    validation_retried = False
     try:
-        for _ in range(min(attempts, 5)):
+        for _ in range(limit):
+            ref_needs_cleanup = True
             base = _fetch(repo, remote, ref, private_ref)
-            with _worktree(repo, base) as path:
-                source, current = path / RUN_STATE, path / CURRENT
-                if source.resolve() != source or current.resolve() != current:
-                    raise ValueError("RUN_STATE and CURRENT must be regular checkout paths")
-                number, updated, document = _prepare(source.read_bytes().decode("utf-8"), request, header)
-                source.write_text(updated, encoding="utf-8")
-                current.write_bytes(document)
-                head = _commit(path, number, request, sources)
-                if _push(path, remote, ref, base):
-                    landed = number, head
+            try:
+                with _worktree(repo, base) as path:
+                    number, updated, document = _prepare(_checked_base(path), request, header)
+                    (path / RUN_STATE).write_text(updated, encoding="utf-8")
+                    (path / CURRENT).write_bytes(document)
+                    head = _commit(path, number, request, sources)
+                    if _push(path, remote, ref, base):
+                        landed = number, head
+            except ValueError as error:
+                # Validation can only decide against the head it actually read.
+                # Recheck after both local cleanup steps, before returning a refusal.
+                _remove_ref(repo, private_ref)
+                ref_needs_cleanup = False
+                if _remote_head(repo, remote, ref) != base:
+                    validation_retried = False
+                    last_failure = "remote changed during validation"
+                    continue
+                if snapshots is None or isinstance(error, InvalidBaseState) or validation_retried:
+                    raise
+                # A matching reply may already be stale. Replay on a fresh
+                # fetch once before returning an error eligible for quarantine.
+                validation_retried = True
+                last_failure = "request validation requires a fresh fetch"
+                continue
             if landed is not None:
                 return landed
-        raise RetriesExhausted(f"push rejected after {min(attempts, 5)} attempts")
+            validation_retried = False
+            last_failure = "push rejected"
+        raise RetriesExhausted(f"{last_failure} after {limit} attempts")
     except (GitFailure, subprocess.CalledProcessError, OSError) as error:
         if landed is None:
             raise
         print(f"run_state_add: item landed; worktree cleanup failed: {_error_text(error)}", file=sys.stderr)
         return landed
     finally:
-        try:
-            _remove_ref(repo, private_ref)
-        except (GitFailure, subprocess.CalledProcessError, OSError) as error:
-            if landed is not None:
-                print(f"run_state_add: item landed; ref cleanup failed: {_error_text(error)}", file=sys.stderr)
-            else:
-                raise
+        if ref_needs_cleanup:
+            try:
+                _remove_ref(repo, private_ref)
+            except (GitFailure, subprocess.CalledProcessError, OSError) as error:
+                if landed is not None:
+                    print(f"run_state_add: item landed; ref cleanup failed: {_error_text(error)}", file=sys.stderr)
+                else:
+                    raise
 
 
-def _spool_dir() -> Path:
-    return Path(os.environ.get("JW_RUN_STATE_SPOOL", "~/.joulewise/run_state_spool")).expanduser()
+def _normalized_host(authority: str) -> str:
+    return authority.rpartition("@")[2].lower()
+
+
+def _normalized_remote_url(repo: Path, url: str) -> str:
+    if "://" not in url:
+        if match := SCP_REMOTE.fullmatch(url):
+            host, path = match.groups()
+            return f"{_normalized_host(host)}:{path.rstrip('/').removesuffix('.git')}"
+        if re.match(r"^[^/:]+::", url):
+            return url  # A Git remote helper's address is protocol-specific.
+        url = (repo / url).resolve().as_uri()
+    parts = urlsplit(url)
+    return urlunsplit((parts.scheme.lower(), _normalized_host(parts.netloc),
+                       parts.path.rstrip("/").removesuffix(".git"), parts.query, parts.fragment))
+
+
+def _spool_dir(repo: Path, remote: str = "origin") -> Path:
+    try:
+        url = _git(repo, "remote", "get-url", "--push", "--", remote)
+    except subprocess.CalledProcessError as error:
+        if error.returncode != 2:
+            raise
+        # Git also accepts a literal URL or path in place of a named remote.
+        url = _git(repo, "ls-remote", "--get-url", "--", remote)
+    key = sha256(os.fsencode(_normalized_remote_url(repo, url.rstrip("\n")))).hexdigest()
+    root = Path(os.environ.get("JW_RUN_STATE_SPOOL", "~/.joulewise/run_state_spool")).expanduser()
+    return root / key
 
 
 @contextmanager
-def _locked(spool: Path):
+def _locked(spool: Path, *, shared: bool = False):
     spool.mkdir(mode=0o700, parents=True, exist_ok=True)
     with (spool / ".lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+        fcntl.flock(lock, fcntl.LOCK_SH if shared else fcntl.LOCK_EX)
         yield
 
 
-def _spool(spool: Path, request: dict) -> Path:
-    target = spool / f"{time.time_ns():020d}-{uuid.uuid4().hex}.json"
-    data = (json.dumps(request, ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
-    with tempfile.NamedTemporaryFile(dir=spool, prefix=".request.", delete=False) as stream:
+def _pending(spool: Path):
+    return (path for path in spool.iterdir() if path.name.endswith(".json"))
+
+
+def _write_spool_file(target: Path, data: bytes) -> None:
+    with tempfile.NamedTemporaryFile(dir=target.parent, prefix=".request.", delete=False) as stream:
         temporary = Path(stream.name)
         try:
             stream.write(data)
@@ -363,7 +452,53 @@ def _spool(spool: Path, request: dict) -> Path:
             os.replace(temporary, target)
         finally:
             temporary.unlink(missing_ok=True)
+
+
+def _spool(spool: Path, request: dict, repo: Path) -> Path:
+    if request["with"]:
+        snapshots = {}
+        for relative, source in _source_files(repo, request["with"]).items():
+            with source.open("rb") as stream:
+                snapshots[relative.as_posix()] = {
+                    "mode": stat.S_IMODE(os.fstat(stream.fileno()).st_mode),
+                    "data": base64.b64encode(stream.read()).decode("ascii"),
+                }
+        request = {**request, "with_snapshot": snapshots}
+    target = spool / f"{time.time_ns():020d}-{uuid.uuid4().hex}.json"
+    data = (json.dumps(request, ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
+    _write_spool_file(target, data)
     return target
+
+
+def _spooled_files(request: dict) -> dict[Path, tuple[bytes, int]]:
+    relatives = dict.fromkeys(_with_path(filename) for filename in request["with"])
+    snapshots = request.get("with_snapshot")
+    if snapshots is None:
+        if relatives:
+            raise ValueError("missing --with snapshot for queued request")
+        return {}
+    if not isinstance(snapshots, dict) or snapshots.keys() != {path.as_posix() for path in relatives}:
+        raise ValueError("--with snapshot paths must match the queued attachments")
+    sources = {}
+    for relative in relatives:
+        snapshot = snapshots[relative.as_posix()]
+        if not isinstance(snapshot, dict) or snapshot.keys() != {"mode", "data"}:
+            raise ValueError(f"invalid --with snapshot for {relative}")
+        mode, data = snapshot["mode"], snapshot["data"]
+        if type(mode) is not int or not 0 <= mode <= 0o7777 or not isinstance(data, str):
+            raise ValueError(f"invalid --with snapshot for {relative}")
+        sources[relative] = base64.b64decode(data, validate=True), mode
+    return sources
+
+
+def _quarantine(path: Path, error: ValueError) -> None:
+    failed = path.parent / "failed"
+    failed.mkdir(mode=0o700, exist_ok=True)
+    target = failed / path.name
+    # Leave the request pending if its reason cannot be recorded.
+    _write_spool_file(target.with_suffix(".reason"), f"{error}\n".encode("utf-8"))
+    os.replace(path, target)
+    print(f"run_state_add: quarantined {target}: {error}", file=sys.stderr)
 
 
 def _error_text(error: Exception) -> str:
@@ -372,35 +507,77 @@ def _error_text(error: Exception) -> str:
     return str(error)
 
 
+def _read_spooled_request(path: Path, legacy: Path, remote: str) -> dict:
+    try:
+        request = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        if path.parent != legacy or remote == "origin":
+            raise
+        # An unreadable legacy entry also has no established remote.
+        request = None
+    if path.parent == legacy:
+        recorded = request.get("remote") if isinstance(request, dict) else None
+        queued_remote = "origin" if recorded is None else recorded
+        if queued_remote != remote:
+            raise GitFailure(f"legacy request {path.name} requires remote {queued_remote!r}. "
+                             f"The selected remote is {remote!r}. Pending spool retained.")
+    return request
+
+
 def add_git(repo: Path, request: dict, *, remote="origin", branch="main", attempts=5) -> tuple[int, str]:
-    spool = _spool_dir()
-    with _locked(spool):
+    repo = _repo_root(repo)
+    spool = _spool_dir(repo, remote)
+    legacy = spool.parent
+    flush_command = "python3 scripts/run_state_add.py flush-spool"
+    keyed_flush = flush_command
+    if remote != "origin":
+        keyed_flush += f" --remote={shlex.quote(remote)}"
+    with _locked(legacy, shared=True), _locked(spool):
+        if any(_pending(legacy)):
+            raise GitFailure(f"pending legacy requests in {legacy}; run {flush_command} "
+                             "from the original checkout with the queued remote before retrying this add")
+        if any(_pending(spool)):
+            raise GitFailure(f"pending requests in {spool}; run {keyed_flush} "
+                             "before retrying this add")
         try:
             return _land(repo, request, remote, branch, attempts)
         except (GitFailure, subprocess.CalledProcessError, OSError) as error:
-            target = _spool(spool, request)
+            target = _spool(spool, request, repo)
             failure = RetriesExhausted if isinstance(error, RetriesExhausted) else GitFailure
             raise failure(f"{_error_text(error)}; spooled at {target}") from error
 
 
-def _flush(repo: Path) -> None:
-    spool = _spool_dir()
-    with _locked(spool):
-        queue = sorted(spool.glob("*.json"))
+def _flush(repo: Path, *, remote: str = "origin") -> int:
+    repo = _repo_root(repo)
+    spool = _spool_dir(repo, remote)
+    legacy = spool.parent
+    # The parent lock is also the old writer's lock. Take it before the
+    # keyed lock so the old and new queues cannot be drained out of order.
+    with _locked(legacy), _locked(spool):
+        queue = sorted(_pending(legacy)) + sorted(_pending(spool))
         if not queue:
-            repo = _repo_root(repo)
             private_ref = f"refs/joulewise/run-state-add/{uuid.uuid4().hex}"
             try:
-                head = _fetch(repo, "origin", "refs/heads/main", private_ref)
+                head = _fetch(repo, remote, "refs/heads/main", private_ref)
                 if _validated(_git(repo, "show", f"{head}:{RUN_STATE}")).cutover is None:
                     raise ValueError("run init first")
             finally:
                 _remove_ref(repo, private_ref)
+        quarantined = False
         for path in queue:
-            request = json.loads(path.read_text(encoding="utf-8"))
-            number, head = _land(repo, request, "origin", "main", 5)
+            try:
+                request = _read_spooled_request(path, legacy, remote)
+                number, head = _land(repo, request, remote, "main", 5,
+                                     snapshots=_spooled_files(request))
+            except InvalidBaseState as error:
+                raise InvalidBaseState(f"{error}; pending spool retained") from error
+            except ValueError as error:
+                _quarantine(path, error)
+                quarantined = True
+                continue
             path.unlink()
             print(number, head)
+        return 2 if quarantined else 0
 
 
 def _iso(value: str, name: str) -> int:
@@ -433,7 +610,8 @@ def main(argv=None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     init = commands.add_parser("init")
     add = commands.add_parser("add")
-    commands.add_parser("flush-spool")
+    flush = commands.add_parser("flush-spool")
+    flush.add_argument("--remote", default="origin", help="Git remote whose queue to replay")
     for command in (add, init):
         command.add_argument("--run-state", type=Path)
         command.add_argument("--current", type=Path)
@@ -451,7 +629,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "flush-spool":
-            _flush(Path.cwd())
+            return _flush(Path.cwd(), remote=args.remote)
         else:
             if args.no_git != bool(args.run_state and args.current) or (
                     (args.run_state is None) != (args.current is None)):

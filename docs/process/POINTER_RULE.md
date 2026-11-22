@@ -59,8 +59,14 @@ when an item with a higher number also carries one.
 
 The highest numbered item **carrying a block** wins, regardless of file order.
 Sort the numeric part first, then the optional lowercase letter (`256b > 256`,
-`257 > 256b`). Items without a block do not affect pointer selection. Ordinary
-legacy text needs no regeneration. After cutover, `run_state_add.py` regenerates
+`257 > 256b`). Items without a block do not affect pointer selection.
+Every pointer owner must match `run_state_items.OWNERS` exactly. The seven
+historical item and owner pairs in `scripts/gen_current.py` may each appear
+once per render when a strictly higher-numbered item carries a pointer.
+Owner violations report `INVALID_OWNER` on the owner line. The generated
+pointer always uses a registered owner when a source item is present.
+
+Ordinary legacy text needs no regeneration. After cutover, `run_state_add.py` regenerates
 the file for each typed item. Headings inside other fenced examples are ignored.
 Quoted or indented pointer fences are examples and ignored; indented fenced
 examples also suppress recognition until their matching closing fence. Other
