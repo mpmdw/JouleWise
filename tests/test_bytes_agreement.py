@@ -136,6 +136,9 @@ CAMPAIGNS = {
     "no_point_labels_survivor": ("bytes", 1100, label_defects(range(4, 10)) + [
         (1, "Qwen3-14B-4bit", i, "member.target_phase_precheck_failed") for i in range(6)
     ], LABEL_KNOBS, ("bytes-s5-p1",)),
+    "no_point_labels_lost_member": ("bytes", 1100, label_defects(range(4, 10)) + [
+        (1, "Qwen3-Next-80B-A3B-Instruct-4bit", 20, "lost_member")
+    ], LABEL_KNOBS, ("bytes-s5-p1",)),
     "invalid_anchor": ("bytes", 1100, ANCHOR_DEFECTS, NR1_KNOBS, ()),
     "marker_incomplete": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
                            "truncate_marker_window": True}, ()),
@@ -2194,6 +2197,29 @@ class AgreementTests(unittest.TestCase):
                         answer_flags = rows[(answer, "flags")][side]
                         self.assertEqual(answer_flags, expected)
                         self.assertNotIn(code, answer_flags)
+
+    def test_no_point_labels_lost_member_campaign(self):
+        name = "no_point_labels_lost_member"
+        recorder = campaign(name)
+        counts = recorder.counts()
+        self.assertEqual(counts["above_bar"], 0)
+        print(f"\nagreement {name}: compared {counts['compared']}, equal {counts['equal']}, "
+              f"under the bar {counts['under_bar']}, above the bar {counts['above_bar']}")
+        exits = {r["key"]: (r["a"], r["t"]) for r in recorder.rows if r["group"] == "exit"}
+        self.assertEqual(exits["heldout/stage2"], (0, 0))
+        rows = {(r["group"], r["key"]): (r["a"], r["t"]) for r in recorder.rows if r["stage"] == "heldout"}
+        model = "qwen3-next-80b-a3b-instruct-4bit"
+        for boundary in ("rails", "dc_input", "rest"):
+            with self.subTest(boundary=boundary):
+                cell = f"cell/{model}/pass1/{boundary}/gross"
+                h1 = f"h1/{boundary}/passes_mean/{model}"
+                moe = f"moe/{boundary}/passes_mean"
+                self.assertEqual(rows[(cell, "status")], ("unavailable", "unavailable"))
+                self.assertEqual(rows[(h1, "status")], ("missing", "missing"))
+                self.assertEqual(rows[(moe, "answer")], ("missing", "missing"))
+                for group in (cell, h1, moe):
+                    for flags in rows[(group, "flags")]:
+                        self.assertIn("member.bytes_missing", flags, group)
 
     def test_time_world(self):
         self.check("time", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),

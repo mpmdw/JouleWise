@@ -116,17 +116,32 @@ class SessionFlagTests(unittest.TestCase):
 class ScienceMeterEligibilityTests(unittest.TestCase):
     def test_all_invalid_members_skip_meter_joins_and_keep_refused_cells(self):
         model = "qwen3-30b-a3b-4bit"
+        codes = ["", *sorted(bt.VALIDITY_CODES)]
         rows = [{
-            "session_id": "s1", "role": "science", "model_name": model, "config_key": "science",
+            "session_id": "s1", "role": "science", "model_name": None, "config_key": "||",
+            "cell_ids": model + "-decode",
             "run_id": f"r{index}", "order_index": index, "status": "succeeded" if code else "failed",
+            "strata": "repeat" if index < 10 else "quad",
+            "unit_ids": str(index if index < 10 else (index - 10) // 4),
             "excluded": bool(code), "exclusion_codes": code, "flag_codes": "battery.assist",
             "_unblinded": True,
-        } for index, code in enumerate(["", *sorted(bt.VALIDITY_CODES)])]
-        archive = {"session_id": "s1", "session_flags": ["audit.session"]}
-        with patch.object(bt, "unblind", return_value=rows), patch.object(bt, "dc_join") as join:
-            result = bt.analyse(rows, {name: {} for name in bt.ROSTER}, [archive],
+        } for index, code in enumerate(codes[i % len(codes)] for i in range(50))]
+        absent = rows.pop()
+        run_id = absent["run_id"]
+        archive = {
+            "session_id": "s1", "session_flags": ["audit.session"],
+            "planned_members": [{"run_id": run_id, "role": "science", "units": [{
+                "cell_id": absent["cell_ids"], "stratum": absent["strata"], "unit_id": absent["unit_ids"],
+            }]}],
+            "run_codes": {run_id: {"member.bytes_missing"}},
+            "exclusions": {run_id: {"member.bytes_missing"}},
+        }
+        manifest = {name: {"cell_ids": [name + "-decode"]} for name in bt.ROSTER}
+        with patch.object(bt, "unblind", return_value=rows) as unblind, patch.object(bt, "dc_join") as join:
+            result = bt.analyse(rows, manifest, [archive],
                                 stage="2", key_dir="synthetic", listed={"s1": {"pass_id": 1}})
 
+        unblind.assert_called_once_with(rows, "synthetic", {bt.REFERENCE_KEY})
         join.assert_not_called()
         block = result["cells"][model]["pass1"]
         self.assertEqual(block["dc_join_status"], {})
@@ -137,6 +152,18 @@ class ScienceMeterEligibilityTests(unittest.TestCase):
                 quantity = cell["quantities"]["gross"]
                 self.assertEqual(quantity["status"], "refused_below_minimum")
                 self.assertEqual(set(quantity["flags"]), {"audit.session", "battery.assist", *bt.VALIDITY_CODES})
+                self.assertTrue(any(row["run_id"] == run_id and row["codes"] == "member.bytes_missing"
+                                    for row in cell["removed_members"]))
+
+    def test_partial_floor_plan_refuses_before_estimation(self):
+        rows = [{"flag_codes": "battery.assist"}] * 49
+        with patch.object(bt, "_scaled_allowance") as scale:
+            cell = bt.compute_cell(rows, "rails", {}, {}, .05)
+        scale.assert_not_called()
+        for variant in bt.CELL_VARIANTS:
+            self.assertEqual(cell[variant], {"status": "refused_floor_plan",
+                                            "reason": "floor module requires 50 planned runs",
+                                            "flags": ["battery.assist"]})
 
 
 class MissingWithheldFlagTests(unittest.TestCase):
@@ -1560,12 +1587,11 @@ class ActiveOrResidentFlagsEndToEndTests(unittest.TestCase):
         def wrapper(rows, manifest, archives, **kw):
             sessions = bt.group_sessions(rows)
             identities = {sid: bt.pass_identity(sid, kw["listed"], kw["sidecars"].get(sid)) for sid in sessions}
-            model_sessions = bt.passes_by_model(sessions, identities)
+            model_sessions = bt.passes_by_model(bt.group_science_rows(rows, manifest), identities)
             first_dense, state["refused"] = model_sessions[self.DENSE]
-            for name in (self.MOE, self.DENSE):
-                manifest[name]["cell_ids"] = ["cell-" + name]
+            state["dense_cell"], = manifest[self.DENSE]["cell_ids"]
             for archive in archives:
-                archive["cell_run_codes"] = {"cell-" + self.DENSE: ["audit.c14"]}
+                archive["cell_run_codes"] = {state["dense_cell"]: ["audit.c14"]}
             missing = {sid: {self.MOE: record} for sid in model_sessions[self.MOE]}
             if mixed_dense:
                 missing.setdefault(first_dense, {})[self.DENSE] = record
@@ -1574,7 +1600,7 @@ class ActiveOrResidentFlagsEndToEndTests(unittest.TestCase):
 
         def refusing(srows, *args, **kw):
             cell = real_cell(srows, *args, **kw)
-            if bt.canon(srows[0]["model_name"]) == self.DENSE and srows[0]["session_id"] == state["refused"]:
+            if srows[0]["cell_ids"] == state["dense_cell"] and srows[0]["session_id"] == state["refused"]:
                 cell["gross"] = {"status": "refused_below_minimum", "flags": ["audit.refusal"]}
             return cell
 
@@ -1708,14 +1734,15 @@ class PassIdentityTests(QuantityTestCase):
                          ["pass_identity_missing"])                                  # a string is not an id
 
     def test_order_follows_the_pass_id_not_the_session_id_or_any_clock(self):
-        rows = lambda sid: [{"role": "science", "model_name": "Qwen3-8B-4bit", "session_id": sid,
-                             "run_start_utc": "2099-01-01T00:00:00+00:00"}]
         # session ids and the (unread) clock both say "zz" first; the registered identity says "aa" is pass 2
-        sessions = {"zz": rows("zz"), "aa": rows("aa"), "mm": rows("mm")}
+        rows = [{"role": "science", "cell_ids": "8b-decode", "model_name": name, "session_id": sid,
+                 "run_start_utc": "2099-01-01T00:00:00+00:00"}
+                for sid, name in (("zz", None), ("aa", "Qwen3-4B-4bit"), ("mm", "Qwen3-8B-4bit"))]
+        science = bt.group_science_rows(rows, {"qwen3-8b-4bit": {"cell_ids": ["8b-decode"]}})
         identities = {"zz": {"pass_id": 1}, "aa": {"pass_id": 2}, "mm": {"pass_id": None}}
-        self.assertEqual(bt.passes_by_model(sessions, identities), {"qwen3-8b-4bit": ["zz", "aa", "mm"]})
+        self.assertEqual(bt.passes_by_model(science, identities), {"qwen3-8b-4bit": ["zz", "aa", "mm"]})
         identities = {"zz": {"pass_id": 2}, "aa": {"pass_id": 1}, "mm": {"pass_id": None}}
-        self.assertEqual(bt.passes_by_model(sessions, identities), {"qwen3-8b-4bit": ["aa", "zz", "mm"]})
+        self.assertEqual(bt.passes_by_model(science, identities), {"qwen3-8b-4bit": ["aa", "zz", "mm"]})
 
     def test_no_printed_field_moves_without_the_clock_column(self):
         """The export's run_start_utc is blanked and the session ids are renamed so that their lexical

@@ -77,6 +77,7 @@ CORPUS_CAP = 12               # the desk cap on the NEG-8 corpus (registration 5
 CORPUS_MINIMUM = 6
 UNIT_MINIMUM = 5              # kept units per stratum (flag catalog rules.cell_unit_minimum)
 BOUNDARIES = ("rails", "dc_input", "rest")
+CELL_VARIANTS = ("gross", "idle_subtracted", "flagged_inclusive", "idle_flagged_inclusive")
 RAILS_KINDS = ("E_clock_anchor_shift_bound_j", "E_interpolation_joint_edge_bound_j",
                "E_whole_window_drift_allowance_j")
 DC_KINDS = ("E_meter_edge_bound_j", "E_whole_window_drift_allowance_j")
@@ -712,7 +713,8 @@ def read_manifest(path):
                 raise ValueError("model predictors differ from registered manifest: " + name)
         manifest[name] = {"model": entry.get("_name"), "W_bytes": w, "KV_bytes": kv, "R_bytes": r,
                           "b_GB": (w + kv) / GB, "R_GB": r / GB,
-                          "revision": entry.get("revision"), "cell_ids": entry.get("cell_ids"), "kind": ROSTER.get(name, {}).get("kind"),
+                          "revision": entry.get("revision"), "cell_ids": entry.get("cell_ids", expected["cell_ids"]),
+                          "kind": ROSTER.get(name, {}).get("kind"),
                           # the public configuration identity (lead ruling 2026-10-20 item 1: the sidecar
                           # lists withheld rows by the digest of this key)
                           "config_key": entry.get("config_key")}
@@ -1059,8 +1061,10 @@ def load_archive(root):
         run_id = (flag.get("scope") or {}).get("run_id")
         if run_id:
             run_codes.setdefault(run_id, set()).add(flag["code"])
+    exclusions = {}
     for entry in record.get("excluding", []):
         if entry.get("scope") == "member":
+            exclusions.setdefault(entry["run_id"], set()).add(entry["code"])
             run_codes.setdefault(entry["run_id"], set()).add(entry["code"])
     roster = read_json(root / "derived/roster.json", {}) or {}
     cell_run_codes = {}
@@ -1081,6 +1085,7 @@ def load_archive(root):
     # a calibration bracket". Keep the archive's already evaluated record.
     return {"root": root, "session_id": record.get("session_id"), "pack_id": record.get("pack_id"),
             "streams": streams, "calibration": record.get("calibration") or {}, "session_flags": session_flags,
+            "planned_members": roster.get("members", []), "run_codes": run_codes, "exclusions": exclusions,
             "cell_run_codes": {cell: sorted(codes) for cell, codes in cell_run_codes.items()}}
 
 
@@ -1435,6 +1440,30 @@ def _valid_record(row):
         (row.get("exclusion_codes") or "").split(";"))
 
 
+def _floor_plan_error(rows):
+    if len(rows) != 50:
+        return "floor module requires 50 planned runs"
+    units = {}
+    for row in rows:
+        stratum, unit, _ = _units_of(row)
+        key = (stratum, unit)
+        units[key] = units.get(key, 0) + 1
+    if sum(s == "repeat" for s, _ in units) != 10 or sum(s == "quad" for s, _ in units) != 10:
+        return "floor module requires ten repeats and ten quads"
+    if any(count != (1 if stratum == "repeat" else 4) for (stratum, _), count in units.items()):
+        return "floor unit census invalid"
+    return None
+
+
+def _cell_flags(rows, *, include_exclusions):
+    flags = ({f for r in rows for f in (r.get("flag_codes") or "").split(";") if f} |
+             {f for r in rows for f in r.get("_meter_flags", [])} |
+             {f for r in rows for f in r.get("_session_flags", [])})
+    if include_exclusions:
+        flags.update(f for r in rows for f in (r.get("exclusion_codes") or "").split(";") if f)
+    return sorted(flags)
+
+
 def restorable(row) -> bool:
     """Addendum 7 D5: any catalog exclusion of a run with a valid energy record, validity failures excepted."""
     return (_valid_record(row) and is_number(row.get("phase_decode_j")) and is_number(row.get("dur_decode_s"))
@@ -1562,6 +1591,12 @@ def compute_cell(rows, boundary, dc_by_run, allowances, alpha, *, diagnostic=Fal
     allowances: {(boundary, "gross"|"idle"): neg8_allowance record} (Addendum 7 D2, D3, D6: each
     boundary and family carries its own allowance with its own scale).
     """
+    if not diagnostic:
+        reason = _floor_plan_error(rows)
+        if reason is not None:
+            flags = _cell_flags(rows, include_exclusions=True)
+            return {variant: {"status": "refused_floor_plan", "reason": reason, "flags": flags}
+                    for variant in CELL_VARIANTS}
     kinds = RAILS_KINDS if boundary == "rails" else DC_KINDS if boundary == "dc_input" else REST_KINDS
     gross_allowance = allowances.get((boundary, "gross"), {})
     idle_allowance = allowances.get((boundary, "idle"), {})
@@ -1608,13 +1643,8 @@ def compute_cell(rows, boundary, dc_by_run, allowances, alpha, *, diagnostic=Fal
                        meter_phase_edge_mean_j=est["kind_averages_j"].get("E_meter_edge_bound_j", 0.0))
         kept_ids = {m["id"] for m in kept}
         kept_rows = [r for r in rows if r["run_id"] in kept_ids]
-        flag_rows = kept_rows if est["status"] == "ok" else rows
-        flags = ({f for r in flag_rows for f in (r.get("flag_codes") or "").split(";") if f} |
-                 {f for r in flag_rows for f in r.get("_meter_flags", [])} |
-                 {f for r in flag_rows for f in r.get("_session_flags", [])})
-        if est["status"] != "ok":
-            flags.update(f for r in rows for f in (r.get("exclusion_codes") or "").split(";") if f)
-        est["flags"] = sorted(flags)
+        refused = est["status"] != "ok"
+        est["flags"] = _cell_flags(rows if refused else kept_rows, include_exclusions=refused)
         est["harvest_assisted_member_counts"] = {s: sum(_units_of(r)[0] == s and
             "battery.assist" in (r.get("flag_codes") or "").split(";") for r in kept_rows) for s in ("repeat", "quad")}
         evaluated = all(r.get("_decode_assisted") is not None for r in kept_rows)
@@ -1693,6 +1723,48 @@ def group_sessions(rows):
     return sessions
 
 
+def group_science_rows(rows, manifest):
+    """Group planned science rows by registered cell ownership, including lost members."""
+    registrations = [(cell, model) for model, entry in manifest.items() for cell in entry.get("cell_ids") or ()]
+    models_by_cell = dict(registrations)
+    if len(models_by_cell) != len(registrations):
+        raise ValueError("duplicate registered cell ID")
+    grouped = {}
+    for row in rows:
+        if row["role"] != "science":
+            continue
+        cells = (row.get("cell_ids") or "").split(";")
+        if not any(cell in models_by_cell for cell in cells):
+            continue
+        if len(cells) != 1:
+            raise ValueError("ambiguous export unit")
+        model = models_by_cell[cells[0]]
+        grouped.setdefault(model, {}).setdefault(row["session_id"], []).append(row)
+    return grouped
+
+
+def absent_science_rows(sessions, archives):
+    """Represent archived planned runs absent from the admitted export."""
+    for session_id, rows in sessions.items():
+        archive = archives.get(session_id, {})
+        exported = {row["run_id"] for row in rows}
+        for member in archive.get("planned_members", []):
+            run_id = member["run_id"]
+            if member.get("role") != "science" or run_id in exported:
+                continue
+            units = member.get("units", [])
+            exclusions = archive["exclusions"].get(run_id, ())
+            yield {
+                "session_id": session_id, "run_id": run_id, "role": "science",
+                "cell_ids": ";".join(unit["cell_id"] for unit in units),
+                "strata": ";".join(unit["stratum"] for unit in units),
+                "unit_ids": ";".join(str(unit["unit_id"]) for unit in units),
+                "status": "unusable", "excluded": bool(exclusions), "_unblinded": False,
+                "exclusion_codes": ";".join(sorted(exclusions)),
+                "flag_codes": ";".join(sorted(archive["run_codes"].get(run_id, ()))),
+            }
+
+
 def pass_identity(session_id, listed_sessions, sidecar):
     """The registered pass identity of one session (ruling of 2026-10-20, item 2): never a clock.
 
@@ -1711,7 +1783,7 @@ def pass_identity(session_id, listed_sessions, sidecar):
     return {"pass_id": None, "source": None, "flags": ["pass_identity_missing"]}
 
 
-def passes_by_model(sessions, identities, withheld_missing=None):
+def passes_by_model(science, identities, withheld_missing=None):
     """Model -> ordered list of session ids: by registered pass id, pass 1 first.
 
     identities: {session_id: pass_identity record}.  Sessions without an identity come after
@@ -1719,11 +1791,7 @@ def passes_by_model(sessions, identities, withheld_missing=None):
     withheld_missing: {session_id: {model: record}} of passes whose withheld file is missing; such
     a pass has no rows but is a collected pass of the model (B6 ruling Q1).
     """
-    order = {}
-    for session_id, rows in sessions.items():
-        for row in rows:
-            if row["role"] == "science" and row.get("model_name"):
-                order.setdefault(canon(row["model_name"]), set()).add(session_id)
+    order = {model: set(sessions) for model, sessions in science.items()}
     for session_id, models in (withheld_missing or {}).items():
         for model in models:
             order.setdefault(model, set()).add(session_id)
@@ -1791,7 +1859,7 @@ def load_withheld(export_path, sidecar, manifest):
 def quantities(cell_block, manifest_entry):
     """e, tau, b, R, P, BW with intervals, from a computed cell (all three variants)."""
     out = {}
-    for variant in ("gross", "idle_subtracted", "flagged_inclusive", "idle_flagged_inclusive", "without_assisted"):
+    for variant in (*CELL_VARIANTS, "without_assisted"):
         est = cell_block.get(variant)
         if not est or est.get("status") != "ok":
             out[variant] = {"status": (est or {}).get("status", "absent")}
@@ -2165,28 +2233,35 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
     held_out = tuple(name for name in HELD_OUT if name in roster)
     h1_family = len(HYPOTHESES) * len(held_out)  # R5: manifest membership, including missing rows.
     sessions = group_sessions(rows)
+    science = group_science_rows(rows, manifest)
+    archive_by_session = {a["session_id"]: a for a in archives if a.get("session_id")}
     sidecars, listed, withheld = sidecars or {}, listed or {}, withheld or {}
     identities = {s: pass_identity(s, listed, sidecars.get(s)) for s in sessions}
     # B6 ruling Q1: a session whose withheld file is missing is still a collected pass of the models
     # it withheld; their cells print `missing` with the flag and the sidecar's counts.
     withheld_missing = {s: w["missing"] for s, w in withheld.items() if w.get("missing")}
-    model_sessions = passes_by_model(sessions, identities, withheld_missing)
-    model_keys = {}
-    for row in rows:
-        if row["role"] == "science" and row.get("model_name"):
-            model_keys.setdefault(canon(row["model_name"]), set()).add(row["config_key"])
+    # A lost member still belongs to its cell and pass, while its export
+    # placeholder has no configuration key to release.
+    model_keys = {model: {row["config_key"] for members in collected.values()
+                        for row in members if _valid_record(row)}
+                  for model, collected in science.items()}
     for models in withheld_missing.values():
         for model in models:
             if manifest.get(model, {}).get("config_key"):
                 model_keys.setdefault(model, set()).add(manifest[model]["config_key"])
-    stage_models = set(FIT_SET) if stage == "1" else set(model_keys) if stage == "2" else set()
     if stage in ("1", "2"):
         if key_dir is None:
             raise ValueError("stages 1 and 2 need --key-dir")
-        keys = {k for m in stage_models for k in model_keys.get(m, ())} | {REFERENCE_KEY}
+        selected = {m: entry for m, entry in manifest.items() if stage == "2" or m in FIT_SET}
+        keys = {k for m in selected for k in model_keys.get(m, ())} | {REFERENCE_KEY}
         rows = unblind(rows, key_dir, keys)
         sessions = group_sessions(rows)
-    archive_by_session = {a["session_id"]: a for a in archives if a.get("session_id")}
+        science = group_science_rows(rows, manifest)
+        missing_science = group_science_rows(absent_science_rows(sessions, archive_by_session), selected)
+        for model, collected in missing_science.items():
+            for session_id, members in collected.items():
+                science.setdefault(model, {}).setdefault(session_id, []).extend(members)
+    model_sessions = passes_by_model(science, identities, withheld_missing)
     alpha_h1 = ALPHA / h1_family
 
     cells, notes, flags = {}, [], []
@@ -2221,10 +2296,8 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
         elif archive is not None:
             notes.append(f"{session_id}: reference rows still blinded, no DC-input or rest allowance")
     for model, session_ids in sorted(model_sessions.items()):
-        if stage in ("1", "2") and model not in stage_models:
+        if stage == "1" and model not in FIT_SET:
             continue
-        if model not in ROSTER:
-            notes.append(f"{model}: not in the R1 roster; computed but outside H1/H2")
         for pass_index, session_id in enumerate(session_ids, 1):
             missing = withheld_missing.get(session_id, {}).get(model)
             if missing is not None:
@@ -2246,8 +2319,8 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                                        "withheld_config_row_count": missing["config_row_count"],
                                        "quantities": missing_pass_quantities(missing, missing_flags)} for b in BOUNDARIES}}
                 continue
-            srows = [r for r in sessions[session_id] if r["role"] == "science" and canon(r["model_name"]) == model]
-            unblinded = all(r["_unblinded"] for r in srows)
+            srows = science[model][session_id]
+            unblinded = stage in ("1", "2") and all(r["_unblinded"] for r in srows if _valid_record(r))
             archive = archive_by_session.get(session_id)
             can_join_archive = archive is not None and unblinded
             dc_by_run = {}

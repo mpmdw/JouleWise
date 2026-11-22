@@ -470,6 +470,7 @@ def generate(out: Path, *, seed=1, passes=1, defects=True, models=None, refuse_p
         "schema": "joulewise.bytes_manifest.synthetic.v1", "note": "registered predictors; synthetic energy and timing",
         "models": {name: {"revision": "synthetic", **{k: REGISTERED[name][k] for k in ("W_bytes", "KV_bytes", "R_bytes")},
                           "tokenizer": "synthetic", "tied_embeddings": False,
+                          "cell_ids": ["bytes-decode-" + canon(name)],
                           # the public configuration identity of the model's science rows (the key the
                           # export sidecar's withheld digests name; lead ruling 2026-10-20 item 1)
                           "config_key": "bytes-decode-" + canon(name)}
