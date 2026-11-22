@@ -10,6 +10,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, call, patch
 
@@ -17,6 +18,7 @@ from joulewise.cadence import ctl, kit as kits, legs, desk, queue
 from joulewise.align.apple import cadence_ctl, r1_runtime as rt, workload
 from scripts import cadence_legs_runner as runner, cadence_queue, launch_cadence_span as launcher
 from tests.cadence import test_kit_v11 as v11_tests
+from tests.cadence.fixtures import checkout_git, make_runner_checkout
 from tests.cadence.test_legs_runner import local, NEW_WINDOW
 
 KIT = runner.ROOT / "docs/process/cadence/kits/cl-ctl-01.draft.json"
@@ -177,13 +179,17 @@ class KitTests(unittest.TestCase):
 class LaunchAuthorityTests(unittest.TestCase):
     now = int(local("2026-11-19T00:00"))
     ns = runner.NS_PER_SECOND
-    span_id = "ctl-01-s01"
+    span_id = "cq-ctl-01-s01-a1"
 
     def setUp(self):
-        kit = draft()
-        kit.update(status="issued", frozen={"commit": "a" * 40, "paths": {kit["runner"]["entry"]: "1" * 64}})
-        kit["ruling"]["authorizes_spans"] = True
         self.root = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        self.repo = self.root / "measurement"
+        self.frozen = make_runner_checkout(self.repo)
+        # Only bootstrap is simulated. Checkout verification uses real Git in the fixture.
+        self.enterContext(patch.object(launcher, "subprocess", SimpleNamespace(**vars(subprocess))))
+        kit = draft()
+        kit.update(status="issued", frozen=self.frozen)
+        kit["ruling"]["authorizes_spans"] = True
         self.kit_path = self.root / "synthetic-issued.json"
         self.kit_path.write_text(json.dumps(kit))
         self.approved_sha = hashlib.sha256(self.kit_path.read_bytes()).hexdigest()
@@ -198,13 +204,59 @@ class LaunchAuthorityTests(unittest.TestCase):
         self.prior = {"sequence": 1, "span_id": "previous", "close_receipt": str(self.receipt)}
         self.ledger.write_text(json.dumps({"attempts": [self.prior]}))
         self.write_close(self.close_ns)
-        self.argv = ["launch", "--repo", str(runner.ROOT), "--kit", str(self.kit_path), "--output", str(self.output),
+        self.queue_path = self.root / "queue.json"
+        self.queue_doc = {
+            "schema": queue.SCHEMA, "queue_id": "cq-ctl-01-s01", "expires_at": "2026-11-20T00:00:00-08:00",
+            "halt": None, "standing_notice": None,
+            "spans": [{"seq": 1, "span_id": "ctl-01-s01", "block_id": "ctl-01", "attempt": 1,
+                       "kit": {"path": self.kit_path.name, "sha256": self.approved_sha},
+                       "legs": kit["layout"][0], "not_before": "2026-11-19"}],
+        }
+        self.write_queue()
+        self.argv = ["launch", "--repo", str(self.repo), "--kit", str(self.kit_path), "--output", str(self.output),
                      "--legs", "L001,L002,L003", "--python-bin", sys.executable, "--disk-path", str(self.root),
                      "--custody-root", str(self.fence_root), "--magistrate-pid", "234",
                      "--deadline", str(self.now + 40000), "--launchctl-bin", "synthetic-launchctl",
-                     "--kit-sha256", self.approved_sha]
+                     "--queue", str(self.queue_path), "--queue-sha256", self.queue_sha,
+                     "--queue-kits-root", str(self.root), "--kit-sha256", self.approved_sha]
         self.proof = [("--attempt-ledger", str(self.ledger)), ("--previous-close-receipt", str(self.receipt)),
                       ("--span-id", self.span_id), ("--t0-not-before-ns", str(self.close_ns))]
+
+    def write_queue(self):
+        self.queue_path.write_text(json.dumps(self.queue_doc))
+        self.queue_sha = hashlib.sha256(self.queue_path.read_bytes()).hexdigest()
+        if hasattr(self, "argv"):
+            self.argv[self.argv.index("--queue-sha256") + 1] = self.queue_sha
+
+    def select_second_span(self):
+        row = self.queue_doc["spans"][0]
+        row.update(span_id="ctl-01-s02", legs=[f"L{i:03d}" for i in range(4, 13)])
+        self.argv[self.argv.index("--legs") + 1] = ",".join(row["legs"])
+        self.proof = [(flag, queue.plan_id(row) if flag == "--span-id" else value) for flag, value in self.proof]
+        self.write_queue()
+        return row
+
+    def write_pilot_pass(self, **changes):
+        pilot = self.root / "pilot-close.json"
+        pilot.write_text(json.dumps({
+            "schema": runner.RECEIPT_SCHEMA, "runner_kind": ctl.RUNNER_KIND, "mock": False,
+            "span_id": self.span_id, "rc": 0, "roster": draft()["layout"][0], "legs_finished": 3,
+            "kit": {"campaign_id": "cl-ctl-01", "sha256": self.approved_sha, "frozen_commit": self.frozen["commit"]},
+        }))
+        self.ledger.write_text(json.dumps({"attempts": [
+            {"sequence": 1, "span_id": self.span_id, "close_receipt": str(pilot),
+             "ctl": {"layout_index": 0, "kit_sha256": self.approved_sha, "queue_sha256": "d" * 64}},
+            {**self.prior, "sequence": 2},
+        ]}))
+        path = self.root / "pilot-pass.json"
+        path.write_text(json.dumps({
+            "schema": ctl.PILOT_PASS_SCHEMA, "status": "PASS", "reviewer": "independent fixture reviewer",
+            "kit_sha256": self.approved_sha, "pilot_plan_id": self.span_id,
+            "pilot_receipt_sha256": hashlib.sha256(pilot.read_bytes()).hexdigest(), **changes,
+        }))
+        self.queue_doc["spans"][0]["pilot_pass_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        self.write_queue()
+        return path
 
     def write_close(self, epoch_ns):
         self.receipt.write_text(json.dumps({"span_id": "previous", "ended": {"epoch_ns": epoch_ns},
@@ -236,7 +288,8 @@ class LaunchAuthorityTests(unittest.TestCase):
                 yield
 
         pending = {"sequence": 2, "span_id": self.span_id,
-                   "close_receipt": str(self.output / runner.RECEIPT_NAME)}
+                   "close_receipt": str(self.output / runner.RECEIPT_NAME),
+                   "ctl": {"layout_index": 0, "kit_sha256": self.approved_sha, "queue_sha256": self.queue_sha}}
         anchor = (self.close_ns, 1000 * self.ns, 1000 * self.ns)
         child = []
 
@@ -267,6 +320,155 @@ class LaunchAuthorityTests(unittest.TestCase):
         self.assertEqual(child[child.index("--t0-not-before-ns") + 1], str(self.close_ns))
         self.check_child_close_bound(child[2:])
 
+    def expect_checkout_refusal(self, message, *extra):
+        original_ledger = self.ledger.read_bytes()
+        with (patch.object(launcher.time, "time", return_value=self.now),
+              patch.object(launcher.base, "pid_alive", return_value=True),
+              patch.object(runner.RealClock, "arm_anchor_ns", return_value=(self.close_ns, self.ns, self.ns)),
+              patch.object(launcher.subprocess, "run") as service):
+            self.assertIn(message, self.launch(self.proof, *extra))
+            service.assert_not_called()
+        self.assertEqual(self.ledger.read_bytes(), original_ledger)
+        self.assertIsNone(launcher.base.read_fence(self.fence_root))
+        self.assertFalse((self.fence_root / "r0-launches").exists())
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(launcher.main(["close-proof", "--attempt-ledger", str(self.ledger)]), 0)
+
+    def test_audit_round_two_wrong_checkout_refuses_after_passing_checklist(self):
+        observations = self.root / "observations.json"
+        observations.write_text(json.dumps({
+            **v11_tests.FreeT0Checklist.GOOD, "kit_sha256": self.approved_sha,
+            "measurement_head": self.frozen["commit"], "frozen_path_sha256": self.frozen["paths"],
+            "t0_epoch_s": self.now, "end_by_epoch_s": self.now + 40000,
+        }))
+        with redirect_stdout(io.StringIO()) as stdout:
+            self.assertEqual(cadence_queue.main([
+                "checklist", "--kit", str(self.kit_path), "--kit-sha256", self.approved_sha,
+                "--observations", str(observations),
+            ]), 0)
+            self.assertIn("CHECKLIST PASS", stdout.getvalue())
+
+        stale = self.root / "stale-runner"
+        make_runner_checkout(stale, b"# previous synthetic runner\n")
+        self.expect_checkout_refusal("is not the kit's frozen commit", "--repo", str(stale))
+
+    def test_ctl_refuses_wrong_head_with_identical_frozen_files(self):
+        checkout_git(self.repo, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                     "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "different HEAD")
+        self.expect_checkout_refusal("is not the kit's frozen commit")
+
+    def test_ctl_refuses_dirty_tree_with_unchanged_frozen_files(self):
+        (self.repo / "untracked.txt").write_text("synthetic dirty tree\n")
+        self.expect_checkout_refusal("measurement checkout is dirty")
+
+    def test_ctl_refuses_changed_frozen_file_even_when_git_status_is_clean(self):
+        entry, = self.frozen["paths"]
+        checkout_git(self.repo, "update-index", "--assume-unchanged", entry)
+        (self.repo / entry).write_bytes(b"# changed synthetic runner\n")
+        self.assertEqual(checkout_git(self.repo, "status", "--porcelain"), "")
+        self.expect_checkout_refusal("frozen paths differ")
+
+    def test_next_and_ctl_launch_agree_at_exclusive_expiry(self):
+        self.queue_doc["expires_at"] = "2026-11-19T00:00:01-08:00"
+        self.write_queue()
+        for instant, expected in ((self.now, "arm"), (self.now + 1, "halt"), (self.now + 2, "halt")):
+            with self.subTest(instant=instant), redirect_stdout(io.StringIO()) as stdout:
+                self.assertEqual(cadence_queue.main(["next", "--queue", str(self.queue_path), "--now", str(instant)]), 0)
+                self.assertEqual(json.loads(stdout.getvalue())["action"], expected)
+        with (patch.object(launcher.time, "time", return_value=self.now + 1),
+              patch.object(launcher.base, "pid_alive") as probe, patch.object(launcher.subprocess, "run") as service):
+            self.assertIn("queue expired", self.launch(self.proof))
+            probe.assert_not_called()
+            service.assert_not_called()
+        self.assertEqual(json.loads(self.ledger.read_text())["attempts"], [self.prior])
+
+    def test_ctl_rejects_both_roster_swaps_before_recording_attempt(self):
+        with (patch.object(launcher.time, "time", return_value=self.now),
+              patch.object(launcher.base, "pid_alive") as host,
+              patch.object(launcher.subprocess, "run") as service):
+            malformed = ["--legs", "L004,L005,L006,L007,L008,L009,L010,L011,L012"]
+            self.assertIn("must match the selected queue row", self.launch(self.proof, *malformed))
+            self.select_second_span()
+            self.assertIn("must match the selected queue row", self.launch(self.proof, "--legs", "L001,L002,L003"))
+            self.assertIn("does not identify a plan", self.launch(self.proof, "--span-id", "other-plan"))
+            host.assert_not_called()
+            service.assert_not_called()
+        self.assertEqual(json.loads(self.ledger.read_text())["attempts"], [self.prior])
+        self.assertFalse(self.fence_root.exists())
+
+    def test_ctl_rejects_expired_queue_at_selection_and_after_close(self):
+        self.queue_doc["expires_at"] = "2026-11-19T00:00:01-08:00"
+        self.write_queue()
+        actual_close = launcher.proven_close
+        with (patch.object(launcher.time, "time", return_value=self.now + 2) as wall,
+              patch.object(launcher.base, "pid_alive", return_value=True),
+              patch.object(runner.RealClock, "arm_anchor_ns", return_value=(self.close_ns, self.ns, self.ns)),
+              patch.object(launcher.subprocess, "run") as service):
+            self.assertIn("queue expired", self.launch(self.proof))
+            wall.return_value = self.now
+
+            def close_crosses_expiry(*args, **kwargs):
+                result = actual_close(*args, **kwargs)
+                wall.return_value = self.now + 1
+                return result
+
+            with patch.object(launcher, "proven_close", side_effect=close_crosses_expiry):
+                self.assertIn("queue expired", self.launch(self.proof))
+            service.assert_not_called()
+        self.assertEqual(json.loads(self.ledger.read_text())["attempts"], [self.prior])
+        self.assertIsNone(launcher.base.read_fence(self.fence_root))
+
+    def test_ctl_span_two_requires_exact_pilot_pass_and_accepts_valid_proof_after_intervening_span(self):
+        self.select_second_span()
+        validate = ["validate-queue", str(self.queue_path), "--kits-root", str(self.root)]
+        with redirect_stdout(io.StringIO()) as stdout:
+            self.assertEqual(cadence_queue.main(validate), 1)
+            self.assertIn("required for active ctl span 2", stdout.getvalue())
+
+        def bootstrap(command, **_kwargs):
+            self.assertEqual(command[:2], ["synthetic-launchctl", "bootstrap"])
+            fence = launcher.base.read_fence(self.fence_root)
+            launcher.base.write_fence(self.fence_root, {**fence, "pid": 345})
+            self.child = json.loads(Path(command[3]).with_name("runner.json").read_text())["argv"][2:]
+            return subprocess.CompletedProcess(command, 0)
+
+        with (patch.object(launcher.time, "time", return_value=self.now),
+              patch.object(launcher.base, "pid_alive", return_value=True),
+              patch.object(runner.RealClock, "arm_anchor_ns", return_value=(self.close_ns, self.ns, self.ns)),
+              patch.object(launcher.subprocess, "run", side_effect=bootstrap) as service):
+            self.assertIn("no approved pilot hand-read PASS", self.launch(self.proof))
+            path = self.write_pilot_pass(status="HOLD")
+            self.assertIn("requires --pilot-hand-read", self.launch(self.proof))
+            self.assertIn("independent pilot PASS", self.launch(self.proof, "--pilot-hand-read", str(path)))
+            path = self.write_pilot_pass(pilot_receipt_sha256="1" * 64)
+            self.assertIn("exact close receipt", self.launch(self.proof, "--pilot-hand-read", str(path)))
+            path = self.write_pilot_pass(pilot_plan_id="cq-ctl-01-s01-a2")
+            self.assertIn("latest pilot attempt", self.launch(self.proof, "--pilot-hand-read", str(path)))
+            path = self.write_pilot_pass()
+            approved = path.read_bytes()
+            path.write_bytes(approved + b" ")
+            self.assertIn("bytes differ", self.launch(self.proof, "--pilot-hand-read", str(path)))
+            path.write_bytes(approved)
+            service.assert_not_called()
+            self.assertEqual(len(json.loads(self.ledger.read_text())["attempts"]), 2)
+            self.assertIsNone(launcher.base.read_fence(self.fence_root))
+            with redirect_stdout(io.StringIO()):
+                command = self.argv + [item for pair in self.proof for item in pair] + ["--pilot-hand-read", str(path)]
+                self.assertEqual(launcher.main(command), 0)
+            self.assertEqual(len(json.loads(self.ledger.read_text())["attempts"]), 3)
+            # Recheck at the agent-free entry before constructing any production dependency.
+            with patch.object(runner, "production_deps") as work:
+                for changed_path, message in ((path, "pilot hand-read bytes differ"),
+                                              (self.queue_path, "queue bytes differ")):
+                    original = changed_path.read_bytes()
+                    changed_path.write_bytes(original + b" ")
+                    with redirect_stderr(io.StringIO()) as stderr, self.assertRaises(SystemExit):
+                        runner.main(self.child)
+                    self.assertIn(message, stderr.getvalue())
+                    changed_path.write_bytes(original)
+                work.assert_not_called()
+        self.assertFalse(self.output.exists())
+
     def revised_dose_kit(self):
         old = json.loads(self.kit_path.read_bytes())
         revised = ctl.apply_instrument_read(draft(), below_gpu_floor=True, below_dc_in_floor=True,
@@ -289,6 +491,8 @@ class LaunchAuthorityTests(unittest.TestCase):
         }))
         obs = self.root / "observations.json"
         obs.write_text(json.dumps({**v11_tests.FreeT0Checklist.GOOD, "kit_sha256": self.approved_sha,
+                                   "measurement_head": self.frozen["commit"],
+                                   "frozen_path_sha256": self.frozen["paths"],
                                    "t0_epoch_s": self.now, "end_by_epoch_s": self.now + 40000}))
         validate = ["validate-queue", str(queue_file), "--kits-root", str(self.root)]
         check = ["checklist", "--kit", str(self.kit_path), "--observations", str(obs),
@@ -319,6 +523,64 @@ class LaunchAuthorityTests(unittest.TestCase):
         self.assertFalse(self.fence_root.exists())
         self.assertFalse(self.output.exists())
         self.assertEqual(json.loads(self.ledger.read_text())["attempts"], [self.prior])
+
+    def test_audit_round_three_kit_and_queue_changes_refuse_before_recording_attempt(self):
+        observations = self.root / "observations.json"
+        observations.write_text(json.dumps({
+            **v11_tests.FreeT0Checklist.GOOD, "kit_sha256": self.approved_sha,
+            "measurement_head": self.frozen["commit"], "frozen_path_sha256": self.frozen["paths"],
+            "t0_epoch_s": self.now, "end_by_epoch_s": self.now + 40000,
+        }))
+        with redirect_stdout(io.StringIO()) as stdout:
+            self.assertEqual(cadence_queue.main([
+                "checklist", "--kit", str(self.kit_path), "--kit-sha256", self.approved_sha,
+                "--observations", str(observations),
+            ]), 0)
+            self.assertIn("CHECKLIST PASS", stdout.getvalue())
+
+        lock = launcher.base.fence_lock
+        verify_checkout = runner.verify_frozen_production
+        ledger_before = self.ledger.read_bytes()
+        cases = (
+            ("kit before lock acquisition", self.kit_path, "kit hash differs"),
+            ("kit after checkout verification", self.kit_path, "kit hash differs"),
+            ("queue after checkout verification", self.queue_path, "queue bytes differ"),
+        )
+        for case, document, refusal in cases:
+            original = document.read_bytes()
+
+            @contextmanager
+            def acquire_after_other_writer(root):
+                if case == "kit before lock acquisition":
+                    # Reproduce the competing writer releasing the real desk lock.
+                    with lock(root):
+                        document.write_bytes(original + b"\n")
+                with lock(root):
+                    yield
+
+            def verify_then_change(*args, **kwargs):
+                result = verify_checkout(*args, **kwargs)
+                if case != "kit before lock acquisition":
+                    document.write_bytes(original + b"\n")
+                return result
+
+            try:
+                with (self.subTest(case=case),
+                      patch.object(launcher.base, "fence_lock", side_effect=acquire_after_other_writer),
+                      patch.object(runner, "verify_frozen_production", side_effect=verify_then_change),
+                      patch.object(launcher.base, "pid_alive", return_value=True),
+                      patch.object(launcher.time, "time", return_value=self.now),
+                      patch.object(runner.RealClock, "arm_anchor_ns", return_value=(self.close_ns, self.ns, self.ns)),
+                      patch.object(launcher.subprocess, "run",
+                                   side_effect=AssertionError("bootstrap reached with changed authority")) as service):
+                    self.assertIn(refusal, self.launch(self.proof))
+                    service.assert_not_called()
+                    self.assertEqual(self.ledger.read_bytes(), ledger_before)
+                    self.assertIsNone(launcher.base.read_fence(self.fence_root))
+                    with redirect_stdout(io.StringIO()):
+                        self.assertEqual(launcher.main(["close-proof", "--attempt-ledger", str(self.ledger)]), 0)
+            finally:
+                document.write_bytes(original)
 
     def test_ctl_refuses_kit_revision_between_launch_and_child(self):
         child = []
@@ -582,7 +844,8 @@ class LaunchAuthorityTests(unittest.TestCase):
     def check_child_close_bound(self, argv):
         clock = runner.FakeClock(self.now)
         deps = runner.mock_deps(self.output, clock)
-        with patch.object(runner, "production_deps", return_value=deps):
+        with (patch.object(runner, "production_deps", return_value=deps),
+              patch.object(launcher.time, "time", return_value=self.now)):
             for wall_ns, continuous_ns in ((self.close_ns - 1, 1000 * self.ns),
                                            (self.close_ns, 1000 * self.ns - 1)):
                 with (self.subTest(wall_ns=wall_ns, continuous_ns=continuous_ns),

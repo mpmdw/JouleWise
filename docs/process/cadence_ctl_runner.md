@@ -37,7 +37,7 @@ There is no G1 or type-T claim. Hidden work occurs after G0 and before the
 visible call. CPU work occurs between its two visible calls. Recovery follows
 the last decode **inside that member's active sampler**, before teardown.
 It does not call R1's temperature-only `observe_recovery` or open another model.
-Recovery length is kit data. The draft retains 600 s pending `lm-inst-01`.
+Recovery length is kit data. RL-197 fixes it at 600 s before the read.
 
 The inherited episode contains **one logged envelope**: its counts sum the
 visible physical calls; hidden work is deliberately absent from those counts.
@@ -97,7 +97,7 @@ The 12 scripts use six hidden-dose legs, one extra-turn script, CPU doses
 342 + 341 + 341. The draft still carries hidden doses 128, 256 and 512 twice
 each, a 2,000-token prefill, 10 s split gaps and 600 s recovery.
 
-After `lm-inst-01`, `joulewise.cadence.ctl.apply_instrument_read` takes the
+The superseded RL-186 draft-sizing helper `joulewise.cadence.ctl.apply_instrument_read` takes the
 lead's scalar inputs and regenerates a draft for review. It keeps the three
 default doses unless 128 falls below both the GPU rail and DC-in floors. In
 that case the research lead supplies the three raised doses. Common recovery
@@ -105,7 +105,7 @@ is five times the printed return time clamped to 120–600 s. The split gap is
 the larger of 10 s and five times the decode-end lag rounded up to whole
 seconds. Prefill uses 2,000 if represented in the look and the nearest
 represented size otherwise. An equidistant pair needs a research-lead
-choice. The helper runs no look and leaves issuance and pinning to the lead.
+choice. The helper runs no look. RL-197 fixes 128/256/512, recovery 600 s, split gap 60 s and prefill 2,000 for issue. The instrument read supplies the look's inputs.
 
 `sha256-scripts-v1` uses separate SHA-256 draw tags for shuffle units, seeds and
 the pair order. RL-186 accepts master seed 2026111601 and the 3 + 9 layout.
@@ -121,11 +121,38 @@ layout span, and the nine-leg cap and 12 h launch ceiling apply.
 
 ## Launch authority
 
-Use the selected span's `kit.sha256` from the validated queue as
-`--kit-sha256` for both ctl checklist and launch. Both compare the exact
-kit bytes they read to that digest. The checklist also checks the
-observations against it. A mismatch at launch refuses before host probes,
-ledger changes, fence creation or bootstrap.
+The lead's issue names the finite queue's full digest and one plan ID, derived
+from its `span_id` and `attempt`. Pass `--queue`, `--queue-sha256`,
+`--queue-kits-root`, the selected plan ID as `--span-id`, its exact ordered
+`--legs`, and its `kit.sha256` as `--kit-sha256`. The kit root is the checkout
+that owns the queue-relative kit path. The checklist verifies kit bytes and
+host observations. The launcher independently verifies the pinned queue,
+row, exact kit path and digest, roster, local not-before date, halt and expiry.
+It repeats this under the desk lock. Before recording any ledger-backed attempt,
+the launcher also verifies the actual `--repo` checkout root, its pinned HEAD,
+clean tree and frozen working-tree bytes. A checkout refusal leaves the ledger
+unchanged. Queue expiry is exclusive for both `next` and launch and must allow
+for the agent-free startup.
+
+The pilot needs no prior hand-read. For span 2, the independent seat signs
+the F-3(c) and four RL-197 view checks for the entire pilot. The lead pins
+that PASS JSON's digest as the queue row's `pilot_pass_sha256`. Supply its
+path with `--pilot-hand-read`. The private record has exactly these fields:
+
+| Field | Value |
+| --- | --- |
+| `schema` | `joulewise.cadence_ctl_pilot_pass.v1` |
+| `status` | `PASS` |
+| `reviewer` | Independent reviewer's signature name |
+| `kit_sha256` | The issued kit's full digest |
+| `pilot_plan_id` | The latest pilot plan for those kit bytes, from the attempt ledger |
+| `pilot_receipt_sha256` | Full digest of that plan's exact clean native close receipt |
+
+The lead authenticates the signer and approves the complete record through
+the finite queue hash in the issue. The launcher verifies the binding to the
+pilot and receipt before recording span 2. A distinct rung may run between
+the pilot and span 2. The agent-free runner checks the same authority against
+its published attempt before creating production dependencies.
 
 The lead obtains the predecessor from the shared launcher's `close-proof`
 command. Export the current close checks using the existing RL-179 item
@@ -181,9 +208,8 @@ tests are not a substitute for the eventual lead-controlled native smoke.
 
 1. An independent executing Astra 6.2 seat reviews the runner candidate
    under RL-186 §2.6.
-2. After runner admission, the research lead reads `lm-inst-01` and records
-   the freezing line for doses, recovery and gap. The prompt size is also
-   checked at the read.
+2. After runner admission, use RL-197's fixed design for the cold kit seat.
+   The instrument read comes before the look.
 3. The lead obtains the cold kit review, then issues the pinned kit and
    counted pilot. The pilot requires its hand-read before the remaining
    span is eligible.
