@@ -25187,3 +25187,167 @@ Every other step, review and gate of RL-197 (as amended by RL-198) is unchanged.
 **Blind status.** Blind. Read: RL-201a (format), RL-197 (heading to §1), RL-197a (head), RL-200a whole; the lane's FINAL-MESSAGE and run report lines 150 to the end; `scripts/launch_cadence_span.py` (ledger, `proven_close`, launch conditions) at `6e9d42f1d` and `043b972f9`, and a search for `span_id` at `2d347f721`; the heading of RUN_STATE 539 and the typed dispatch-field section on `origin/main` as the worktree holds it. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened, and no real receipt or ledger. No commit, push, comment, run, SSH or fetch. The only file written is this one.
 
 **For Ed, plainly.** Yes, the positive control can run from the reviewed side branch without the big merge into main; it still needs PR #946 green and audited, and the span right before it must be one whose receipt names itself (a kit 15 or 16 span), or a small reviewed launcher change.
+
+# RL-202. `lm-ctl-01`'s look path: the ctl span-to-leg DC-in producer is ratified on the direct RAW-to-episode clock route with a frozen half-width; every way DC-in can be missing is decided blind before the claim, and only my written per-leg disposition lets a leg through without it; the instrument closes its null-reason list first, with a pinned ctl list as the fallback; one new private reason, one private rail-gap mark, and no token for a zero floor. The spec's twelve dispositions stand with three corrections. The 29-case suite is adopted as acceptance, with a second freeze owed for what is ruled here
+
+Research lead (Fable 5.2), Sun Nov 22 05:42:34 PST 2026 (from `date`). Rules OPEN.md items 1 to 4 of the Astra look-path spec, before any ctl value or instrument value is seen. OPEN item 5 is the lead's and is not ruled.
+
+**Cites.** `SPEC` and `OPEN` are `/Volumes/JW-EXT/scratch/astra-ctl01-look-path-spec/SPEC.md` and `OPEN.md`; `MR` is `/Volumes/JW-EXT/scratch/mythos-ctl01-print-final/REPORT.md`. Source is cited at runner `043b972f9`, #795 `d2aa20bc4`, print `724d0d40cc08`.
+
+**Read.** SPEC, OPEN and MR whole; RL-197, RL-197a and RL-197b whole; the suite's README and the case list of `cases.json`. Source only: `km003c_parse.py` (samples, `clock_fit`, `parse`, `raw_offset_ns`), the header and trailer writer of `km003c_monitor.py`, `sampler.py`'s `monotonic_ns` and `stamp_mapping`, `clock.py`'s stamp, `records.ClockMapping`, #795's `MeterSpan` and `time_fields` (`clock_fit_excess_s`, `SpanMeter`, `support`), and in the print the view checks, `floor_units`, `print_controls` and the restricted schema's top level and `not_evaluable` enum.
+
+**Not checked.**
+- **RL-187 §3.4 and RL-173 E.1 in full.** For RL-187 I read the matching lines of the scratch copy only (the 3.4 table rows and 3.1's view-check text).
+- **Whether `lm-inst-01` is registered yet,** and the #868 schema itself. Section 3 rules both cases.
+- **The 29 cases' oracles.** I read the case list and the lines of `run_suite.py` that assert reasons; I ran nothing.
+- **The v3.1 suite's assertions.** Section 4 is written so that no existing expected value changes; I did not verify that against its tests.
+- **macOS clock semantics.** That `time.monotonic` and RAW differ by a constant except across a sleep is the decoder's docstring, not my test.
+- **Whether any boot identifier is recorded** in the receipt or metadata.
+- No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened.
+
+**Not done.** No commit, push, comment, run, SSH or fetch. The only file written is this one.
+
+---
+
+## 1. DC binding and blind timing
+
+**1.1 The producer is ratified.** SPEC §2 as written: receipt-listed `S/hazards/meter/stream-NNN.jsonl`, decoded by the pinned `km003c_parse`, mapped, sliced per leg on the original episode bounds, joined in memory inside `first_read`, never written. #868's `dc_points.csv` reader and #795's `MeterSpan` are not ctl producers. The rail mapping (`stamp_mapping`) is not touched.
+
+**1.2 Clock route: direct.** RAW to episode-monotonic through the stream's own two clock pairs. Not #795's RAW-to-epoch composed with epoch-to-episode.
+- **Why.** The episode's stamps are `time.monotonic()` and the stream's header and trailer each carry a RAW and `time.monotonic_ns()` reading from the same host. That is one hop with no wall clock in it. The composed route adds a second estimate and the wall clock's steps for no gain.
+- **Accepted anchors, and no others:** the header's `start_raw_ns` and `start_mono_ns`, and the trailer's `end_raw_ns` and `end_mono_ns`, all integers, from the receipt-hashed stream bytes. Not `start_real_ns`, not the hazard journal, not `allow_unclosed`, not a fit to the power trace, not a tail correction.
+- **Offset.** `o = raw_offset_ns(stream, allow_unclosed=False)`. The mapping is `ClockMapping(trace_domain=<the named RAW domain>, episode_domain="joulewise.monotonic:<episode_id>", offset_ns=-o, ...)`, so `t_episode = host_ns - o`.
+
+**1.3 The half-width, frozen.** In integer nanoseconds, rounded up:
+
+> `H = |o_end - o_start| + 1,000,000 + step_ns + F`
+> - `o_start = start_raw_ns - start_mono_ns`, `o_end = end_raw_ns - end_mono_ns` (anchor spread; the decoder already refuses over 1 ms).
+> - `1,000,000`: each anchor is two clock reads in sequence with no bracket.
+> - `step_ns`: one nominal sample period, `STEP_MS[rate_idx]` (device counter resolution and the sample's own window).
+> - `F = 1e6 x (max(0, -excess_latency_ms_min) + R)`, from the decoder's fit statistics. `R` is `FIT_MAX_RTT_MS` (3.0) when the fit reports `filtered: true`, else `request_rtt_ms_max`.
+
+- `uncertainty_ns = H`; `method = "km003c_raw_monotonic_pairs.v1"`. The fit's p95 and maximum excess are printed privately beside it and gate nothing.
+- **Cap.** `H > 100,000,000` (one rail sample period at 10 Hz) means the stream gives no mapping.
+- **What H does.** The frozen phase code reads `offset_ns` only (`rl176_phases.py:163`). H is carried and capped; it widens no interval and changes no joule. If the build finds otherwise, that comes to me.
+
+**1.4 One stream per leg; restart boundaries.** A stream's boundary is its own header and trailer. Each stream is decoded, fitted and mapped alone. Samples of two streams are never merged, stitched or interpolated across. A leg is served by the one stream that satisfies all of:
+1. closed (header and trailer present, `status` streaming, a clock fit, `o` not None, `H` at or under the cap);
+2. **same boot:** `start_mono_ns <= episode start` and `episode end <= end_mono_ns`, and `(start_real_ns - start_mono_ns)` within 5 s of `(epoch - monotonic)` at the episode's first paired stamp. The wall clock is used here as an identity check only. A recorded boot identifier, if both sides carry one, must also match;
+3. **bracket:** a decoded sample at or before the episode's start and one at or after its end, in episode time by the offset alone.
+
+**1.5 The DC condition of each dispatched leg is one closed code, decided blind:**
+
+| Code | Meaning |
+|---|---|
+| `ok` | Exactly one stream satisfies 1.4 |
+| `meter_absent` | No receipt-listed stream is streaming with samples |
+| `stream_unclosed` | The only candidate has no trailer |
+| `anchor_unusable` | An anchor field is missing, or the spread is over 1 ms, or the fit failed |
+| `half_width_over_cap` | 1.3's cap |
+| `not_bracketed` | No single stream brackets the episode (includes a leg that straddles a restart) |
+| `boot_mismatch` | A stream overlaps the leg in monotonic time and fails 1.4 item 2 |
+| `ambiguous_overlap` | Two or more streams satisfy 1.4 |
+
+A within-stream hole is not in this table. It is a gap, the leg is `ok`, and RL-187 §3.4's 2 s rule decides it at the read with no screening before.
+
+**1.6 What may be projected before the read.** By a Check, a pilot hand-read or stage 1, at any time after a close, with no wait on freeze 2:
+- **Yes:** identifiers, digests and sizes; stamps and durations; token and step counts and completion flags (as the pilot hand-read already reads); clock pairs and anchors; from a stream, header and trailer non-measurement fields, each poll's `tx`, `rx`, `rt`, `n` and the device sample counters, and the clock fit computed from them; from `power_trace.csv`, the stamp, interval, source and rail columns. The tool is #795's time-only lexer, generalised to the three components and pinned under a ctl role.
+- **Never:** `power_w`, the Vbus and Ibus fields, any SMC value, any product of them, any energy-bearing script or episode field. The lexer does not convert them.
+- **Product:** the private per-leg certificate of SPEC §5.3 carrying 1.5's code and `H`. Nothing per leg is public; the public side carries hashes and the five fields.
+- **Hash-only verifier:** #868's verified-byte helper (`description_inputs`/`custody_pins`), registered under a ctl role. It may read any ctl file as opaque bytes and emit only a SHA-256, a size and match or mismatch.
+- **The reader must agree.** Inside `first_read` the decoder's sample times and the leg's code must equal the certificate's exactly. A difference is an integrity failure after start, never a null.
+- **At the pilot** the certificate may be built on L001 to L003 as information. It holds no span (RL-197b). A code other than `ok` is reported to the lead at once so the collector is fixed before span 2.
+
+## 2. Preflight versus true absence
+
+**2.1 The default stands:** every dispatched leg has all four channels, or the preflight refuses fresh with `INPUT_CHANNELS`.
+
+**2.2 The one exception is DC-in, per leg, by my written disposition before the claim.**
+- **The test of true absence:** would a correct reader, given the receipt-hashed bytes, produce a mapped, bracketed trace for this leg under section 1? If not, and the cause is written in those bytes' identity, time or counter fields, DC-in is absent as measured.
+- **Eligible codes:** `meter_absent`, `stream_unclosed`, `anchor_unusable`, `half_width_over_cap`, `not_bracketed`. So a closed-but-unmapped capture is eligible, and so is a leg that straddles a restart. A leg wholly inside one mapped stream of a restarted capture is `ok` and needs nothing.
+- **Not eligible, hold and come to me:** `ambiguous_overlap` and `boot_mismatch`. They say the custody is not what the receipt claims.
+- **Mechanics.** I write a private disposition file listing leg, code and the certificate's sha256. Its sha256 is bound into the stage-1 inventory. Preflight passes a leg whose code is not `ok` only if the file lists that leg with that code. The print gives that leg's DC-in the frozen reason `trace_or_clock_unavailable`; no new output word. The rails and the other eleven positions are unaffected.
+- **Limit.** I grant no disposition that leaves DC-in with fewer than four admitted hidden legs over three dose levels. That case holds the look and goes to Ed, whose rule is that every analysis analyzes DC-in.
+- **Disclosure.** After the look, the deviation log names each excepted leg and its code.
+
+**2.3 Always fresh, never an exception:** strip; rails_only where streams exist; a reader or certificate that is not built or not pinned; a receipt-listed file missing from the copy; a wrong span; a prepared CSV in place of a native stream; a header-only rail; any missing rail or component (no rail exception exists); a certificate that disagrees with the files. A changed existing payload is `INPUT_BINDING`. A recorded G0 non-dispatch keeps its position and needs no exception.
+
+## 3. The instrument's null-reason vocabulary
+
+**Instrument first.** RL-197 §3.6 stands: the floors' null reasons are the enum of the instrument's pinned restricted schema, plus `no_matched_floor`.
+- **Who and when.** The #868 lane closes the enum in the instrument's restricted schema before `lm-inst-01` is registered. The list is an inventory of every reason the writer's source can emit, leaf and whole-member forms both, and the writer fails closed on anything else. One cross-family seat confirms the inventory against source. My freeze-2 line cites the schema's sha256.
+- **Test.** The enum equals the set of reason literals reachable in the writer; a writer fed an unlisted reason refuses.
+- **Fallback, only if the instrument's schema is already registered with the open string, or closing it would delay freeze 2:** a ctl-side list `lm-ctl-01.hold-reasons.v1.json`, built by the same source inventory at the instrument's pinned commit, pinned as a role in the ctl manifest and cited by sha256 in my bytes ruling. RL-197 §3.6 then reads "the pinned hold-reason list, plus `no_matched_floor`". The lead picks the route on wall time and tells me.
+- **Either way:** the list is made from source, never from `hold.json`; an unknown reason refuses before the claim with `INSTRUMENT_HOLD_BINDING` and spends nothing; no instrument output is edited; numeric siblings still pool.
+
+## 4. Private output semantics
+
+**4.1 Invalid leg data: one new private reason, `leg_record_invalid`.**
+- A leg whose bytes passed every digest, size and identity check, and on which the frozen record decode, `with_package`, `attribute_episode`, the tiling or the cadence raises `ValueError` or `RecordError`, prints `not_evaluable` with `leg_record_invalid`. It is passed to nothing. The other eleven print.
+- The catch is at those call sites inside the per-leg block only. Any other exception type, and anything raised by the reader, binding, pool, roster or schema, still fails the look after start.
+- A view-check failure keeps its own name. A channel-level missing mapping keeps `trace_or_clock_unavailable`.
+- **Test.** G0 ending 1 ns into the episode on one leg: that row is `not_evaluable`/`leg_record_invalid`, eleven rows print, exit 0. A digest mismatch on the same leg: exit 1.
+
+**4.2 A rail gap over U1 inside a measured part: arithmetic unchanged, marked privately.**
+- The registered integrator bridges it and the number prints. No admission, fit, closure or qualifier rule changes. The DC rule is not applied to rails, and RL-187 §3.4's DC rule is not relaxed.
+- `controls.json` gains one optional top-level key, `rail_gap_marks`: a sorted list of `{leg_id, channel, part}`, absent when empty. An entry exists when, on that channel, two consecutive samples more than U1 apart overlap the part's interval. `package` is marked when any component is. Baseline windows are not listed; they already null with `gap_over_u1`. DC-in is never listed.
+- A marked leg stays in the slope. Whether a paper number carries a caption is my restricted read's call; nothing is refitted or dropped.
+- **Test.** The suite's 1.3 s gap in a hidden decode: the same joules as today and exactly one mark per affected channel. No gap: the key is absent.
+
+**4.3 Zero floor: no token.** `floor_j: 0.0` with `units: null` and `reason: null` is the zero-floor print, and `floor_j` is its reason. Never infinity or an epsilon. RL-197a §2's order is untouched. A token would change the tool-phase row of every leg and every accepted hand vector, for no information the row lacks.
+- **Test.** A 0 s phase and a pooled SD of exactly 0 both give `floor_j` 0.0, `units` null, `reason` null; with a null baseline the reason is the baseline's.
+
+## 5. The twelve dispositions
+
+Confirmed as SPEC §7 has them: **1, 2, 3, 4, 6, 7, 8, 12.** Corrected:
+
+| # | Correction |
+|---|---|
+| 5 | Section 3: instrument first, with the pinned ctl list as a ruled fallback. No further ruling is needed for the fallback |
+| 9 | Section 4.1: the reason is `leg_record_invalid`, at closed call sites |
+| 10 | Section 4.2: DC behaviour retained, and the private mark is approved |
+| 11 | Section 4.3: retained for good, not "pending"; no `zero_floor` token |
+
+One addition to disposition 1: the reader's clock is section 1.2 to 1.4, and SPEC §2.3's "until a restart rule is approved" is closed by 1.4.
+
+## 6. The suite
+
+**Adopted.** The 29 cases at `SUITE.sha256` `7451b002…01c4d5` are acceptance for the look path, unchanged, together with the v3.1 suite, the hand vectors, the installed source closure and the bound-host preflight (SPEC §7's union).
+
+**Owed: freeze 2, written by a seat that is not the builder,** adding only:
+1. `H` on the fixture equals 1.3's formula; a stream over the cap gives no mapping.
+2. One case per code of 1.5 other than `ok`, each without a disposition (`INPUT_CHANNELS`, nothing claimed) and, for the eligible codes, with one (success, that leg's DC-in `trace_or_clock_unavailable`, eleven DC-in rows numeric).
+3. A restarted capture with a leg wholly in the second stream (`ok`, correct baseline for that leg).
+4. A disposition naming the wrong code or a leg that is `ok`: fresh refusal.
+5. A disposition that would leave DC-in under four hidden legs over three levels: fresh refusal.
+6. A certificate the reader contradicts: exit 1 after start.
+7. Sections 4.1 to 4.3's exact tests, and section 3's unknown-reason test under whichever route is taken.
+
+If a freeze-1 case conflicts with this ruling, freeze 2 replaces that case by name and nothing else. The restricted schema changes by one enum value and one optional key, so the print's bytes get a new byte pass, which the look-path build needs in any case.
+
+**Blind status.** Blind. I read rulings, a spec, an audit report, a synthetic suite's text and source code. Every rule here is fixed before any ctl leg's energy, any meter stream and any instrument output has been read by anyone. No estimator, threshold, level, population or outcome word of K, S or Q changes. The ctl legs are not gated by anything here (RL-197, RL-197b).
+
+**For Ed, plainly.** "The control experiment's analysis code is correct, but nothing yet feeds it the wall-power readings, so that reader has to be built. I have fixed, before anyone sees a number, exactly how the wall-meter clock is lined up with each run and how wrong that line-up may be (at most a tenth of a second). If the meter truly failed to record a run, I can let that one run through without wall power, in writing, beforehand; but never so many that the wall-power result disappears, which would come to you. None of this delays the twelve control runs on the MacBook Pro."
+
+---
+
+## Register
+
+Owner `research_lead`.
+
+| # | Clause | Class | Protects | Scope | Ends | Test |
+|---|---|---|---|---|---|---|
+| 1 | DC-in for ctl is the receipt-hashed stream on the direct RAW-to-monotonic route, anchors and `H` as 1.2 to 1.3, one stream per leg (1.4) | VALIDITY | The clock is not chosen after values are seen | `lm-ctl-01` | The paper's data release | Freeze 2 items 1 and 3; the suite's nonzero-offset case |
+| 2 | Before the read only identifiers, times, counts, anchors and hashes are projected; no power, voltage, current or SMC value (1.6) | VALIDITY (blinding) | ctl energy is read once | `lm-ctl-01` | When the look has run | The lexer's source converts no measurement field; `ctl_value_decode` never precedes `start` in the suite's event log |
+| 3 | A leg passes preflight without DC-in only by my pre-claim disposition, on an eligible code, leaving at least four hidden legs over three levels (2.2) | VALIDITY | Missing plumbing is not printed as a measured absence; DC-in is analyzed | `lm-ctl-01` | When the look has run | Freeze 2 items 2, 4 and 5 |
+| 4 | Floor null reasons are a closed list made from the writer's source, at the instrument first or as a pinned ctl list (3) | VALIDITY (prereg) | No reason is accepted because the data contained it | `lm-inst-01`, `lm-ctl-01` | The bytes ruling | Enum equals the writer's reachable literals; unknown reason refuses before the claim |
+| 5 | `leg_record_invalid` at closed call sites; `rail_gap_marks` changes no number; a zero floor carries no token (4) | VALIDITY | One bad leg does not spend twelve; a bridged gap is not silent | `lm-ctl-01` | The paper's data release | Freeze 2 item 7 |
+
+**Amends.**
+- **RL-197 §3.6:** read with section 3's fallback.
+- **RL-187 §3.1 and §3.4:** `leg_record_invalid` joins the `not_evaluable` reasons; "DC-in absent" at the read is `trace_or_clock_unavailable` and is reached only through section 2.2. The 2 s DC gap rule stands.
+- **Stand unchanged:** RL-197 §§1, 2 and 4; RL-197a whole; RL-197b; the v3.1 suite's cases and the hand vectors.
+
+**What comes back to me.** Each request for a DC-in disposition, with the certificate. `ambiguous_overlap` or `boot_mismatch`. A build that finds the phase code uses `uncertainty_ns`. A v3.1 case or hand vector that fails because of section 4. The route chosen under section 3. A pilot certificate code other than `ok`.
+
+**Lead route choice for RL-202 item 3 (2026-11-22):** the ruled fallback: a pinned ctl list `lm-ctl-01.hold-reasons.v1.json`, so the ctl-01 look does not wait on the #868 instrument lane or freeze 2. The research lead is told by this entry.
