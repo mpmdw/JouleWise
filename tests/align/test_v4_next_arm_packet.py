@@ -6,7 +6,7 @@ measurements, probes, models or network.
 """
 from tests.git_fixture import init_git_fixture
 from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
-from tests.align.v4_registration_fixtures import session_plan
+from tests.align.v4_registration_fixtures import projection_arm_checks, session_plan
 import builtins
 import contextlib
 import copy
@@ -1542,6 +1542,7 @@ class ArmOrderWitness(Base):
                    return_value={'verdict': 'PASS', 'reasons': []}), \
              patch('joulewise.battery_float.observe', side_effect=seam('battery', (good, b'synthetic'))), \
              patch.object(kit, 'arm_powermode_check', side_effect=seam('powermode_check', None)), \
+             patch.object(session, 'arm_checks', side_effect=projection_arm_checks(session.arm_checks)), \
              patch.object(session, 'w1_disk_check', side_effect=disk_gate), \
              patch('shutil.disk_usage', side_effect=usage), \
              patch.object(session.pilot, 'install', side_effect=seam('INSTALL', {'synthetic': True})):

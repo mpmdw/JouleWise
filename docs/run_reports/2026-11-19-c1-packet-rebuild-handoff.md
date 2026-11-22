@@ -876,3 +876,11 @@ scan inside the staged root. Preflight verifies that depth and evaluates
 the original parser with the staged defaults. The W1 CLI keeps its
 existing argument shape. The authentication census records the same
 eight permitted I/O sites at their moved source lines.
+
+Shard 4 exposed two remaining fixture integrations. The dwell-order
+witness now uses the explicit projection seam used by the other
+preflight-only witnesses and retains its Git, meter and write-order
+assertions. The Git-fixture census recognizes the frozen test package's
+two named initialization calls only at their exact supplied file digest.
+All six targeted checks passed. The frozen files and production code are
+identical to the preceding tested head.
