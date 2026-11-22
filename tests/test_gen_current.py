@@ -18,6 +18,15 @@ from tests.test_run_state_items import EXPIRY, change, doc, item
 T0 = "2026-11-10T20:53:00-08:00"
 END = "2026-11-11T19:03:00-08:00"
 DEADLINE = "2026-11-11T19:33:00-08:00"
+HISTORICAL_OWNER_CASES = {
+    "316": "research lead",
+    "310": "research lead",
+    "292": "magistrate (interim lead under items 289/291/292)",
+    "291": "magistrate (interim lead under item 289, as amended here)",
+    "291b": "lead (BYTES); magistrate continues Track A (item 294)",
+    "290": "magistrate (interim lead)",
+    "289": "magistrate (interim lead)",
+}
 
 
 def fields() -> dict[str, str]:
@@ -69,12 +78,12 @@ class RenderTests(unittest.TestCase):
 
     def test_deterministic_canonical_bytes_and_unicode(self):
         values = fields()
-        values["owner"] = "léad ⚡"
+        values["next_observable"] = "résultat ⚡"
         first = gc.render(block(values))
         self.assertEqual(first, gc.render(block(values)))
         self.assertEqual(first, (json.dumps(json.loads(first), indent=2, sort_keys=True,
                                            ensure_ascii=False) + "\n").encode("utf-8"))
-        self.assertIn("léad ⚡".encode(), first)
+        self.assertIn("résultat ⚡".encode(), first)
         self.assertEqual(gc.render(block(values, gap="")), first)
         self.assertEqual(gc.render(block(values, gap="\n\n \t\n")), first)
         self.assertEqual(gc.render(block(values).replace("\n", "\r\n")), first)
@@ -94,7 +103,7 @@ class RenderTests(unittest.TestCase):
 
     def test_older_block_below_newer_block_cannot_replace_it(self):
         newer = fields()
-        newer["owner"] = "new owner"
+        newer["owner"] = "lead"
         self.assertEqual(gc.render(block(newer, item="257") + block(item="256b")),
                          gc.render(block(newer, item="257")))
 
@@ -107,6 +116,44 @@ class RenderTests(unittest.TestCase):
         old["wait"] = "chain_exited"
         text = block(old, item="256")
         self.refused(text + block(item="257"), "INVALID_WAIT", 9)
+
+    def test_gemini_4_1_unregistered_pointer_owner_is_refused(self):
+        for owner in ("bogus-unregistered-owner", "Lead"):
+            with self.subTest(owner=owner):
+                self.refused(block({**unarmed(), "owner": owner}, item="21") + block(),
+                             "INVALID_OWNER", 4)
+
+    def test_gemini_4_1_accepts_seven_superseded_historical_owners(self):
+        winner = block(item="317")
+        historical = "".join(block({**unarmed(), "owner": owner}, item=number)
+                             for number, owner in HISTORICAL_OWNER_CASES.items())
+        self.assertEqual(gc.render(winner + historical), gc.render(winner))
+        self.assertEqual(gc.render(historical + winner), gc.render(winner))
+
+    def test_gemini_4_1_refuses_changed_historical_owner(self):
+        historical = block({**unarmed(), "owner": "Research lead"}, item="316")
+        self.refused(historical + block(item="317"), "INVALID_OWNER", 4)
+
+    def test_gemini_4_1_refuses_historical_owner_on_another_item(self):
+        historical = block({**unarmed(), "owner": "research lead"}, item="315")
+        self.refused(historical + block(item="317"), "INVALID_OWNER", 4)
+
+    def test_gemini_4_1_refuses_repeated_historical_exception(self):
+        historical = block({**unarmed(), "owner": "research lead"}, item="316")
+        self.refused(historical + historical + block(item="317"),
+                     "INVALID_OWNER", len(historical.splitlines()) + 4)
+
+    def test_gemini_4_1_historical_exception_requires_strictly_higher_pointer(self):
+        historical = block({**unarmed(), "owner": HISTORICAL_OWNER_CASES["291b"]}, item="291b")
+        for other in ("", block(item="291"), block(item="291b"), "999. **Blockless**\n"):
+            with self.subTest(other=other):
+                self.refused(other + historical, "INVALID_OWNER", len(other.splitlines()) + 4)
+        winner = block(item="291c")
+        self.assertEqual(gc.render(historical + winner), gc.render(winner))
+
+    def test_gemini_4_1_historical_exception_keeps_other_block_checks(self):
+        historical = block({**unarmed(), "owner": "research lead", "wait": "chain_exited"}, item="316")
+        self.refused(historical + block(item="317"), "INVALID_WAIT", 5)
 
     def test_unknown_key(self):
         self.refused(block({**fields(), "surprise": "value"}), "UNKNOWN_KEY", 13)
@@ -490,7 +537,13 @@ class SchemaTests(unittest.TestCase):
                     # null is allowed for a none wait only, tested separately.
                     pointer = expected()
                     (pointer if section is None else pointer[section])[key] = text
-                    self.invalid(pointer, "single-line text|requires deadline and refusal")
+                    self.invalid(pointer, "INVALID_OWNER" if key == "owner"
+                                 else "single-line text|requires deadline and refusal")
+
+    def test_gemini_4_1_rejects_forged_json_owner(self):
+        for number, owner in (*HISTORICAL_OWNER_CASES.items(), ("262", "Lead")):
+            with self.subTest(number=number, owner=owner):
+                self.invalid({**expected(), "source_item": number, "owner": owner}, "INVALID_OWNER")
 
     def test_nested_shapes_keys_and_wait_vocabulary(self):
         for section in ("armed", "wait"):

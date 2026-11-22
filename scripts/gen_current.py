@@ -26,6 +26,16 @@ OBSERVABLES = frozenset({
 KEYS = frozenset({"owner", "armed", "host", "t0", "latest_end", "wait", "deadline",
                   "on_early_or_refused", "next_observable"})
 ARM_KEYS = frozenset({"armed", "host", "t0", "latest_end"})
+# The lead approved these historical declarations for superseded blocks only.
+HISTORICAL_OWNERS = {
+    "316": "research lead",
+    "310": "research lead",
+    "292": "magistrate (interim lead under items 289/291/292)",
+    "291": "magistrate (interim lead under item 289, as amended here)",
+    "291b": "lead (BYTES); magistrate continues Track A (item 294)",
+    "290": "magistrate (interim lead)",
+    "289": "magistrate (interim lead)",
+}
 MIN_EPOCH = 1767225600  # 2026-01-01T00:00:00+00:00
 MAX_EPOCH = 1893456000  # 2030-01-01T00:00:00+00:00
 HEADING = re.compile(r"^([1-9][0-9]*)([a-z]?)\.[ \t]+\*\*\S")
@@ -57,11 +67,27 @@ def _epoch(value: str, key: str, line: int) -> int | float:
     return int(epoch) if epoch.is_integer() else epoch
 
 
+def _owner_error(owner: object) -> str | None:
+    if __package__:
+        from . import run_state_items
+    else:
+        import run_state_items
+
+    if not isinstance(owner, str) or owner not in run_state_items.OWNERS:
+        return f"{owner!r}; expected " + ", ".join(run_state_items.OWNERS)
+    return None
+
+
 def _pointer(values: dict[str, str], lines: dict[str, int], start: int,
-             item: str, heading: str) -> dict:
+             item: str, heading: str, *, historical_owners: dict[str, str] | None = None) -> dict:
     for key in ("owner", "wait", "next_observable"):
         if key not in values:
             _fail(start, "MISSING_KEY", f"required key {key}")
+    owner = values["owner"]
+    if detail := _owner_error(owner):
+        if historical_owners is None or historical_owners.get(item) != owner:
+            _fail(lines["owner"], "INVALID_OWNER", detail)
+        del historical_owners[item]
     observable = values["wait"]
     if observable not in OBSERVABLES:
         _fail(lines["wait"], "INVALID_WAIT", f"{observable!r}; expected "
@@ -87,7 +113,7 @@ def _pointer(values: dict[str, str], lines: dict[str, int], start: int,
     date = DATE.search(heading)
     return {"schema": SCHEMA, "source_item": item,
             "source_item_heading_date": date[0] if date else None,
-            "owner": values["owner"], "armed": armed,
+            "owner": owner, "armed": armed,
             "wait": {"observable": observable, "deadline_epoch_s": epochs.get("deadline"),
                      "on_early_or_refused": values.get("on_early_or_refused")},
             "next_observable": values["next_observable"]}
@@ -127,7 +153,7 @@ def render(run_state_text: str) -> bytes:
     errors = run_state_items.validate(parsed)
     if errors:
         raise PointerError("\n".join(map(str, errors)))
-    candidates = []
+    blocks = []
     item = heading = None
     eligible = seen = False
     other_fence = None
@@ -137,9 +163,8 @@ def render(run_state_text: str) -> bytes:
         if body is not None:
             if line == "```":
                 values, lines = _entries(body)
-                candidates.append(((int(item[:-1]), item[-1]) if item[-1].isalpha()
-                                   else (int(item), ""),
-                                   _pointer(values, lines, start, item, heading)))
+                rank = (int(item[:-1]), item[-1]) if item[-1].isalpha() else (int(item), "")
+                blocks.append((rank, item, heading, start, values, lines))
                 body = None
             elif line == "```pointer":
                 _fail(number, "SECOND_POINTER", "second pointer block in one item")
@@ -168,9 +193,17 @@ def render(run_state_text: str) -> bytes:
             eligible = False
     if body is not None:
         _fail(start, "UNTERMINATED_POINTER", "pointer fence has no exact closing fence")
-    pointer = (max(candidates, key=lambda candidate: candidate[0])[1] if candidates else
-               {"schema": SCHEMA, "source_item": None, "source_item_heading_date": None,
-                "owner": None, "armed": None, "wait": None, "next_observable": None})
+    pointer = {"schema": SCHEMA, "source_item": None, "source_item_heading_date": None,
+               "owner": None, "armed": None, "wait": None, "next_observable": None}
+    if blocks:
+        winner = max(blocks, key=lambda block: block[0])
+        remaining = HISTORICAL_OWNERS.copy()
+        for block in blocks:
+            rank, item, heading, start, values, lines = block
+            candidate = _pointer(values, lines, start, item, heading,
+                                 historical_owners=remaining if rank < winner[0] else None)
+            if block is winner:
+                pointer = candidate
     pointer["open_items"] = run_state_items.open_items(parsed)
     return (json.dumps(pointer, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8")
 
@@ -238,6 +271,9 @@ def validate(pointer: object) -> None:
         if expiry is not None and not run_state_items.valid_epoch(expiry):
             raise ValueError("open_items expires_epoch_s must be null or integer seconds within the epoch bounds")
         previous = number
+    owner = pointer["owner"]
+    if (owner is not None or pointer["source_item"] is not None) and (detail := _owner_error(owner)):
+        raise ValueError(f"INVALID_OWNER: {detail}")
     if pointer["source_item"] is None:
         if any(pointer[key] is not None for key in pointer if key not in {"schema", "open_items"}):
             raise ValueError("no-pointer document must have all declaration fields null")
@@ -247,8 +283,7 @@ def validate(pointer: object) -> None:
     date = pointer["source_item_heading_date"]
     if date is not None and (not isinstance(date, str) or DATE.fullmatch(date) is None):
         raise ValueError("source_item_heading_date must be YYYY-MM-DD or null")
-    for key in ("owner", "next_observable"):
-        _text(pointer[key], key)
+    _text(pointer["next_observable"], "next_observable")
     armed, wait = pointer["armed"], pointer["wait"]
     _keys(wait, {"observable", "deadline_epoch_s", "on_early_or_refused"}, "wait")
     if not isinstance(wait["observable"], str) or wait["observable"] not in OBSERVABLES:
