@@ -4,6 +4,12 @@
   "open_items": [
     {
       "expires_epoch_s": null,
+      "item": 538,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
       "item": 537,
       "owner": "magistrate",
       "status": "ISSUED"

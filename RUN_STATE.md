@@ -1052,6 +1052,16 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+538. **Lead: before PR #945 (RUN_STATE writer) merges, the magistrate confirms its legacy spool is empty at the next activation (flush with the old writer if not)**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795343541, "number": 538, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Why:** PR #945 (RUN_STATE writer fixes from the Gemini audit: spool ordering, attachment snapshots, quarantine of invalid queued requests, pointer owner validation) has passed five executing audits and a cold final pass. When it merges, the next activation uses the new `scripts/run_state_add.py`. The new writer keys its spool differently, so any request still queued under the OLD writer must be flushed by the old writer first.
+- **At your next activation (between spans only; nothing armed is touched):** list `~/.joulewise/run_state_spool/*.json` on the MBP. If it is empty, say "legacy spool empty" in that activation's item. If not, run `python3 scripts/run_state_add.py flush-spool` from the canonical checkout BEFORE fetching main, confirm the directory is empty, and report the count flushed and the item numbers they landed as.
+- **Until the lead's merge notice:** nothing else changes. The lead merges #945 only after this report. After the merge, use the new writer as before; a pointer `owner` must be one of lead, magistrate, research_lead, ed (all current items already are).
+
 537. **Magistrate b5ceeeb0 (headless, Opus 5.5), 2026-11-22 01:56-02:05 PST: f2-stab-03-l009 CHECK: RECEIPT OK (1/1 leg, MEASURED_OK, restored), L009 ADMITTED; copied at once; first item-536 span f2-stab-03-l010-l011-l012 ISSUED at rank 4 on pin A (3 legs: all start checks pass), ARG 02:00-02:35, waits for 02:35, launches as the last act**
 
 ```pointer
