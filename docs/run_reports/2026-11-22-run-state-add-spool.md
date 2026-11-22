@@ -49,13 +49,31 @@ Findings 1 and 3 reproduced on `b3da9918e` and are fixed in `3721cd6ee`.
 | G2 / finding 3 | The resolved worktree root and origin URL scope the queue and its lock. A different clone, a fork, or a change to the checkout's origin URL selects a different queue. | `test_audit_round_2_spool_isolated_by_checkout_and_origin` |
 
 The default spool location and `JW_RUN_STATE_SPOOL` act as parent directories
-for the identity-specific queues. Existing unscoped files stay in the parent
-directory because their repository identity cannot be established from the
-legacy format.
+for the identity-specific queues. Unkeyed request files in the parent form the
+upgrade queue described below.
 
 Finding 2 is a known limitation outside the final build scope. A pre-commit
 hook can restage an attachment after the staged snapshot check, so the final
 commit can contain bytes supplied by that hook.
+
+## Independent audit round 3
+
+U1 reproduced on `ff4c0d5b4` and is fixed in `31be14fe3`.
+`test_audit_round_3_upgrade_preserves_legacy_spool_order` queues an old-format
+request, lets a second writer land independently, and checks that a later
+add is refused. It then verifies that flush replays both legacy requests in
+filename order before the keyed request. A later add lands after all three.
+
+The old writer's parent lock protects the unkeyed queue. A transient failure
+retains pending requests and stops replay before any later entry. The legacy
+format carries no repository identity, so run `flush-spool` from the original
+checkout during upgrade. New requests remain scoped to their checkout and
+origin.
+
+Accepted MED limitation. If another writer changes the target after G1's
+second remote-head check, a currently valid `--set` can still be quarantined.
+Flush reports the reason and preserves the exact request bytes in `failed/`.
+Audit round 3 recovered the request and landed it from those bytes.
 
 ## Verification
 
@@ -74,7 +92,9 @@ the checked-in bytes on both interpreters. The check also exited 0 on each
 interpreter after main advanced to `7eec25d6ab4cc8cf72b37532ad407cbb6ceefa13`.
 After the audit round 1 fixes, all 110 focused tests passed on each
 interpreter, and the CURRENT check passed again on the same main revision.
-After the final two fixes, all 112 focused tests passed on each interpreter.
+After the audit round 2 fixes, all 112 focused tests passed on each interpreter.
 Both CURRENT checks again exited 0 against `7eec25d6ab4cc8cf72b37532ad407cbb6ceefa13`.
+After U1, all 113 focused tests passed on each interpreter. Both CURRENT
+checks exited 0 against `1b834776d4d566b684536bedeff5935c12517f4c`.
 The full suite runs in the draft PR's hosted CI. Tier 1 cross-family review
 remains a lead gate.
