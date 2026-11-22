@@ -20,6 +20,13 @@ predecessor, D_bank with its tool calls and context checks, and X_G; `clock-offs
 moves the events alone and must refuse). Step D is not shifted here: its reference record and journal are bound
 by digest into the later members' custody, which a one-member edit cannot keep consistent.
 
+Audit 2 of 2026-11-21 adds four false passes, each a recorded value that frozen R1 derives from a raw record:
+the idle soak's terminal closed one second after it opened (`idle-closed-one-second`), the quiet predecessor's
+census without its closing point, with it twice, or reversed (`predecessor-census-*`), an unobserved X_G G1 whose
+exit slope contradicts the frozen reducer on the same view (`x-g-unobserved-exit-slope-contradicted`; the same
+gate recording the derived value, `x-g-unobserved-exit-slope-derived`, must pass), and an X_G journal whose session
+ID is not the one its opening stamp derives (`x-g-session-id-plus-one`).
+
     python3.13 -IB tests/align/partc_audit_probe.py [case ...]      (JW_PARTC_REPO selects the tree under test)
 
 It prints one `RESULT <case> <verdict> <reasons>` line per case and exits 1 on any disagreement. The pinned
@@ -58,6 +65,14 @@ EXPECTED = {
     "clock-offset-coherent-d-bank": None,
     "clock-offset-coherent-x-g": None,
     "clock-offset-incoherent-predecessor": ("turn_boundary_recompute", "paired_clock"),
+    # Audit 2 of 2026-11-21.
+    "idle-closed-one-second": "member_order",
+    "predecessor-census-end-omitted": ("quiet_load", "census"),
+    "predecessor-census-end-twice": ("quiet_load", "census"),
+    "predecessor-census-reversed": ("quiet_load", "census"),
+    "x-g-unobserved-exit-slope-derived": None,
+    "x-g-unobserved-exit-slope-contradicted": ("evidence_unverifiable", "N5.exit_slope"),
+    "x-g-session-id-plus-one": ("sidecar_derivation", "session"),
     # RL-186's member wall bound alone, judged directly: no synthetic journal can isolate it.
     "step-d-member-wall-over-bracket": ("member_order", "member_wall_s"),
     # The episode's two paired stamps in reverse order, both inside the bracket (v3.1's predecessor
@@ -121,7 +136,11 @@ def run(argv):
                       "step-d-close-5179": None, "step-d-close-before-recovery": None,
                       "issued-template-duplicate-key": None, "issued-config-backend-synthetic": None,
                       "clock-offset-coherent-predecessor": s.P, "clock-offset-coherent-d-bank": s.D, "clock-offset-coherent-x-g": s.X,
-                      "clock-offset-incoherent-predecessor": s.P}
+                      "clock-offset-incoherent-predecessor": s.P,
+                      "idle-closed-one-second": None, "predecessor-census-end-omitted": s.P,
+                      "predecessor-census-end-twice": s.P, "predecessor-census-reversed": s.P,
+                      "x-g-unobserved-exit-slope-derived": s.X, "x-g-unobserved-exit-slope-contradicted": s.X,
+                      "x-g-session-id-plus-one": s.X}
 
     def frozen_refuses(segment, kind):
         try:
@@ -192,6 +211,32 @@ def run(argv):
             frozen = str(error)
         assert frozen == ("N5 entry" if mixed else None), frozen
 
+    def unobserved_exit(bundle, contradicted):
+        """An unobserved X_G G1: the frozen wait's exit slope is ``slow_slope`` on its final view. The derived case
+        records that value in every copy; the contradicted case records 1,000,000 instead."""
+        episode_path, journal_path = bundle / "outputs/align_episode.json", bundle / "outputs/align_thermal.jsonl"
+        episode, journal, events = s.read(episode_path), s.rows(journal_path), s.rows(bundle / "events.jsonl")
+        gate, = [row for row in episode["hardware"]["thermal"]["intervals"] if row["outcome"] == "unobserved"]
+        assert gate["kind"] == "G1"
+        key = episode["hardware"]["thermal"]["policy"]["sensors"]["s_slow"]
+        view = [row for row in s.tg.sample_rows(journal) if row["finished"]["monotonic_after_ns"] <= gate["end_ns"]]
+        value = 1e6 if contradicted else s.tg.slow_slope(view, gate["end_ns"], key)
+        assert value != 1e6 or contradicted
+        copies = 0
+        gate["slope_c_per_min"] = value
+        for row in journal:
+            if row["values"].get("state") == "end" and row["values"]["gate"].get("start_ns") == gate["start_ns"]:
+                row["values"]["gate"]["slope_c_per_min"] = value
+                copies += 1
+        for event in events:
+            if event["phase"] == "align_thermal_gate" and event["metadata"].get("start_ns") == gate["start_ns"]:
+                event["metadata"]["slope_c_per_min"] = value
+                copies += 1
+        assert copies == 3
+        s.write(episode_path, episode)
+        s.write_rows(journal_path, journal)
+        s.write_rows(bundle / "events.jsonl", events)
+
     def clock_offset(bundle, coherent):
         """One second between the epoch and monotonic clocks. Coherent: every epoch value moves, the endpoint's
         turn mappings are re-derived with the frozen ``stamp_mapping`` and reproduce each first token. Incoherent:
@@ -249,6 +294,22 @@ def run(argv):
         episode = s.read(episode_path)
         if case.startswith("x-g-gate-entry-"):
             gate_entry(bundle, kind, mixed=case.endswith("mixed"))
+        elif case.startswith("predecessor-census-"):
+            load = s.read(segment / "load_journal.json")
+            census = load["census"]
+            assert [point["label"] for point in census] == ["start", "end"]
+            census = {"end-omitted": census[:1], "end-twice": census + census[1:],
+                      "reversed": census[::-1]}[case.removeprefix("predecessor-census-")]
+            s.write(segment / "load_journal.json", {**load, "census": census})
+            receipt["census"] = census                  # the receipt's copy agrees with the journal
+        elif case.startswith("x-g-unobserved-exit-slope-"):
+            unobserved_exit(bundle, contradicted=case.endswith("contradicted"))
+        elif case == "x-g-session-id-plus-one":
+            path = bundle / "outputs/align_thermal.jsonl"
+            journal = s.rows(path)
+            opening = journal[0]["started"]["monotonic_ns"]
+            assert {row["session"] for row in journal} == {f"align-{opening}"}   # Sidecar.start derives it
+            s.write_rows(path, [{**row, "session": f"align-{opening + 1}"} for row in journal])
         elif case.startswith("clock-offset-"):
             clock_offset(bundle, coherent="-coherent-" in case)
         elif case == "interval-header-zero-rows":
@@ -342,6 +403,21 @@ def run(argv):
             template.write_bytes(raw.replace(b'"idle_seconds":', b'"idle_seconds":0,"idle_seconds":'))
             assert s.read(template)["sampling"]["idle_seconds"] == 300     # the frozen reader keeps the last key
             stack.callback(template.write_bytes, raw)
+        elif name.startswith("x-g-unobserved-exit-slope-"):
+            # The fixture's X_G records its second gate unobserved; the frozen wait then flags the state.
+            stack.enter_context(patch.dict(s.fixture.XG["intervals"][1], outcome="unobserved"))
+        elif name == "idle-closed-one-second":
+            writer = s.write
+
+            def close_soak(path, value):
+                if path.name == s.rt.CUSTODY_NAME and path.parent.name == "idle_soak" and value.get("ended_epoch_s") == 1800:
+                    assert value["started_epoch_s"] == 0
+                    rows = s.rows(path.parent / "sensors/align_thermal.jsonl")
+                    assert max(row["finished"]["wall_ns"] for row in rows) > s.N     # the journal runs past it
+                    value = dict(value, ended_epoch_s=1)
+                return writer(path, value)
+
+            stack.enter_context(patch.object(s, "write", close_soak))
         elif name.startswith("step-d-close-"):
             writer = s.write
 

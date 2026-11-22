@@ -13,6 +13,12 @@ decision is recomputed by frozen R1 code from the raw records the ledger bound a
 there by name. ``_adjudicate`` returns ``pass`` only as a conjunction with the oracle, and
 ``_emit_part_c`` publishes it only for a native evaluation whose oracle passed.
 
+Derive, don't trust (lead directive of 2026-11-21, fix-2). A field frozen R1 derives from a raw
+record is derived again here with the frozen function and compared: every sensor-journal row
+(``_replay_frozen_sidecar``), each gate's entry and exit views whatever its outcome
+(``_gate_witnesses``), the soak's window and duration (``_check_soak_window``) and the census
+structure (``_check_census``). A required check whose input is missing or unobservable refuses.
+
 The test, as ruled (RL-145 step 3 and the addendum's section 6, which replaces the
 D_bank line):
 - Step-D: its G0 releases inside 1,200 s with both keys at most 1.0 C over the
@@ -1161,6 +1167,9 @@ STEP_INVENTORY = "inventory/inventory_journal.jsonl"
 STEP_PM_SOURCES = ("rich_telemetry.jsonl", "raw/powermetrics.plist")
 LOAD_SOURCE = "load_journal.json"
 QUIET_MEMBERS = ("capture-predecessor-30b", "step-d")
+# r1_runtime.Segment.run takes the process census at these points, in this order, once each: start_journals
+# before the member and stop_journals(final=True) after it.
+CENSUS_POINTS = ("start", "end")
 RELEASE_COPIES = ("smoke_part_c.json", "smoke.json")
 RELEASE_LINES = ("step_d", "d_bank_mechanics", "d_bank_start_state", "x_g")
 
@@ -1490,6 +1499,82 @@ def _validate_sidecar(rows, sensors, kind, source, *, gated=False):
     check(isinstance(span, list) and len(span) == 2 and span[0] == begin_ns and _uint(span[1])
           and rows[-2]["finished"]["monotonic_ns"] <= span[1] <= terminal_ns, "coverage")
     check(canonical(counter.report(span[1])) == canonical(coverage), "coverage")
+    _replay_frozen_sidecar(rows, sensors, kind, source, gated=gated)
+
+
+def _replay_frozen_sidecar(rows, sensors, kind, source, *, gated):
+    """Derive, don't trust (lead directive of 2026-11-21, fix-2, D1): the frozen Sidecar writes every row again.
+
+    ``thermal.Sidecar.start`` names the session from its opening monotonic stamp, ``_write`` numbers each
+    row, joins its read errors and serializes it, ``tick`` projects each raw reading (value, error and the
+    reader's raw fields) and its status, and ``stop`` reports coverage. The frozen Sidecar is driven here with
+    only the recorded stamps, raw readings, status and gate events, the inputs it cannot derive. Every row it
+    writes must equal the recorded row. A session ID, sequence number, error string, unit, projected value
+    or coverage figure that frozen R1 would not have written refuses.
+    """
+    from joulewise.align.apple import thermal
+    from joulewise.hazards.base import Stamp
+
+    def refuse(index, field, error=None):
+        raise EvidenceFailure("sidecar_derivation", kind, source, index=index, field=field,
+                              peer="thermal.Sidecar") from error
+
+    def same(index, recorded, written):
+        if canonical(recorded) != canonical(written):
+            fields = sorted(key for key in {*recorded, *written} if canonical(recorded.get(key)) !=
+                            canonical(written.get(key)))
+            refuse(index, ",".join(fields) or "row")
+
+    clock = SimpleNamespace(stamps=iter(()))
+    context = SimpleNamespace(stamp=lambda: next(clock.stamps))
+    reader = SimpleNamespace(read=None, close=lambda: None)
+    written_rows = []
+    try:
+        native = thermal.Sidecar(None, sensors, reader=reader, ctx=context)
+        write = native._write
+
+        def record(*args, **kwargs):                    # keeps every row the frozen _write returns
+            written_rows.append(write(*args, **kwargs))
+            return written_rows[-1]
+
+        native._write = record
+        clock.stamps = iter((Stamp.from_json(rows[0]["started"]),))
+        native.start(background=False)
+    except Exception as error:  # noqa: BLE001 - a journal the frozen Sidecar cannot replay is never a pass
+        refuse(0, "session_start", error)
+    same(0, rows[0], written_rows[0])
+    for index, row in enumerate(rows[1:-1], start=1):
+        try:
+            values = row["values"]
+            if row["kind"] == "reading":
+                clock.stamps = iter((Stamp.from_json(row["started"]), Stamp.from_json(row["finished"])))
+                entries = values["readings"]
+                inputs = {"values": {key: entries[key]["value"] for key in native.selected},
+                          "errors": {key: entries[key]["error"] for key in native.selected
+                                     if entries[key]["error"] is not None},
+                          "raw": {key: {name: value for name, value in entries[key].items()
+                                        if name not in ("value", "error")} for key in native.selected}}
+                reader.read = lambda keys, inputs=inputs: inputs
+                status = values.get("status")
+                native.status_reader = (lambda status=status: status) if gated or "status" in values else None
+                written = native.tick()
+            else:
+                clock.stamps = iter((Stamp.from_json(row["started"]),))
+                written = native.event(row["kind"], values)
+        except EvidenceFailure:
+            raise
+        except Exception as error:  # noqa: BLE001
+            refuse(index, "row", error)
+        same(index, row, written)
+    last = rows[-1]
+    try:
+        report_end = last["values"]["coverage"]["span_ns"][1]
+        written = native._write("session_end", {"coverage": native.counter.report(report_end),
+                                                "collector_error": None},
+                                Stamp.from_json(last["started"]), Stamp.from_json(last["finished"]))
+    except Exception as error:  # noqa: BLE001
+        refuse(len(rows) - 1, "session_end", error)
+    same(len(rows) - 1, last, written)
 
 
 def _check_event_rows(kind, events):
@@ -2760,8 +2845,7 @@ def _gate_witnesses(kind, index, interval, readings, reference, policy, deadline
 
     if word == "deadman":
         check(_uint(deadline) and start < deadline <= end, "deadline", "gate_outcome")
-        return findings
-    if deadline is not None:
+    elif deadline is not None:
         check(deadline > end, "U4", "gate_outcome" if deadline <= start else "evidence_unverifiable")
 
     sure, possible = (readings.visible_count(start, lag) for lag in (GATE_VISIBILITY_NS, 0))
@@ -2787,6 +2871,36 @@ def _gate_witnesses(kind, index, interval, readings, reference, policy, deadline
     needed = 10 if gate == "G0" else 5
     first = max(0, sure - 1)
     last = readings.visible_count(end)
+
+    def final_view(lower, *, closing=True, no_poll=False):
+        """D1: the exit sample, the release values and the exit slope are one derivation, not three records.
+
+        ``ThermalSession._wait`` keeps them from its final poll: ``latest`` (the last visible row), its two
+        temperatures, and ``slow_slope`` over the same rows at the same instant. That instant lies in
+        ``[lower, end]``. ``closing``: the exit stamp follows the final poll at once, so its view already
+        holds every row surely visible at the exit. ``no_poll``: a deadman can end the wait before its first
+        poll, which records nothing.
+        """
+        exit_ns, claim = interval["exit_sample_ns"], interval["slope_c_per_min"]
+        if exit_ns is None:
+            count = 0
+        elif exit_ns in readings.index:
+            count = readings.index[exit_ns] + 1
+        else:
+            check(False, "exit_sample", "release_sample")
+            return
+        release = readings.temperatures(count - 1) if count else dict.fromkeys(TEMPERATURE_KEYS)
+        floor = readings.visible_count(end, GATE_VISIBILITY_NS) if closing else 0
+        check(floor <= count <= last and canonical(interval["release"]) == canonical(release),
+              "exit_sample", "release_sample")
+        if no_poll and count == 0 and claim is None:
+            return
+        check(lower <= end and _gate_exit_slope(claim, readings, lower, end, count),
+              "N5.exit_slope", "evidence_unverifiable")
+
+    if word == "deadman":
+        final_view(start, closing=False, no_poll=True)
+        return findings
 
     def row_terms(at, previous):
         row = readings.rows[at]
@@ -2845,6 +2959,10 @@ def _gate_witnesses(kind, index, interval, readings, reference, policy, deadline
 
     if word == "timeout":
         check(end - start >= cap and earliest_release() is None, "timeout", "gate_outcome")
+        # D2: every poll of a timed-out wait saw coverage, so its final slope is a number. A null is
+        # unobservable and never certifies the outcome.
+        check(_finite(interval["slope_c_per_min"]), "N5.exit_slope", "evidence_unverifiable")
+        final_view(start + cap)                         # the wait ends at its first poll at or past the cap
         return findings
     if word == "unobserved":
         earliest = earliest_release()
@@ -2852,15 +2970,9 @@ def _gate_witnesses(kind, index, interval, readings, reference, policy, deadline
               "unobserved", "evidence_unverifiable")
         required = min(cap, G0_UNOBSERVED_LIMIT_S * NS) if gate == "G0" else cap
         check(end - start >= required, "unobserved_cap", "gate_outcome")
-        at = readings.index.get(interval["exit_sample_ns"])
-        if at is None:
-            check(interval["exit_sample_ns"] is None and not readings.visible_count(end, GATE_VISIBILITY_NS)
-                  and canonical(interval["release"]) == canonical(dict.fromkeys(TEMPERATURE_KEYS)),
-                  "unobserved_sample", "release_sample")
-        else:
-            check(max(0, readings.visible_count(end, GATE_VISIBILITY_NS) - 1) <= at < last
-                  and canonical(interval["release"]) == canonical(readings.temperatures(at)),
-                  "unobserved_sample", "release_sample")
+        # An unobserved wait's final slope is whatever the frozen reducer gives on that view, null included:
+        # the outcome itself says the state was unobservable, and the Part C lines decide whether it may.
+        final_view(start + required)
         return findings
 
     if word != "released":
@@ -2870,6 +2982,8 @@ def _gate_witnesses(kind, index, interval, readings, reference, policy, deadline
     if at is None:
         check(False, "N1.exit_sample", "release_sample")
         return findings
+    # D2: a release poll saw coverage, so its slope is a number. A null is unobservable, never a pass.
+    check(_finite(interval["slope_c_per_min"]), "N5.exit_slope", "evidence_unverifiable")
     finish = readings.finishes[at]
     check(finish + GATE_CONSUMPTION_NS - start < cap, "U3",
           "gate_outcome" if finish - start >= cap else "evidence_unverifiable")
@@ -3168,6 +3282,7 @@ def _check_load(raw, receipt, kind, wall_s=None):
                                and _uint(process.get("ppid")) and _finite(process.get("pcpu"))
                                and isinstance(process.get("comm"), str) for process in snapshot["processes"])):
                 raise ValueError("invalid census")
+        _check_census(kind, census, times, reason)
         if wall_s is None:
             return
         if load["errors"]:
@@ -3176,8 +3291,63 @@ def _check_load(raw, receipt, kind, wall_s=None):
         if verdict["redo"] is not False:
             raise ValueError("load redo required")
         return verdict
+    except EvidenceFailure:
+        raise
     except (ValueError, ArithmeticError, LookupError, TypeError, AttributeError, r1.Refusal) as error:
         raise EvidenceFailure(reason, kind, LOAD_SOURCE, peer=RECEIPT_NAME) from error
+
+
+def _check_census(kind, census, sample_times, reason):
+    """D3: the census points are the ones ``Segment.run`` takes, each exactly once, in order.
+
+    ``start_journals`` snapshots ``start`` before the member and ``stop_journals(final=True)`` snapshots
+    ``end`` after it, both on the load journal's own monotonic clock, with every CPU sample between them.
+    A quiet member's admission rests on both points, so each must appear once, ``start`` before ``end``, and
+    their span must hold the whole CPU sample series. A duplicate, a reversal, an unknown label or a missing
+    point refuses. Elsewhere the points present must still be a duplicate-free prefix of that order; the soak
+    must have ``start``. (The frozen suite's synthetic soak has no ``end`` and its gated members none at all,
+    so the producer's full structure is required where the frozen verdicts rest on it.)
+    """
+    def refuse(field):
+        raise EvidenceFailure(reason, kind, LOAD_SOURCE, field=field, peer=RECEIPT_NAME)
+
+    labels = [snapshot["label"] for snapshot in census]
+    stamps = [snapshot["t_s"] for snapshot in census]
+    if labels != list(CENSUS_POINTS[:len(labels)]):
+        refuse("census")
+    if kind in QUIET_MEMBERS and len(labels) != len(CENSUS_POINTS) or kind == "idle" and not labels:
+        refuse("census")
+    if any(later < earlier for earlier, later in zip(stamps, stamps[1:])):
+        refuse("census.t_s")
+    if len(labels) == len(CENSUS_POINTS) and sample_times and stamps[1] - stamps[0] < sample_times[-1] - sample_times[0]:
+        refuse("census.t_s")
+
+
+def _check_soak_window(bound, receipt, rows):
+    """D1: the idle's window and duration are derived from its own records, not taken from the receipt.
+
+    ``r1_runtime.main`` stamps the soak segment's terminal bracket around everything it does, on the wall
+    clock, so every sensor-journal row lies inside it. ``Segment.idle`` loops on the monotonic clock until the
+    configured duration has passed inside one sensor session, so that session spans the duration, and so does
+    the bracket around it.
+    """
+    from joulewise.align.apple.sampler import seconds_ns
+
+    source = "sensors/align_thermal.jsonl"
+    started, ended = bound.started_epoch_s, bound.ended_epoch_s
+    duration = receipt.get("duration_s")
+    _required(_finite(duration) and duration > 0, "fresh_soak", "idle", RECEIPT_NAME, field="duration_s")
+    low, high = seconds_ns(started), seconds_ns(ended)
+    for index, row in enumerate(rows):
+        for end in ("started", "finished"):
+            wall = (row.get(end) or {}).get("wall_ns")
+            _required(_uint(wall) and low <= wall <= high, "member_order", "idle", source, index=index, field=end,
+                      peer=MANIFEST_NAME)
+    opened, closed = (row["started"]["monotonic_ns"] for row in (rows[0], rows[-1]))
+    _required(closed - opened >= round(duration * NS), "fresh_soak", "idle", source, field="duration_s",
+              peer=RECEIPT_NAME)
+    _required(ended - started >= duration, "member_order", "idle", MANIFEST_NAME, field="duration_s",
+              peer=RECEIPT_NAME)
 
 
 def _check_battery(raw, receipt, kind):
@@ -3814,8 +3984,8 @@ def _check_native_soak(soak, config_path):
     """Reconcile the bound soak records with the unchanged producer reductions."""
     from scripts import align_r1_rehearsal as r1
     from joulewise.align.apple import r1_runtime as rt
-    from joulewise.align.apple.thermal_gates import sample_rows
 
+    journal = "sensors/align_thermal.jsonl"
     row, reference = soak.row, soak.reference
     receipt = row["result"]
     if (receipt.get("schema") != rt.RESULT_SCHEMA or receipt.get("config_sha256") != soak.config_sha
@@ -3839,10 +4009,36 @@ def _check_native_soak(soak, config_path):
         "valid 1 Hz reads in order with their times (s from the first journal row); "
         "a failed read is dropped, never interpolated"), "soak_readings", "idle", RECEIPT_NAME,
         field="sensor_series_note")
+    derived = _derive_soak(soak.sources[journal], receipt, sensors, soak.member)
+    if any(stat["settled"] is not True for stat in derived.values()):
+        raise EvidenceFailure("soak_unsettled", "idle", journal)
+    if (canonical(derived) != canonical(row.get("soak_detrended"))
+            or canonical(derived) != canonical(reference.get("detrended"))
+            or canonical({key: stat["mean_c"] for key, stat in derived.items()}) != canonical(reference.get("sensors_c"))
+            or reference.get("schema") != r1.SOAK_REFERENCE_SCHEMA or reference.get("window_s") != r1.SOAK_TAIL_S):
+        raise EvidenceFailure("fresh_soak", "idle", "soak_reference.json", peer=journal)
+    load_verdict = _check_load(soak.sources[LOAD_SOURCE], receipt, "idle", (ended - started) / NS)
+    _required(canonical(load_verdict) == canonical(row.get("os_load")),
+              "soak_load", "idle", LOAD_SOURCE, peer="soak_row.json")
+    soak.verify_reads()
+    return configured
+
+
+def _derive_soak(raw_journal, receipt, sensors, bound):
+    """The soak's series, read times, failures, end and detrended statistics, derived from its sensor journal.
+
+    The frozen ``Segment.k_idle`` reduces the journal to these receipt fields and the frozen driver detrends
+    them (``soak_detrended``). Both are recomputed here from the journal; the receipt's copies must equal them.
+    """
+    from scripts import align_r1_rehearsal as r1
+    from joulewise.align.apple import r1_runtime as rt
+    from joulewise.align.apple.thermal_gates import sample_rows
+
     journal = "sensors/align_thermal.jsonl"
     try:
-        entries = _jsonl_objects(soak.sources[journal], "idle", journal, "soak_readings")
+        entries = _jsonl_objects(raw_journal, "idle", journal, "soak_readings")
         _validate_sidecar(entries, sensors, "idle", journal)
+        _check_soak_window(bound, receipt, entries)
         readings = sample_rows(entries)
         first_ns = readings[0]["monotonic_ns"]
         series, times, failed = {}, {}, {}
@@ -3856,23 +4052,11 @@ def _check_native_soak(soak, config_path):
                               ("sensor_series_failed_reads", failed), ("sensor_series_end_t_s", end_time)):
             if canonical(receipt[key]) != canonical(expected):
                 raise ValueError("soak readings disagree with their receipt")
-        derived = r1.soak_detrended(series, times, end_time)
+        return r1.soak_detrended(series, times, end_time)
     except EvidenceFailure:
         raise
-    except (ValueError, ArithmeticError, LookupError, TypeError, AttributeError) as error:
+    except (ValueError, ArithmeticError, LookupError, TypeError, AttributeError, r1.Refusal) as error:
         raise EvidenceFailure("soak_readings", "idle", journal, peer=RECEIPT_NAME) from error
-    if any(stat["settled"] is not True for stat in derived.values()):
-        raise EvidenceFailure("soak_unsettled", "idle", journal)
-    if (canonical(derived) != canonical(row.get("soak_detrended"))
-            or canonical(derived) != canonical(reference.get("detrended"))
-            or canonical({key: stat["mean_c"] for key, stat in derived.items()}) != canonical(reference.get("sensors_c"))
-            or reference.get("schema") != r1.SOAK_REFERENCE_SCHEMA or reference.get("window_s") != r1.SOAK_TAIL_S):
-        raise EvidenceFailure("fresh_soak", "idle", "soak_reference.json", peer=journal)
-    load_verdict = _check_load(soak.sources[LOAD_SOURCE], receipt, "idle", (ended - started) / NS)
-    _required(canonical(load_verdict) == canonical(row.get("os_load")),
-              "soak_load", "idle", LOAD_SOURCE, peer="soak_row.json")
-    soak.verify_reads()
-    return configured
 
 
 def _w1_schedule(runtime):
@@ -4063,8 +4247,8 @@ def replay_archived(output, runtime_config):
                       and soak.get("backend") == "production" and soak.get("config_sha256") == config_sha
                       and not r1.contract.missing_fields(kind, soak, quiet=True, contract_key=SOAK_SEGMENT),
                       "receipt_contract", kind, RECEIPT_NAME)
-            detrended = r1.soak_detrended(soak["sensor_series_c"], soak["sensor_series_t_s"],
-                                         soak["sensor_series_end_t_s"])
+            journal = "sensors/align_thermal.jsonl"
+            detrended = _derive_soak(idle.read(journal, journal), soak, rt.sensors_policy(configured), idle)
             _check_load(idle.read(LOAD_SOURCE, LOAD_SOURCE), soak, kind, idle.ended_epoch_s - idle.started_epoch_s)
             idle.verify_reads()
             return detrended

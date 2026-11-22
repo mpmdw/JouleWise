@@ -1321,7 +1321,10 @@ class RawEvidenceTests(unittest.TestCase):
         apple.thermal = thermal
         align = ModuleType("joulewise.align")
         align.apple = apple
-        with patch.dict(sys.modules, {module.__name__: module for module in (align, apple, thermal)}):
+        # This double has no Sidecar. The row-order rule is judged here alone; the frozen Sidecar's replay of
+        # every row (``_replay_frozen_sidecar``) is judged on frozen sources by tests/align/partc_derived_sweep.py.
+        with patch.dict(sys.modules, {module.__name__: module for module in (align, apple, thermal)}), \
+                patch.object(pc, "_replay_frozen_sidecar", lambda *args, **kwargs: None):
             yield
 
     def test_no_journal_row_starts_before_the_row_above_it_finished_on_any_clock(self):
@@ -2360,6 +2363,53 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
                     "episode-stamps-reversed": "other_failure member_order"}
         proc, output, seen = self.run_probe(list(expected))
         self.assertEqual(seen, expected, output[-3000:])
+        self.assertEqual(proc.returncode, 0, output[-3000:])
+
+    def test_audit_2_of_2026_11_21_derived_fields_and_their_control(self):
+        """pl-809 audit 2: four recorded values frozen R1 derives from a raw record, each recorded otherwise.
+
+        The idle soak closed one second after it opened; the quiet predecessor's census without its closing
+        point, with it twice, or reversed; an unobserved X_G G1 whose exit slope contradicts the frozen reducer;
+        an X_G journal whose session ID is not the one its opening stamp derives. The same unobserved gate
+        recording the derived slope passes.
+        """
+        expected = {"idle-closed-one-second": "other_failure member_order",
+                    "predecessor-census-end-omitted": "other_failure quiet_load",
+                    "predecessor-census-end-twice": "other_failure quiet_load",
+                    "predecessor-census-reversed": "other_failure quiet_load",
+                    "x-g-unobserved-exit-slope-derived": "pass -",
+                    "x-g-unobserved-exit-slope-contradicted": "other_failure evidence_unverifiable",
+                    "x-g-session-id-plus-one": "other_failure sidecar_derivation"}
+        proc, output, seen = self.run_probe(list(expected))
+        self.assertEqual(seen, expected, output[-3000:])
+        self.assertEqual(proc.returncode, 0, output[-3000:])
+
+    SWEEP = Path(__file__).resolve().parent / "align" / "partc_derived_sweep.py"
+
+    def test_every_derived_field_recorded_otherwise_refuses(self):
+        """The generated sweep: each field in the inventory, recorded differently from its frozen derivation,
+        refuses; each clean record passes; every inventory entry generates at least one mutation."""
+        import os
+        import subprocess
+
+        root = Path(__file__).resolve().parents[1]
+        if not self.SWEEP.is_file() or any(
+                subprocess.run(["git", "-C", str(root), "cat-file", "-e", pin + "^{commit}"],
+                               capture_output=True).returncode for pin in self.PINS):
+            self.skipTest("the pinned R1 commits are not in this object database")
+        with TemporaryDirectory() as tmp:
+            proc = subprocess.run([sys.executable, "-IB", str(self.SWEEP)], cwd=tmp, capture_output=True, text=True,
+                                  env={**os.environ, "JW_PARTC_REPO": str(root), "TMPDIR": tmp,
+                                       "PYTHONDONTWRITEBYTECODE": "1"})
+        output = proc.stdout + proc.stderr
+        entries = {line.split()[1]: tuple(map(int, line.split()[2:4])) for line in proc.stdout.splitlines()
+                   if line.startswith("SWEEP ")}
+        self.assertTrue(entries, output[-3000:])
+        for name, (generated, refused) in entries.items():
+            with self.subTest(entry=name):
+                self.assertGreater(generated, 0)
+                self.assertEqual(refused, generated)
+        self.assertNotIn("\nFAIL ", "\n" + proc.stdout, output[-3000:])
         self.assertEqual(proc.returncode, 0, output[-3000:])
 
     def test_audit_two_reproductions_are_each_refused_for_their_own_reason(self):
