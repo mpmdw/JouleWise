@@ -1127,7 +1127,9 @@ def consumer_check(consumer, call):
         code = exc.code.value if exc.code else 'refused'
         raise ValueError(f'C1 {consumer} refuses: {code}') from exc
     if isinstance(result, tuple) and result and isinstance(result[0], RefusalCode):
-        raise ValueError(f'C1 {consumer} refuses: {result[0].value}')
+        context = result[1] if len(result) > 1 and result[1] else None
+        detail = f' {json.dumps(context, sort_keys=True, default=str)}' if context else ''
+        raise ValueError(f'C1 {consumer} refuses: {result[0].value}{detail}')
     return result
 
 
@@ -1147,7 +1149,10 @@ def check_selections(view, tree, night, pin, *, c1_inputs, starting=True):
         raise ValueError('prepared repo_root binding differs')
     # O2a: a ledger pointer in the caller's shell must name the one live file.
     # The chain replaces it, so this check only refuses; it selects nothing.
-    if launch_ledger := os.environ.get('CALIBRATION_LEDGER'):
+    # The fence rejects an outside path before any byte of it is read.
+    if 'CALIBRATION_LEDGER' in os.environ:
+        if not (launch_ledger := os.environ['CALIBRATION_LEDGER']):
+            raise ValueError('CALIBRATION_LEDGER is empty; unset it or name the canonical C1 ledger')
         check_ledger(view.locate(launch_ledger), pin, starting=starting)
     stages = chain.stage_plan(tree, c1=True)
     environment, launches = chain.c1_chain_environment(
@@ -1241,7 +1246,7 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
                 raise ValueError('C1 reservation must append its session (--execute)')
             # The reservation's own gates on its prepared inputs, before any host work.
             consumer_check('reservation', lambda: runtime_ledger(args.ledger, starting=True))
-            consumer_check('reservation', lambda: ledger.CustodyDeadline(
+            deadline = consumer_check('reservation', lambda: ledger.CustodyDeadline(
                 args.custody_budget_s, args.custody_deadline_epoch_s, telemetry_stream=None))
             consumer_check('reservation', lambda: reservation.verify_frozen_plan(
                 args.plan, plan_id=args.plan_id, plan_sha256=args.plan_sha256))
@@ -1251,6 +1256,18 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
             epoch = dict.fromkeys(ledger.IDENTITY_EPOCH_FIELDS, MEASURED_AT_LAUNCH)
             t1 = dict.fromkeys(ledger.T1_FIELDS, MEASURED_AT_LAUNCH)
             consumer_check('reservation', lambda: reservation.reservation_inputs(args, epoch, t1))
+            # C1 launches under the HAZARD_PACK driver, so the reservation takes
+            # its HAZARD route: no committed-pin or custody pass, a lagging pin
+            # allowed, rollback refused. Read-only here: no lease, no append.
+            consumer_check('reservation', lambda: reservation.pre_reserve_readiness(
+                args, hazard=True, require_committed_pin=False, custody_deadline=deadline,
+                pre_reserve_strict=args.pre_reserve_strict, enforcing_under_lease=False,
+                probe_live_writer=False))
+            # What the reservation records for both captures to agree with.
+            reserved_policy = reservation.reserved_power_policy(
+                reservation._hazard_desk_object(args.identity_epoch_json)[0],
+                reservation._hazard_desk_object(args.t1_bindings_json)[0])
+            reserved_sampler = reservation.reserved_sampler()
         elif stage.kind == 'calibration_capture':
             if args.slot != stage.slot:
                 raise ValueError('C1 capture resolved to the wrong slot')
@@ -1272,6 +1289,8 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
                 args.custody_budget_s, args.custody_deadline_epoch_s, telemetry_stream=None))
             consumer_check('capture', lambda: fiducial._capture_mode_refusal(args))
             consumer_check('capture', lambda: fiducial._live_capture_refusal(args))
+            consumer_check('capture', lambda: fiducial.reserved_identity_refusal(
+                args, power_policy=reserved_policy, sampler=reserved_sampler))
         else:
             check_ledger(view.locate(args.calibration_ledger), pin, starting=starting)
             view.locate(args.head_pin)

@@ -2207,6 +2207,30 @@ def _live_capture_refusal(
     return None
 
 
+def reserved_identity_refusal(
+    args: argparse.Namespace,
+    *,
+    power_policy: Any,
+    sampler: Path,
+) -> tuple[RefusalCode, dict[str, Any]] | None:
+    """This capture's prepared identity against what its reservation records.
+
+    At launch the capture refuses ``RESERVED_SLOT_MISMATCH`` when its identity
+    differs from the reserved one. Two fields come from prepared inputs: the
+    power policy and the sampler executable. The C1 arm preflight calls this
+    with the reservation's own recorded values. It compares sampler paths
+    without opening either file; host-measured fields keep their live check.
+    """
+
+    if args.power_policy != power_policy:
+        return RefusalCode.RESERVED_SLOT_MISMATCH, {
+            "field": "power_policy", "capture": args.power_policy, "reservation": power_policy}
+    if os.path.realpath(args.sampler_binary) != os.path.realpath(sampler):
+        return RefusalCode.RESERVED_SLOT_MISMATCH, {
+            "field": "sampler_binary", "capture": str(args.sampler_binary), "reservation": str(sampler)}
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     from joulewise.align.apple.v4_registration import runtime_input_context, runtime_ledger
 

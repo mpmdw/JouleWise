@@ -56,6 +56,30 @@ HAZARD_SAMPLER_BINARY: Path | None = None
 
 
 # --- HAZARD_PACK flag path (gate-prune core lane VPF, A6-R1) ------------------
+def _desk_power_policy(desk_epoch: Mapping[str, Any], desk_t1: Mapping[str, Any]) -> Any:
+    return desk_epoch.get("power_policy") or desk_t1.get("power_policy")
+
+
+def reserved_power_policy(desk_epoch: Mapping[str, Any], desk_t1: Mapping[str, Any]) -> Any:
+    """The power policy a HAZARD reservation records for both slots.
+
+    The desk epoch's, else the desk T1's, else the window plan's constant.
+    The reservation and the C1 arm preflight both call this.
+    """
+
+    from joulewise.b5.plan import POWER_POLICY  # noqa: PLC0415
+
+    return _desk_power_policy(desk_epoch, desk_t1) or POWER_POLICY
+
+
+def reserved_sampler() -> Path:
+    """The sampler whose digest a HAZARD reservation records (the writer's default)."""
+
+    from scripts import validate_powermetrics_fiducial as writer  # noqa: PLC0415
+
+    return Path(writer.POWER_METRICS if HAZARD_SAMPLER_BINARY is None else HAZARD_SAMPLER_BINARY)
+
+
 def _hazard_measured_identity(
     desk_epoch: Mapping[str, Any], desk_t1: Mapping[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None]:
@@ -95,11 +119,9 @@ def _hazard_measured_identity(
 
     from joulewise.b5.plan import POWER_POLICY  # noqa: PLC0415
 
-    sampler = Path(
-        writer.POWER_METRICS if HAZARD_SAMPLER_BINARY is None else HAZARD_SAMPLER_BINARY
-    )
-    desk_policy = desk_epoch.get("power_policy") or desk_t1.get("power_policy")
-    power_policy = desk_policy or POWER_POLICY
+    sampler = reserved_sampler()
+    desk_policy = _desk_power_policy(desk_epoch, desk_t1)
+    power_policy = reserved_power_policy(desk_epoch, desk_t1)
     epoch = {
         "os_build": read("os_build", lambda: writer._sysctl_identity("kern.osversion"),
                          desk_epoch.get("os_build")),
@@ -360,6 +382,69 @@ def reservation_inputs(
     return declared, slots, session_identity, normalized_slots
 
 
+def pre_reserve_readiness(
+    args: argparse.Namespace,
+    *,
+    hazard: bool,
+    require_committed_pin: bool,
+    custody_deadline: CustodyDeadline,
+    pre_reserve_strict: bool,
+    enforcing_under_lease: bool,
+    probe_live_writer: bool = True,
+) -> Any:
+    """The reservation's pre-reserve decision on ``args.ledger`` and ``args.head_pin``.
+
+    Returns the readiness, or raises the reservation's refusal. ``main`` calls
+    this under its writer lease. The C1 arm preflight calls it read-only:
+    ``enforcing_under_lease=False`` and ``probe_live_writer=False`` take no
+    lease and append nothing.
+    """
+
+    readiness = calibration_readiness(
+        args.ledger,
+        args.head_pin,
+        phase="pre-reserve",
+        enforcing_under_lease=enforcing_under_lease,
+        require_committed_pin=require_committed_pin,
+        repo_root=REPO_ROOT,
+        custody_deadline=custody_deadline,
+        probe_live_writer=probe_live_writer,
+        **(
+            {}
+            if not hazard
+            else {"verify_custody": False, "allow_stale_pin": True}
+        ),
+    )
+    if readiness.refusal_code is RefusalCode.LEDGER_CUSTODY_TIMEOUT:
+        custody_deadline.refuse()
+    if readiness.status != "ready":
+        # The night gate and verification cannot turn blocked
+        # readiness into success via the resumable-session route.
+        if pre_reserve_strict or readiness.refusal_code is RefusalCode.LEDGER_CUSTODY_INVALID:
+            raise CalibrationLedgerError(
+                readiness.refusal_code or RefusalCode.PRE_RESERVE_NOT_READY,
+                context={"readiness": readiness.as_dict()},
+            )
+        try:
+            calibration_session_status(
+                args.ledger,
+                args.head_pin,
+                session_id=args.session_id,
+                plan_path=args.plan,
+                require_committed_pin=require_committed_pin,
+                repo_root=REPO_ROOT,
+                custody_deadline=custody_deadline,
+            )
+        except CalibrationLedgerError as exc:
+            if exc.code == RefusalCode.SESSION_NOT_FOUND:
+                raise CalibrationLedgerError(
+                    readiness.refusal_code
+                    or RefusalCode.PRE_RESERVE_NOT_READY
+                ) from exc
+            raise
+    return readiness
+
+
 def main(argv: list[str] | None = None) -> int:
     from joulewise.align.apple.v4_registration import runtime_input_context, runtime_ledger
 
@@ -471,48 +556,15 @@ def main(argv: list[str] | None = None) -> int:
             with CalibrationWriterLease(args.ledger):
                 if context:
                     runtime_ledger(args.ledger, starting=True)
-                readiness = calibration_readiness(
-                    args.ledger,
-                    args.head_pin,
-                    phase="pre-reserve",
-                    enforcing_under_lease=True,
+                readiness = pre_reserve_readiness(
+                    args,
+                    hazard=hazard is not None,
                     require_committed_pin=require_committed_pin,
-                    repo_root=REPO_ROOT,
                     custody_deadline=custody_deadline,
-                    **(
-                        {}
-                        if hazard is None
-                        else {"verify_custody": False, "allow_stale_pin": True}
-                    ),
+                    pre_reserve_strict=pre_reserve_strict,
+                    enforcing_under_lease=True,
                 )
-                if readiness.refusal_code is RefusalCode.LEDGER_CUSTODY_TIMEOUT:
-                    custody_deadline.refuse()
-                if readiness.status != "ready":
-                    # The night gate and verification cannot turn blocked
-                    # readiness into success via the resumable-session route.
-                    if pre_reserve_strict or readiness.refusal_code is RefusalCode.LEDGER_CUSTODY_INVALID:
-                        raise CalibrationLedgerError(
-                            readiness.refusal_code or RefusalCode.PRE_RESERVE_NOT_READY,
-                            context={"readiness": readiness.as_dict()},
-                        )
-                    try:
-                        calibration_session_status(
-                            args.ledger,
-                            args.head_pin,
-                            session_id=args.session_id,
-                            plan_path=args.plan,
-                            require_committed_pin=require_committed_pin,
-                            repo_root=REPO_ROOT,
-                            custody_deadline=custody_deadline,
-                        )
-                    except CalibrationLedgerError as exc:
-                        if exc.code == RefusalCode.SESSION_NOT_FOUND:
-                            raise CalibrationLedgerError(
-                                readiness.refusal_code
-                                or RefusalCode.PRE_RESERVE_NOT_READY
-                            ) from exc
-                        raise
-                else:
+                if readiness.status == "ready":
                     _writer_stage(WriterStage.AFTER_PRE_RESERVE_READINESS)
                     print(
                         json.dumps(
