@@ -759,8 +759,10 @@ class Round5DeltaTests(unittest.TestCase):
         rows = coverage.build(coverage.paper_text(), fill.load_ledger())
         current = (SCRIPT.parents[3]/'docs/paper/paper1/paper1.md').read_text()
         # RL-147 §8 (2026-11-13) filled P1-ABS-PART1 and P1-RECOMPUTE, and the final pass on PR #772 (finding 4)
-        # P1-RELEASE: 55 + 3 filled, 10 - 3 pending.
-        self.assertEqual(coverage.check_working_paper(current, rows, fill), (58, 7))
+        # P1-RELEASE. The research lead's workload-structure note also fills the conclusion contrast.
+        self.assertEqual(coverage.check_working_paper(current, rows, fill), (59, 6))
+        with self.assertRaisesRegex(ValueError, 'mapped id still a placeholder but not listed pending: CP-X08'):
+            coverage.check_working_paper(current + '\n{{FILL: CP-X08-decode-a-conclusion | contrast}}', rows, fill)
         with self.assertRaisesRegex(ValueError, 'unaccounted Block 5 placeholder'):
             coverage.check_working_paper(current + '\n{{FILL: P1-B5-NEW-GAP | x}}', rows, fill)
         with patch.object(fill, 'FILLED', [f for f in fill.FILLED if f != 'P1-B5-XWIN']):
@@ -770,7 +772,8 @@ class Round5DeltaTests(unittest.TestCase):
     def test_default_fill_checks_merged_working_paper(self):
         fill = self.module('fill_check_b5.py')
         with redirect_stdout(io.StringIO()):
-            self.assertEqual(fill.main(), 0)
+            status = fill.main()
+        self.assertEqual(status, 0, '\n'.join(failure.split(':\n', 1)[0] for failure in fill.FAILURES))
 
     def test_round4_native_replay_preserves_later_append_and_write_refuses(self):
         r4 = self.module('hand_check_rl55_round4.py')
