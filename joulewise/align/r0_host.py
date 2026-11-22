@@ -6,6 +6,13 @@ contention flag, latched at any time from the first admission to the end of
 the run, gives exit 2 and withheld publication (QuietGuard.finish, then
 QuietGuard.verify_publication).
 
+The verdict's windows come only from that series: the startup and daemon
+samples, then the read each publication census takes at run end. It judges
+every window the sliding rule defines over the series, including the one
+ending at the final read, and also the window of exactly INTERVAL_S ending
+at the final read. Admission windows reproduce the admitted L3 guard's
+flags; they can add a flag, never supply an opening to the verdict.
+
 Foreground admission is advisory. It saves work that the final verdict
 would discard; it cannot make a run pass. Its last act before it returns
 clear re-reads the sampler's latch, the age of the newest sample (at most
@@ -212,6 +219,29 @@ def _wall_divergence_ns(reads):
     offsets = [stamp.wall_ns - stamp.monotonic_ns for read in reads if isinstance(read, contention.Snapshot)
                for stamp in (read.started, read.finished, getattr(read, "admitted_finish", read.finished))]
     return max(offsets) - min(offsets) if offsets else 0
+
+
+def _full_length_window(snapshots, observations):
+    """The window of exactly INTERVAL_S that ends at the final read, or None.
+
+    Counters exist only at samples. The opening carries the counters of the
+    oldest sample inside the window, which bounds the window's CPU from
+    below; its time is the window's start, so rates use the full INTERVAL_S.
+    The caller reports the window from that sample to the final read. None
+    when a sample sits exactly on the start (the sliding window is this
+    window) or none lies inside.
+    """
+    current = snapshots[-1]
+    start_ns = current.midpoint_ns - prewindow.INTERVAL_S * 1_000_000_000
+    if any(sample.midpoint_ns == start_ns for sample in snapshots[:-1]):
+        return None
+    inside = next((sample for sample in snapshots[:-1] if sample.midpoint_ns > start_ns), None)
+    if inside is None:
+        return None
+    stamp = Stamp(start_ns + _wall_offset_ns(inside), start_ns, start_ns)
+    opening = replace(inside, started=stamp, finished=stamp, admitted_start_ns=start_ns,
+                      admitted_finish=stamp, host=None, host_error="full-length window opening")
+    return opening, current, [opening, *_window_reads(observations, inside, current)[1:]], inside
 
 
 def _window_reads(reads, opening, current):
@@ -734,8 +764,12 @@ class QuietGuard:
                 latest = self._snapshots[-1] if self._snapshots else None
             self._require_fresh_background(receipt["monotonic_s"], latest)
             self._census(receipt)
-            current = self._cpu_snapshot(admission=True)
+            # The read at run end joins the sample series. The admission
+            # window keeps parity with the admitted guard; the verdict's
+            # windows below use only the series.
+            current = self._cpu_snapshot()
             self._admission_interval(receipt, current)
+            self._cpu_interval(receipt, final=True)
             self._require_fresh_background(self._now(), latest)
             self._require_background_clear()
         except Exception as exc:
@@ -829,8 +863,9 @@ class QuietGuard:
             cutoff = min(self._snapshots[0].started.monotonic_ns, samples[0].started.monotonic_ns)
             self._process_observations = [read for read in self._process_observations if _read_finished_ns(read) >= cutoff]
 
-    def _cpu_interval(self, receipt):
+    def _cpu_interval(self, receipt, *, final=False):
         # Admission's closing read can judge a second batch into its receipt.
+        # final: the newest sample is a read at run end (verify_publication).
         details = receipt.get("cpu_interval") or {"regressed_counters": [], "regressed_noncontaminant": []}
         judged = receipt.setdefault("cpu_intervals", [])
         dwell_ns = prewindow.INTERVAL_S * 1_000_000_000
@@ -869,6 +904,21 @@ class QuietGuard:
                     raise Refused(
                         f"census indeterminate: judged CPU window of {interval_details['elapsed_s']:.1f} s "
                         f"exceeds {self.MAX_WINDOW_S:g} s (background snapshots stalled)")
+                self._record_interval_flags(receipt, interval_details, endpoint, endpoint_busy, lifetime_busy)
+            window = _full_length_window(snapshots, observations) if final else None
+            if window is not None:
+                window_opening, window_end, reads, inside = window
+                interval_details = {"regressed_counters": [], "regressed_noncontaminant": [],
+                                    "full_length_at_final_read": True,
+                                    "opening_counters_monotonic_s": inside.midpoint_ns / 1e9}
+                endpoint, endpoint_busy, lifetime_busy = self._judge_cpu_interval(
+                    window_opening, window_end, interval_details, reads=reads)
+                # Rates use the full INTERVAL_S. The reported window starts at
+                # the sample whose counters open it, so both ends are samples.
+                interval_details["window_start_monotonic_s"] = interval_details["start_monotonic_s"]
+                interval_details["start_monotonic_s"] = endpoint["start_monotonic_s"] = inside.midpoint_ns / 1e9
+                judged.append(interval_details)
+                busy.extend(endpoint_busy + lifetime_busy)
                 self._record_interval_flags(receipt, interval_details, endpoint, endpoint_busy, lifetime_busy)
         finally:
             for row in pending["regressed_counters"]:

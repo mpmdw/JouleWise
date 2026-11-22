@@ -2662,6 +2662,160 @@ class R0AdvisoryAdmissionTest(unittest.TestCase):
         self.assertEqual(len(guard.receipts), receipts)
 
 
+class R0FinalVerdictTest(unittest.TestCase):
+    """Lead ruling after audit 4: the final verdict is self-contained.
+
+    Its windows come only from the sample series (startup, daemon, and the
+    read each publication census takes at run end). It judges every sliding
+    window, the one ending at the final read, and the window of exactly
+    INTERVAL_S ending at the final read. Admission is never its opening.
+    """
+    setUp = R0HostTest.setUp
+    runner = R0HostTest.runner
+    trial = R0PublicationAuditTest.trial
+
+    def schedule(self, *, first_tick, cadence, burst_at=None, admission_at=None):
+        """The frozen fixture with a daemon schedule and a 1.80 CPU-s burst over 4 s."""
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        class Burst(fixture.Fixture):
+            def __init__(self, case, root):
+                super().__init__(case, root)
+                self.next_tick = first_tick
+
+            def move(self, end):
+                # The daemon wakes every `cadence` seconds after its first tick.
+                while self.next_tick <= end:
+                    self.now = self.next_tick
+                    self.next_tick += cadence
+                    self.apply_tree()
+                    self.timer.pulse()
+                self.now = end
+                self.apply_tree()
+
+            def processes(self):
+                gain = 0 if burst_at is None else round(100 * min(1.8, max(0, self.now - burst_at) * 0.45))
+                return [*super().processes(), (fixture.PID, -100, gain, fixture.WORKER, "/fixture/mdworker_shared")]
+
+            def host(self):
+                self.work_started.append("host")
+                self.phase = "host_return"
+                if admission_at is not None:
+                    self.move(admission_at)
+                    self.guard.check(force=True)
+                self.move(self.case.end)
+                return {"status": "pass"}
+
+        return Burst
+
+    def run_model(self, case, model_type):
+        models = []
+
+        def factory(case, root):
+            models.append(model_type(case, root))
+            return models[-1]
+
+        return self.trial(case, factory=factory), models[0]
+
+    @staticmethod
+    def verdict_windows(guard, *, flagged=False):
+        """Windows the verdict judged over the series (never admission windows)."""
+        receipts = [*guard.receipts, *(r["publication_census"] for r in guard.receipts if "publication_census" in r)]
+        return sorted({(w["start_monotonic_s"], w["end_monotonic_s"]) for r in receipts
+                       for w in r.get("cpu_intervals", ()) if w.get("contention_flag") or not flagged})
+
+    @classmethod
+    def verdict_flags(cls, guard):
+        """Series windows the verdict itself flagged."""
+        return cls.verdict_windows(guard, flagged=True)
+
+    def test_audit4_terminal_contention_is_judged_from_the_series_final_read(self):
+        # Audit round 4 terminal_30s.py. The daemon wakes 0.5 s late each
+        # cadence: samples at 45.5 and 61.0 s. The run ends at 75.5 s. A
+        # worker reaches 1.80 CPU-s between 71.5 and 75.5 s. c069985cb opened
+        # the last window at the 30.0 s admission (45.5 s long, 0.040 CPU-s/s)
+        # and published.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        cases = (("quiet", 75.5, None, None), ("normal", 75.5, 71.5, None),
+                 ("extra_admission", 75.5, 71.5, 45.5), ("next_tick", 76.5, 71.5, None))
+        for name, end, burst_at, admission_at in cases:
+            with self.subTest(case=name):
+                result, model = self.run_model(fixture.Case(name, end=end), self.schedule(
+                    first_tick=45.5, cadence=15.5, burst_at=burst_at, admission_at=admission_at))
+                if burst_at is None:
+                    self.assertEqual((result["rc"], result["status"], result["published"], result["flags"]),
+                                     (0, "pass", True, []), result)
+                    continue
+                self.assertEqual((result["rc"], result["status"], result["published"]), (2, "refused", False), result)
+                # The verdict judges the series window ending at the final read,
+                # and that window is flagged. An extra admission at 45.5 s can
+                # flag the same window first; the verdict does not need it.
+                self.assertIn((45.5, end), self.verdict_windows(model.guard))
+                self.assertIn((45.5, end), [(f["interval"]["start_monotonic_s"], f["interval"]["end_monotonic_s"])
+                                            for f in model.guard.contention_flags])
+                if admission_at is None:
+                    self.assertIn((45.5, end), self.verdict_flags(model.guard))
+                self.assertEqual(result["recorded"], result["guard_count"])
+
+    def test_a_burst_at_every_five_second_offset_flags_through_the_verdict(self):
+        # 1.80 CPU-s over 4 s placed at every 5 s offset across the run. Two
+        # schedules: the audit's (daemon 0.5 s late, final read at 75.5 s)
+        # and the regular cadence with an off-grid final read at 74 s, whose
+        # sliding window opens at 30 s (44 s long); only the window of exactly
+        # 30 s ending at 74 s proves a burst in its last 30 s.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        for first_tick, cadence, end in ((45.5, 15.5, 75.5), (45, 15, 74)):
+            with self.subTest(end=end, burst=None):
+                result, _ = self.run_model(fixture.Case(f"quiet_{end}", end=end),
+                                           self.schedule(first_tick=first_tick, cadence=cadence))
+                self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+            for burst_at in range(0, int(end) - 4 + 1, 5):
+                with self.subTest(end=end, burst=burst_at):
+                    result, model = self.run_model(fixture.Case(f"burst_{end}_{burst_at}", end=end), self.schedule(
+                        first_tick=first_tick, cadence=cadence, burst_at=burst_at))
+                    self.assertEqual((result["rc"], result["status"], result["published"]),
+                                     (2, "refused", False), result)
+                    covering = [w for w in self.verdict_flags(model.guard)
+                                if w[0] <= burst_at and burst_at + 4 <= w[1]]
+                    self.assertTrue(covering, (burst_at, self.verdict_flags(model.guard)))
+
+    def test_full_length_window_uses_the_oldest_sample_inside_it(self):
+        # Regular cadence, final read at 74 s. The sliding window ending at
+        # 74 s opens at 30 s; the full-length window is 44-74 s, opened with
+        # the counters of the 45 s sample and reported from that sample, so
+        # every reported endpoint is a sample. 1.50 CPU-s inside it is exactly
+        # 0.05 over 30 s and stays quiet; 1.52 CPU-s flags.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        for total_cs, flagged in ((150, False), (152, True)):
+            with self.subTest(total_cs=total_cs):
+                class Exact(self.schedule(first_tick=45, cadence=15)):
+                    def processes(self):
+                        rows = fixture.Fixture.processes(self)
+                        cs = total_cs if self.now >= 70 else 0
+                        return [*rows, (fixture.PID, -100, cs, fixture.WORKER, "/fixture/mdworker_shared")]
+
+                result, model = self.run_model(fixture.Case(f"exact_{total_cs}", end=74), Exact)
+                windows = [w for r in model.guard.receipts for p in [r.get("publication_census", {})]
+                           for w in p.get("cpu_intervals", ()) if w.get("full_length_at_final_read")]
+                self.assertTrue(windows)
+                # Reported from the 45 s sample whose counters open it; its rate
+                # uses the full 30 s that starts at 44 s.
+                self.assertEqual({(w["start_monotonic_s"], w["end_monotonic_s"], w["elapsed_s"],
+                                   w["window_start_monotonic_s"], w["opening_counters_monotonic_s"])
+                                  for w in windows}, {(45.0, 74.0, 30.0, 44.0, 45.0)})
+                if flagged:
+                    self.assertEqual((result["rc"], result["published"]), (2, False), result)
+                    self.assertIn((45.0, 74.0), self.verdict_flags(model.guard))
+                    busy = [row for f in model.guard.contention_flags for row in f["busy"]
+                            if (f["interval"]["start_monotonic_s"], f["interval"]["end_monotonic_s"]) == (45.0, 74.0)]
+                    self.assertAlmostEqual(busy[0]["cpu_s_per_s"], 1.52 / 30)
+                else:
+                    self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+
+
 class R0ProcessIdentityTest(unittest.TestCase):
     """Audit round 2 MED: the arguments table's PID is not a process identity."""
     trial = R0PublicationAuditTest.trial
