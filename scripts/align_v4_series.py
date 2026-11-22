@@ -20,7 +20,7 @@ if str(ROOT) not in sys.path:
 from scripts import align_v4_kit as w1
 from scripts.align_pilot_kit import raw_json, sha
 from joulewise.align.apple import v4_cadence as cadence
-from joulewise.align.apple.v4_registration import confined_reader
+from joulewise.align.apple.v4_registration import C1_DISPATCH, confined_reader
 from joulewise.align.apple.sampling import episode_seed, leading_seed, turn_seed
 from joulewise.b5 import chain, plan as launch_plan
 
@@ -91,6 +91,10 @@ def _order_configs(order, directory, read):
     return configs
 
 
+def c1_spare_path(stage_id, count):
+    return Path('configs/campaigns') / pack_id('C1') / C1_DISPATCH / stage_id / f'spares-{count}' / 'order_manifest.json'
+
+
 def c1_execution_identity(tree, plan, read, *, staged):
     """Use the writer's argv resolver to seal each stage and the science order."""
     order_bytes, read_errors = {}, []
@@ -116,7 +120,7 @@ def c1_execution_identity(tree, plan, read, *, staged):
         if dispatch.error or len(dispatch.run_ids) != stage.expected_count:
             raise ValueError(f'C1 dispatch {stage.stage_id}: {dispatch.error or "member count differs"}')
         directory = Path(dispatch.config_dir)
-        staged_dir = launch_pack / 'members' / stage.stage_id
+        staged_dir = launch_pack / C1_DISPATCH / stage.stage_id
         if staged and directory != staged_dir:
             raise ValueError(f'C1 dispatch {stage.stage_id} does not use its staged config directory')
         raw = order_bytes[directory / 'order_manifest.json']
@@ -127,11 +131,19 @@ def c1_execution_identity(tree, plan, read, *, staged):
                 launch_plan.relocate_order_entry(row, staged_dir / row['config'], configs[row['config']])
             raw = raw_json(order)
         spares = {}
-        for path in (stage.spare_sets or {}).values():
+        for count, path in (stage.spare_sets or {}).items():
             spare = Path(path)
+            staged_spare = c1_spare_path(stage.stage_id, count)
+            if staged and spare != staged_spare:
+                raise ValueError(f'C1 dispatch {stage.stage_id} does not use its staged spare directory')
             spare_raw = _campaign_file(spare, read)
-            spares[path] = {'sha256': sha(spare_raw),
-                            'configs': _order_configs(json.loads(spare_raw), spare.parent, read)}
+            order = json.loads(spare_raw)
+            spare_configs = _order_configs(order, spare.parent, read)
+            if not staged:
+                for row in order['executed_order']:
+                    launch_plan.relocate_order_entry(row, staged_spare.parent / row['config'], spare_configs[row['config']])
+                spare_raw = raw_json(order)
+            spares[staged_spare.as_posix()] = {'sha256': sha(spare_raw), 'configs': spare_configs}
         orders.append({'stage_id': stage.stage_id, 'ordinal': stage.ordinal,
                        'runs_root_binding': dispatch.runs_root_binding,
                        'sha256': sha(raw), 'run_ids': list(dispatch.run_ids), 'configs': configs, 'spares': spares})

@@ -152,6 +152,16 @@ class Attempt:
 
     def mutate_source(self):
         fixture = self.fixture
+        if fixture == 'with_spare':
+            stage = next(row for row in self.source['stage_graph'] if row['kind'] == 'campaign_collection')
+            relative = Path('configs/campaigns/invented-spares')
+            data = {'run_id': 'invented-spare', 'workload_profile': {'name': 'align_episode'}}
+            put(self.git_dir, relative / 'spare.json', data)
+            path = put(self.git_dir, relative / 'order_manifest.json', {
+                'executed_order': [{'config': 'spare.json', 'run_id': 'invented-spare'}]})
+            stage['spare_retry'] = {'schema_version': chain.SPARE_RETRY_SCHEMA, 'slot': 'start', 'max_spares': 1,
+                                    'spare_sets': [{'count': 1, 'order_manifest': {
+                                        'path': str(relative / path.name), 'sha256': closure.digest(path.read_bytes())}}]}
         if fixture == 'drop_required_derivation_before_build':
             (self.git_dir / DERIVATION).unlink()
         if fixture == 'drop_default_policy_before_build':
@@ -217,7 +227,8 @@ class Attempt:
             return (self.repo / path).read_bytes()
 
         files, self.tree = staging.render_measurement_files(
-            KIT, series.pack_id('C1'), read, lambda path: read(path) if (self.repo / path).is_file() else None)
+            KIT, series.pack_id('C1'), read, lambda path: read(path) if (self.repo / path).is_file() else None,
+            dispatch_dir=closure.C1_DISPATCH)
         for path in sorted((self.repo / KIT).rglob('*')):
             if path.is_file() and path.name != 'plan_tree.json':
                 files[closure.PACK / path.relative_to(self.repo / KIT)] = path.read_bytes()

@@ -133,7 +133,8 @@ def c1_measurement_view(source, session, *, kit, public_inputs=None):
         except FileNotFoundError:
             return None
 
-    files, _ = render_measurement_files(kit, 'align-v4-c1', source_file, optional_file)
+    files, _ = render_measurement_files(kit, 'align-v4-c1', source_file, optional_file,
+                                       dispatch_dir=c1_closure.C1_DISPATCH)
     for name, mode, _ in roots.walk(repo / kit):
         path = Path(name)
         if mode != '040000' and align_v4_series.c1_kit_file(path) and path.name != 'plan_tree.json':
@@ -241,7 +242,7 @@ def measurement_view(source, session, *, kit=KIT, pack_id=PACK_ID):
     return view, pack
 
 
-def render_measurement_files(kit, pack_id, read_file, optional_file):
+def render_measurement_files(kit, pack_id, read_file, optional_file, *, dispatch_dir=Path('members')):
     """Render the exact relocated bytes from source readers, with no writes."""
     pack = Path('configs/campaigns') / pack_id
     files = {}
@@ -273,7 +274,28 @@ def render_measurement_files(kit, pack_id, read_file, optional_file):
         manifest = json.loads(read_file(manifest_path))
         if len(manifest['executed_order']) != stage['expected_count']:
             raise ValueError('collection count differs from dispatched manifest: ' + stage['stage_id'])
-        directory = pack / 'members' / stage['stage_id']
+        directory = pack / dispatch_dir / stage['stage_id']
+        if dispatch_dir != Path('members') and stage.get('spare_retry'):
+            from scripts.align_v4_series import c1_spare_path
+            for spare in stage['spare_retry']['spare_sets']:
+                descriptor = spare['order_manifest']
+                source = plan.canonical_repo_path(descriptor['path'])
+                raw = read_file(source)
+                if hashlib.sha256(raw).hexdigest() != descriptor['sha256']:
+                    raise ValueError(f'spare order manifest digest differs: {source}')
+                target = c1_spare_path(stage['stage_id'], spare['count'])
+                order = json.loads(raw)
+                for row in order['executed_order']:
+                    name = Path(row['config'])
+                    if name.parts != (row['config'],):
+                        raise ValueError(f'invalid spare config name: {name}')
+                    data = read_file(source.parent / name)
+                    path = target.parent / name
+                    files[path] = data
+                    plan.relocate_order_entry(row, path, hashlib.sha256(data).hexdigest())
+                files[target] = encoded_json(order)
+                descriptor.update(path=target.as_posix(), sha256=hashlib.sha256(files[target]).hexdigest())
+
         members = []
         for row in manifest['executed_order']:
             config = manifest_path.parent / row['config']

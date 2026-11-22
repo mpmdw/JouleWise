@@ -821,6 +821,9 @@ def declared_pins(repo, stage):
 
 LEDGER = 'runs/calibration_observation_ledger.jsonl'
 PACK = Path('configs/campaigns/align-v4-c1')
+# The pinned campaign runner probes at most six ancestors of a resolved
+# config directory. Keep its last probe inside S without editing the runner.
+C1_DISPATCH = Path('members/dispatch')
 
 
 def ledger_pin(roots, path, pins):
@@ -1017,12 +1020,12 @@ def load_prepared(view, read):
 
 
 def config_references(data, config, view, runner, *, cache_home=None):
-    def resolve(reference, parent):
+    def resolve(reference, parent, *, base=view.root):
         path = Path(reference)
         if path.is_absolute():
             return view.locate(path)
         try:
-            return view.locate(path)
+            return view.locate(base / path)
         except FileNotFoundError:
             return view.locate(parent / path)
 
@@ -1031,10 +1034,10 @@ def config_references(data, config, view, runner, *, cache_home=None):
     visited = set()
     documents = [(data, config.parent)]
     for ref in filter(None, refs):
-        path = resolve(ref, config.parent)
+        path = resolve(ref, config.parent, base=view.roots.repo)
         documents.append((decode(path.read_bytes()), path.parent))
     if suite:
-        manifest = resolve(suite, config.parent)
+        manifest = resolve(suite, config.parent, base=view.roots.repo)
         annotated = manifest.with_name(f'{manifest.stem}_annotations.json')
         try:
             path = view.locate(annotated)
@@ -1079,6 +1082,7 @@ def config_references(data, config, view, runner, *, cache_home=None):
 
 def check_selections(view, tree, night, pin, *, cache_home=None, environment=None, starting=True):
     """Run the actual argv binders and parsers, then check their selected inputs."""
+    from types import FunctionType, SimpleNamespace
     from joulewise.b5 import chain
     from scripts import reserve_calibration_window_bracket as reservation, run_campaign as runner
 
@@ -1100,6 +1104,13 @@ def check_selections(view, tree, night, pin, *, cache_home=None, environment=Non
         check_ledger(view.locate(candidate), pin, starting=starting)
     if fallback := en.get('JOULEWISE_G2A_PRE_BRACKET_PLAN'):
         view.locate(fallback)
+    # Evaluate the original parser with the values its staged process sees.
+    # The isolated globals leave the pinned module and ambient environment alone.
+    parser = FunctionType(runner.parse_args.__code__, {
+        **runner.parse_args.__globals__,
+        'DEFAULT_CAMPAIGN_POLICY': view.roots.repo / runner.DEFAULT_CAMPAIGN_POLICY.relative_to(runner.ROOT),
+        'os': SimpleNamespace(environ=env),
+    })
     selections = {}
     generated_bound = None
 
@@ -1111,6 +1122,16 @@ def check_selections(view, tree, night, pin, *, cache_home=None, environment=Non
                 raise ValueError(f'invalid dispatched config name: {name}')
             config = view.locate(Path(manifest_path).parent / name)
             config_references(decode(config.read_bytes()), config, view, runner, cache_home=cache_home)
+        directory = view.locate(Path(manifest_path).parent, directory=True)
+        analysis = directory / runner.ANALYSIS_MANIFEST_NAME
+        if analysis.is_file():
+            config_references(decode(view.locate(analysis).read_bytes()), analysis, view, runner)
+        scope = next(root for root in view.roots.allowed if directory.is_relative_to(root))
+        if len(directory.relative_to(scope).parts) < runner.MAX_ANALYSIS_MANIFEST_V3_ANCESTOR_DEPTH:
+            raise ValueError('campaign ancestor lookup would leave the verified roots')
+        _, marker = runner._reachable_analysis_manifest_v3(directory)
+        if marker is not None:
+            config_references(decode(marker.read_bytes()), marker, view, runner)
 
     for stage in chain.stage_plan(tree):
         for command in stage.commands:
@@ -1148,7 +1169,7 @@ def check_selections(view, tree, night, pin, *, cache_home=None, environment=Non
                         if value := getattr(args, field, None):
                             view.locate(value)
                 elif command.tool_id == 'campaign_runner':
-                    args = runner.parse_args(argv, repo_root=view.root, environment=env)
+                    args = parser(argv)
                     check_ledger(view.locate(args.calibration_ledger), pin, starting=starting)
                     view.locate(args.head_pin)
                     if stage.kind == 'bound_derivation':
@@ -1178,16 +1199,9 @@ def check_selections(view, tree, night, pin, *, cache_home=None, environment=Non
                             selected = view.root / args.instrument_calibration_dir
                             if selected != Path(bindings['pre_calibration_dir']):
                                 view.locate(selected, directory=True)
-                        directory = view.locate(args.config_dir, directory=True)
                         check_order(Path(args.config_dir) / 'order_manifest.json')
                         for path in (stage.spare_sets or {}).values():
                             check_order(path)
-                        analysis = directory / runner.ANALYSIS_MANIFEST_NAME
-                        if analysis.is_file():
-                            config_references(decode(view.locate(analysis).read_bytes()), analysis, view, runner)
-                        _, marker = runner._reachable_analysis_manifest_v3(directory, allowed_roots=view.roots.allowed)
-                        if marker is not None:
-                            config_references(decode(marker.read_bytes()), marker, view, runner)
             except SystemExit as exc:
                 raise ValueError(f'{stage.stage_id}: invalid resolved C1 command') from exc
     return selections

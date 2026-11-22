@@ -1256,7 +1256,7 @@ def _check_c1_packet_kit(view, read, packet, tree, night):
                [(row['run_id'], row['config_sha256']) for row in plan['members']]):
         raise ValueError('staged launch plan differs from the materialized kit')
     for projected, member in zip(tree['science'], plan['members'], strict=True):
-        config = pack / 'members' / member['stage_id'] / Path(member['config_path']).name
+        config = pack / c1_closure.C1_DISPATCH / member['stage_id'] / Path(member['config_path']).name
         if projected['config_path'] != config.as_posix():
             raise ValueError('staged science row names a different config')
     observed = series.c1_execution_identity(tree, plan, lambda path: view.locate(path).read_bytes(), staged=True)
@@ -2232,8 +2232,13 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
 
 
 def main(argv=None):
+    def install_cli(session_root, *, c1_handoff=None, **kwargs):
+        if c1_handoff is not None:
+            kwargs['c1_handoff'] = c1_handoff
+        return install(session_root, **kwargs)
+
     return pilot.main(argv, kit=kit.KIT, pack_id=kit.PACK_ID, desk_schema=kit.DESK_SCHEMA,
-                      session_prefix='align-v4-', prepare_fn=prepare, install_fn=install,
+                      session_prefix='align-v4-', prepare_fn=prepare, install_fn=install_cli,
                       desk_fn=desk, install_refusals=(PacketKitMismatch,),
                       prepare_options=(('--window-id', dict(help='frozen series window or D alias; requires series admission')),
                                        ('--extra-sentinels', dict(type=int, default=0, choices=(0, 2),

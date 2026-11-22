@@ -1161,7 +1161,6 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
         f"export PY={_literal(python)}",
         'export PYTHONPATH="$REPO"',
         *(["export JOULEWISE_C1_INPUTS=" + _literal(json.dumps(c1_inputs, sort_keys=True)),
-           "export JOULEWISE_C1_INPUT_ROOTS=" + _literal(json.dumps([c1_inputs["repo"], c1_inputs["stage"]])),
            "export CALIBRATION_LEDGER=" + _literal(bindings["ledger_path"]),
            "export LEDGER_HEAD_PIN=" + _literal(head_pin)]
           if c1_inputs is not None else []),

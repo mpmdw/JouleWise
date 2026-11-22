@@ -18,13 +18,13 @@ ROOT = HERE.parents[2]
 
 
 class C1ClosureTests(unittest.TestCase):
-    def attempt(self):
+    def attempt(self, fixture='valid_24_closure'):
         work = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
         self.enterContext(patch.dict(os.environ, {'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_CONFIG_NOSYSTEM': '1'}))
         for name in ('CALIBRATION_LEDGER', 'LEDGER_HEAD_PIN', 'JOULEWISE_C1_INPUTS'):
             os.environ.pop(name, None)
         subprocess.run(['git', 'clone', '-q', '--bare', HERE / 'suite/history.bundle', work / 'history.git'], check=True)
-        return adapter.Attempt(work, 'valid_24_closure', 'copy', None)
+        return adapter.Attempt(work, fixture, 'copy', None)
 
     def assert_refuses_before_host(self, attempt, detail):
         from joulewise.align.apple import powermode
@@ -100,7 +100,7 @@ class C1ClosureTests(unittest.TestCase):
         self.assertEqual(code, 0, attempt.build_error)
         attempt.deliver(packet)
         for dispatch in packet['c1_kit']['execution']['order_manifests']:
-            relative = closure.PACK / 'members' / dispatch['stage_id'] / 'order_manifest.json'
+            relative = closure.PACK / closure.C1_DISPATCH / dispatch['stage_id'] / 'order_manifest.json'
             path = attempt.stage / relative
             raw = path.read_bytes()
             order = json.loads(raw)
@@ -110,6 +110,19 @@ class C1ClosureTests(unittest.TestCase):
                     path.write_bytes(changed)
                     self.assert_refuses_before_host(attempt, 'staged SHA-256 mismatch')
             path.write_bytes(raw)
+
+    def test_spare_dispatch_uses_the_same_scoped_ancestor_lookup_and_pin(self):
+        attempt = self.attempt('with_spare')
+        code, packet = attempt.build()
+        self.assertEqual(code, 0, attempt.build_error)
+        attempt.deliver(packet)
+        validated = session.c1_arm_preflight(attempt.handoff_file, now_epoch_s=adapter.NOW)
+        first = validated['kit']['execution']['order_manifests'][0]
+        path, signed = next(iter(first['spares'].items()))
+        target = attempt.stage / path
+        self.assertEqual(closure.digest(target.read_bytes()), signed['sha256'])
+        target.write_bytes(target.read_bytes() + b' ')
+        self.assert_refuses_before_host(attempt, 'staged SHA-256 mismatch')
 
     def test_frozen_lite_decisions(self):
         completed = subprocess.run([sys.executable, '-B', str(HERE / 'suite/run.py'),

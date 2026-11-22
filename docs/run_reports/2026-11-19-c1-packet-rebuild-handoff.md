@@ -866,3 +866,13 @@ that a diagnostic packet omitted the closure when the roster check
 refused. The builder now carries the verified transport closure on
 diagnostic packets as well. Both consumers can authenticate the attempt
 and report the sentinel failure before they consider host access.
+
+The first final-head CI run caught the WP14-C whole-file pin on the
+campaign runner, a forwarded optional argument on the W1 CLI route, and
+line offsets in the authentication I/O census. The runner was restored
+byte for byte to the W1 baseline. C1 now prepares each main and spare
+dispatch at a depth that keeps the runner's existing six-level ancestor
+scan inside the staged root. Preflight verifies that depth and evaluates
+the original parser with the staged defaults. The W1 CLI keeps its
+existing argument shape. The authentication census records the same
+eight permitted I/O sites at their moved source lines.

@@ -684,11 +684,8 @@ VALID_WAIVER_SCOPES = {
 }
 
 
-def parse_args(argv: list[str] | None = None, *, repo_root=None, environment=None) -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     arguments = list(sys.argv[1:] if argv is None else argv)
-    environment = os.environ if environment is None else environment
-    default_policy = (Path(repo_root) / DEFAULT_CAMPAIGN_POLICY.relative_to(ROOT)
-                      if repo_root is not None else DEFAULT_CAMPAIGN_POLICY)
     if arguments[:1] == ["repair-campaign-provenance"]:
         repair_parser = argparse.ArgumentParser(
             prog="run_campaign.py repair-campaign-provenance",
@@ -709,9 +706,9 @@ def parse_args(argv: list[str] | None = None, *, repo_root=None, environment=Non
     parser.add_argument("config_dir", nargs="?", help="Directory containing generated JSON configs")
     parser.add_argument("--runs-dir", default="runs", help="Bundle output directory")
     parser.add_argument("--log", help="JSONL campaign log path")
-    parser.add_argument("--calibration-ledger", default=environment.get("CALIBRATION_LEDGER"),
+    parser.add_argument("--calibration-ledger", default=os.environ.get("CALIBRATION_LEDGER"),
                         help="Selected calibration observation ledger")
-    parser.add_argument("--head-pin", default=environment.get("LEDGER_HEAD_PIN"),
+    parser.add_argument("--head-pin", default=os.environ.get("LEDGER_HEAD_PIN"),
                         help="Selected committed calibration ledger head pin")
     parser.add_argument("--dry-run", action="store_true", help="Print plan without invoking benchmarks")
     parser.add_argument(
@@ -746,7 +743,7 @@ def parse_args(argv: list[str] | None = None, *, repo_root=None, environment=Non
     )
     parser.add_argument(
         "--campaign-policy",
-        default=str(default_policy),
+        default=str(DEFAULT_CAMPAIGN_POLICY),
         help=(
             "Hash-bound campaign policy sidecar "
             f"(default: {DEFAULT_CAMPAIGN_POLICY})"
@@ -1398,13 +1395,10 @@ def _prospective_manifest_resolution_error(
 
 def _reachable_analysis_manifest_v3(
     config_dir: Path,
-    *, allowed_roots=(),
 ) -> tuple[Path, Path | None]:
     """Find the nearest bounded real marker that names this physical stage."""
 
     resolved_config_dir = Path(config_dir).resolve()
-    if not allowed_roots and os.environ.get('JOULEWISE_C1_INPUT_ROOTS'):
-        allowed_roots = tuple(Path(root) for root in json.loads(os.environ['JOULEWISE_C1_INPUT_ROOTS']))
     try:
         config_device = resolved_config_dir.stat().st_dev
     except OSError:
@@ -1412,8 +1406,6 @@ def _reachable_analysis_manifest_v3(
     for depth, ancestor in enumerate(
         (resolved_config_dir, *resolved_config_dir.parents)
     ):
-        if allowed_roots and not any(ancestor.is_relative_to(root) for root in allowed_roots):
-            break
         if depth > MAX_ANALYSIS_MANIFEST_V3_ANCESTOR_DEPTH:
             break
         try:
@@ -2452,9 +2444,7 @@ def resolve_sidecar_path(config_path: Path, sidecar_ref: str | None) -> Path | N
     path = Path(sidecar_ref)
     if path.is_absolute():
         return path
-    from joulewise.align.apple.v4_registration import runtime_input_context
-    context = runtime_input_context()
-    root_relative = (Path(context["view"]) if context else ROOT) / path
+    root_relative = ROOT / path
     if root_relative.is_file():
         return root_relative
     config_relative = config_path.parent / path
@@ -2469,9 +2459,7 @@ def resolve_config_ref_path(config_path: Path, ref: str | None) -> Path | None:
     path = Path(ref)
     if path.is_absolute():
         return path
-    from joulewise.align.apple.v4_registration import runtime_input_context
-    context = runtime_input_context()
-    root_relative = (Path(context["view"]) if context else ROOT) / path
+    root_relative = ROOT / path
     if root_relative.is_file():
         return root_relative
     config_relative = config_path.parent / path
