@@ -1110,6 +1110,8 @@ def main(argv=None):
         p.add_argument("--batch-window", help="HH:MM-HH:MM local blackout (default: none, RL-171)")
         if name == "run":
             p.add_argument("--kit-sha256", help="exact kit bytes approved by the ctl launcher")
+            ctl.add_queue_authority_arguments(p)
+            p.add_argument("--attempt-ledger", type=Path, help="ctl launch attempt ledger")
             p.add_argument("--output", type=Path, required=True)
             p.add_argument("--deadline", type=float, required=True)
             p.add_argument("--span-id", help="span identity carried into its close receipt")
@@ -1187,13 +1189,17 @@ def main(argv=None):
                 raise ValueError("ctl kit hash differs from the launcher-approved kit")
             if args.span_id is None:
                 raise ValueError("ctl requires --span-id from the launch ledger")
-        elif args.kit_sha256 is not None:
+            from scripts import launch_cadence_span
+
+            launch_cadence_span.verify_ctl_child(args, kit, sha, sys.modules[__name__])
+        elif (args.kit_sha256 is not None or args.attempt_ledger is not None
+              or any(getattr(args, key) is not None for key in ctl.QUEUE_AUTHORITY_FLAGS)):
             raise ValueError("launcher-approved ctl kit was replaced by a different runner kind")
         if args.span_id is not None and not SPAN_ID_PATTERN.fullmatch(args.span_id):
             raise ValueError("invalid --span-id")
         validate_t0_authority(kit, args.authorized_t0_date, args.t0_not_before, args.t0_before, args.t0_anchor,
                               require_anchor=True, t0_not_before_ns=args.t0_not_before_ns)
-    except ValueError as error:
+    except (OSError, ValueError) as error:
         parser.error(str(error))
     output = args.output.resolve()
     deps = production_deps(inputs=args.inputs, pmset_bin=args.pmset_bin, output=output,

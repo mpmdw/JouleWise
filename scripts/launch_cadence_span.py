@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 from decimal import Decimal
+import hashlib
 import json
 import math
 import os
@@ -257,9 +258,70 @@ def proven_close(ledger, runner, *, require_attestation=True):
     return attempt, epoch_ns
 
 
-def append_attempt(path, ledger, previous, span_id, receipt, span_pattern):
+def require_ctl_pilot_pass(args, kit, span, authority, ledger, runner):
+    """Verify the lead-pinned independent PASS against the latest pilot for this kit."""
+    path = getattr(args, "pilot_hand_read", None)
+    if authority["layout_index"] == 0:
+        if path is not None or "pilot_pass_sha256" in span:
+            raise ValueError("pilot launch cannot carry span 2's hand-read authority")
+        return
+    if path is None:
+        raise ValueError("ctl span 2 requires --pilot-hand-read with the independent PASS")
+    raw = path.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != span["pilot_pass_sha256"]:
+        raise ValueError("pilot hand-read bytes differ from the lead-approved queue hash")
+    proof = json.loads(raw)
+    keys = {"schema", "status", "reviewer", "kit_sha256", "pilot_plan_id", "pilot_receipt_sha256"}
+    if (not isinstance(proof, dict) or set(proof) != keys or proof["schema"] != ctl.PILOT_PASS_SCHEMA
+            or proof["status"] != "PASS" or proof["kit_sha256"] != authority["kit_sha256"]
+            or not isinstance(proof["reviewer"], str) or not proof["reviewer"].strip()):
+        raise ValueError("ctl span 2 needs an independent pilot PASS for this exact kit")
+
+    candidates = []
+    for attempt in ledger["attempts"]:
+        bind = attempt.get("ctl")
+        if isinstance(bind, dict) and bind.get("layout_index") == 0 and bind.get("kit_sha256") == authority["kit_sha256"]:
+            candidates.append(attempt)
+    if not candidates:
+        raise ValueError("pilot hand-read has no matching pilot attempt in the ledger")
+    pilot = latest_attempt({**ledger, "attempts": candidates}, runner.SPAN_ID_PATTERN)
+    if pilot["span_id"] != proof["pilot_plan_id"]:
+        raise ValueError("pilot hand-read does not name the latest pilot attempt for this kit")
+    receipt_raw = Path(pilot["close_receipt"]).read_bytes()
+    if hashlib.sha256(receipt_raw).hexdigest() != proof["pilot_receipt_sha256"]:
+        raise ValueError("pilot hand-read does not bind the pilot's exact close receipt")
+    receipt = json.loads(receipt_raw)
+    expected = {
+        "schema": runner.RECEIPT_SCHEMA, "runner_kind": ctl.RUNNER_KIND, "mock": False,
+        "span_id": pilot["span_id"], "rc": 0, "roster": kit["layout"][0],
+        "legs_finished": len(kit["layout"][0]),
+        "kit": {"campaign_id": kit["campaign_id"], "sha256": authority["kit_sha256"],
+                "frozen_commit": kit["frozen"]["commit"]},
+    }
+    if not isinstance(receipt, dict) or any(type(receipt.get(key)) is not type(value) or receipt[key] != value
+                                           for key, value in expected.items()):
+        raise ValueError("pilot hand-read does not bind a clean native close of the full pilot roster")
+
+
+def verify_ctl_child(args, kit, kit_sha256, runner):
+    """Use the same authority at the child entry before its production dependencies."""
+    if args.attempt_ledger is None:
+        raise ValueError("ctl child requires the launch attempt ledger")
+    document, span, authority = ctl.queued_span(args, kit, kit_sha256, time.time())
+    ledger = json.loads(args.attempt_ledger.read_bytes())
+    current = latest_attempt(ledger, runner.SPAN_ID_PATTERN)
+    if (current["span_id"] != args.span_id or current.get("ctl") != authority
+            or Path(current["close_receipt"]).resolve() != args.output.resolve() / runner.RECEIPT_NAME):
+        raise ValueError("ctl child does not match the published queue-bound launch attempt")
+    require_ctl_pilot_pass(args, kit, span, authority, ledger, runner)
+    ctl.check_queue_window(document, span, kit, time.time())
+
+
+def append_attempt(path, ledger, previous, span_id, receipt, span_pattern, *, ctl_authority=None):
     """Publish the start plan under the desk fence lock before bootstrap."""
     row = {"span_id": span_id, "close_receipt": str(receipt)}
+    if ctl_authority is not None:
+        row["ctl"] = ctl_authority
     if "sequence" in previous:
         row["sequence"] = previous["sequence"] + 1
     else:
@@ -304,11 +366,17 @@ def runner_argv(args, *, kit_sha256=None) -> list[str]:
     if getattr(args, "t0_not_before_ns", None) is not None:
         t0_args += ["--t0-not-before-ns", str(args.t0_not_before_ns)]
     span_id = getattr(args, "span_id", None)
+    authority_args = []
+    if kit_sha256 is not None:
+        for key in (*ctl.QUEUE_AUTHORITY_FLAGS, "attempt_ledger"):
+            value = getattr(args, key, None)
+            if value is not None:
+                authority_args += ["--" + key.replace("_", "-"), str(value)]
     return [str(args.python_bin), str(args.repo / RUNNER), "run", "--kit", str(args.kit), "--output", str(args.output),
             *(["--kit-sha256", kit_sha256] if kit_sha256 is not None else []),
             *(["--legs", legs] if legs else []), *(["--batch-window", window] if window else []),
             "--deadline", str(args.deadline), "--pmset-bin", str(args.pmset_bin),
-            *(["--span-id", span_id] if span_id else []), *t0_args]
+            *(["--span-id", span_id] if span_id else []), *t0_args, *authority_args]
 
 
 def launch(args, *, loaded_kit=None) -> None:
@@ -324,7 +392,7 @@ def launch(args, *, loaded_kit=None) -> None:
     if scripted_ctl:
         ctl.require_issued(kit)
         ctl.require_queue_kit_hash(approved_sha, sha)
-    elif approved_sha is not None:
+    elif approved_sha is not None or any(getattr(args, key, None) is not None for key in ctl.QUEUE_AUTHORITY_FLAGS):
         raise ValueError("queue-approved ctl kit was replaced by a different runner kind")
     ledger_path = getattr(args, "attempt_ledger", None)
     previous_receipt = getattr(args, "previous_close_receipt", None)
@@ -342,6 +410,7 @@ def launch(args, *, loaded_kit=None) -> None:
                                           getattr(args, "t0_not_before", None), getattr(args, "t0_before", None),
                                           getattr(args, "t0_anchor", None), require_anchor=False,
                                           t0_not_before_ns=close_bound)
+        ctl.queued_span(args, kit, sha, time.time())
     if (args.magistrate_pid <= 1 or not base.pid_alive(args.magistrate_pid)
             or not math.isfinite(args.deadline) or args.deadline <= time.time()):
         raise ValueError("live magistrate PID and future finite epoch deadline required")
@@ -369,11 +438,9 @@ def launch(args, *, loaded_kit=None) -> None:
     label = f"com.joulewise.align-r0.{token}"
     domain = f"gui/{os.getuid()}"
     job = root / "r0-launches" / token
-    job.mkdir(parents=True)
     plist = job / f"{label}.plist"
     wrapper = Path(base.__file__).with_name("run_align_r0_launchagent.sh").resolve()
     runner_spec = job / "runner.json"
-    runner_spec.write_text(json.dumps({"kind": RUNNER_KIND, "argv": child_argv}) + "\n")
     arguments = ["/bin/bash", str(wrapper), str(Path(__file__).resolve()),
                  str(args.python_bin), str(root), purpose, str(args.magistrate_pid),
                  str(args.deadline), str(args.exit_wait_seconds), args.pmset_bin,
@@ -388,7 +455,6 @@ def launch(args, *, loaded_kit=None) -> None:
         # Interactive like the night templates (RUN_STATE 274).
         "ExitTimeOut": 2 * base.R1_CLEANUP_GRACE_S + 40, "ProcessType": "Interactive",
     }
-    plist.write_bytes(plistlib.dumps(job_spec))
     with base.fence_lock(root):
         current = base.read_fence(root)
         if current and current["deadline"] > time.time() and base.pid_alive(current["pid"]):
@@ -398,8 +464,20 @@ def launch(args, *, loaded_kit=None) -> None:
             previous, close_ns = proven_close(ledger, span_runner, require_attestation=scripted_ctl)
             if previous["close_receipt"] != previous_receipt or close_ns != close_bound:
                 raise ValueError(f"close proof changed before launch for {previous['span_id']}")
+        authority = None
+        if scripted_ctl:
+            document, row, authority = ctl.queued_span(args, kit, sha, time.time())
+            if any(attempt["span_id"] == span_id for attempt in ledger["attempts"]):
+                raise ValueError("ctl queue plan already has a recorded attempt")
+            require_ctl_pilot_pass(args, kit, row, authority, ledger, span_runner)
+        job.mkdir(parents=True)
+        runner_spec.write_text(json.dumps({"kind": RUNNER_KIND, "argv": child_argv}) + "\n")
+        plist.write_bytes(plistlib.dumps(job_spec))
+        if scripted_ctl:
+            ctl.check_queue_window(document, row, kit, time.time())
+        if ledger_path is not None:
             append_attempt(ledger_path, ledger, previous, span_id, args.output / span_runner.RECEIPT_NAME,
-                           span_runner.SPAN_ID_PATTERN)
+                           span_runner.SPAN_ID_PATTERN, ctl_authority=authority)
         base.write_fence(root, {"purpose": purpose, "pid": args.magistrate_pid, "deadline": args.deadline})
     try:
         subprocess.run([args.launchctl_bin, "bootstrap", domain, str(plist)], check=True, timeout=30)
@@ -469,6 +547,7 @@ def main(argv=None) -> int:
     start.add_argument("--repo", type=Path, required=True)
     start.add_argument("--kit", type=Path, required=True, help="the frozen campaign kit (RL-149 section 2)")
     start.add_argument("--kit-sha256", help="ctl only: SHA-256 from the validated queue span")
+    ctl.add_queue_authority_arguments(start)
     start.add_argument("--legs", help="the queue span's roster, comma-separated kit leg ids")
     start.add_argument("--batch-window", help="HH:MM-HH:MM blackout (default: none, RL-171)")
     start.add_argument("--output", type=Path, required=True)
@@ -494,7 +573,8 @@ def main(argv=None) -> int:
     close = sub.add_parser("close-proof", help="read the latest attempt and verify its own close receipt")
     close.add_argument("--attempt-ledger", type=Path, required=True)
     args = parser.parse_args(argv)
-    for name in ("repo", "kit", "output", "disk_path", "custody_root", "attempt_ledger"):
+    for name in ("repo", "kit", "output", "disk_path", "custody_root", "attempt_ledger",
+                 "queue", "queue_kits_root", "pilot_hand_read"):
         if getattr(args, name, None) is not None:
             setattr(args, name, getattr(args, name).expanduser().resolve())
     if hasattr(args, "python_bin"):

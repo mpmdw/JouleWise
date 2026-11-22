@@ -7,11 +7,14 @@ from __future__ import annotations
 
 from copy import deepcopy
 from decimal import Decimal
+from datetime import date, datetime
 import hashlib
 import json
 import math
+from pathlib import Path
+from zoneinfo import ZoneInfo
 
-from joulewise.cadence import kit as base, kit_v11
+from joulewise.cadence import kit as base, kit_v11, queue
 
 SCHEMA = "joulewise.cadence_campaign_kit.ctl.v1"
 RUNNER_KIND = "cadence-ctl-v1"
@@ -227,7 +230,7 @@ def validate_kit(kit, *, batch_window=base.OS_BATCH_WINDOW):
 
 def require_issued(kit):
     if kit.get("status") != "issued":
-        raise base.KitError(["ctl kit is DRAFT / UNFROZEN: research-lead lm-inst-01 read and lead issue required"])
+        raise base.KitError(["ctl kit is DRAFT / UNFROZEN: RL-197 cold kit review and lead issue required"])
 
 
 def require_queue_kit_hash(approved_sha, actual_sha):
@@ -235,6 +238,53 @@ def require_queue_kit_hash(approved_sha, actual_sha):
         raise base.KitError(["ctl requires --kit-sha256 from the validated queue span"])
     if approved_sha != actual_sha:
         raise base.KitError(["ctl kit hash differs from the queue-approved kit"])
+
+
+PILOT_PASS_SCHEMA = "joulewise.cadence_ctl_pilot_pass.v1"
+QUEUE_AUTHORITY_FLAGS = ("queue", "queue_sha256", "queue_kits_root", "pilot_hand_read")
+
+
+def add_queue_authority_arguments(parser):
+    parser.add_argument("--queue", type=Path, help="ctl only: finite queue named in the lead's issue")
+    parser.add_argument("--queue-sha256", help="ctl only: full queue digest from the lead's issue")
+    parser.add_argument("--queue-kits-root", type=Path, help="ctl only: root for queue-relative kit paths")
+    parser.add_argument("--pilot-hand-read", type=Path, help="ctl span 2: lead-approved independent PASS record")
+
+
+def check_queue_window(document, span, kit, now):
+    if document["halt"] is not None:
+        raise ValueError("ctl queue is halted")
+    if now >= queue.parse_time(document["expires_at"]):
+        raise ValueError("ctl queue expired")
+    earliest = date.fromisoformat(span["not_before"])
+    actual = datetime.fromtimestamp(now, ZoneInfo(kit["span_template"]["timezone"])).date()
+    if actual < earliest:
+        raise ValueError("ctl queue row is before its earliest local date")
+
+
+def queued_span(args, kit, kit_sha256, now):
+    """Resolve the lead's pinned queue to one exact invocation."""
+    location, digest, root = (getattr(args, key, None) for key in QUEUE_AUTHORITY_FLAGS[:3])
+    if location is None or root is None or not isinstance(digest, str) or not base.HEX64.fullmatch(digest):
+        raise ValueError("ctl requires --queue, --queue-sha256 and --queue-kits-root from the lead's issue")
+    raw = location.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != digest:
+        raise ValueError("ctl queue bytes differ from the lead-approved queue hash")
+    document = queue.validate_queue(json.loads(raw))
+    span = next((row for row in document["spans"] if queue.plan_id(row) == args.span_id), None)
+    if span is None:
+        raise ValueError("ctl --span-id does not identify a plan in the approved queue")
+    expected_kit = (root / span["kit"]["path"]).resolve()
+    if args.kit.resolve() != expected_kit or kit_sha256 != span["kit"]["sha256"]:
+        raise ValueError("ctl kit path or digest differs from the selected queue row")
+    roster = args.legs.split(",") if args.legs else None
+    if roster != span["legs"] or roster not in kit["layout"]:
+        raise ValueError("ctl --legs must match the selected queue row and a complete kit roster")
+    check_queue_window(document, span, kit, now)
+    layout = kit["layout"].index(roster)
+    if layout == 1 and not span.get("pilot_pass_sha256"):
+        raise ValueError("ctl span 2 queue has no approved pilot hand-read PASS")
+    return document, span, {"queue_sha256": digest, "kit_sha256": kit_sha256, "layout_index": layout}
 
 
 def apply_instrument_read(kit, *, below_gpu_floor, below_dc_in_floor, return_time_s, decode_end_lag_s,

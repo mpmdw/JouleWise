@@ -177,7 +177,7 @@ class KitTests(unittest.TestCase):
 class LaunchAuthorityTests(unittest.TestCase):
     now = int(local("2026-11-19T00:00"))
     ns = runner.NS_PER_SECOND
-    span_id = "ctl-01-s01"
+    span_id = "cq-ctl-01-s01-a1"
 
     def setUp(self):
         kit = draft()
@@ -198,13 +198,59 @@ class LaunchAuthorityTests(unittest.TestCase):
         self.prior = {"sequence": 1, "span_id": "previous", "close_receipt": str(self.receipt)}
         self.ledger.write_text(json.dumps({"attempts": [self.prior]}))
         self.write_close(self.close_ns)
+        self.queue_path = self.root / "queue.json"
+        self.queue_doc = {
+            "schema": queue.SCHEMA, "queue_id": "cq-ctl-01-s01", "expires_at": "2026-11-20T00:00:00-08:00",
+            "halt": None, "standing_notice": None,
+            "spans": [{"seq": 1, "span_id": "ctl-01-s01", "block_id": "ctl-01", "attempt": 1,
+                       "kit": {"path": self.kit_path.name, "sha256": self.approved_sha},
+                       "legs": kit["layout"][0], "not_before": "2026-11-19"}],
+        }
+        self.write_queue()
         self.argv = ["launch", "--repo", str(runner.ROOT), "--kit", str(self.kit_path), "--output", str(self.output),
                      "--legs", "L001,L002,L003", "--python-bin", sys.executable, "--disk-path", str(self.root),
                      "--custody-root", str(self.fence_root), "--magistrate-pid", "234",
                      "--deadline", str(self.now + 40000), "--launchctl-bin", "synthetic-launchctl",
-                     "--kit-sha256", self.approved_sha]
+                     "--queue", str(self.queue_path), "--queue-sha256", self.queue_sha,
+                     "--queue-kits-root", str(self.root), "--kit-sha256", self.approved_sha]
         self.proof = [("--attempt-ledger", str(self.ledger)), ("--previous-close-receipt", str(self.receipt)),
                       ("--span-id", self.span_id), ("--t0-not-before-ns", str(self.close_ns))]
+
+    def write_queue(self):
+        self.queue_path.write_text(json.dumps(self.queue_doc))
+        self.queue_sha = hashlib.sha256(self.queue_path.read_bytes()).hexdigest()
+        if hasattr(self, "argv"):
+            self.argv[self.argv.index("--queue-sha256") + 1] = self.queue_sha
+
+    def select_second_span(self):
+        row = self.queue_doc["spans"][0]
+        row.update(span_id="ctl-01-s02", legs=[f"L{i:03d}" for i in range(4, 13)])
+        self.argv[self.argv.index("--legs") + 1] = ",".join(row["legs"])
+        self.proof = [(flag, queue.plan_id(row) if flag == "--span-id" else value) for flag, value in self.proof]
+        self.write_queue()
+        return row
+
+    def write_pilot_pass(self, **changes):
+        pilot = self.root / "pilot-close.json"
+        pilot.write_text(json.dumps({
+            "schema": runner.RECEIPT_SCHEMA, "runner_kind": ctl.RUNNER_KIND, "mock": False,
+            "span_id": self.span_id, "rc": 0, "roster": draft()["layout"][0], "legs_finished": 3,
+            "kit": {"campaign_id": "cl-ctl-01", "sha256": self.approved_sha, "frozen_commit": "a" * 40},
+        }))
+        self.ledger.write_text(json.dumps({"attempts": [
+            {"sequence": 1, "span_id": self.span_id, "close_receipt": str(pilot),
+             "ctl": {"layout_index": 0, "kit_sha256": self.approved_sha, "queue_sha256": "d" * 64}},
+            {**self.prior, "sequence": 2},
+        ]}))
+        path = self.root / "pilot-pass.json"
+        path.write_text(json.dumps({
+            "schema": ctl.PILOT_PASS_SCHEMA, "status": "PASS", "reviewer": "independent fixture reviewer",
+            "kit_sha256": self.approved_sha, "pilot_plan_id": self.span_id,
+            "pilot_receipt_sha256": hashlib.sha256(pilot.read_bytes()).hexdigest(), **changes,
+        }))
+        self.queue_doc["spans"][0]["pilot_pass_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        self.write_queue()
+        return path
 
     def write_close(self, epoch_ns):
         self.receipt.write_text(json.dumps({"span_id": "previous", "ended": {"epoch_ns": epoch_ns},
@@ -236,7 +282,8 @@ class LaunchAuthorityTests(unittest.TestCase):
                 yield
 
         pending = {"sequence": 2, "span_id": self.span_id,
-                   "close_receipt": str(self.output / runner.RECEIPT_NAME)}
+                   "close_receipt": str(self.output / runner.RECEIPT_NAME),
+                   "ctl": {"layout_index": 0, "kit_sha256": self.approved_sha, "queue_sha256": self.queue_sha}}
         anchor = (self.close_ns, 1000 * self.ns, 1000 * self.ns)
         child = []
 
@@ -266,6 +313,93 @@ class LaunchAuthorityTests(unittest.TestCase):
         self.assertEqual(child[child.index("--t0-anchor") + 1], ":".join(map(str, anchor)))
         self.assertEqual(child[child.index("--t0-not-before-ns") + 1], str(self.close_ns))
         self.check_child_close_bound(child[2:])
+
+    def test_ctl_rejects_both_roster_swaps_before_recording_attempt(self):
+        with (patch.object(launcher.time, "time", return_value=self.now),
+              patch.object(launcher.base, "pid_alive") as host,
+              patch.object(launcher.subprocess, "run") as service):
+            malformed = ["--legs", "L004,L005,L006,L007,L008,L009,L010,L011,L012"]
+            self.assertIn("must match the selected queue row", self.launch(self.proof, *malformed))
+            self.select_second_span()
+            self.assertIn("must match the selected queue row", self.launch(self.proof, "--legs", "L001,L002,L003"))
+            self.assertIn("does not identify a plan", self.launch(self.proof, "--span-id", "other-plan"))
+            host.assert_not_called()
+            service.assert_not_called()
+        self.assertEqual(json.loads(self.ledger.read_text())["attempts"], [self.prior])
+        self.assertFalse(self.fence_root.exists())
+
+    def test_ctl_rejects_expired_queue_at_selection_and_after_close(self):
+        self.queue_doc["expires_at"] = "2026-11-19T00:00:01-08:00"
+        self.write_queue()
+        actual_close = launcher.proven_close
+        with (patch.object(launcher.time, "time", return_value=self.now + 2) as wall,
+              patch.object(launcher.base, "pid_alive", return_value=True),
+              patch.object(runner.RealClock, "arm_anchor_ns", return_value=(self.close_ns, self.ns, self.ns)),
+              patch.object(launcher.subprocess, "run") as service):
+            self.assertIn("queue expired", self.launch(self.proof))
+            wall.return_value = self.now
+
+            def close_crosses_expiry(*args, **kwargs):
+                result = actual_close(*args, **kwargs)
+                wall.return_value = self.now + 1
+                return result
+
+            with patch.object(launcher, "proven_close", side_effect=close_crosses_expiry):
+                self.assertIn("queue expired", self.launch(self.proof))
+            service.assert_not_called()
+        self.assertEqual(json.loads(self.ledger.read_text())["attempts"], [self.prior])
+        self.assertIsNone(launcher.base.read_fence(self.fence_root))
+
+    def test_ctl_span_two_requires_exact_pilot_pass_and_accepts_valid_proof_after_intervening_span(self):
+        self.select_second_span()
+        validate = ["validate-queue", str(self.queue_path), "--kits-root", str(self.root)]
+        with redirect_stdout(io.StringIO()) as stdout:
+            self.assertEqual(cadence_queue.main(validate), 1)
+            self.assertIn("required for active ctl span 2", stdout.getvalue())
+
+        def bootstrap(command, **_kwargs):
+            self.assertEqual(command[:2], ["synthetic-launchctl", "bootstrap"])
+            fence = launcher.base.read_fence(self.fence_root)
+            launcher.base.write_fence(self.fence_root, {**fence, "pid": 345})
+            self.child = json.loads(Path(command[3]).with_name("runner.json").read_text())["argv"][2:]
+            return subprocess.CompletedProcess(command, 0)
+
+        with (patch.object(launcher.time, "time", return_value=self.now),
+              patch.object(launcher.base, "pid_alive", return_value=True),
+              patch.object(runner.RealClock, "arm_anchor_ns", return_value=(self.close_ns, self.ns, self.ns)),
+              patch.object(launcher.subprocess, "run", side_effect=bootstrap) as service):
+            self.assertIn("no approved pilot hand-read PASS", self.launch(self.proof))
+            path = self.write_pilot_pass(status="HOLD")
+            self.assertIn("requires --pilot-hand-read", self.launch(self.proof))
+            self.assertIn("independent pilot PASS", self.launch(self.proof, "--pilot-hand-read", str(path)))
+            path = self.write_pilot_pass(pilot_receipt_sha256="1" * 64)
+            self.assertIn("exact close receipt", self.launch(self.proof, "--pilot-hand-read", str(path)))
+            path = self.write_pilot_pass(pilot_plan_id="cq-ctl-01-s01-a2")
+            self.assertIn("latest pilot attempt", self.launch(self.proof, "--pilot-hand-read", str(path)))
+            path = self.write_pilot_pass()
+            approved = path.read_bytes()
+            path.write_bytes(approved + b" ")
+            self.assertIn("bytes differ", self.launch(self.proof, "--pilot-hand-read", str(path)))
+            path.write_bytes(approved)
+            service.assert_not_called()
+            self.assertEqual(len(json.loads(self.ledger.read_text())["attempts"]), 2)
+            self.assertIsNone(launcher.base.read_fence(self.fence_root))
+            with redirect_stdout(io.StringIO()):
+                command = self.argv + [item for pair in self.proof for item in pair] + ["--pilot-hand-read", str(path)]
+                self.assertEqual(launcher.main(command), 0)
+            self.assertEqual(len(json.loads(self.ledger.read_text())["attempts"]), 3)
+            # Recheck at the agent-free entry before constructing any production dependency.
+            with patch.object(runner, "production_deps") as work:
+                for changed_path, message in ((path, "pilot hand-read bytes differ"),
+                                              (self.queue_path, "queue bytes differ")):
+                    original = changed_path.read_bytes()
+                    changed_path.write_bytes(original + b" ")
+                    with redirect_stderr(io.StringIO()) as stderr, self.assertRaises(SystemExit):
+                        runner.main(self.child)
+                    self.assertIn(message, stderr.getvalue())
+                    changed_path.write_bytes(original)
+                work.assert_not_called()
+        self.assertFalse(self.output.exists())
 
     def revised_dose_kit(self):
         old = json.loads(self.kit_path.read_bytes())
@@ -582,7 +716,8 @@ class LaunchAuthorityTests(unittest.TestCase):
     def check_child_close_bound(self, argv):
         clock = runner.FakeClock(self.now)
         deps = runner.mock_deps(self.output, clock)
-        with patch.object(runner, "production_deps", return_value=deps):
+        with (patch.object(runner, "production_deps", return_value=deps),
+              patch.object(launcher.time, "time", return_value=self.now)):
             for wall_ns, continuous_ns in ((self.close_ns - 1, 1000 * self.ns),
                                            (self.close_ns, 1000 * self.ns - 1)):
                 with (self.subTest(wall_ns=wall_ns, continuous_ns=continuous_ns),
