@@ -1525,30 +1525,30 @@ class ActiveOrResidentFlagsEndToEndTests(unittest.TestCase):
     MOE = "qwen3-30b-a3b-4bit"
     DENSE = "qwen3-14b-4bit"
 
-    def run_with(self, *, all_points):
+    def run_with(self, *, mixed_dense):
         world = WORLD["two"]
         record = {"row_count": 40, "config_row_count": 14, "path": "withheld/x.csv", "config_key_sha256": "x"}
         real, real_cell = bt.analyse, bt.compute_cell
         state = {}
 
         def wrapper(rows, manifest, archives, **kw):
-            sessions = sorted({r["session_id"] for r in rows},
-                              key=lambda sid: bt.pass_identity(sid, kw.get("listed") or {}, (kw.get("sidecars") or {}).get(sid))["pass_id"])
-            state["first"] = sessions[0]
+            sessions = bt.group_sessions(rows)
+            identities = {sid: bt.pass_identity(sid, kw["listed"], kw["sidecars"].get(sid)) for sid in sessions}
+            model_sessions = bt.passes_by_model(sessions, identities)
+            first_dense, state["refused"] = model_sessions[self.DENSE]
             for name in (self.MOE, self.DENSE):
                 manifest[name]["cell_ids"] = ["cell-" + name]
             for archive in archives:
                 archive["cell_run_codes"] = {"cell-" + self.DENSE: ["audit.c14"]}
-            missing = {s: {self.MOE: record} for s in sessions}
-            missing[sessions[0]][self.DENSE] = record
+            missing = {sid: {self.MOE: record} for sid in model_sessions[self.MOE]}
+            if mixed_dense:
+                missing.setdefault(first_dense, {})[self.DENSE] = record
             withheld = {s: {"rows": [], "missing": m} for s, m in missing.items()}
-            if not all_points:
-                del withheld[sessions[0]]["missing"][self.DENSE]
             return real(rows, manifest, archives, **{**kw, "withheld": withheld})
 
         def refusing(srows, *args, **kw):
             cell = real_cell(srows, *args, **kw)
-            if bt.canon(srows[0]["model_name"]) == self.DENSE and srows[0]["session_id"] != state["first"]:
+            if bt.canon(srows[0]["model_name"]) == self.DENSE and srows[0]["session_id"] == state["refused"]:
                 cell["gross"] = {"status": "refused_below_minimum", "flags": ["audit.refusal"]}
             return cell
 
@@ -1557,7 +1557,7 @@ class ActiveOrResidentFlagsEndToEndTests(unittest.TestCase):
 
     def test_refused_point_without_withheld_flag_contributes(self):
         # 14B: the first pass is withheld-missing and the second is refused.
-        result = self.run_with(all_points=True)
+        result = self.run_with(mixed_dense=True)
         for boundary in bt.BOUNDARIES:
             row = result["h1"][boundary]["passes_mean"]["active_or_resident"]
             self.assertEqual(row["answer"], "missing")
@@ -1565,12 +1565,12 @@ class ActiveOrResidentFlagsEndToEndTests(unittest.TestCase):
             self.assertEqual(row["flags"], ["audit.c14", "audit.refusal", "bytes.withheld_missing"])
 
     def test_only_the_missing_moe_model_without_the_refused_point(self):
-        result = self.run_with(all_points=False)
+        result = self.run_with(mixed_dense=False)
         row = result["h1"]["rails"]["passes_mean"]["active_or_resident"]
         self.assertEqual(row["flags"], ["bytes.withheld_missing"])
 
     def test_output_manifest_keeps_no_cell_ids(self):
-        result = self.run_with(all_points=False)
+        result = self.run_with(mixed_dense=False)
         self.assertTrue(all("cell_ids" not in entry for entry in result["manifest"].values()))
 
 
