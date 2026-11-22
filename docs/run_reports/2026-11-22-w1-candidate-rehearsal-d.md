@@ -91,7 +91,7 @@ report are outside the code/test port. [PR #809 handoff](https://github.com/mpmd
 
 ## Verification
 
-Local results as of 2026-11-22 01:54 PST.
+Local results as of 2026-11-22 02:47 PST.
 All local inputs were synthetic or source/policy files. The checks used
 Python 3.13, isolated temporary directories, offline model caches, the host
 command tripwire and the seat's file-access fence.
@@ -127,7 +127,7 @@ command tripwire and the seat's file-access fence.
 | Part C legacy launcher tests | FAIL (90 tests) |
 | Full synthetic WP22 opt-in | PASS (23 tests) |
 | Ordinary synthetic PREQUAL subset | FAIL |
-| W1 PREQUAL selected probes | IN PROGRESS |
+| W1 PREQUAL selected probes | INCOMPLETE (15 PASS, 1 WARN) |
 
 - Frozen v2 SHA-256 was
   `f35c7bb08814785079008acd3a47a3c85993083da1e7ba731e7d2bee486d768d`.
@@ -163,6 +163,10 @@ command tripwire and the seat's file-access fence.
   run includes legacy clean controls rejected by the newer evaluator
   and evidence-shape mismatches. The #809 builder and W1 port owner
   must adjudicate the legacy fixtures before exact-tree CI.
+- Selected W1 PREQUAL returned its documented incomplete exit 3
+  with 15 passes and one opt-in warning. The arm refused all 504
+  packet mutations, and the full WP22 probe passed within its timeout.
+  The lead runs complete PREQUAL with the signed inputs and E3 record.
 - The full canonical suite requires archived capture fixtures. Local
   verification uses the scoped synthetic runs. Ordinary and W1 PREQUAL
   have additional native or lead-input rows. The workflow launches CI on
@@ -170,7 +174,7 @@ command tripwire and the seat's file-access fence.
   fixture census exited 2 because this seat cannot execute `ps`.
 
 The first two assembled trees reproduce C's tested trees. The end-of-run
-scoped fetch and comparison are recorded in the seat. The scoped component heads matched the recorded snapshot at the latest check.
+scoped fetch and comparison are recorded in the seat. The final refetch matched every component head and both the issued W1 and protected R1 refs.
 The seat's `test-exceptions.tsv` records failed and skipped test IDs
 alongside issued observations where available.
 
@@ -183,7 +187,7 @@ Local `assemble.sh` SHA-256 is `52016ae5ad9933ad6661350b287c08f7ab440d02d932538c
 | Approve the component set | W1 lead and component reviewers | Exact accepted diffs for #826, #839, #831, #813, #904 and #944. Close #826's direct and successor unpack-receipt and digest-only gate, #839's binding, and #813's E1–E17 audit and CI. #944 includes RL-198a. RL-200 §1.3(c) leaves the optional earlier dose edit to the lead if it fits the signing schedule. |
 | Accept #809 | Opus builder, independent executing auditor, W1 lead | Zero false passes on the adopted v3 family and six-column positive supplement, D1–D6, audit-2 regressions and independent admission at the exact head. Keep the seven ported files byte-equal and resolve the legacy W1 launcher failures before rerunning exact-tree CI. Lead records the two protected stored replays of counted Part C and F0 run 11 as verdict and failing check names, with the archived native limit marked unattested. |
 | Command-site gate | #809 builder and W1 lead | All 362 declarations are preserved in D. The live scan has 338 sites, and rejects exactly the 24 inherited upstream rows. Audit and dispose those rows before promotion so the active inventory equals the W1 scan. |
-| R0 binding | #824 builder and auditor, then W1 lead | Admit the R0 sampler on its own lane and bind the authorized R0 record, including `R0.record_sha256`, on the W1 candidate. |
+| R0 binding | #824 builder and auditor, then W1 lead | Admit the R0 sampler on its own lane and bind the authorized R0 record, including `R0.record_sha256`, on the W1 candidate. PR #824 remained draft at `2e0f43c1d5d05fb4c719b241b0d1e62302d7ae95` at close. |
 | R1 fill and anti-hindsight | W1 lead | Incorporate approved #886, RL-189 §2.5 planning release, backfilled slot record from the designated session, DEC2 inputs, unchanged `INCONCLUSIVE` contrast, and both anti-hindsight lines. Run derive-contrast and regenerate on the final source tree. |
 | Step-4 provenance and registration inputs | W1 lead, U3 independent reviewer | Compare exporter, selection and roster blobs at actual step 4 vs signing. Rerun step 4 if any differs. Bind U3 transfer, sources and gate, WP19, R0, battery policy and gate reports. Confirm the allowed publication file list. |
 | Strict closure and hash refresh | W1 lead | Update `joulewise/align/apple/v4_registration.py` executed artifact inventory for `scripts/align_r1_part_c_evidence.py` and any other final paths. Regenerate the full `docs/align/v4/dynamic_closure_trace.json` on the candidate. Re-census the approved refusal sites and imports in `configs/gates/hazard_refusals.json`, then bind the reader-census code and evidence. Refresh strict receipt artifacts, gate A/B hashes, regenerated kit and template member bindings. Regenerate and sign the receipt against the approved candidate pin. |
