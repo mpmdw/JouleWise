@@ -1007,45 +1007,59 @@ def _bundle(root, run_id):
     return None
 
 
+def _phase_edges(events, phase):
+    starts = []
+    ends = []
+    for event in events:
+        if event.get("phase") != phase:
+            continue
+        kind = event.get("event_type")
+        if kind in ("phase_start", "stage_started"):
+            starts.append(event)
+        elif kind in ("phase_end", "stage_completed"):
+            ends.append(event)
+    if len(starts) == len(ends) == 1:
+        return starts[0], ends[0]
+    return None
+
+
 def member_spans(bundle, *, metadata=None, reference=True):
     """Decode-phase and idle-baseline spans of a bundle in the controller's monotonic ns."""
     if metadata is None:
         metadata = read_json(bundle / "metadata.json", {}) or {}
     try:
         pair = metadata["uncertainty_evidence"]["clock_anchor"]["clock_stamps"]["sampling_started"]
-        epoch, mono = float(pair["epoch_s"]), float(pair["monotonic_before_s"])
+        epoch, mono = pair["epoch_s"], pair["monotonic_before_s"]
     except (KeyError, TypeError, ValueError):
         return None
 
-    def mapped(wall):
-        return int(round((mono + (float(wall) - epoch)) * 1_000_000_000))   # Addendum 7 N1: nearest ns
-    spans = {}
     try:
-        lines = _read_text(bundle / "events.jsonl").splitlines()
+        events = [json.loads(line) for line in _read_text(bundle / "events.jsonl").splitlines() if line.strip()]
     except FileNotFoundError:
         return None
-    for line in lines:
-        if not line.strip():
-            continue
-        event = json.loads(line)
-        kind, phase = event.get("event_type"), event.get("phase")
-        meta = event.get("metadata") or {}
-        if kind == "phase_start" and phase == "tokenize":
-            spans["request_start"] = mapped(event["timestamp_s"])
-        if phase == "decode" and kind == "phase_start":
-            spans["decode_start"] = mapped(event["timestamp_s"])
-        elif phase == "decode" and kind == "phase_end":
-            spans["decode_end"] = mapped(event["timestamp_s"])
-        elif phase == "idle_baseline" and kind == "stage_started":
-            spans["idle_start"] = int(meta["monotonic_ns"]) if is_number(meta.get("monotonic_ns")) \
-                else mapped(event["timestamp_s"])
-        elif phase == "idle_baseline" and kind == "stage_completed":
-            spans["idle_end"] = mapped(event["timestamp_s"])
-    if "decode_start" not in spans or "decode_end" not in spans or (reference and "request_start" not in spans):
+
+    def mapped(event):
+        own = event.get("metadata", {}).get("monotonic_ns")
+        return own if type(own) is int else round((mono + event["timestamp_s"] - epoch) * 1_000_000_000)
+
+    def span(phase):
+        edges = _phase_edges(events, phase)
+        if edges is None:
+            return None
+        start, end = map(mapped, edges)
+        return [start, end] if end > start else None
+
+    decode = span("decode")
+    idle = span("idle_baseline")
+    try:
+        tokenize = span("tokenize")
+    except (KeyError, TypeError, ValueError, ArithmeticError):
+        if reference:
+            raise
+        tokenize = None
+    if decode is None or idle is None or (reference and tokenize is None):
         return None
-    return {"decode_ns": [spans["decode_start"], spans["decode_end"]],
-            "request_ns": [spans["request_start"], spans["decode_end"]] if "request_start" in spans else None,
-            "idle_ns": [spans["idle_start"], spans["idle_end"]] if "idle_start" in spans and "idle_end" in spans else None}
+    return {"decode_ns": decode, "idle_ns": idle, "request_ns": [tokenize[0], decode[1]] if tokenize else None}
 
 
 def load_archive(root):
@@ -1182,10 +1196,10 @@ def decode_anchor_bound(archive, run_id, *, plain=None, metadata=None, native=No
         if operative + 1e-12 < mint:
             raise ValueError("operative bound narrows member calibration")
         events = [json.loads(line) for line in _read_text(plain / "events.jsonl").splitlines() if line.strip()]
-        starts = [e["timestamp_s"] for e in events if e.get("phase") == "decode" and e.get("event_type") == "phase_start"]
-        ends = [e["timestamp_s"] for e in events if e.get("phase") == "decode" and e.get("event_type") == "phase_end"]
-        if len(starts) != 1 or len(ends) != 1:
-            raise ValueError("one decode phase required")
+        edges = _phase_edges(events, "decode")
+        if edges is None or tuple(edge["event_type"] for edge in edges) != ("phase_start", "phase_end"):
+            raise ValueError("one runtime decode phase required")
+        start, end = (edge["timestamp_s"] for edge in edges)
         rails = (metadata.get("device") or {}).get("rail_manifest")
         if not isinstance(rails, list) or not rails:
             raise ValueError("anchor rail manifest missing")
@@ -1211,11 +1225,11 @@ def decode_anchor_bound(archive, run_id, *, plain=None, metadata=None, native=No
             intervals.append((a + shift, z + shift, math.fsum(v[2] for v in group.values())))
         if native is not None:
             _verify_native_trace(intervals, native)
-        anchor = anchor_envelope(intervals, (starts[0], ends[0]), common, operative + span)
+        anchor = anchor_envelope(intervals, (start, end), common, operative + span)
         if include_decode:
             origin = intervals[0][1]
             shifted = [(a - origin, z - origin, power) for a, z, power in intervals]
-            return anchor, _interval_energy(shifted, starts[0] - origin, ends[0] - origin)
+            return anchor, _interval_energy(shifted, start - origin, end - origin)
         return anchor
 
 
@@ -1333,7 +1347,7 @@ def dc_join(archive, run_id, *, reference=False, spans=None):
                     f"decode marker not evaluated: selected bundle missing (run {run_id})"}
         try:
             with _readable_bundle(bundle, Path(str(archive["root"]) + ".desk") / "compression.jsonl") as plain:
-                spans = member_spans(plain)
+                spans = member_spans(plain, reference=reference)
         except (OSError, ValueError, KeyError, TypeError):
             spans = None
         if spans is None:
@@ -1396,11 +1410,12 @@ def dc_join(archive, run_id, *, reference=False, spans=None):
             request_energy, n_request = integrate(host, watts, request[0], request[1])
             if request_energy is not None:
                 request_battery = battery_terms(stream, request, base)
-                if request_battery["status"] != "ok":
+                if request_battery["status"] != "ok" and reference:
                     failure = request_battery
                     continue
-                result.update({"request_energy_j": request_energy + request_battery["battery_gross_j"], "request_span_s": (request[1] - request[0]) / 1e9,
-                               "request_samples": n_request})
+                if request_battery["status"] == "ok":
+                    result.update({"request_energy_j": request_energy + request_battery["battery_gross_j"],
+                                   "request_span_s": (request[1] - request[0]) / 1e9, "request_samples": n_request})
         if spans["idle_ns"]:
             base = [spans["idle_ns"][0] + offset, spans["idle_ns"][1] + offset]
             if base[1] > base[0]:
@@ -1483,7 +1498,7 @@ def _science_inputs(archive, row, registered_model, *, synthetic=False):
         if not metadata or metadata.get("workload_observed", {}).get("output_token_count") != PRINTED_TOKENS:
             raise ValueError("runtime-observed output count must be 512")
         spans = member_spans(plain, metadata=metadata, reference=False)
-        if not spans or not spans["idle_ns"] or any(spans[k][1] <= spans[k][0] for k in ("decode_ns", "idle_ns")):
+        if spans is None:
             raise ValueError("member decode or idle span unavailable")
         stored = json.loads(_read_text(root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json")))
         # Dispatch can raise before the reducer returns a structured failure.

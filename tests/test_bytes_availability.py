@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from contextlib import chdir, contextmanager, redirect_stderr, redirect_stdout
 import errno
+from fnmatch import fnmatchcase
 import hashlib
 import io
 import json
@@ -14,7 +15,9 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from joulewise.desk_restore import StorageStop
+from joulewise import environment_admission
+from joulewise.axi_decode_config import RequestDescriptor, RequestRoster
+from joulewise.desk_restore import RestoreRefused, StorageStop, readable_run
 from joulewise.b6.acceptance import evidence_from_archive
 from scripts import bytes_analyze, bytes_commitment, bytes_twin
 from tests import test_bytes_agreement as agreement
@@ -47,18 +50,51 @@ def file_fault(path, fault):
             path.write_bytes(original)
 
 
+def traced_input(fixture, path):
+    if path.is_relative_to(fixture.archive):
+        path = path.relative_to(fixture.archive)
+        if path.parts[:2] in {("sources", "claim-runs"), ("sources", "bound-runs")}:
+            return Path("bundle", *path.parts[3:]).as_posix()
+        return path.as_posix()
+    if path.is_relative_to(fixture.root):
+        return path.relative_to(fixture.root).as_posix()
+    if path.is_relative_to(agreement.ROOT / "configs"):
+        return path.relative_to(agreement.ROOT).as_posix()
+    return None
+
+
+@contextmanager
+def trace_primary_inputs(fixture, *, suppress=()):
+    seen = set()
+    original = Path.open
+
+    def tracked(path, mode="r", *args, **kwargs):
+        if mode.startswith("r"):
+            key = traced_input(fixture, path)
+            if key is not None:
+                seen.add(key)
+            if path in suppress:
+                raise FileNotFoundError("synthetic mirror read intercepted")
+        return original(path, mode, *args, **kwargs)
+
+    with patch.object(Path, "open", tracked):
+        yield seen
+
+
 class AvailabilityFixture:
-    def __init__(self, root, timing):
+    def __init__(self, root, timing, *, complete_fit=False):
         self.root = root
         self.manifest_path = root / "manifest.json"
+        collected = {SESSION, "bytes-s1-p1"} if complete_fit else {SESSION}
         uncollected = tuple(f"bytes-s{subpack}-p{p}" for subpack in range(1, 7) for p in (1, 2)
-                            if f"bytes-s{subpack}-p{p}" != SESSION)
+                            if f"bytes-s{subpack}-p{p}" not in collected)
         with patch("os.fsync", return_value=None):
             self.manifest = agreement.archive_campaign(
-                root, non_claim=False, release="none", subpack_sessions=True,
+                root, non_claim=False, release="fit" if complete_fit else "none", subpack_sessions=True,
                 uncollected_sessions=uncollected, anchor_profile="narrow" if timing == "native" else None)
         agreement._write(self.manifest_path, self.manifest)
-        self.archive = Path(self.manifest["sessions"][0]["archive"])
+        self.archives = [Path(session["archive"]) for session in self.manifest["sessions"]]
+        self.archive = next(archive for archive in self.archives if archive.name == SESSION)
         self.member = agreement._run_ids(self.archive, self.manifest["models"], MODEL)[20]
         self.bundle = self.archive / "sources/claim-runs" / self.member
         # The library selects dispatch by reading a finalized summary when one exists.
@@ -68,8 +104,9 @@ class AvailabilityFixture:
             SimpleNamespace(**member, status="succeeded", config_key="fixture") for member in roster])])
         self.private = root / "private-keys/bytes/blinding"
         self.keys = root / "released-keys/bytes/blinding"
-        for path in self.private.glob("*.json"):
-            shutil.copyfile(path, self.keys / path.name)
+        if not complete_fit:
+            for path in self.private.glob("*.json"):
+                shutil.copyfile(path, self.keys / path.name)
         self.export = self.export_path(root / "export")
         self.stream = self.archive / "sources/night-custody/hazards/meter/stream-001.jsonl"
 
@@ -100,12 +137,19 @@ class AvailabilityFixture:
                                          evidence=self.evidence, pack_registration=None if read_registration else pack)
         return self.export_path(destination), private / ("bytes" if grouped else SESSION) / "blinding"
 
-    def compare(self, test, export, keys, scratch, *, stage="fit", expect_kept=None):
+    def compare(self, test, export, keys, scratch, *, stage="fit", expect_kept=None, fit_cli=False):
         modes = {"fit": "1", "heldout": "2", "blinded": "blinded"}
         try:
-            manifest = agreement.ba.validate_manifest(agreement.ba.read_json(self.manifest_path))
-            passes, _ = bytes_analyze._reduce([export.parents[1]], manifest, stage, keys)
-            primary_status = 0
+            if fit_cli:
+                primary_out = scratch / "primary"
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    primary_status = bytes_analyze.main(["--export", str(export.parents[1]), "--manifest",
+                        str(self.manifest_path), "--key-dir", str(keys), "--stage", "fit", "--out", str(primary_out)])
+                passes = agreement.load(primary_out / "fit_pass_estimates.json")
+            else:
+                manifest = agreement.ba.validate_manifest(agreement.ba.read_json(self.manifest_path))
+                passes, _ = bytes_analyze._reduce([export.parents[1]], manifest, stage, keys)
+                primary_status = 0
         except (StorageStop, OSError, ValueError, KeyError, TypeError, AttributeError):
             primary_status = 1
         output = scratch / "twin.json"
@@ -117,7 +161,8 @@ class AvailabilityFixture:
         else:
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 twin_status = bytes_twin.main(["--export-dir", str(export.parents[1]), "--manifest", str(self.manifest_path),
-                    "--archive", str(self.archive), "--key-dir", str(keys), "--stage", modes[stage], "--out", str(output)])
+                    *[arg for archive in self.archives for arg in ("--archive", str(archive))],
+                    "--key-dir", str(keys), "--stage", modes[stage], "--out", str(output)])
             twin = agreement.load(output) if twin_status == 0 else None
         recorder = agreement.Recorder()
         recorder.exact(stage, "stage", "refusal", primary_status, twin_status)
@@ -152,6 +197,165 @@ class AvailabilityFixture:
 
 
 class BytesAvailabilityTests(unittest.TestCase):
+    def assert_contract_covers_reads(self, actual, phase):
+        patterns = {pattern for row in CONTRACT.values() if row["phase"] in {phase, "both"}
+                    for pattern in row.get("read_paths", ())}
+        uncovered = sorted(path for path in actual if not any(fnmatchcase(path, pattern) for pattern in patterns))
+        self.assertEqual(uncovered, [])
+
+    def test_contract_covers_primary_export_and_conditional_reducer_reads(self):
+        with tempfile.TemporaryDirectory(prefix="bytes-contract-reads-") as directory:
+            root = Path(directory)
+            fixture = AvailabilityFixture(root / "base", "mock")
+            registered = fixture.root / "registration/acceptance.json"
+            registered.parent.mkdir(exist_ok=True)
+            registered.touch()
+            # Exercise the producer without the fixture's precomputed evidence.
+            with patch("os.fsync", return_value=None), trace_primary_inputs(fixture) as opened:
+                agreement.export_runs.export(fixture.archive, {}, registered.parent, fixture.root / "private-keys",
+                    fixture.root / "read-trace-export", pack_registration={"blinding_group": "bytes", "bytes_pass": 1})
+            self.assertIn("registration/acceptance.json", opened)
+            self.assert_contract_covers_reads(opened, "export")
+            reads = set(opened)
+
+            def fit():
+                passes, _ = bytes_analyze._reduce([fixture.export.parents[1]], fixture.manifest, "fit", fixture.keys)
+                self.assertTrue(passes)
+                return passes
+
+            suite = fixture.bundle / "suite_manifest.json"
+            suite.write_bytes(b"{")
+            with trace_primary_inputs(fixture) as opened:
+                passes = fit()
+            self.assertIn("bundle/suite_manifest.json", opened)
+            self.assert_contract_covers_reads(opened, "analysis")
+            reads.update(opened)
+            self.assertTrue(any(fixture.member in row.get("kept_runs", ()) for row in passes))
+            fixture.compare(self, fixture.export, fixture.keys, root, expect_kept=True)
+            suite.unlink()
+
+            config_path = fixture.bundle / "config.json"
+            metadata_path = fixture.bundle / "metadata.json"
+            config = agreement.load(config_path)
+            metadata = agreement.load(metadata_path)
+            native_config = {**config, "hardware_target": {**config["hardware_target"], "telemetry_backend": "powermetrics"}}
+            native_metadata = {**metadata, "adapters": {**metadata.get("adapters", {}), "telemetry": {"name": "powermetrics"}},
+                               "environment_admission": {"attempts": [{"attempt": 1, "start_s": 0, "end_s": 1,
+                                                                       "baseline": {"duration_s": 1}}]},
+                               "campaign_policy": {"sha256": "0" * 64}}
+            agreement._write(config_path, native_config)
+            agreement._write(metadata_path, native_metadata)
+            policies = fixture.root / "configs/campaign_policies"
+            native_paths = {"bundle/rich_telemetry_idle.jsonl": fixture.bundle / "rich_telemetry_idle.jsonl",
+                            "bundle/raw/powermetrics_idle.plist": fixture.bundle / "raw/powermetrics_idle.plist",
+                            "configs/campaign_policies/test.json": policies / "test.json"}
+            for path in native_paths.values():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+            with patch.object(environment_admission, "REGISTERED_POLICY_DIR", policies), trace_primary_inputs(fixture) as opened:
+                fit()
+            self.assertTrue(native_paths.keys() <= opened)
+            self.assert_contract_covers_reads(opened, "analysis")
+            reads.update(opened)
+            with patch.object(environment_admission, "REGISTERED_POLICY_DIR", policies):
+                fixture.compare(self, fixture.export, fixture.keys, root, expect_kept=True)
+            for path in native_paths.values():
+                path.unlink()
+
+            roster = RequestRoster((RequestDescriptor(0, "synthetic", "prompt_text", "0" * 64, "synthetic", 512),))
+            axi = agreement.load(agreement.ROOT / "tests/fixtures/axi_ap_spec/draft_spec_on.json")
+            axi["model"]["name"], axi["run_id"] = MODEL, fixture.member
+            axi["batch_policy"]["request_roster_sha256"] = roster.sha256
+            agreement._write(config_path, axi)
+            agreement._write(metadata_path, {**metadata, "event_semantics_version": "joulewise.events.v2"})
+            agreement._write(fixture.bundle / "summary_metrics.json", {"summary_provenance": {"reducer_version": "0.6.2"}})
+            (fixture.bundle / "events.jsonl").write_bytes(b"")
+            (fixture.bundle / "request_roster.json").write_bytes(roster.to_bytes())
+            outputs = fixture.bundle / "outputs"
+            outputs.mkdir(exist_ok=True)
+            request_files = {outputs / "requests.jsonl", outputs / "request_tokens.jsonl"}
+            mirrors = {outputs / "response.txt", outputs / "tokens.jsonl"}
+            for path in request_files | mirrors:
+                path.touch()
+            with trace_primary_inputs(fixture, suppress=mirrors) as opened:
+                fit()
+            event_v2_paths = {traced_input(fixture, path) for path in request_files | mirrors}
+            self.assertTrue(event_v2_paths | {"bundle/request_roster.json"} <= opened)
+            self.assert_contract_covers_reads(opened, "analysis")
+            reads.update(opened)
+            with trace_primary_inputs(fixture, suppress=mirrors):
+                fixture.compare(self, fixture.export, fixture.keys, root, expect_kept=False)
+            print(f"\nBYTES contract read trace: {len(reads)} normalized input paths covered", flush=True)
+
+    def test_run_report_matches_contract_rows(self):
+        report = (agreement.ROOT / "docs/run_reports/2026-11-22-bytes-p1m1.md").read_text()
+        documented = {line for line in report.splitlines() if line.startswith("| `")}
+        for row in CONTRACT.values():
+            fields = [f'`{row["path"]}`', row["phase"], row["primary"], *row["faults"].values(), row["flags"]]
+            self.assertIn("| " + " | ".join(field.replace("|", r"\|") for field in fields) + " |", documented)
+
+    def test_required_phase_pairs_follow_primary_marker_and_clock_rules(self):
+        phases = ("idle_baseline", "tokenize", "decode")
+        metadata = {"uncertainty_evidence": {"clock_anchor": {"clock_stamps": {"sampling_started": {
+            "monotonic_before_s": 10, "epoch_s": 100}}}}}
+        valid = [
+            {"phase": phase, "event_type": kind, "timestamp_s": 100 + 2 * i + j, "metadata": {}}
+            for i, phase in enumerate(phases)
+            for j, kind in enumerate(("stage_started", "stage_completed") if i == 0 else ("phase_start", "phase_end"))
+        ]
+        valid[1]["metadata"] = {"monotonic_ns": 11_250_000_000}
+        with tempfile.TemporaryDirectory(prefix="bytes-phase-pairing-") as directory:
+            bundle = Path(directory)
+
+            def spans(events, *, reference=True):
+                (bundle / "events.jsonl").write_text("".join(json.dumps(event) + "\n" for event in events))
+                return bytes_twin.member_spans(bundle, metadata=metadata, reference=reference)
+
+            expected = {phase: agreement.ba._event_span(valid, phase, metadata) for phase in phases}
+            self.assertEqual(spans(valid), {"idle_ns": expected["idle_baseline"], "decode_ns": expected["decode"],
+                                           "request_ns": [expected["tokenize"][0], expected["decode"][1]]})
+            for i, phase in enumerate(phases):
+                start, end = 2 * i, 2 * i + 1
+                duplicate_alias = {**valid[end], "event_type": "phase_end" if i == 0 else "stage_completed"}
+                variants = {"duplicate start": [*valid, valid[start]], "duplicate end": [*valid, valid[end]],
+                            "duplicate alias": [*valid, duplicate_alias],
+                            "missing start": valid[:start] + valid[start + 1:],
+                            "missing end": valid[:end] + valid[end + 1:],
+                            "nonpositive duration": valid[:end] + [{**valid[end], "metadata": {},
+                                "timestamp_s": valid[start]["timestamp_s"]}] + valid[end + 1:]}
+                for fault, events in variants.items():
+                    with self.subTest(phase=phase, fault=fault):
+                        with self.assertRaises(agreement.ba.AnalysisError):
+                            agreement.ba._event_span(events, phase, metadata)
+                        self.assertIsNone(spans(events))
+                        science = spans(events, reference=False)
+                        if phase == "tokenize":
+                            self.assertEqual(science, {"idle_ns": expected["idle_baseline"],
+                                                       "decode_ns": expected["decode"], "request_ns": None})
+                        else:
+                            self.assertIsNone(science)
+
+    @unittest.skipUnless(shutil.which("zstd"), "compressed availability regression needs zstd")
+    def test_plain_precedence_only_applies_outside_verified_restore(self):
+        with tempfile.TemporaryDirectory(prefix="bytes-compressed-siblings-") as directory:
+            archive = Path(directory) / "archive"
+            bundle = archive / "sources/claim-runs/synthetic"
+            bundle.mkdir(parents=True)
+            config = bundle / "config.json"
+            config.write_text("{}")
+            (bundle / "metadata.json").write_text("{}")
+            events = bundle / "events.jsonl"
+            events.write_text("{}\n")
+            journal = compress_member(config, archive)
+            config.write_text("{}")
+            with readable_run(bundle, compression_records=journal) as primary, bytes_twin._readable_bundle(bundle, journal) as twin:
+                self.assertEqual((primary, twin), (bundle, bundle))
+            compress_member(events, archive)
+            for reader, refusal in ((lambda: readable_run(bundle, compression_records=journal), RestoreRefused),
+                                     (lambda: bytes_twin._readable_bundle(bundle, journal), bytes_twin.StorageStop)):
+                with self.assertRaisesRegex(refusal, "plain and compressed siblings are ambiguous"), reader():
+                    self.fail("verified restore accepted duplicate logical inputs")
+
     def exercise(self, timing, rows, *, phases=PHASES, faults=FAULTS, expect_kept=None):
         compared = checked = export_stops = 0
         with tempfile.TemporaryDirectory(prefix=f"bytes-availability-{timing}-") as directory:
@@ -211,6 +415,43 @@ class BytesAvailabilityTests(unittest.TestCase):
 
     def test_unavailable_native_trace_keeps_explicit_synthetic_summary(self):
         self.exercise("native", ["trace"], phases=("after_export",), faults=("absent", "half"), expect_kept=True)
+
+    def test_duplicate_decode_end_drops_member_in_both_fit_clis(self):
+        for timing in ("mock", "native"):
+            with self.subTest(timing=timing), tempfile.TemporaryDirectory(prefix="bytes-duplicate-phase-") as directory:
+                root = Path(directory)
+                fixture = AvailabilityFixture(root / "base", timing, complete_fit=True)
+                clean = root / "clean"
+                clean.mkdir()
+                count = fixture.compare(self, fixture.export, fixture.keys, clean, expect_kept=True, fit_cli=True)
+                path = fixture.bundle / "events.jsonl"
+                lines = path.read_bytes().splitlines(keepends=True)
+                index, = [i for i, line in enumerate(lines) if (event := json.loads(line)).get("phase") == "decode"
+                          and event.get("event_type") == "phase_end"]
+                lines.insert(index, lines[index])
+                path.write_bytes(b"".join(lines))
+                damaged = root / "duplicate"
+                damaged.mkdir()
+                count += fixture.compare(self, fixture.export, fixture.keys, damaged, expect_kept=False, fit_cli=True)
+                print(f"\nBYTES {timing} duplicate decode end: {count} comparisons, zero above bar", flush=True)
+
+    @unittest.skipUnless(shutil.which("zstd"), "compressed availability regression needs zstd")
+    def test_absent_last_compressed_input_drops_member_without_refusing_fit(self):
+        with tempfile.TemporaryDirectory(prefix="bytes-absent-compressed-") as directory:
+            root = Path(directory)
+            fixture = AvailabilityFixture(root / "base", "mock", complete_fit=True)
+            path = fixture.bundle / "events.jsonl"
+            journal = compress_member(path, fixture.archive)
+            clean = root / "clean"
+            clean.mkdir()
+            count = fixture.compare(self, fixture.export, fixture.keys, clean, expect_kept=True, fit_cli=True)
+            path.with_suffix(".jsonl.zst").unlink()
+            self.assertTrue(journal.is_file())
+            self.assertFalse(any(fixture.bundle.rglob("*.zst")))
+            damaged = root / "missing"
+            damaged.mkdir()
+            count += fixture.compare(self, fixture.export, fixture.keys, damaged, expect_kept=False, fit_cli=True)
+            print(f"\nBYTES last compressed input missing: {count} comparisons, zero above bar", flush=True)
 
     def test_bundle_restored_after_export_supplies_unblinded_science_record(self):
         for timing in ("mock", "native"):
@@ -405,8 +646,8 @@ class BytesAvailabilityTests(unittest.TestCase):
                 member = fixture.bundle / "events.jsonl"
                 compress_member(member, fixture.archive)
                 journal = Path(str(fixture.archive) + ".desk") / "compression.jsonl"
-                for file in (journal, member.with_suffix(".jsonl.zst")):
-                    for fault in CONTRACT["compression"]["faults"]:
+                for row, file in (("compression", journal), ("compressed_member", member.with_suffix(".jsonl.zst"))):
+                    for fault in CONTRACT[row]["faults"]:
                         for phase in PHASES:
                             with self.subTest(timing=timing, file=file.name, fault=fault, phase=phase):
                                 checked += 1

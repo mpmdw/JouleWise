@@ -42,7 +42,9 @@
         "tests.test_bytes_availability.BytesAvailabilityTests.test_mock_timing_control_faults": 380.0,
         "tests.test_bytes_availability.BytesAvailabilityTests.test_native_timing_control_faults": 380.0,
         "tests.test_bytes_availability.BytesAvailabilityTests.test_mock_timing_admission_faults": 110.0,
-        "tests.test_bytes_availability.BytesAvailabilityTests.test_native_timing_admission_faults": 110.0
+        "tests.test_bytes_availability.BytesAvailabilityTests.test_native_timing_admission_faults": 110.0,
+        "tests.test_bytes_availability.BytesAvailabilityTests.test_duplicate_decode_end_drops_member_in_both_fit_clis": 130.0,
+        "tests.test_bytes_availability.BytesAvailabilityTests.test_absent_last_compressed_input_drops_member_without_refusing_fit": 85.0
       },
       "remainder_weight_seconds": 240.0
     },

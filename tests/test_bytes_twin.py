@@ -769,7 +769,10 @@ class DeskBundleReadTests(unittest.TestCase):
             bundle = Path(tmp)
             metadata = {"uncertainty_evidence": {"clock_anchor": {"clock_stamps": {
                 "sampling_started": {"epoch_s": 2000, "monotonic_before_s": 1000}}}}}
-            events = [{"event_type": "phase_start", "phase": "tokenize", "timestamp_s": 2000},
+            events = [{"event_type": "stage_started", "phase": "idle_baseline", "timestamp_s": 1998},
+                      {"event_type": "stage_completed", "phase": "idle_baseline", "timestamp_s": 1999},
+                      {"event_type": "phase_start", "phase": "tokenize", "timestamp_s": 2000},
+                      {"event_type": "phase_end", "phase": "tokenize", "timestamp_s": 2000.1},
                       {"event_type": "phase_start", "phase": "decode", "timestamp_s": 2000},
                       {"event_type": "phase_end", "phase": "decode", "timestamp_s": 2001}]
             for name, text in (("metadata.json", json.dumps(metadata)),
@@ -782,7 +785,8 @@ class DeskBundleReadTests(unittest.TestCase):
             # Exact integer ns: one second after the 1000 s monotonic anchor.
             self.assertEqual(bt.member_spans(bundle), {
                 "decode_ns": [1_000_000_000_000, 1_001_000_000_000],
-                "request_ns": [1_000_000_000_000, 1_001_000_000_000], "idle_ns": None})
+                "request_ns": [1_000_000_000_000, 1_001_000_000_000],
+                "idle_ns": [998_000_000_000, 999_000_000_000]})
             (bundle / "metadata.json").write_text('{"plain":true}', encoding="utf-8")
             self.assertEqual(bt.read_json(bundle / "metadata.json"), {"plain": True})
 
@@ -926,7 +930,10 @@ class MeterTests(QuantityTestCase):
             bundle = Path(tmp)
             (bundle / "metadata.json").write_text(json.dumps({"uncertainty_evidence": {"clock_anchor": {"clock_stamps": {
                 "sampling_started": {"epoch_s": 2000.0, "monotonic_before_s": 1000.0}}}}}))
-            events = [{"event_type": "phase_start", "phase": "tokenize", "timestamp_s": 2000.0},
+            events = [{"event_type": "stage_started", "phase": "idle_baseline", "timestamp_s": 1998},
+                      {"event_type": "stage_completed", "phase": "idle_baseline", "timestamp_s": 1999},
+                      {"event_type": "phase_start", "phase": "tokenize", "timestamp_s": 2000.0},
+                      {"event_type": "phase_end", "phase": "tokenize", "timestamp_s": 2000.0000000006},
                       {"event_type": "phase_start", "phase": "decode", "timestamp_s": 2000.0000000006},
                       {"event_type": "phase_end", "phase": "decode", "timestamp_s": 2001.0000000004}]
             (bundle / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
