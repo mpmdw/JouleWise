@@ -14,7 +14,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from joulewise.cadence_looks import controls_manifest
 from joulewise.cadence_looks import manifest_dispatch as dispatch
+from tests.contracts.cadence_looks import ctl_v2_adapter
 
 ROOT = Path(__file__).resolve().parents[1]
 LOOKS = ROOT / (
@@ -52,6 +54,12 @@ def registered_fixture():
     draft = json.loads(DRAFT.read_bytes())
     draft.update(status="registered", title="Synthetic registration fixture")
     return encode(draft)
+
+
+def controls_fixture():
+    pins = {role: sha256(role.encode()).hexdigest() for role in controls_manifest.ROLES}
+    pins["instrument_floor_schema"] = ctl_v2_adapter.SCHEMA_SHA
+    return ctl_v2_adapter.make_manifest("lm-ctl-01", "controls", pins)
 
 
 def cli(*args):
@@ -98,6 +106,33 @@ def object_paths(value, path=()):
 
 
 class VariantContractTests(unittest.TestCase):
+    def test_shared_dispatcher_validates_final_controls_and_refuses_other_routes(self):
+        raw = controls_fixture()
+        controls = controls_manifest.validate_manifest(raw)
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = Path(tmp) / "synthetic-controls.json"
+            candidate.write_bytes(raw)
+            admitted = cli(candidate, "--final")
+            self.assertEqual((admitted.returncode, admitted.stdout, admitted.stderr),
+                             (0, b"ok lm-ctl-01 (final)\n", b""))
+
+            invalid = (
+                (dict(schema="unknown"), b"REFUSE unknown cadence manifest schema ID\n"),
+                (dict(schema="joulewise.cadence_look_manifest.hp.v1", look_id="lm-hp-01"),
+                 b"REFUSE unknown cadence manifest schema ID\n"),
+                (dict(look_id="lm-hp-01"),
+                 b"REFUSE unrecognized cadence manifest schema, look_kind and look_id combination\n"),
+                (dict(kit_id="hp-01"), b"REFUSE manifest failed validation\n"),
+                (dict(status="draft"), b"REFUSE manifest failed validation\n"),
+                (dict(pins=dict(controls["pins"], output_schema="0" * 64)),
+                 b"REFUSE manifest failed validation\n"),
+            )
+            for changes, notice in invalid:
+                with self.subTest(fields=tuple(changes)):
+                    candidate.write_bytes(encode(dict(controls, **changes)))
+                    refused = cli(candidate, "--final")
+                    self.assertEqual((refused.returncode, refused.stdout, refused.stderr), (2, b"", notice))
+
     def test_v2_variants_are_closed(self):
         for source in (QUALIFICATION, INSTRUMENT, STABILITY, DRAFT):
             original = json.loads(source.read_bytes())
@@ -136,6 +171,7 @@ class VariantContractTests(unittest.TestCase):
     def test_dispatch_accepts_only_closed_manifest_identity_triples(self):
         allowed = {
             (dispatch.V1, "interim", "lm-interim-01"),
+            (controls_manifest.SCHEMA_ID, "controls", "lm-ctl-01"),
             (dispatch.V2, "qualification", "lm-qual-01"),
             (dispatch.V2, "description", "lm-inst-01"),
             (dispatch.V2, "description", "lm-stab-01"),
@@ -147,9 +183,10 @@ class VariantContractTests(unittest.TestCase):
             for document in (json.loads(source.read_bytes()) for source in (QUALIFICATION, INSTRUMENT, STABILITY, DRAFT))
         }
         templates["lm-stab-02"] = dict(templates["lm-stab-01"], kit_index_path="f2-stab/KITS.json")
+        templates["lm-ctl-01"] = json.loads(controls_fixture())
         schemas = {schema for schema, _, _ in allowed} | {"unknown"}
-        kinds = {kind for _, kind, _ in allowed} | {"controls"}
-        look_ids = {look_id for _, _, look_id in allowed} | {"lm-qual-42", "lm-qualification-01"}
+        kinds = {kind for _, kind, _ in allowed}
+        look_ids = {look_id for _, _, look_id in allowed} | {"lm-qual-42", "lm-qualification-01", "lm-hp-01"}
         with tempfile.TemporaryDirectory() as tmp:
             candidate = Path(tmp) / "candidate.json"
             tool = Path(tmp) / "legacy.py"
@@ -738,6 +775,8 @@ raise SystemExit(97)
         with tempfile.TemporaryDirectory() as tmp:
             registration = Path(tmp).resolve() / "registration.json"
             description = Path(tmp) / "description.json"
+            controls = Path(tmp) / "controls.json"
+            controls.write_bytes(controls_fixture())
             payload = json.loads(INSTRUMENT.read_bytes())
             payload["status"] = "committed"
             for pin in payload["code_pins"].values():
@@ -754,6 +793,7 @@ raise SystemExit(97)
                 (description, ["--final"]),
                 (DRAFT, ["--final"]),
                 (QUALIFICATION, []),
+                (controls, ["--final"]),
             ):
                 with self.subTest(candidate=candidate.name), patch.object(Path, "read_bytes", guard):
                     with redirect_stderr(StringIO()) as stderr:

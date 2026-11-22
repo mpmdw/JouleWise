@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "status",
+    "look_id",
+    "look_kind",
+    "kit_id",
+    "pins",
+    "instrument_output_schema",
+    "instrument_stage1",
+    "release_layout"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "joulewise.cadence_look_manifest.controls.v1"
+    },
+    "status": {
+      "type": "string",
+      "const": "final"
+    },
+    "look_id": {
+      "type": "string",
+      "const": "lm-ctl-01"
+    },
+    "look_kind": {
+      "type": "string",
+      "const": "controls"
+    },
+    "kit_id": {
+      "type": "string",
+      "const": "cl-ctl-01"
+    },
+    "instrument_output_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "path", "sha256"],
+      "properties": {
+        "commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "instrument_stage1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ledger_commit", "stage1_sha256"],
+      "properties": {
+        "ledger_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+        "stage1_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "release_layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["private", "public"],
+      "properties": {
+        "private": {"$ref": "#/$defs/releaseDirectory"},
+        "public": {"$ref": "#/$defs/releaseDirectory"}
+      }
+    },
+    "pins": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "controls_route",
+        "edges",
+        "hold",
+        "instrument_floor_schema",
+        "instrument_manifest",
+        "output_schema",
+        "print_code",
+        "print_code/analysis",
+        "print_code/attribution",
+        "print_code/branch_release",
+        "print_code/dispatch",
+        "print_code/integrator",
+        "print_code/manifest",
+        "print_code/manifest_json",
+        "print_code/phase",
+        "print_code/powermetrics_adapter",
+        "print_code/projection",
+        "print_code/records",
+        "print_code/trace_point",
+        "print_code/windows",
+        "restricted_schema"
+      ],
+      "properties": {
+        "controls_route": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "edges": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "hold": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "instrument_floor_schema": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "instrument_manifest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "output_schema": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/analysis": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/attribution": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/branch_release": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/dispatch": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/integrator": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/manifest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/manifest_json": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/phase": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/powermetrics_adapter": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/projection": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/records": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/trace_point": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/windows": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "restricted_schema": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "releaseDirectory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "device", "inode"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^/(?:[^/]+/)*lm-ctl-01$"},
+        "device": {"type": "integer", "minimum": 0},
+        "inode": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

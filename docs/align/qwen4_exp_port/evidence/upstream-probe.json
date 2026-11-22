@@ -1,0 +1,29 @@
+{
+  "indexed_attention": {
+    "loaded": false,
+    "error": "'full_attention' is not in list"
+  },
+  "norm_topk_prob_false": {
+    "selected_probability_sums": [
+      [
+        0.9065775871276855,
+        0.9997891187667847,
+        0.9157620668411255
+      ]
+    ],
+    "pass": false,
+    "max_abs": 0.14441251754760742,
+    "rms": 0.03390298591954839,
+    "atol": 0.0001,
+    "first_max_index": [
+      0,
+      0,
+      45
+    ],
+    "values": [
+      -1.604232668876648,
+      -1.4598201513290405
+    ],
+    "unequal": 192
+  }
+}

@@ -1003,6 +1003,16 @@ CONCLUSION_9D = ('Allowing each value to move within its registered timing uncer
                  'dominates the detection floor is therefore not met, and we make no statement about which source '
                  'limits these measurements.')
 
+# Research lead's text, /Volumes/JW-EXT/scratch/fable-dn-workload-structure.md §3(ii).
+# Reuse the Section 6.5 rows and formats. The replication wording repeats Section 6.8.
+CONCLUSION_9C = (
+    'The 8B model used more gross processor-rail energy per request than the 1.7B model in both phases: '
+    'by {r15:e} J in decode (decision interval [{r48:lo}, {r49:hi}] J) and by {r16:e} J in 2,048-token '
+    'prefill ([{r50:lo}, {r51:hi}] J). Each contrast was *{r530:w}* at claim level {r532:id} under the registered '
+    'claim gate in one session, and each *replicated* under the registered definition: every one of the three '
+    'replication contrast sessions gave the same outcome word and sign. ' + D177
+)
+
 # --- first-fill prose, re-rounded under RL-52
 PROSE = [
     ('Table 5 caption, claim level (RL-41 b)', [],
@@ -1096,6 +1106,7 @@ SITES.append(('Section 6.6, monitor cost', ['P1-B5-MONITOR'], MONITOR, 1, [LBL_S
 SITES.append(('Section 6.7, primary-block recomputation (RL-4 vii)', ['P1-RECOMPUTE-SUMMARY'], RECOMPUTE_B5, 1, []))
 SITES.append(('Table S8, comparator families', [], TABLE_S8, 1, []))
 SITES.append(('Section 11, branch 9.D', ['CP-X02-conclusion'], CONCLUSION_9D, 1, []))
+SITES.append(('Section 11, branch 9.C', ['CP-X08-decode-a-conclusion'], CONCLUSION_9C, 1, ['registered claim gate']))
 SITES.append(('Section 5.1, identities (RL-60 (5))', ['CP-X01-identity'], '({c:identity})', 1, []))
 SITES.append(('Section 5.1, prefill length record (RL-60 (5))', ['CP-X01-length'], '({c:length})', 1, []))
 SITES.append(('Section 6.3, floor class (RL-66 F07)', [], FLOOR_CLASS, 1, []))
@@ -1120,13 +1131,12 @@ DELETED_WITH_BRANCH = ['P1-B5-NOPACK', 'P1-B5-NOPACK-REASON', 'P1-B5-CELL-REFUSE
                        'P1-B5-DOM-REFUSED']
 DROPPED = ['P1-B5-B-SHARE']  # RL-52 (5): dropped with its sentence
 
-# Block 5 ids left as placeholders (reasons in the run report). P1-ABS-PART1 was filled under RL-147 §8 (2026-11-13);
-# the Block 6 half of the recompute summary is fill_check_b6.py's.
-PENDING = ['CP-X08-decode-a-conclusion']
+# Block 5 ids left as placeholders. The Block 6 half of the recompute summary is fill_check_b6.py's.
+PENDING: list[str] = []
 
 GONE = ['[BRANCH 5.1.a', '[END BRANCH 5.1]', '[BRANCH 5.2.a', '[END BRANCH 5.2]', '[BRANCH 5.4.A', '[END BRANCH 5.4.A]',
         '[BRANCH 5.4.B', '[END BRANCH 5.4.B]', '**[BRANCH 5.4.R', '[END BRANCH 5.4.R]', '[BRANCH 9.D',
-        '[END BRANCH 9.D]'] + [f'BRANCH 5.5.{k}' for k in range(1, 6) if k != 1] + \
+        '[END BRANCH 9.D]', '[BRANCH 9.C', '[END BRANCH 9.C]'] + [f'BRANCH 5.5.{k}' for k in range(1, 6) if k != 1] + \
        ['[BRANCH 5.5.1', '[END BRANCH 5.5.1]', 'share of each interval taken by B']
 PRESENT = ['BRANCH 5.1.a not selected', 'BRANCH 5.2.a not selected', 'BRANCH 5.4.B selected',
            'BRANCH 5.4.R not selected', 'BRANCH 5.5.1 selected for both contrasts', 'BRANCH 9.D: branch B selected']

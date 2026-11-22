@@ -1,0 +1,53 @@
+{
+  "affine": {
+    "comparisons": {
+      "decode": {
+        "atol": 0.0001,
+        "first_max_index": [
+          0,
+          0,
+          18
+        ],
+        "max_abs": 1.0132789611816406e-06,
+        "pass": true,
+        "rms": 3.753536167282997e-07,
+        "unequal": 90,
+        "values": [
+          0.9133086800575256,
+          0.9133076667785645
+        ]
+      },
+      "prefill": {
+        "atol": 0.0001,
+        "first_max_index": [
+          0,
+          4,
+          57
+        ],
+        "max_abs": 9.5367431640625e-07,
+        "pass": true,
+        "rms": 1.2568850140739953e-07,
+        "unequal": 2668,
+        "values": [
+          -2.5021281242370605,
+          -2.502127170562744
+        ]
+      }
+    },
+    "global_scale_tensors": 0,
+    "upstream_finite": true,
+    "weights_sha256": "2ef0aebf338c153c7f172af0998898e05be0256bd3feed198c9a1d95869da610"
+  },
+  "nvfp4": {
+    "global_scale_tensors": 0,
+    "refusal": "qwen4_exp model_file supports unquantized or native MLX affine weight checkpoints. quantization.mode='nvfp4' is unsupported.",
+    "upstream_finite": true,
+    "weights_sha256": "34a7a3484a314d6c36be42d8289a29d6e3e3a63003b1457adedf95b287d858dc"
+  },
+  "nvfp4-global-scale": {
+    "global_scale_tensors": 12,
+    "refusal": "qwen4_exp model_file supports unquantized or native MLX affine weight checkpoints. quantization.mode='nvfp4' is unsupported.",
+    "upstream_finite": true,
+    "weights_sha256": "f4015eea6c137ee95212fd76f24676a6f4a7ddbf516e65f8f3cd2370146a7f7e"
+  }
+}

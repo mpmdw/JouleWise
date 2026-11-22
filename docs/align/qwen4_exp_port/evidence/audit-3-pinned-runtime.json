@@ -1,0 +1,35 @@
+{
+  "batch": {
+    "refusals": [
+      {
+        "exception": "UnsupportedByPinnedRuntime",
+        "message": "BatchGenerator caches are outside single-request generation.",
+        "requests": 2
+      },
+      {
+        "exception": "UnsupportedByPinnedRuntime",
+        "message": "BatchGenerator caches are outside single-request generation.",
+        "requests": 1
+      }
+    ],
+    "single_request_argmax": [
+      9,
+      48
+    ],
+    "single_request_max_abs_vs_hf": 8.344650268554688e-07,
+    "weights_sha256": "2e33426e86762fbb54a5a7bc9c602708c118ef6b9eb593e669ba3678b3c6ea1d"
+  },
+  "mixed_affine": {
+    "max_abs_vs_upstream": {
+      "decode": 1.4901161193847656e-07,
+      "prefill": 2.384185791015625e-07
+    },
+    "ple_head_bits": [
+      4,
+      4,
+      4,
+      4
+    ],
+    "weights_sha256": "bec6c32be20f3488e38483f7708271467c8979bdcc169e77d0e53c4b621fade0"
+  }
+}

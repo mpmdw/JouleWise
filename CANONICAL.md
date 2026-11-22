@@ -87,8 +87,9 @@ Held, not canonical yet: the condition-waits lane (`align/2026-11-08-condition-w
 
 | Job | Canonical | Replaced |
 |---|---|---|
-| Goal and status | Branch `port/qwen4-exp-mlx` (`docs/align/qwen4_exp_port/GOAL.md`) plus the `lane/*-qwen4exp-*` lanes. `docs/align/qwen4_exp_port/canonical.md` comes from `lane/2026-11-05-qwen4exp-canonical`; the newest lane carrying both is `lane/2026-11-06-qwen4exp-port-r2`. None of it is on `main` yet | Pinning a newer upstream `mlx-vlm` release to get the model |
-| Model code | `joulewise/align/models/qwen4_exp.py` (loaded through the ALIGN `model_file` hook) + `scripts/align_convert_qwen4_exp.py`, on the qwen4exp lanes (`lane/2026-11-05-qwen4exp-canonical`, `lane/2026-11-06-qwen4exp-port-r2`), not on `port/qwen4-exp-mlx` itself | — |
+| Upstream numerical comparison | [Parity evidence in PR #927](https://github.com/mpmdw/JouleWise/pull/927) | [Earlier port validation](docs/align/qwen4_exp_port/canonical.md) |
+| Pinned model for supported upstream-layout checkpoints | [Setup and allowlist](docs/align/qwen4_exp_port/PINNED-RUNTIME.md), using `joulewise/align/models/qwen4_exp_upstream.py` through the ALIGN `model_file` hook | JouleWise port as the runtime direction |
+| Existing JouleWise-layout artifacts | The [historical port](docs/align/qwen4_exp_port/canonical.md) pinned at `97d780d59` remains their loader. The converter on `main` is `scripts/align_stream_qwen4_exp.py` | — |
 | Upstream fixes | `docs/align/upstream_mlxvlm_d1/` (fact sheet, walkthrough, evidence) | — |
 
 ## CI and checks

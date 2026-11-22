@@ -43,10 +43,12 @@ wait are refused. `deadline` and `on_early_or_refused` are required unless
 `wait: none`. An armed block always needs a deadline, including with `none`.
 The times must satisfy `t0 < latest_end <= deadline` when armed.
 
-Time values use ISO 8601 with an explicit offset or `Z` (UTC). They must fall
-within 2026-01-01 through 2030-01-01 UTC, including the endpoints. Naive times,
-bare epochs and impossible dates/offsets are refused. They become numeric epoch
-seconds; fractional seconds use Python datetime's microsecond precision.
+Time values use `YYYY-MM-DDTHH:MM:SS`, optionally followed by a period and
+one or more fractional digits, then `Z` (UTC) or a signed offset `+HH:MM` or
+`-HH:MM`. Hours are `00`–`23`, and minutes and seconds are `00`–`59`.
+Dates must be valid, and instants must fall within 2026-01-01 through
+2030-01-01 UTC, including the endpoints. Values become numeric epoch seconds
+using Python datetime's microsecond precision.
 
 Each body line is `key: value`; the first colon separates the key from the
 value. Surrounding whitespace is stripped. Values must be nonempty printable
@@ -62,8 +64,14 @@ are retained by their exact heading digests from commits `754cc672c3` and
 
 The highest numbered item **carrying a block** wins, regardless of file order.
 Sort the numeric part first, then the optional lowercase letter (`256b > 256`,
-`257 > 256b`). Items without a block do not affect pointer selection. Ordinary
-legacy text needs no regeneration. After cutover, `run_state_add.py` regenerates
+`257 > 256b`). Items without a block do not affect pointer selection.
+Every pointer owner must match `run_state_items.OWNERS` exactly. The seven
+historical item and owner pairs in `scripts/gen_current.py` may each appear
+once per render when a strictly higher-numbered item carries a pointer.
+Owner violations report `INVALID_OWNER` on the owner line. The generated
+pointer always uses a registered owner when a source item is present.
+
+Ordinary legacy text needs no regeneration. After cutover, `run_state_add.py` regenerates
 the file for each typed item. Headings inside other fenced examples are ignored.
 Quoted or indented pointer fences are examples and ignored; indented fenced
 examples also suppress recognition until their matching closing fence. Other
