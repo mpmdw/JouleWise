@@ -1,6 +1,6 @@
 """Single-use controls output boundary with a blind public projection."""
 
-from contextlib import suppress
+from contextlib import ExitStack, contextmanager, suppress
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from importlib.util import find_spec
@@ -13,12 +13,14 @@ import traceback
 
 from . import controls_analysis as analysis
 from .controls_manifest import CODE_PATHS, canonical, verify_freeze, verify_stage1
-from .controls_print import LOOK_ID, LegBinding, encode_public_projection
+from .controls_print import LegBinding, encode_public_projection
 from .qualification_manifest import _decode
 
 
 PUBLIC_NAME = "PUBLIC.json"
+PRIVATE_NAME = "RESTRICTED"
 PRIVATE_NAMES = frozenset({"controls.json", "stdout", "stderr"})
+_DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 _PHASE_SOURCES = (
     "print_code/phase", "print_code/attribution", "print_code/records", "print_code/windows",
     "print_code/powermetrics_adapter", "print_code/trace_point", "print_code/integrator",
@@ -81,26 +83,16 @@ def prepare_private(scientific, schema_bytes, *, instrument_reasons=()):
     return canonical(scientific)
 
 
-def _write(path, data, mode):
-    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, mode)
+def _write_at(directory, name, data, mode):
+    fd = os.open(name, os.O_CREAT | os.O_EXCL | os.O_WRONLY, mode, dir_fd=directory)
     with os.fdopen(fd, "wb") as stream:
         stream.write(data)
         stream.flush()
         os.fsync(stream.fileno())
 
 
-def reserve_outputs(restricted, public):
-    if (restricted.name != "RESTRICTED" or public.name != PUBLIC_NAME
-            or restricted.parent.name != LOOK_ID or public.parent.name != LOOK_ID
-            or restricted.parent.resolve() == public.parent.resolve()
-            or not restricted.parent.is_dir() or not public.parent.is_dir()
-            or restricted.parent.is_symlink() or public.parent.is_symlink()):
-        raise ValueError("controls_destination")
-    reserve_directory(restricted, public)
-
-
 def reserve_directory(directory, public):
-    """Reserve a directory for the writer after the caller binds its paths."""
+    """Reserve an invented fixture directory for the lower-level writer."""
     if os.path.lexists(public):
         raise ValueError("controls_destination")
     # The directory creation selects the sole winner even if two workers
@@ -108,19 +100,88 @@ def reserve_directory(directory, public):
     directory.mkdir(mode=0o700)
 
 
-def write_outputs(restricted, public, private_bytes, public_bytes):
-    """Write confined scientific bytes, then publish the prebound blind bytes."""
-    _write(restricted / "controls.json", private_bytes, 0o600)
-    if {path.name for path in restricted.iterdir()} != PRIVATE_NAMES:
+def _write_outputs_at(restricted, publication, public_name, private_bytes, public_bytes):
+    _write_at(restricted, "controls.json", private_bytes, 0o600)
+    if set(os.listdir(restricted)) != PRIVATE_NAMES:
         raise ValueError("controls_inventory")
-    pending = restricted / ".publication"
-    _write(pending, public_bytes, 0o644)
+    pending = ".publication"
+    _write_at(restricted, pending, public_bytes, 0o644)
     try:
-        # The temporary file stays in the reservation. An existing public file
-        # wins rather than being replaced by a competing writer.
-        os.link(pending, public, follow_symlinks=False)
+        os.link(pending, public_name, src_dir_fd=restricted, dst_dir_fd=publication, follow_symlinks=False)
     finally:
-        pending.unlink()
+        os.unlink(pending, dir_fd=restricted)
+
+
+def write_outputs(restricted, public, private_bytes, public_bytes):
+    """Write the synthetic fixture's scientific and blind output bytes."""
+    with ExitStack() as stack:
+        private_fd = os.open(restricted, _DIRECTORY_FLAGS)
+        stack.callback(os.close, private_fd)
+        public_fd = os.open(public.parent, _DIRECTORY_FLAGS)
+        stack.callback(os.close, public_fd)
+        _write_outputs_at(private_fd, public_fd, public.name, private_bytes, public_bytes)
+
+
+def _identity(fd):
+    info = os.fstat(fd)
+    return info.st_dev, info.st_ino
+
+
+def _open_directory(path):
+    """Open a canonical absolute directory and retain its physical ancestry."""
+    fd = os.open("/", _DIRECTORY_FLAGS)
+    try:
+        ancestry = {_identity(fd)}
+        for part in Path(path).parts[1:]:
+            child = os.open(part, _DIRECTORY_FLAGS, dir_fd=fd)
+            os.close(fd)
+            fd = child
+            ancestry.add(_identity(fd))
+        return fd, ancestry
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+@contextmanager
+def _registered_directories(layout):
+    with ExitStack() as stack:
+        private_fd, private_ancestry = _open_directory(layout["private"]["path"])
+        stack.callback(os.close, private_fd)
+        public_fd, public_ancestry = _open_directory(layout["public"]["path"])
+        stack.callback(os.close, public_fd)
+        repo_fd, repo_ancestry = _open_directory(Path(__file__).resolve().parents[2])
+        stack.callback(os.close, repo_fd)
+        private_id, public_id, repo_id = map(_identity, (private_fd, public_fd, repo_fd))
+        if (private_id != (layout["private"]["device"], layout["private"]["inode"])
+                or public_id != (layout["public"]["device"], layout["public"]["inode"])
+                or private_id in public_ancestry or public_id in private_ancestry
+                or private_id in repo_ancestry or repo_id in private_ancestry):
+            raise ValueError("controls_destination")
+        yield private_fd, public_fd
+
+
+def _reserve_at(private_parent, publication):
+    try:
+        os.stat(PUBLIC_NAME, dir_fd=publication, follow_symlinks=False)
+    except FileNotFoundError:
+        pass
+    else:
+        raise ValueError("controls_destination")
+    os.mkdir(PRIVATE_NAME, mode=0o700, dir_fd=private_parent)
+    # The only winner persists its reservation before any read can start.
+    os.fsync(private_parent)
+    return os.open(PRIVATE_NAME, _DIRECTORY_FLAGS, dir_fd=private_parent)
+
+
+def _redirect_at(restricted):
+    for target, name in ((1, "stdout"), (2, "stderr")):
+        stream = os.open(name, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600, dir_fd=restricted)
+        try:
+            os.dup2(stream, target)
+        finally:
+            os.close(stream)
+    os.fsync(restricted)
 
 
 def calculate_private(positions, *, kernel, pooled, instrument_manifest_sha256, schema_bytes,
@@ -199,11 +260,10 @@ def _bound_positions(expected, received):
     return tuple(positions)
 
 
-def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, local_host, restricted: Path,
-                        public: Path, first_read):
+def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, local_host, first_read):
     """Run once, with the first reader given the committed stage-1 bindings."""
     from .manifest_dispatch import PRE_READ_REFUSAL
-    from .transfer_release import POST_READ_FAILURE, _failure_type, _redirect, _sync_directory
+    from .transfer_release import POST_READ_FAILURE, _failure_type
 
     saved_stderr = None
     confined = False
@@ -218,16 +278,22 @@ def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, l
         sys.stdout.flush()
         sys.stderr.flush()
         saved_stderr = os.dup(2)
-        reserve_outputs(restricted, public)
-        _redirect(restricted)
-        confined = True
-        _sync_directory(restricted.parent)
-        read_started = True
-        requests = tuple(replace(leg, binding=replace(leg.binding)) for leg in stage1.legs)
-        positions = _bound_positions(stage1.legs, first_read(requests))
-        publish_reserved(restricted, public, public_bytes, positions, kernel=kernel, pooled=freeze.instrument_pool,
-                         instrument_manifest_sha256=freeze.instrument_manifest_sha256,
-                         schema_bytes=freeze.restricted_schema, instrument_reasons=freeze.instrument_pool.reason_enum)
+        with _registered_directories(freeze.release_layout) as (private_parent, publication), ExitStack() as stack:
+            restricted = _reserve_at(private_parent, publication)
+            stack.callback(os.close, restricted)
+            _redirect_at(restricted)
+            confined = True
+            read_started = True
+            requests = tuple(replace(leg, binding=replace(leg.binding)) for leg in stage1.legs)
+            positions = _bound_positions(stage1.legs, first_read(requests))
+            private_bytes = calculate_private(
+                positions, kernel=kernel, pooled=freeze.instrument_pool,
+                instrument_manifest_sha256=freeze.instrument_manifest_sha256,
+                schema_bytes=freeze.restricted_schema, instrument_reasons=freeze.instrument_pool.reason_enum,
+            )
+            sys.stdout.flush()
+            sys.stderr.flush()
+            _write_outputs_at(restricted, publication, PUBLIC_NAME, private_bytes, public_bytes)
     except BaseException as error:
         if confined:
             with suppress(BaseException):

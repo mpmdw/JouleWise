@@ -25,13 +25,6 @@ from .ctl_print_adapter import check_fixture
 from .frozen_v3.test_ctl01_hand_vectors import frozen_kernel
 
 
-def load_tests(loader, tests, pattern):
-    from .ctl_print_binding_acceptance import TestControlsBindingFreeze
-
-    tests.addTests(loader.loadTestsFromTestCase(TestControlsBindingFreeze))
-    return tests
-
-
 class TestFrozenControlsPrint(vectors.Contract):
     def setUp(self):
         super().setUp()
@@ -82,7 +75,7 @@ ROOT = Path(__file__).resolve().parents[3]
 SHARED_MODULES = "5a8ac8ff6753caf76cac01bfc4d15d6f0385afc5"
 
 
-def instrument_freeze_fixture(artifacts, mode):
+def instrument_freeze_fixture(artifacts, mode, *, layout=None):
     """Bind the fixture artifacts and apply exactly one source or authority mutation."""
     commits, instrument_stage1 = adapter.instrument_commitments()
     schema_key = manifest.INSTRUMENT_SCHEMA_PATH
@@ -109,7 +102,7 @@ def instrument_freeze_fixture(artifacts, mode):
 
     pins = {name: sha256(raw).hexdigest() for name, raw in artifacts.items()}
     instrument_stage1["manifest_sha256"] = pins["instrument_manifest"]
-    document = json.loads(adapter.make_manifest(controls.LOOK_ID, "controls", pins))
+    document = json.loads(adapter.make_manifest(controls.LOOK_ID, "controls", pins, layout=layout))
     if mode == "schema_absent":
         del document["instrument_output_schema"]
     if mode == "schema_unpinned":
@@ -136,7 +129,7 @@ def instrument_freeze_fixture(artifacts, mode):
     return dict(current_revision=revision, committed=commits, working=working, history=history)
 
 
-def worker_fixture(directory, mode, synthetic_path=False, *, close_positions=None):
+def worker_fixture(directory, mode, synthetic_path=False, *, close_positions=None, registered_root=None):
     """Drive the real worker in a child with invented commitments and records."""
     import joulewise.cadence_looks as looks
 
@@ -151,16 +144,13 @@ def worker_fixture(directory, mode, synthetic_path=False, *, close_positions=Non
                 (source / name).write_bytes(subprocess.check_output(["git", "show", git_path], cwd=ROOT))
             looks.__path__.append(str(source))
         v2 = import_module("tests.contracts.cadence_looks.frozen_v3.test_ctl01_print_v2")
-        _run_worker_fixture(directory, mode, synthetic_path, v2, scope, close_positions)
+        _run_worker_fixture(directory, mode, synthetic_path, v2, scope, close_positions, registered_root or directory)
 
 
-def _run_worker_fixture(directory, mode, synthetic_path, v2, scope, close_positions):
-    private = directory / "private" / controls.LOOK_ID
-    restricted = private / ("synthetic-output" if synthetic_path else "RESTRICTED")
-    public = directory / "public" / controls.LOOK_ID / release.PUBLIC_NAME
+def _run_worker_fixture(directory, mode, synthetic_path, v2, scope, close_positions, registered_root):
     if synthetic_path:
         # The local host denies even an invented RESTRICTED directory.
-        scope.enter_context(patch.object(release, "reserve_outputs", release.reserve_directory))
+        scope.enter_context(patch.object(release, "PRIVATE_NAME", "synthetic-output"))
 
     positions = v2.complete()
     if close_positions is not None:
@@ -188,7 +178,8 @@ def _run_worker_fixture(directory, mode, synthetic_path, v2, scope, close_positi
     if mode == "committed_nested_extra":
         committed_stage1 = stage1_bytes
 
-    freeze_inputs = instrument_freeze_fixture(dict(adapter.freeze_artifacts()), mode)
+    freeze_inputs = instrument_freeze_fixture(dict(adapter.freeze_artifacts()), mode,
+                                              layout=adapter.release_layout(registered_root))
     digest = sha256(freeze_inputs["working"]["manifest"]).hexdigest()
     stage1_sha = sha256(committed_stage1).hexdigest()
     stage1_revision = "c" * 40
@@ -224,7 +215,7 @@ def _run_worker_fixture(directory, mode, synthetic_path, v2, scope, close_positi
                    commit=stage1_revision, n_legs=count,
                    stage1_sha256=stage1_sha if mode == "stale_bytes_only" else sha256(stage1_bytes).hexdigest()),
         execution_host="invented-host", local_host="wrong-host" if mode == "host" else "invented-host",
-        restricted=restricted, public=public, first_read=first_read,
+        first_read=first_read,
     )
     if mode == "other_integrator":
         def constant_level(trace, start, end, *, mapping):
@@ -326,7 +317,7 @@ class TestControlsRelease(unittest.TestCase):
             ("withheld", 2, b"REFUSE controls look before read\n"),
             ("host", 2, b"REFUSE controls look before read\n"),
         ):
-            with self.subTest(mode=mode), TemporaryDirectory(dir=ROOT) as directory:
+            with self.subTest(mode=mode), TemporaryDirectory() as directory:
                 base = Path(directory)
                 restricted = base / "private" / controls.LOOK_ID / "RESTRICTED"
                 public = base / "public" / controls.LOOK_ID / release.PUBLIC_NAME
@@ -352,7 +343,7 @@ class TestControlsRelease(unittest.TestCase):
         for mode in ("wrong_manifest", "stale_bytes_only", "prior_kit_self_digest",
                      "diagnostic_3w", "diagnostic_4w", "committed_nested_extra", "unregistered_stage1",
                      "schema_unpinned", "instrument_stage1_draft", "hold_wrong_kit"):
-            with self.subTest(mode=mode), TemporaryDirectory(dir=ROOT) as directory:
+            with self.subTest(mode=mode), TemporaryDirectory() as directory:
                 base = Path(directory)
                 result = self.run_worker(base, mode, synthetic_path=True)
                 self.assertEqual((result.returncode, result.stdout, result.stderr),
@@ -362,7 +353,7 @@ class TestControlsRelease(unittest.TestCase):
                 self.assertFalse((base / "public" / controls.LOOK_ID / release.PUBLIC_NAME).exists())
 
     def test_worker_uses_exact_pinned_integrator_and_committed_stage1(self):
-        with TemporaryDirectory(dir=ROOT) as directory:
+        with TemporaryDirectory() as directory:
             base = Path(directory)
             result = self.run_worker(base, "ok", synthetic_path=True)
             self.assertEqual((result.returncode, result.stdout, result.stderr), (0, b"", b""))
@@ -377,7 +368,7 @@ class TestControlsRelease(unittest.TestCase):
             ("other_integrator", (0, b"", b"")),
             ("foreign_integrator_source", (2, b"", b"REFUSE controls look before read\n")),
         ):
-            with self.subTest(mode=mode), TemporaryDirectory(dir=ROOT) as directory:
+            with self.subTest(mode=mode), TemporaryDirectory() as directory:
                 base = Path(directory)
                 result = self.run_worker(base, mode, synthetic_path=True)
                 self.assertEqual((result.returncode, result.stdout, result.stderr), expected)

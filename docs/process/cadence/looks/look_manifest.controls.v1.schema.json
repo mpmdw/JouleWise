@@ -10,7 +10,8 @@
     "kit_id",
     "pins",
     "instrument_output_schema",
-    "instrument_stage1"
+    "instrument_stage1",
+    "release_layout"
   ],
   "properties": {
     "schema": {
@@ -50,6 +51,15 @@
       "properties": {
         "ledger_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
         "stage1_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "release_layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["private", "public"],
+      "properties": {
+        "private": {"$ref": "#/$defs/releaseDirectory"},
+        "public": {"$ref": "#/$defs/releaseDirectory"}
       }
     },
     "pins": {
@@ -163,6 +173,18 @@
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         }
+      }
+    }
+  },
+  "$defs": {
+    "releaseDirectory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "device", "inode"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^/(?:[^/]+/)*lm-ctl-01$"},
+        "device": {"type": "integer", "minimum": 0},
+        "inode": {"type": "integer", "minimum": 1}
       }
     }
   }

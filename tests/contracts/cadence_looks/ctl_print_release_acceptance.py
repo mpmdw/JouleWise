@@ -49,7 +49,7 @@ class TestControlsReleaseFreeze(unittest.TestCase):
         publications = []
         floor_values = []
         for mode in ("current", "stale"):
-            with self.subTest(mode=mode), TemporaryDirectory(dir=fixtures.ROOT) as temporary:
+            with self.subTest(mode=mode), TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 for side in ("public", "private"):
                     (root / side / "lm-ctl-01").mkdir(parents=True)
@@ -69,7 +69,9 @@ class TestControlsReleaseFreeze(unittest.TestCase):
                 floor = printed["legs"][1]["channels"]["gpu_rail"]["hidden"]["floor"]
                 floor_values.append((floor["joules"], floor["floor_j"], floor["units"]))
         self.assertEqual(len(publications), 2)
-        self.assertEqual(publications[0], publications[1])
+        # The two synthetic registrations bind different physical roots.
+        self.assertEqual({k: v for k, v in json.loads(publications[0]).items() if k != "manifest_sha256"},
+                         {k: v for k, v in json.loads(publications[1]).items() if k != "manifest_sha256"})
         self.assertEqual(floor_values, [(14.0, 2.0, 7.0), (14.0, 2.0, 7.0)])
 
     def test_recovery_acceptance_selects_the_authorized_v31_case(self):

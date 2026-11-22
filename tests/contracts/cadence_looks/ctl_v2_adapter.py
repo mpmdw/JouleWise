@@ -83,9 +83,24 @@ def freeze_artifacts():
     return artifacts
 
 
-def make_manifest(look, route, pins):
+def release_layout(directory):
+    layout = {}
+    for side in ("private", "public"):
+        path = (directory / side / "lm-ctl-01").resolve()
+        info = path.stat()
+        layout[side] = dict(path=str(path), device=info.st_dev, inode=info.st_ino)
+    return layout
+
+
+def make_manifest(look, route, pins, *, layout=None):
+    if layout is None:
+        layout = {
+            "private": dict(path="/invented/private/lm-ctl-01", device=1, inode=1),
+            "public": dict(path="/invented/public/lm-ctl-01", device=1, inode=2),
+        }
     return manifest.canonical(dict(schema=manifest.SCHEMA_ID, status="final", look_id=look,
                                    look_kind=route, kit_id="cl-ctl-01", pins=pins,
+                                   release_layout=layout,
                                    instrument_output_schema=dict(commit=SCHEMA_COMMIT,
                                        path=manifest.INSTRUMENT_SCHEMA_PATH, sha256=SCHEMA_SHA),
                                    instrument_stage1=dict(ledger_commit=STAGE1_COMMIT, stage1_sha256=STAGE1_SHA)))

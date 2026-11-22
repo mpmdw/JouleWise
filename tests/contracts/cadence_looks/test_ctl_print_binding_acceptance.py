@@ -98,9 +98,13 @@ def run_binding_fixture(directory, mode):
         elif mode in ("execution_host", "local_host"):
             kwargs[mode] = "foreign-host"
         elif mode in ("restricted", "public"):
-            path = directory / f"alternate-{mode}" / "lm-ctl-01" / kwargs[mode].name
-            path.parent.mkdir(parents=True)
-            kwargs[mode] = path
+            try:
+                worker(**kwargs, **{mode: directory / "alternate"})
+            except TypeError as error:
+                if f"unexpected keyword argument '{mode}'" not in str(error):
+                    raise
+                return
+            raise AssertionError("worker accepted an output override")
         worker(**kwargs)
 
     close_positions = None
@@ -119,7 +123,7 @@ class TestControlsBindingFreeze(unittest.TestCase):
         for side in ("public", "private"):
             (root / side / "lm-ctl-01").mkdir(parents=True)
         launcher = ("import sys; from pathlib import Path; from tests.contracts.cadence_looks."
-                    "ctl_print_binding_acceptance import run_binding_fixture; "
+                    "test_ctl_print_binding_acceptance import run_binding_fixture; "
                     "run_binding_fixture(Path(sys.argv[1]), sys.argv[2])")
         return subprocess.run([sys.executable, "-B", "-c", launcher, str(root), mode],
                               cwd=fixtures.ROOT, capture_output=True)
@@ -138,7 +142,7 @@ class TestControlsBindingFreeze(unittest.TestCase):
 
     def test_episode_swap_refuses_before_analysis(self):
         for mode in ("swap", "swap_relabelled", "attempt"):
-            with self.subTest(mode=mode), TemporaryDirectory(dir=fixtures.ROOT) as directory:
+            with self.subTest(mode=mode), TemporaryDirectory() as directory:
                 root = Path(directory)
                 result = self._run(root, mode)
                 if result.returncode == 0:
@@ -152,7 +156,7 @@ class TestControlsBindingFreeze(unittest.TestCase):
     def test_caller_override_cannot_raise_registered_u1(self):
         public_bytes, observed = [], []
         for mode in ("gap_bound", "gap_override"):
-            with self.subTest(mode=mode), TemporaryDirectory(dir=fixtures.ROOT) as directory:
+            with self.subTest(mode=mode), TemporaryDirectory() as directory:
                 root = Path(directory)
                 result = self._run(root, mode)
                 self.assertEqual((result.returncode, result.stdout, result.stderr), (0, b"", b""))
@@ -165,12 +169,14 @@ class TestControlsBindingFreeze(unittest.TestCase):
                 observed.append((gpu["baseline_w"], gpu["baseline_reason"], hidden["call_j"],
                                  hidden["floor"]["units"]))
         self.assertEqual(len(public_bytes), 2)
-        self.assertEqual(public_bytes[0], public_bytes[1])
+        # Independent fixture registrations bind different physical roots.
+        self.assertEqual({k: v for k, v in json.loads(public_bytes[0]).items() if k != "manifest_sha256"},
+                         {k: v for k, v in json.loads(public_bytes[1]).items() if k != "manifest_sha256"})
         self.assertEqual(observed, [(None, "gap_over_u1", None, None)] * 2)
 
     def test_reader_admission_flags_cannot_change_committed_fit(self):
         for mode, n_legs, fit_legs, slope in (("control", 12, 6, 1.0), ("committed_unadmitted", 10, 4, None)):
-            with self.subTest(mode=mode), TemporaryDirectory(dir=fixtures.ROOT) as directory:
+            with self.subTest(mode=mode), TemporaryDirectory() as directory:
                 root = Path(directory)
                 result = self._run(root, mode)
                 self.assertEqual((result.returncode, result.stdout, result.stderr), (0, b"", b""))
@@ -179,16 +185,16 @@ class TestControlsBindingFreeze(unittest.TestCase):
                 fit = self._private(root)["dose_response"]["gpu_rail"]
                 self.assertEqual((len(fit["legs"]), fit["slope"]), (fit_legs, slope))
         for mode in ("stale_admission", "request_tampering"):
-            with self.subTest(mode=mode), TemporaryDirectory(dir=fixtures.ROOT) as directory:
+            with self.subTest(mode=mode), TemporaryDirectory() as directory:
                 root = Path(directory)
                 self._assert_post_read_refusal(root, self._run(root, mode))
 
     def test_unbound_worker_inputs_cannot_change_printed_values(self):
         self.assertEqual(set(signature(release.run_controls_worker).parameters),
                          {"freeze_inputs", "stage1_bytes", "blind", "execution_host", "local_host",
-                          "restricted", "public", "first_read"})
+                          "first_read"})
         for mode in ("freeze_inputs", "stage1_bytes", "blind", "execution_host", "local_host"):
-            with self.subTest(mode=mode), TemporaryDirectory(dir=fixtures.ROOT) as directory:
+            with self.subTest(mode=mode), TemporaryDirectory() as directory:
                 root = Path(directory)
                 result = self._run(root, mode)
                 self.assertEqual((result.returncode, result.stdout, result.stderr),
@@ -197,19 +203,14 @@ class TestControlsBindingFreeze(unittest.TestCase):
                 self.assertFalse((root / "analysis-started").exists())
                 self.assertFalse((root / "private" / "lm-ctl-01" / "synthetic-output").exists())
 
-        outputs = []
-        for mode in ("control", "restricted", "public"):
-            with self.subTest(mode=mode), TemporaryDirectory(dir=fixtures.ROOT) as directory:
+        for mode in ("restricted", "public"):
+            with self.subTest(mode=mode), TemporaryDirectory() as directory:
                 root = Path(directory)
                 result = self._run(root, mode)
                 self.assertEqual((result.returncode, result.stdout, result.stderr), (0, b"", b""))
-                private_dir = "alternate-restricted" if mode == "restricted" else "private"
-                public_dir = "alternate-public" if mode == "public" else "public"
-                outputs.append((
-                    (root / private_dir / "lm-ctl-01" / "synthetic-output" / "controls.json").read_bytes(),
-                    (root / public_dir / "lm-ctl-01" / "PUBLIC.json").read_bytes(),
-                ))
-        self.assertEqual(outputs, outputs[:1] * 3)
+                self.assertFalse((root / "first-read").exists())
+                self.assertFalse((root / "private" / "lm-ctl-01" / "synthetic-output").exists())
+                self.assertFalse((root / "public" / "lm-ctl-01" / "PUBLIC.json").exists())
 
     def test_reader_fields_require_their_committed_values(self):
         with fixtures.frozen_kernel():

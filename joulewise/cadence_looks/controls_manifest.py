@@ -56,15 +56,35 @@ def _schema_path(value):
             and all(part not in ("..", "RESTRICTED") for part in path.parts))
 
 
+def _validate_layout(layout):
+    if type(layout) is not dict or layout.keys() != {"private", "public"}:
+        raise ValueError("controls_destination")
+    for pin in layout.values():
+        if type(pin) is not dict or pin.keys() != {"path", "device", "inode"}:
+            raise ValueError("controls_destination")
+        path = pin["path"]
+        if (type(path) is not str or "\x00" in path or "\\" in path
+                or not PurePosixPath(path).is_absolute() or PurePosixPath(path).as_posix() != path
+                or ".." in PurePosixPath(path).parts or PurePosixPath(path).name != LOOK_ID
+                or type(pin["device"]) is not int or pin["device"] < 0
+                or type(pin["inode"]) is not int or pin["inode"] <= 0):
+            raise ValueError("controls_destination")
+    private, public = layout["private"], layout["public"]
+    if (private["path"] == public["path"] or private["device"] != public["device"]
+            or private["inode"] == public["inode"]):
+        raise ValueError("controls_destination")
+
+
 def validate_manifest(raw):
     document = _decode(raw)
-    identity_fields = {"schema", "status", "look_id", "look_kind", "kit_id", "pins"}
+    identity_fields = {"schema", "status", "look_id", "look_kind", "kit_id", "pins", "release_layout"}
     instrument_fields = {"instrument_output_schema", "instrument_stage1"}
     if (type(document) is not dict
             or not identity_fields <= document.keys() <= identity_fields | instrument_fields
             or (document["schema"], document["status"], document["look_id"],
                 document["look_kind"], document["kit_id"]) != (SCHEMA_ID, "final", LOOK_ID, "controls", KIT_ID)):
         raise ValueError("controls_manifest")
+    _validate_layout(document["release_layout"])
     schema = document.get("instrument_output_schema")
     if (type(schema) is not dict or schema.keys() != {"commit", "path", "sha256"}
             or not _schema_path(schema["path"])
@@ -114,6 +134,7 @@ class VerifiedFreeze:
     instrument_pool: analysis.HoldPool
     pins: dict
     stage1_entry: dict | None
+    release_layout: dict
 
 
 @dataclass(frozen=True)
@@ -355,6 +376,12 @@ def verify_freeze(*, current_revision, committed, working, history):
                                and row.get("hand_vectors_passed") is True)
             eligible_receipt = False
         elif kind == "receipt":
+            # An earlier receipt for this look cannot establish a second root.
+            if (row.get("revision"), row.get("manifest_sha256")) != (current_revision, digest):
+                previous = committed.get(row.get("revision"), {}).get("manifest")
+                if (type(previous) is not bytes or sha256(previous).hexdigest() != row.get("manifest_sha256")
+                        or validate_manifest(previous)["release_layout"] != document["release_layout"]):
+                    raise ValueError("controls_layout_change")
             eligible_receipt = (prior_byte_pass and row.get("manifest_sha256") == digest
                                 and row.get("revision") == current_revision)
         elif kind == "stage1":
@@ -368,4 +395,4 @@ def verify_freeze(*, current_revision, committed, working, history):
                                   pins["instrument_manifest"])
     pool = _hold_pool(snapshot["hold"], members, channels, reasons)
     return VerifiedFreeze(current_revision, digest, pins["instrument_manifest"], snapshot["output_schema"],
-                          snapshot["restricted_schema"], pool, pins, stage1_entry)
+                          snapshot["restricted_schema"], pool, pins, stage1_entry, document["release_layout"])
