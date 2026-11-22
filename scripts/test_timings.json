@@ -314,6 +314,7 @@
     "tests.contracts.cadence_looks.test_ctl_print": 0.101,
     "tests.contracts.cadence_looks.test_ctl_print_binding_acceptance": 9.944,
     "tests.contracts.cadence_looks.test_ctl_print_reservation_acceptance": 3.396,
+    "tests.contracts.cadence_looks.test_look_path_cumulative_gate": 0.002,
     "tests.external.test_km003c_monitor": 0.383,
     "tests.external.test_km003c_parse": 0.196,
     "tests.flags.test_b6_emitters": 0.008,

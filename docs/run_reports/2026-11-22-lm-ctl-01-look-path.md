@@ -149,3 +149,9 @@ other certificate. The gate tests rejected a generic comparator message,
 an incorrect identity, an incorrect code, an unrelated failure and an
 unexpected historical pass. The cumulative checksum manifest verified
 without a byte change to any of the three suites.
+
+The first run of the cumulative job passed. Its nine artifacts retained
+all 79 raw outcomes and the four matching proofs. Downloading the artifacts
+and replaying the gate also passed. Standard CI identified the new guard
+module's missing shard weight. The follow-up records the measured local
+weight of 0.002 s. [Cumulative CI and raw artifacts](https://github.com/mpmdw/JouleWise/actions/runs/45048358941)
