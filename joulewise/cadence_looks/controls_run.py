@@ -5,8 +5,6 @@ from hashlib import sha256
 import os
 from pathlib import Path
 import socket
-import subprocess
-import sys
 
 from .controls_book import Authority, Book
 from .controls_layout import (
@@ -273,6 +271,8 @@ def main(argv, root):
     except GateRefusal as error:
         os.write(2, error.notice.encode("ascii"))
         return error.status
-    except (KeyError, ValueError, TypeError, OSError, subprocess.SubprocessError):
+    except Exception:
+        # This entry point runs before the dedicated worker's post-start
+        # handler. Even a malformed pinned record must fail with a blind token.
         os.write(2, b"REFUSE PREFLIGHT FREEZE\n")
         return 2

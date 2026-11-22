@@ -136,7 +136,7 @@ def main(argv):
         sys.path.insert(0, str(root))
         sys.meta_path.insert(0, RegisteredModules(root, inventory))
         from joulewise.cadence_looks.controls_run import main as run
-    except (OSError, ValueError, TypeError, KeyError, ImportError, subprocess.SubprocessError):
+    except Exception:
         os.write(2, b"REFUSE PREFLIGHT FREEZE\n")
         return 2
     return run(argv, root)
