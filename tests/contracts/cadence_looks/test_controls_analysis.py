@@ -127,7 +127,7 @@ class TestControlsConventions(unittest.TestCase):
                 "reason": "envelope_stamps",
             })
         self.assertEqual(rows["L010"]["disposition"], "admitted")
-        self.assertEqual(rows["L010"]["envelope"], envelope)
+        self.assertEqual(rows["L010"]["envelope"], {"prompt_tokens": 4000, "decode_tokens": 1024})
 
         phases.with_package.assert_called_once()
         view = phases.with_package.call_args.args[0]
@@ -165,22 +165,24 @@ class TestControlsConventions(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "^instrument_variance$"):
             analysis.floor_units(None, 40, "gpu_rail", pooled, "a" * 64)
 
-    def test_print_keeps_closed_null_and_zero_floor_reasons(self):
+    def test_print_keeps_only_schema_bound_floor_reasons(self):
         member = ("f2-inst-01", "a" * 64, "L001")
         admitted = leg(Episode(), "L010", "cpu", cpu_steps())
         for sd, retained, reason, expected in (
-            (None, 0, "missing_floor", ("missing_floor",)),
-            (None, 0, None, ("missing_floor",)),
-            (0, 2, None, ("zero_floor",)),
+            (None, 0, "synthetic_floor_unavailable", "synthetic_floor_unavailable"),
+            (None, 0, None, None),
+            (0, 2, None, None),
         ):
             with self.subTest(sd=sd, reason=reason):
                 hold = analysis.HoldWindow(member, "gpu_rail", 40, retained, sd, reason)
-                pooled = analysis.pool_hold_windows([hold], {member})
+                pooled = analysis.pool_hold_windows([hold], {member}, reason_enum={"synthetic_floor_unavailable"})
                 result = calculate(synthetic_cpu_kernel(), admitted, pooled=pooled)
                 row = result["legs"][9]
                 self.assertEqual(row["disposition"], "admitted")
                 floor = row["channels"]["gpu_rail"]["baseline_drift_floor"]
                 self.assertEqual((floor["units"], floor["reason"]), (None, expected))
+        with self.assertRaisesRegex(ValueError, "^floor_reason$"):
+            analysis.pool_hold_windows([], set(), reason_enum={"missing_floor"})
 
     def test_print_refuses_unruled_script_kind_on_any_position(self):
         for kind in ("detected", "invented script", ["cpu"], None):
@@ -308,7 +310,7 @@ class TestFrozenPhaseIntegration(unittest.TestCase):
                               hidden["j_per_token"]), (2, 12, 4, 8, 8 / divisor))
         incomplete = leg(episode, "L002", "hidden", (full, visible, {**tail, "complete": False}))
         gpu = calculate(self.kernel, incomplete)["legs"][1]["channels"]["gpu_rail"]
-        self.assertEqual((gpu["baseline_w"], gpu["baseline_reason"]), (None, "incomplete_recovery"))
+        self.assertEqual((gpu["baseline_w"], gpu["baseline_reason"]), (None, "recovery_incomplete"))
         self.assertTrue(gpu["absolute"]["closes"])
 
     def test_frozen_absolute_closure_boundary(self):
@@ -344,3 +346,59 @@ class TestFrozenPhaseIntegration(unittest.TestCase):
         qualifier = calculate(self.kernel, *legs)["aligned_power"]
         # CPU other energy at 10/30/90 s is 524/151/422 J.
         self.assertEqual(qualifier, {"qualified": "no", "all_legs_close": True, "cpu_burn_order": False})
+
+
+class TestEnvelopeDisclosure(unittest.TestCase):
+    def assert_refused(self, envelope):
+        episode = Episode(turns=(envelope,))
+        cpu = leg(episode, "L010", "cpu", cpu_steps())
+        kernel = synthetic_cpu_kernel()
+        result = calculate(kernel, cpu)
+        row = result["legs"][9]
+        self.assertEqual(row["disposition"], "not_evaluable")
+        self.assertEqual(row, {
+            "leg_id": "L010", "kind": "cpu", "disposition": "not_evaluable",
+            "reason": "envelope_counts",
+        })
+        kernel.attribute_episode.assert_not_called()
+        kernel.phases.phase_table.assert_not_called()
+        kernel.phases.qualify_ctl01.assert_called_once_with([])
+
+    def test_in_memory_hidden_token_reproductions_refuse(self):
+        for value in (37, "detected", "K_outcome", "S_score"):
+            with self.subTest(value=value):
+                self.assert_refused(Turn(hidden_tokens=value))
+
+    def test_envelope_counts_require_exact_integers(self):
+        for fields in ({"hidden_tokens": False}, {"hidden_tokens": 0.0},
+                       {"context_tokens": True, "prefill_tokens": 3999},
+                       {"prefill_tokens": 3000.0}, {"decode_tokens": 1024.0}):
+            with self.subTest(fields=fields):
+                self.assert_refused(Turn(**fields))
+
+    def test_accepted_envelope_is_a_closed_visible_count_projection(self):
+        episode = Episode()
+        cpu = leg(episode, "L010", "cpu", cpu_steps())
+        row = calculate(synthetic_cpu_kernel(), cpu)["legs"][9]
+        self.assertEqual(row["disposition"], "admitted")
+        self.assertEqual(row["envelope"], {"prompt_tokens": 4000, "decode_tokens": 1024})
+
+    def test_native_round_trip_hidden_token_reproduction_refuses(self):
+        try:
+            kernel = analysis.PhaseKernel.frozen()
+        except ModuleNotFoundError as error:
+            if error.name != "joulewise.align":
+                raise
+            self.skipTest("native record codec awaits the pinned kernel overlay")
+        from joulewise.align.records import Episode, from_json, to_json
+
+        episode = TestFrozenPhaseIntegration().episode(Turn(), 135)
+        native = replace(episode, turns=(replace(episode.turns[0], hidden_tokens=37),))
+        round_tripped = from_json(Episode, to_json(native))
+        cpu = leg(round_tripped, "L010", "cpu", cpu_steps())
+        row = calculate(kernel, cpu)["legs"][9]
+        self.assertEqual(row["disposition"], "not_evaluable")
+        self.assertEqual(row, {
+            "leg_id": "L010", "kind": "cpu", "disposition": "not_evaluable",
+            "reason": "envelope_counts",
+        })

@@ -13,10 +13,7 @@ from .qualification_manifest import _decode, ManifestError
 
 NS = 1_000_000_000
 FLOOR_WINDOWS = (10, 40, 128)
-MISSING_FLOOR = "missing_floor"
-# This is the null reason defined by the draft projection. The instrument
-# input schema and its closed reason vocabulary are pinned at registration.
-HOLD_NULL_REASONS = frozenset({MISSING_FLOOR})
+BASELINE_REASONS = frozenset({"trace_or_clock_unavailable", "recovery_incomplete", "gap_over_u1"})
 TRACE_CHANNELS = {
     "gpu_rail": ("powermetrics", "gpu_power"),
     "cpu_rail": ("powermetrics", "cpu_power"),
@@ -133,7 +130,10 @@ def physical_call_view(leg: LegInput):
 
     envelope = episode.turns[0]
     visible = tuple(step for step in steps if step.kind == "turn")
-    if (sum(step.context_tokens for step in visible) != envelope.prefill_tokens + envelope.context_tokens
+    if (not all(map(_nonnegative_int, (envelope.prefill_tokens, envelope.context_tokens,
+                                      envelope.decode_tokens, envelope.hidden_tokens)))
+            or envelope.hidden_tokens != 0
+            or sum(step.context_tokens for step in visible) != envelope.prefill_tokens + envelope.context_tokens
             or sum(step.delivered_tokens for step in visible) != envelope.decode_tokens):
         raise ViewError("envelope_counts")
     if (visible[0].start_ns, visible[0].first_ns) != (envelope.start_ns, envelope.first_token_ns):
@@ -144,6 +144,19 @@ def physical_call_view(leg: LegInput):
                           decode_tokens=step.delivered_tokens, hidden_tokens=0)
                   for index, step in enumerate(visible))
     return PhysicalView(replace(episode, turns=turns), steps)
+
+
+def _project_steps(steps):
+    rows = []
+    for step in steps:
+        row = {"kind": step.kind, "duration_s": (step.end_ns - step.start_ns) / NS}
+        if step.kind in ("turn", "hidden"):
+            row.update(requested_tokens=step.requested_tokens, delivered_tokens=step.delivered_tokens,
+                       context_tokens=step.context_tokens)
+        else:
+            row["requested_s"] = step.requested_s
+        rows.append(row)
+    return rows
 
 
 def _other_parts(view, segments):
@@ -214,17 +227,21 @@ def _baseline(kernel, trace, mapping, recovery, gap_limit):
     end = recovery.end_ns
     start = end - 40 * NS
     if not recovery.complete or start < recovery.start_ns:
-        return None, "incomplete_recovery", None
+        return None, "recovery_incomplete", None, "recovery_incomplete"
     if _has_gap(trace, mapping, start, end, gap_limit):
-        return None, "recovery_gap", None
+        return None, "gap_over_u1", None, "gap_over_u1"
     energy = _energy(kernel, trace, mapping, start, end)
     if energy is None:
-        return None, "recovery_coverage", None
+        return None, "trace_or_clock_unavailable", None, "trace_or_clock_unavailable"
     previous = start - 40 * NS
-    prior = None
-    if previous >= recovery.start_ns and not _has_gap(trace, mapping, previous, start, gap_limit):
-        prior = _energy(kernel, trace, mapping, previous, start)
-    return energy / 40, None, None if prior is None else prior - energy
+    if previous < recovery.start_ns:
+        return energy / 40, None, None, "recovery_incomplete"
+    if _has_gap(trace, mapping, previous, start, gap_limit):
+        return energy / 40, None, None, "gap_over_u1"
+    prior = _energy(kernel, trace, mapping, previous, start)
+    if prior is None:
+        return energy / 40, None, None, "trace_or_clock_unavailable"
+    return energy / 40, None, prior - energy, None
 
 
 def _above(joules, seconds, baseline):
@@ -235,11 +252,13 @@ def _channel_values(kernel, view, episode, name, attrs, parts, gap_limit):
     channel = TRACE_CHANNELS[name]
     trace, mapping = kernel.phases.selected_trace(episode, channel)
     if trace is None:
-        return {"reason": "trace_or_clock_unavailable"}
+        return {"reason": "trace_or_clock_unavailable", "baseline_w": None,
+                "baseline_reason": "trace_or_clock_unavailable"}
     if name == "dc_in" and _has_gap(trace, mapping, episode.start_ns, episode.end_ns, gap_limit):
-        return {"reason": "trace_gap"}
+        baseline, reason, _, _ = _baseline(kernel, trace, mapping, view.steps[-1], gap_limit)
+        return {"reason": "gap_over_u1", "baseline_w": baseline, "baseline_reason": reason}
     table = kernel.phases.phase_table(episode, channel, attrs)
-    baseline, reason, drift = _baseline(kernel, trace, mapping, view.steps[-1], gap_limit)
+    baseline, reason, drift, drift_reason = _baseline(kernel, trace, mapping, view.steps[-1], gap_limit)
     above = {key: _above(phase["joules"], phase["seconds"], baseline)
              for key, phase in table["phases"].items()}
     detailed = {}
@@ -251,7 +270,8 @@ def _channel_values(kernel, view, episode, name, attrs, parts, gap_limit):
                          "above_baseline_j": _above(absolute, seconds, baseline)}
 
     result = {"absolute": table, "baseline_w": baseline, "baseline_reason": reason,
-              "baseline_drift_j": drift, "above_baseline_j": above, "other": detailed}
+              "baseline_drift_j": drift, "baseline_drift_reason": drift_reason,
+              "above_baseline_j": above, "other": detailed}
     hidden = next((step for step in view.steps if step.kind == "hidden"), None)
     if hidden is not None:
         whole = _energy(kernel, trace, mapping, hidden.start_ns, hidden.end_ns)
@@ -305,8 +325,18 @@ class HoldWindow:
     reason: str | None = None
 
 
-def _is_hold_null_reason(reason):
-    return type(reason) is str and reason in HOLD_NULL_REASONS
+class HoldPool(dict):
+    """Pooled windows with the reason vocabulary from the verified input schema."""
+
+    def __init__(self, *args, reason_enum=()):
+        super().__init__(*args)
+        self.reason_enum = frozenset(reason_enum)
+        if any(type(reason) is not str or not reason or reason == "missing_floor" for reason in self.reason_enum):
+            raise ValueError("floor_reason")
+
+
+def _is_hold_null_reason(reason, reason_enum):
+    return type(reason) is str and reason in reason_enum
 
 
 def validate_instrument_pins(manifest_bytes, hold_bytes, edges_bytes, *, manifest_sha256,
@@ -320,8 +350,9 @@ def validate_instrument_pins(manifest_bytes, hold_bytes, edges_bytes, *, manifes
             raise ValueError("instrument_pin") from error
 
 
-def pool_hold_windows(rows, qualified_members):
+def pool_hold_windows(rows, qualified_members, *, reason_enum=()):
     """Pool the per-leg hold variances over the committed instrument roster."""
+    reason_enum = frozenset(reason_enum)
     seen, weights, variance, nulls = set(), defaultdict(int), defaultdict(list), defaultdict(set)
     for row in rows:
         if row.member not in qualified_members:
@@ -330,7 +361,7 @@ def pool_hold_windows(rows, qualified_members):
         if (row.channel not in ("gpu_rail", "rail_sum", "dc_in") or row.window_s not in FLOOR_WINDOWS
                 or (row.member, key) in seen or not _nonnegative_int(row.retained)):
             raise ValueError("instrument_window")
-        if row.reason is not None and not _is_hold_null_reason(row.reason):
+        if row.reason is not None and not _is_hold_null_reason(row.reason, reason_enum):
             raise ValueError("floor_reason")
         seen.add((row.member, key))
         if row.sd_w is None:
@@ -342,13 +373,13 @@ def pool_hold_windows(rows, qualified_members):
         weight = row.retained - 1
         weights[key] += weight
         variance[key].append(weight * row.sd_w ** 2)
-    return {key: (sqrt(fsum(variance[key]) / weights[key]), ()) if weights[key]
-            else (None, tuple(sorted(nulls[key])) or (MISSING_FLOOR,))
-            for key in {(channel, window) for channel in ("gpu_rail", "rail_sum", "dc_in")
-                        for window in FLOOR_WINDOWS}}
+    windows = ((channel, window) for channel in ("gpu_rail", "rail_sum", "dc_in")
+               for window in FLOOR_WINDOWS)
+    return HoldPool({key: (sqrt(fsum(variance[key]) / weights[key]), ()) if weights[key]
+                     else (None, tuple(sorted(nulls[key]))) for key in windows}, reason_enum=reason_enum)
 
 
-def floor_units(joules, duration_s, channel, pooled, manifest_sha256):
+def floor_units(joules, duration_s, channel, pooled, manifest_sha256, *, baseline_reason=None):
     """Describe a phased energy value against its own duration's pooled floor."""
     if channel == "cpu_rail":
         return {"joules": joules, "duration_s": duration_s, "floor_j": None,
@@ -357,19 +388,19 @@ def floor_units(joules, duration_s, channel, pooled, manifest_sha256):
         raise ValueError("instrument_pin")
     window = max((width for width in FLOOR_WINDOWS if width <= duration_s), default=10)
     sd, reasons = pooled[(channel, window)]
-    if type(reasons) is not tuple or any(not _is_hold_null_reason(reason) for reason in reasons):
+    reason_enum = pooled.reason_enum if type(pooled) is HoldPool else ()
+    if type(reasons) is not tuple or any(not _is_hold_null_reason(reason, reason_enum) for reason in reasons):
         raise ValueError("floor_reason")
     if sd is not None and (not _finite(sd) or sd < 0):
         raise ValueError("instrument_variance")
     floor = None if sd is None else sd * duration_s
-    if floor is None:
-        reasons = reasons or (MISSING_FLOOR,)
-    else:
-        reasons = () if floor else ("zero_floor",)
+    if baseline_reason is not None and baseline_reason not in BASELINE_REASONS:
+        raise ValueError("baseline_reason")
+    reason = (reasons[0] if reasons and floor is None else baseline_reason) if joules is None or not floor else None
     return {"joules": joules, "duration_s": duration_s, "floor_j": floor, "window_s": window,
             "units": joules / floor if floor and joules is not None else None,
             "under_shortest_window": duration_s < 10, "instrument_manifest_sha256": manifest_sha256,
-            "reason": reasons}
+            "reason": reason}
 
 
 @dataclass(frozen=True)
@@ -382,34 +413,48 @@ class ReadParameters:
 
 def read_parameters(*, gpu_token_floors, dc_token_floors, return_bounds,
                     decode_end_lags, qualified_prefills):
-    """Apply RL-187 §3.7 to normalized qualified instrument observations.
+    """Calculate the counterfactual RL-187 §3.7 settings for the read.
 
     Return values use the reported upper bound for ``under`` and None for
     ``never returned``. Decode-end lags use None for ``over 1 s``.
+    RL-197 fixes the actual issued-kit settings independently of this read.
     """
-    floor_inputs = (tuple(gpu_token_floors), tuple(dc_token_floors))
-    if not all(floor_inputs) or any(not _finite(value) or value < 0
-                                    for values in floor_inputs for value in values):
-        raise ValueError("missing_token_floor")
-    threshold = min(median(values) for values in floor_inputs)
+    gpu, dc = tuple(gpu_token_floors), tuple(dc_token_floors)
+    prefills = sorted(set(qualified_prefills), key=lambda size: abs(size - 2000))
+    withheld = withheld_reason(gpu, dc, prefills)
+    if withheld:
+        raise ValueError({"no_dc_in_floor": "missing_token_floor", "no_prefill_size": "prefill_requires_ruling",
+                          "dose_under_floor_at_k2": "dose_requires_ruling"}[withheld])
+    threshold = min(median(gpu), median(dc)) if gpu else 0
     dose = next((candidate for candidate in (128, 256, 512) if candidate >= threshold), None)
-    if dose is None:
-        raise ValueError("dose_requires_ruling")
     bounds, lags = tuple(return_bounds), tuple(decode_end_lags)
-    if (not bounds or not lags or any(value is not None and (not _finite(value) or value < 0)
-                                      for value in (*bounds, *lags))):
+    if any(value is not None and (not _finite(value) or value < 0) for value in (*bounds, *lags)):
         raise ValueError("missing_instrument_timing")
-    never_returned = None in bounds
-    returned = max(value for value in bounds) if not never_returned else None
+    never_returned = not bounds or None in bounds
+    returned = max(bounds) if not never_returned else None
     recovery = 600 if never_returned else min(600, max(120, 5 * returned))
-    if None in lags:
+    if not lags or None in lags:
         gap = 60 if never_returned else min(60, max(10, ceil(returned)))
     else:
         gap = max(10, ceil(5 * max(lags)))
-    prefills = sorted(set(qualified_prefills), key=lambda size: abs(size - 2000))
-    if not prefills or (len(prefills) > 1 and abs(prefills[0] - 2000) == abs(prefills[1] - 2000)):
+    if len(prefills) > 1 and abs(prefills[0] - 2000) == abs(prefills[1] - 2000):
         raise ValueError("prefill_requires_ruling")
     return ReadParameters((dose, 2 * dose, 4 * dose), recovery, gap, prefills[0])
+
+
+def withheld_reason(gpu_token_floors, dc_token_floors, qualified_prefills):
+    """Evaluate RL-197's ordered reservation reasons on qualified observations."""
+    if any(not _finite(value) or value < 0 for value in (*gpu_token_floors, *dc_token_floors)):
+        raise ValueError("instrument_floor_observation")
+    if any(not _nonnegative_int(value) or not value for value in qualified_prefills):
+        raise ValueError("instrument_prefill_observation")
+    if not dc_token_floors:
+        return "no_dc_in_floor"
+    if not qualified_prefills:
+        return "no_prefill_size"
+    if gpu_token_floors and min(median(gpu_token_floors), median(dc_token_floors)) > 512:
+        return "dose_under_floor_at_k2"
+    return None
 
 
 def print_controls(positions, *, kernel, gap_limits_ns, pooled, instrument_manifest_sha256):
@@ -439,22 +484,27 @@ def print_controls(positions, *, kernel, gap_limits_ns, pooled, instrument_manif
             row.update(disposition="not_evaluable", reason=str(error))
             continue
         controls.append(kernel.phases.ControlLeg(episode, view.cpu_dose))
+        visible = tuple(step for step in view.steps if step.kind == "turn")
+        envelope = {"prompt_tokens": sum(step.context_tokens for step in visible),
+                    "decode_tokens": sum(step.delivered_tokens for step in visible)}
         row.update(disposition="admitted" if leg.admitted and not view.short else "unadmitted",
-                   delivery="short" if view.short else "as_requested", calls=view.steps,
-                   envelope=leg.episode.turns[0], channels={})
+                   delivery="short" if view.short else "as_requested", calls=_project_steps(view.steps),
+                   envelope=envelope, channels={})
         for name in CHANNELS:
             channel = _channel_values(kernel, view, episode, name, attrs[name], parts, gap_limits_ns[name])
             row["channels"][name] = channel
             if "absolute" not in channel:
                 continue
-            def units(joules, duration):
-                return floor_units(joules, duration, name, pooled, instrument_manifest_sha256)
+            def units(joules, duration, reason=channel["baseline_reason"]):
+                return floor_units(joules, duration, name, pooled, instrument_manifest_sha256,
+                                   baseline_reason=reason)
 
             channel["phase_floors"] = {
                 phase: units(joules, channel["absolute"]["phases"][phase]["seconds"])
                 for phase, joules in channel["above_baseline_j"].items()
             }
-            channel["baseline_drift_floor"] = units(channel["baseline_drift_j"], 40)
+            channel["baseline_drift_floor"] = units(channel["baseline_drift_j"], 40,
+                                                     channel["baseline_drift_reason"])
             for part in channel["other"].values():
                 part["floor"] = units(part["above_baseline_j"], part["seconds"])
             hidden = channel.get("hidden")
