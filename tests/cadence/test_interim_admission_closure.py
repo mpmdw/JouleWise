@@ -542,6 +542,7 @@ class Arena:
         mr.git_commit(self.mini,"Register generated stage-one inputs")
         self.ledger_bytes=self.ledger.read_bytes()
         self.manifest,self.audit=manifest,audit
+        self.base=mr.git(self.mini,"rev-parse","HEAD").stdout.strip()   # SHIM: each case's pin commit sits on this
         # SHIM: a committed stage 1 with no path option; the manifest, the roster and the custody are found at
         # their registered places, and public records are read from origin/main after a fetch (audit 3)
         self.args=["stage1"]
@@ -574,7 +575,9 @@ class Arena:
     def pin(self):
         """SHIM (RL-194): the lead's pin fill for custody as it now is. The manifest's one pin list is made from the
         rostered spans' bytes, RUN_STATE carries a Check item naming each span's offload manifest in full hex, the
-        LOOKS row names the manifest's new sha256, and the copy commits and publishes all three."""
+        LOOKS row names the manifest's new sha256, and the copy commits and publishes all three, as one commit on the
+        registration commit: each case is its own committed look, and no case's pin list stays in the history the
+        executor reads (the published branch is replaced)."""
         from tests.cadence import custody_pin_fixture as fixture, look_minirepo as mr
         from joulewise.cadence_looks import interim_release as release
         ids=[span["span_id"] for span in json.loads(self.inputs[0].read_bytes())]
@@ -588,6 +591,7 @@ class Arena:
         shared=json.loads(self.ledger.read_bytes())
         next(row for row in shared["looks"] if row["look_id"]==LOOK)["sha256"]=mr.lm.sha256_file(self.manifest)
         self.ledger.write_bytes(release.dump(shared) if self.audit else wire(shared))
+        mr.git(self.mini,"reset","-q","--soft",self.base)
         mr.git_commit(self.mini,"Pin the generated custody as it now is")
         self.ledger_bytes=self.ledger.read_bytes()
     def invoke(self,path):
