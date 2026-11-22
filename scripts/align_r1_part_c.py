@@ -4228,13 +4228,14 @@ def _check_native_soak(soak, config_path):
             or canonical(receipt.get("sensor_roles")) != canonical(sensors)
             or canonical(reference.get("sensor_roles")) != canonical(sensors)):
         raise EvidenceFailure("fresh_soak", "idle", "soak_row.json")
-    _check_battery(soak.sources[BATTERY_SOURCE], receipt, "idle", soak.member)
     # The frozen k_idle emits this fixed declaration about the derived series.
     _required(receipt.get("sensor_series_note") == (
         "valid 1 Hz reads in order with their times (s from the first journal row); "
         "a failed read is dropped, never interpolated"), "soak_readings", "idle", RECEIPT_NAME,
         field="sensor_series_note")
     derived = _derive_soak(soak.sources[journal], receipt, sensors, soak.member)
+    # After the soak's own window and duration, so a terminal that contradicts its journal is named as such.
+    _check_battery(soak.sources[BATTERY_SOURCE], receipt, "idle", soak.member)
     if any(stat["settled"] is not True for stat in derived.values()):
         raise EvidenceFailure("soak_unsettled", "idle", journal)
     if (canonical(derived) != canonical(row.get("soak_detrended"))
