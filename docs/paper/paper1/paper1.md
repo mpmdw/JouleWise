@@ -652,7 +652,7 @@ L9-RULING-ADDENDUM.md; decision_log.md D-188-D-190; docs/analysis/b5/DEVIATION-L
 
 ### 5.6 Blinding and release
 
-The rule for each block, from its first session until its release, is that no person or AI agent reads a measured energy, power, phase duration, floor, ratio, contrast, outcome word or calibration value. Two recorded departures are stated below and in Section 8.2. For the replication block, which is not released, this is the rule in force, not a completed record. The collection and analysis programs wrote
+The rule for each block, from its first session until its release, is that no person or AI agent reads a measured energy, power, phase duration, floor, ratio, contrast, outcome word or calibration value. Two recorded departures are stated below and in Section 8.2. The replication block was under this rule from its first session until its release on 13 November 2026 (recorded below). The collection and analysis programs wrote
 these into restricted files listed in a custody map; everything released during collection was **structure**
 only: verdicts, whether a session counted, flag counts by code, kept-unit counts, hazard measurements, and timing
 that is not a phase duration. A unit removed by a restricted code was reported only as "removed (restricted
