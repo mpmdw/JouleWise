@@ -19,6 +19,7 @@ from . import qualification_manifest as schema_check
 
 V1 = "joulewise.cadence_look_manifest.v1"
 V2 = "joulewise.cadence_look_manifest.v2"
+CONTROLS = "joulewise.cadence_look_manifest.controls.v1"
 PRE_READ_REFUSAL = 2
 _VALIDATION_REFUSAL = "REFUSE manifest failed validation\n"
 REGISTRATION_PLACEHOLDER = b'"PENDING:CODE"'
@@ -36,12 +37,14 @@ class _PublicRefusal(ManifestError):
 
 _MANIFEST_ROUTES = frozenset((
     (V1, "interim", "lm-interim-01"),
+    (CONTROLS, "controls", "lm-ctl-01"),
     (V2, "qualification", "lm-qual-01"),
     (V2, "description", "lm-inst-01"),
     (V2, "description", "lm-stab-01"),
     (V2, "description", "lm-stab-02"),
     (V2, "transfer", "lm-transfer-01"),
 ))
+_MANIFEST_SCHEMA_IDS = frozenset(schema for schema, _, _ in _MANIFEST_ROUTES)
 
 TRANSFER_PRINTS = (
     "daily_errors",
@@ -159,9 +162,10 @@ class _NoticeArgumentParser(argparse.ArgumentParser):
 
 
 def _manifest_route(document):
-    if not isinstance(document, dict) or document.get("schema") not in (V1, V2):
+    schema = document.get("schema") if isinstance(document, dict) else None
+    if not isinstance(schema, str) or schema not in _MANIFEST_SCHEMA_IDS:
         raise _PublicRefusal("unknown cadence manifest schema ID")
-    route = (document["schema"], document.get("look_kind"), document.get("look_id"))
+    route = (schema, document.get("look_kind"), document.get("look_id"))
     if not all(isinstance(value, str) for value in route) or route not in _MANIFEST_ROUTES:
         raise _PublicRefusal("unrecognized cadence manifest schema, look_kind and look_id combination")
     return route
@@ -423,8 +427,18 @@ def _dispatch(argv, *, stderr_fd=None):
             if args.final:
                 _reject_final_placeholders(document)
             return _validate_legacy(args.v1_tool, payload, args.final, stderr_fd=stderr_fd)
-        read_registration = None if registration is None else lambda: _read_cli_registration(registration)
-        doc = _validate_v2_document(payload, document, kind, args.final, read_registration)
+        if schema == CONTROLS:
+            if registration is not None:
+                raise _PublicRefusal("--registration applies to v2 manifests")
+            from .controls_manifest import validate_manifest
+
+            try:
+                doc = validate_manifest(payload)
+            except ValueError as error:
+                raise ManifestError("invalid controls manifest") from error
+        else:
+            read_registration = None if registration is None else lambda: _read_cli_registration(registration)
+            doc = _validate_v2_document(payload, document, kind, args.final, read_registration)
     except (ManifestError, OSError) as error:
         return finish_notice(PRE_READ_REFUSAL, stderr=_refusal_notice(error), stderr_fd=stderr_fd)
     return finish_notice(0, stdout=f"ok {doc['look_id']} ({doc['status']})\n")
