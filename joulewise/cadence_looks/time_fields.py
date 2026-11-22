@@ -217,14 +217,20 @@ def stream_fields(payload, name):
             continue
         kind = _kind(members)
         if kind == "h":
+            if header is not None or not is_first:
+                raise TimeFieldError("unexpected native stream header")
             header = _pick(members, HEADER_KEYS)
             if is_first:
                 first = header
         elif kind == "t":
+            if trailer is not None:
+                raise TimeFieldError("duplicate native stream trailer")
             trailer = _pick(members, TRAILER_KEYS)
         elif kind == "e":
             errors += 1
         elif kind == "b":
+            if header is None or trailer is not None:
+                raise TimeFieldError("poll outside native stream anchors")
             poll = _pick(members, POLL_KEYS)
             if "p" in members:
                 pk, ptext = members["p"]

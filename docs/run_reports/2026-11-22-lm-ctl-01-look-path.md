@@ -81,6 +81,24 @@ locally. Its own attempt to create a synthetic `RESTRICTED` directory for
 therefore use CI's unprivileged Linux analyst. The bound-host blind preflight
 and a production registration are separate lead-owned gates.
 
+## Draft PR and executing evidence
+
+The initial implementation is `2580c30649a6115c142e7daa433307324905ef79` in
+draft PR #951. Its body was read back against the submitted gate ledger.
+The 846 installed v3.1 tests and hand-vector tests passed locally and in CI.
+The isolated paired release passed the frozen `h_byte_identity` case. The
+public and private files matched byte for byte. The local unprivileged probe
+also passed its write, cleanup and 0555 denial checks.
+
+CI observed the four archived mismatches below. It also caught that the
+synthetic registrar used the case ID instead of the injected fault name for
+`private_operand_tracked`, so it omitted the synthetic tracked blob in that
+case. The follow-up corrects the registrar and also verifies the public
+authority tip before importing checkout code and again before claiming.
+The paired case and all fixtures retain their original bytes.
+
+[Draft PR #951](https://github.com/mpmdw/JouleWise/pull/951) · [Initial frozen checks](https://github.com/mpmdw/JouleWise/actions/runs/45039449189)
+
 ## NEEDS_SPEC
 
 The two original questions are resolved by RL-202a. One freeze disposition

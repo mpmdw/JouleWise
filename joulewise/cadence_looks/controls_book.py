@@ -91,7 +91,17 @@ class Book:
         return tip
 
     def recheck(self):
-        _require(self.tip == self.head())
+        _require(self.tip == self.head() == self.public_tip())
+
+    @staticmethod
+    def public_tip():
+        environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        environment.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull, GIT_TERMINAL_PROMPT="0")
+        raw = subprocess.check_output(["git", "ls-remote", "--exit-code", ORIGIN, "refs/heads/main"],
+                                      cwd="/", env=environment, stderr=subprocess.PIPE, timeout=15)
+        revision, ref = raw.decode("ascii").split()
+        _require(ref == "refs/heads/main")
+        return revision
 
     def tree(self, revision):
         _require(revision in self.first_parents)
@@ -236,11 +246,10 @@ class Authority:
                      "version": list(sys.version_info[:3]),
                  })
         pins = document["paths"]
-        actual = {}
         for name, expected in pins.items():
             _require(name.endswith(".py") and _hex_pin(expected, 64)
                      and name.startswith(("joulewise/", "scripts/")))
-            actual[name] = book.working(name, self.revision, expected)
+            book.working(name, self.revision, expected)
         _require({path for path in CODE_PATHS.values() if path.endswith(".py")} <= pins.keys())
         for module in tuple(sys.modules.values()):
             origin = getattr(module, "__file__", None)

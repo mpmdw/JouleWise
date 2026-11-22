@@ -1,6 +1,6 @@
 """Descriptor-bound ctl-01 layout, link probe and single-use state."""
 
-from contextlib import ExitStack, contextmanager, suppress
+from contextlib import ExitStack, contextmanager
 import ctypes
 import errno
 import fcntl
@@ -332,10 +332,14 @@ def marker_valid(private, reservation, history):
         return False
 
 
-def require_fresh(private, public, history):
+def require_unspent_history(history):
     if any(row.get("look_id") == LOOK_ID and row.get("kind") in ("first_ctl_read", "published")
            for row in history):
         raise GateRefusal("SPENT", status=3, special=True)
+
+
+def require_fresh(private, public, history):
+    require_unspent_history(history)
     reservation = _observation(private, PRIVATE_NAME)
     if marker_valid(private, reservation, history):
         raise GateRefusal("SPENT", status=3, special=True)

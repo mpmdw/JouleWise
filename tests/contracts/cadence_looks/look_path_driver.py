@@ -104,7 +104,7 @@ def install(world, bench, fault, legacy):
     source.chmod(0o700)
     for role in ("hold", "edges"):
         put(instrument/(role+".json"), (world/"instrument"/(role+".json")).read_bytes(), mode=0o600)
-    if fault == "private_operand_tracked":
+    if fault == "tracked_hold_blob":
         put(repo/"synthetic-misplaced-input.json", (instrument/"hold.json").read_bytes())
 
     floor_path = manifest.LOOK_DIR + "lm-inst-01.restricted.schema.json"
@@ -219,6 +219,7 @@ def _production_modules(repo):
     spec = util.spec_from_loader(loader.name, loader)
     launcher = util.module_from_spec(spec)
     loader.exec_module(launcher)
+    launcher._public_tip = lambda: git(repo, "rev-parse", book.REF)
     inventory = launcher._registration(repo)
     sys.path.insert(0, str(repo))
     sys.meta_path.insert(0, launcher.RegisteredModules(repo, inventory))
@@ -260,6 +261,7 @@ def run(operation, world, bench, fault):
     from joulewise.cadence_looks import controls_run as worker
     from joulewise.cadence_looks.controls_book import Authority, Book
 
+    Book.public_tip = staticmethod(lambda: git(repo, "rev-parse", book.REF))
     make_inputs = inputs.make_inputs
     inputs.make_inputs = lambda *args: make_inputs(*args, synthetic=True)
 

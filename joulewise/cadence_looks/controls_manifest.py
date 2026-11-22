@@ -332,6 +332,10 @@ def _hold_pool(raw, members, channels, reasons, *, whole_reasons=None):
                 rows.extend(analysis.HoldWindow(member, channel, width, 0, None, record["reason"])
                             for channel in _INSTRUMENT_CHANNELS for width in analysis.FLOOR_WINDOWS)
                 continue
+            if whole_reasons is not None and "reference_source_leg_id" in record:
+                reference = record["reference_source_leg_id"]
+                if type(reference) is not str or not re.fullmatch(r"L(?:00[1-9]|01[0-2])", reference):
+                    raise ValueError("instrument hold reference")
             for channel in _INSTRUMENT_CHANNELS:
                 leaf = record[channel]
                 rule = channels[channel]
@@ -343,22 +347,29 @@ def _hold_pool(raw, members, channels, reasons, *, whole_reasons=None):
                         type(dropped) is not list or len(dropped) != len(analysis.FLOOR_WINDOWS)
                         or any(type(value) is not int or value < 0 for value in dropped)))):
                     raise ValueError("instrument hold counts")
+                if whole_reasons is not None:
+                    for field in ("mean_w", "drift_w_per_600s"):
+                        _hold_value(leaf[field], reasons)
                 for width, retained in zip(analysis.FLOOR_WINDOWS, kept, strict=True):
-                    sd = leaf[f"sd{width}_w"]
-                    reason = None
-                    if type(sd) is dict:
-                        if (not {"value", "reason"} <= sd.keys() <= {"value", "reason", "bound_s"}
-                                or sd["value"] is not None or sd["reason"] not in reasons):
-                            raise ValueError("instrument hold reason")
-                        if "bound_s" in sd and (not analysis._finite(sd["bound_s"]) or sd["bound_s"] < 0):
-                            raise ValueError("instrument hold bound")
-                        sd, reason = None, sd["reason"]
-                    elif type(sd) not in (int, float):
-                        raise ValueError("instrument hold SD")
+                    sd, reason = _hold_value(leaf[f"sd{width}_w"], reasons)
                     rows.append(analysis.HoldWindow(member, channel, width, retained, sd, reason))
         return analysis.pool_hold_windows(rows, set(members.values()), reason_enum=reasons | (whole_reasons or set()))
     except (AttributeError, KeyError, TypeError, ValueError, OverflowError) as error:
         raise ControlsRefusal(Refusal.INSTRUMENT_HOLD_BINDING) from error
+
+
+def _hold_value(value, reasons):
+    if type(value) is dict:
+        if (not {"value", "reason"} <= value.keys() <= {"value", "reason", "bound_s"}
+                or value["value"] is not None or value["reason"] not in reasons):
+            raise ValueError("instrument hold reason")
+        bound = value.get("bound_s", 0)
+        if not analysis._finite(bound) or bound < 0:
+            raise ValueError("instrument hold bound")
+        return None, value["reason"]
+    if not analysis._finite(value):
+        raise ValueError("instrument hold value")
+    return value, None
 
 
 def verify_freeze(*, current_revision, committed, working, history, private=None):

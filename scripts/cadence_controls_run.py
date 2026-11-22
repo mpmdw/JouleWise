@@ -7,6 +7,7 @@ import importlib.machinery
 import json
 import os
 from pathlib import Path
+import stat
 import subprocess
 import sys
 
@@ -15,6 +16,7 @@ CONTROL = "docs/process/cadence/looks/"
 MANIFEST = CONTROL + "lm-ctl-01.json"
 SOURCE_INDEX = CONTROL + "lm-ctl-01.sources.json"
 LAUNCHER = "scripts/cadence_controls_run.py"
+ORIGIN = "https://github.com/mpmdw/JouleWise.git"
 OPERATIONS = ("validate-final", "stage1", "preflight", "stage2", "status")
 
 
@@ -41,6 +43,16 @@ def _git(root, *arguments):
                                    stderr=subprocess.PIPE, env=environment)
 
 
+def _public_tip():
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    environment.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull, GIT_TERMINAL_PROMPT="0")
+    raw = subprocess.check_output(["git", "ls-remote", "--exit-code", ORIGIN, "refs/heads/main"],
+                                  cwd="/", env=environment, stderr=subprocess.PIPE, timeout=15)
+    revision, ref = raw.decode("ascii").split()
+    _demand(ref == "refs/heads/main")
+    return revision
+
+
 def _read(root, name):
     parts = name.split("/")
     _demand(len(parts) >= 2 and all(part not in ("", ".", "..") and "\\" not in part for part in parts))
@@ -51,6 +63,7 @@ def _read(root, name):
             os.close(fd)
             fd = child
         with os.fdopen(os.open(parts[-1], os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW, dir_fd=fd), "rb") as handle:
+            _demand(stat.S_ISREG(os.fstat(handle.fileno()).st_mode))
             return handle.read()
     finally:
         os.close(fd)
@@ -95,6 +108,7 @@ class RegisteredModules(importlib.abc.MetaPathFinder):
 
 def _registration(root):
     tip = _git(root, "rev-parse", "--verify", "refs/remotes/origin/main^{commit}").decode().strip()
+    _demand(tip == _public_tip())
     ledger = json.loads(_git(root, "show", f"{tip}:{CONTROL}LOOKS.json"), object_pairs_hook=_unique)
     row, = (row for row in ledger["looks"] if row["look_id"] == "lm-ctl-01")
     _demand(row["manifest_path"] == MANIFEST and row["status"] == "registered")

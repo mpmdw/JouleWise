@@ -11,7 +11,7 @@ import sys
 from .controls_book import Authority, Book
 from .controls_layout import (
     DIR_FLAGS, GateRefusal, absolute, held_lock, open_directory, open_file, probe_link,
-    registered_directories, require_fresh, require_private,
+    registered_directories, require_fresh, require_private, require_unspent_history,
 )
 from .controls_manifest import verify_freeze, verify_stage1
 from .controls_print import LOOK_ID, ControlsRefusal, Refusal, _hex_pin
@@ -208,7 +208,9 @@ def _layout(book, layout, protected=(), *, lock=False):
 
 def run(operation, root):
     book = Book(root)
+    book.recheck()
     authority = Authority(book)
+    require_unspent_history(authority.history)
     layout = authority.document["release_layout"]
     execution = authority.document["execution"]
     private = absolute(layout["private"]["path"])
