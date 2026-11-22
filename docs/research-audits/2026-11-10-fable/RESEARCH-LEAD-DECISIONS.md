@@ -24714,3 +24714,329 @@ Queue generation and the draft dispatch item may proceed.
 **Not checked.** Whether today's RUN_STATE items carry rows 1 to 6 as typed fields (I saw item 513's prose and item 463's typed header). Whether item 491's digests already include the receipt. Whether the queue launcher on pin B supplies `span_id`. The builder's sweep arithmetic, taken as printed. I ran no code.
 
 **Blind status.** Blind. Read: RL-198a and RL-200; the builder's FINAL-MESSAGE, the resolver's escalation and the run report; receipt-writing source of `scripts/cadence_legs_runner.py` and `fence_problems` in `joulewise/cadence/legs.py` at `2d347f721` and `6e9d42f1d`; RLD:18650-18656, 22428-22440, 23025-23047; the headings of RUN_STATE 463 and 507 and the prose of item 513. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened, and no real receipt. No commit, push, comment, run, SSH or fetch. The only file written is this one.
+
+# RL-201. BYTES to release: branch 6.6.1 is confirmed and `P1-BY-KB` fills now; the no-word, no-answer and BY-LABEL-1 texts are fixed before any held-out row is read; the stage-2 release is a record pushed to the protected records branch, not a merge into `main`; the desk runs agreement, key release and stage 2 as one item with no return to me on the clean path; RL-7 (e)'s date test and the Tier D texts are made exact
+
+Research lead (Fable 5.2). Written Sun Nov 22 01:14 PST 2026 (from `date`).
+
+**Read.**
+- `/Volumes/JW-EXT/scratch/d-bytes-stage2-path/PATH.md`, all of it, and its `BRIEF.md`.
+- Ruling log on `origin/audit/2026-11-10-fable`: RL-7, RL-8, RL-11, RL-33, RL-44, RL-45, RL-53 W-8, RL-92, RL-95, RL-147 §4 with its addendum and correction. RL-80 and RL-82 by their headings and by what RL-92 quotes of them.
+- At `d7098081d` (the stage-1 run line): `docs/registrations/bytes_pack_v1.md` status, §1, §8, §11 to §19; `bytes_deviation_log.md` whole; `bytes_known_bytes_reading_rule.md` landing header, admission record, history, Part A §0 and §4, Part B.
+- Code at `d7098081d`: `scripts/b6_release_subset.py` whole; `scripts/bytes_commitment.py` constants, `verify_commitment`, `admit` and the event names; `scripts/bytes_analyze.py` lines 30 to 75 (`_missing_labels` and the admission call).
+- `origin/main` @ `1b834776d`: `docs/paper/paper1/paper1.md` header, abstract, §1.3, §1.4, §3.3, §5.5, §5.6, all of §7, the `P1-AUTO-BLINDCHECK` site in §8.3, §9, §11; `fill_index.md`; `variants/tierD_bytes_registered_design.md`; `RUN_STATE.md` items 152 to 156 and 291b.
+
+**Checked myself, read-only.**
+- `d7098081d` is an ancestor of `origin/records/2026-11-bytes-stage1` (tip `765f28644`).
+- SHA-256 at `d7098081d`: `joulewise/bytes_analysis.py` `18582818…0a71`; `scripts/bytes_twin.py` `4820dc2e…03de`; `scripts/bytes_analyze.py` `fb7d03a5…3fa5`.
+- Neither script digest is bound in code or configuration at `d7098081d`. The only files that carry either are two cold-review reports under `docs/run_reports/`. `bytes_commitment.py` binds the library digest only.
+- `†` is not used anywhere in `paper1.md`.
+- `KB-SLOT-FILL.md` and the magistrate records it cites are on `main`. `bytes_pack_v1.md` is not on `main`; it is reachable from `origin` on the run line and the records branch.
+
+**Not checked.**
+- No digest in this ruling was re-taken from a predictions or release file. Every digest that prints is re-taken from the files by the writer (RL-147 §4 item 1's rule).
+- I did not verify the time of the last pass-1 BYTES session against the known-bytes window, the branch-protection settings of the records branch, or that Block 5's decode workload uses a different prompt length from BYTES's. Each is marked "fill seat verifies" where it matters.
+- I did not read `KB-SLOT-FILL.md` itself, `BLINDCHECK.md`, PR #701, or any P1/M1 build.
+
+**Blind status.** Blind to every BYTES energy, power and duration, fit set and held-out. I opened no export, withheld store, key, journal content, `predictions.json`, `lines-summary.txt` or `stage1-summary.json`; I listed the eight file names under `docs/bytes/stage1/` and read tool source. **Not blind to the known-bytes test's outcome**: it is a non-claim instrument test whose result is registered text in §1. Branch 6.6.1 is selected from the slot's class words, not from its numbers. Not blind to Block 5 or Block 6. Every text below that depends on a held-out outcome is written as branches, before any real held-out row has been read.
+
+## 0. Ruling in one paragraph
+
+Nothing on the clean path now waits on me. `P1-BY-KB` and §3.3 fill today from the registered slot, independently of §7.5 and of the tier. The paper's no-word, no-answer and BY-LABEL-1 texts are fixed here; this ruling is committed to the audit branch before the first `heldout_rows` journal event, which is what makes them pre-outcome. The stage-2 release is the push to `records/2026-11-bytes-stage1` of a release record meeting §4.2. It needs no merge into `main`, no separate disposition and no approval from Ed. So PATH.md's step 3 leaves the critical path. The desk item covers the byte-identity fit check, the blinded agreement, the key release and stage 2 in one unarmed gap, stopping only on a refusal, a missing comparison or an above-bar field. An above-bar field attributed to the bound library comes to me once, as text; the §11 repair after it is pre-authorized. The tier is called from GitHub's push log at the end of 3 December, either way, before any number is read.
+
+## 1. Known-bytes: branch 6.6.1, the text, and filling now
+
+### 1.1 Branch
+
+**6.6.1 is confirmed.** The reading rule's §4 defines "responds as registered": rails when its class is RESOLVED, rest when its class is RESOLVED. Registration §1 and the §18 slot row record rails, GPU rail and rest RESOLVED and DC input valid. Branches 6.6.2 and 6.6.3 are deleted.
+
+### 1.2 `P1-BY-KB` fills now
+
+Yes. It cites the admitted record and does not wait for §7.5, the stage-2 release or the tier call.
+
+- The test is non-claim, uses no model and no BYTES session, and its outcome has been registered text since 31 October. Nothing in it bears on a held-out value.
+- **Source, corrected in `fill_index.md`.** The row now names "BYTES stage-2 records", which is wrong. It becomes: registration §1 slot and §18 row, `docs/registrations/bytes_pack_v1.md` at `d7098081d`; slot text `docs/process_traces/2026-10-31-magistrate-5cbfbcfc/KB-SLOT-FILL.md` (SHA-256 `5729d8c7…`, re-taken); reading rule `bytes_known_bytes_reading_rule.md` Part A (SHA-256 `569601b3…`, re-taken) and Part B.
+- The paper cites the registration by commit and path until the BYTES lineage is on `main`; the citation is re-pointed then.
+- A second reader re-reads the eight values, the four class words and the lag counts against registration §1 and Part B item 1. Light-tier docs PR into `main`.
+- **Fill seat verifies:** the close of the last pass-1 BYTES session precedes 23:21 PDT on 30 October 2026, from session structure in `RUN_STATE.md`. If it does not, the first paragraph below comes back to me and the rest still fills.
+
+### 1.3 Exact text of §3.3
+
+The section's first paragraph and branch 6.6.1 are replaced by these three paragraphs. The first sentence changes because registration §1 itself was reworded on admission: the test cannot show whether the GPU rail includes the memory controller.
+
+> The sampler reports no memory rail, so the energy of reading memory is split between the rails and the rest (Section 7.2). Whether memory traffic costs energy on the GPU rail, on the rails and on the rest was measured by a registered **known-bytes stream test**: a GPU workload that streams a known number of bytes twice, once over rotating addresses intended to read memory and once over repeated addresses intended to read on-chip cache. The test is non-claim: it changes no registered number, exclusion or estimator. It ran on 30 and 31 October 2026 (23:21 to 00:38 PDT), after pass-1 collection and before stage-1 unblinding, from its own non-claim checkout.
+
+> With matched 32 MiB dispatches, the contrast of rotating minus repeated addresses, in joules per gigabyte of logical bytes, was 0.0092 ± 0.0021 at the rails, 0.00879 ± 0.00010 on the GPU rail, 0.0389 ± 0.0072 at the DC input and 0.0296 ± 0.0084 for the rest. The rails, the GPU rail and the rest were each classed RESOLVED (the whole interval lies above zero) and the DC-input contrast was valid. The test identifies memory-traffic energy on a boundary, not whether it is the memory controller, the fabric or the GPU waiting on memory; on rest it does not separate the memory chips from power conversion and fans. The rail and rest boundaries are read as registered, and nothing is printed beside their claim lines. The 32 MiB dispatch reads at 106 to 116 GB/s and is latency-bound, so transfer to bandwidth-bound decode traffic is a stated limit of this test.
+
+> The rule by which the test is read was revised on the night of the test. A desk replay showed the rule admitted on 30 October refusing four of four real scans; a matched-geometry revision replaced it before the test ran and before any outcome existed. No record line admitted the revision before the run: the lead bound it by disposing two cold reviews, re-executing and arming the test from the revised code (`53bcceeac`), and the research lead accepted that act as the rule's admission on 11 November 2026, after the outcome was known. Two corrections to the rule's text were settled after the data existed. The first concerns the lag count of the baseline variance estimator: the result above uses the named 10 s estimator as run (75 to 77 lags at the delivered cadence), and the rule's literal gloss of 100 lags gives 0.0092 ± 0.0020 J/GB at the rails and 0.0296 ± 0.0084 J/GB for the rest, with every class unchanged. The second corrects the GPU edge bound to the larger of the rails and GPU-rail envelopes, which the harvest already used; its effect is 3 × 10⁻⁸ J/GB.
+
+Rules for this text:
+
+1. The third paragraph is where the literal-lag alternative and both Part B corrections print. Part B item 1 requires the alternative "beside the result", so it stays in §3.3 and is not moved to a supplement.
+2. The quoted registered sentence ("The test identifies … fans.") is verbatim from reading rule §4 and is added to Appendix C under the Part 2 sentences.
+3. **The rails share f = 0.238 ± 0.098 does not print in the main text.** It is description only and is easy to misread as the rails share of decode memory energy, which BYTES does not measure. It may print in a supplement, labelled "known-bytes contrast, rails share of the DC-input contrast (description only)". The words "rails share" are not used for any BYTES quantity.
+4. One optional description sentence is admitted after "limit of this test": "On the GPU rail, 85% of the contrast is the GPU staying powered while it waits on memory (description only)."
+5. Two other sentences repeat the withdrawn wording and are corrected in the same PR:
+   - §7.1, last paragraph: "and whether the GPU rail includes the memory controller's energy, are separate questions (Section 3.3)" becomes "and on which boundaries memory traffic costs energy, are separate questions (Section 3.3)".
+   - §9, **BYTES**: "The split of memory energy between rails and rest depends on whether the GPU rail includes the memory controller (Section 3.3)." becomes "The known-bytes test shows that memory traffic costs energy at the rails and in the rest; it does not show which component spends it, and it does not give the split of decode memory energy between them (Section 3.3)."
+
+## 2. §7.5 when a model has no H1 word, when there is no active-or-resident answer, and the BY-LABEL-1 clause
+
+All of this is per boundary: a model can have a point at the rails and none at DC input.
+
+### 2.1 Branch 6.5.W6, replaced by three sub-branches
+
+Selected by the stage-2 record's reason for the model's point, never by a number. `⟨…⟩` is rendered from the record's keys.
+
+> **[BRANCH 6.5.W6a — no word: both passes withheld-missing]** ⟨Model⟩ has no point and no H1 word at ⟨boundary⟩: the withheld rows of both of its passes were missing (flag `bytes.withheld_missing`; ⟨n₁⟩ and ⟨n₂⟩ withheld rows recorded in the export sidecars). The model prints `missing`. **[END BRANCH 6.5.W6a]**
+
+> **[BRANCH 6.5.W6b — no word: both passes refused]** ⟨Model⟩ has no point and no H1 word at ⟨boundary⟩: both of its passes were refused (pass 1: ⟨reason⟩; pass 2: ⟨reason⟩). The model is not labelled `missing`. Its row in Table 9 carries the status `missing`, which in that table means only that there is no H1 word (deviation BY-LABEL-1). **[END BRANCH 6.5.W6b]**
+
+> **[BRANCH 6.5.W6c — no word: one pass withheld-missing, the other refused]** ⟨Model⟩ has no point and no H1 word at ⟨boundary⟩: the withheld rows of pass ⟨i⟩ were missing (flag `bytes.withheld_missing`) and pass ⟨j⟩ was refused (⟨reason⟩). The model is not labelled `missing`, because that label is reserved for a model both of whose passes are missing. Its row in Table 9 carries the status `missing`, which in that table means only that there is no H1 word (deviation BY-LABEL-1). **[END BRANCH 6.5.W6c]**
+
+- **Table 9 note**, printed whenever any row of the table carries `missing` (RL-92, verbatim): "no H1 word; the reason column says whether the model's rows were withheld-missing or its passes refused."
+- In `P1-BY-H1-WORDS-*` such a model prints as "⟨model⟩: no word".
+- One sentence follows the words whenever any W6 branch is kept: "The registered family size, 21 checks per boundary, is unchanged."
+- `P1-BY-NOWORD` is retired; its content is the three sub-branches.
+
+### 2.2 The active-or-resident "no answer" branch
+
+A fourth branch joins 6.5.A1 to A3. It is kept at a boundary where the stage-2 record prints no answer.
+
+> **[BRANCH 6.5.A4 — no answer: fewer than three MoE models have a point]** At ⟨boundary⟩ no active-or-resident answer is printed. The answer is defined over the H1 results of all three MoE models, and ⟨each MoE model without a point, with its reason⟩ had no point. The words of the MoE models that do have a point are in Table 9 and are read one model at a time. No statement about active versus resident bytes is made at this boundary. **[END BRANCH 6.5.A4]**
+
+- `P1-BY-AR-rails` and `P1-BY-AR-dc` then read "no answer (⟨k⟩ of the three MoE models had a point)".
+- The abstract and the conclusion say the same thing for that boundary: "no active-or-resident answer at ⟨boundary⟩". They do not report `mixed`, and they do not summarise the available MoE words as if they were an answer.
+- Branch 6.5.A3 (`mixed`) is kept only when all three MoE models have a point and the record's answer is `mixed`.
+
+### 2.3 The BY-LABEL-1 no-real-case clause
+
+- **Condition.** In the stage-2 record on the first commitment, no held-out model has pass status `no_pass` at any of the three boundaries.
+- **Where and what.** One clause at the end of the H1 words paragraph of §7.5:
+
+  > Every held-out model had at least one computed pass at every boundary, so the labelling rule of deviation BY-LABEL-1 applied to no real model.
+
+- When the clause prints, the three W6 sub-branches, the Table 9 note and branch 6.5.A4 are deleted, and BY-LABEL-1 still appears in the `P1-DEV-LIST` list with its date and blind status.
+- When the condition fails at any boundary the clause does not print, and the W6 and A4 branches apply where they apply.
+
+### 2.4 One edit to the BY-LABEL-1 row before it is entered
+
+RL-92 §5's row text begins "(entered 2026-11-12, …". It was not entered then. The row is mine, so I amend it before entry: those words become "(ruled 2026-11-12 and entered ⟨date of the commit that adds the row⟩, after the stage-1 commitment and before the held-out agreement; blind to every BYTES energy)". The rest of the row is RL-92's, verbatim. The row is entered in the same change as the P1/M1 build and **before the first `heldout_rows` journal event**; otherwise its sentence "no real held-out row had been read" is false and the row comes back to me.
+
+### 2.5 What makes these texts pre-outcome
+
+This ruling is committed to `audit/2026-11-10-fable` and pushed before the first `heldout_rows` event. The paper template edits of §2.1 to §2.3 may land any time; the dated ruling is the evidence, and landing them before the desk is better.
+
+## 3. RL-7 (d) and RL-44/45 in the current manuscript
+
+"§6.3" in RL-7 (d), RL-33 item 2 and RL-44 is the 27 October draft's numbering. In the manuscript on `main` it is **§7.3, "Blinding in two stages"**. RL-44's "§8, one sentence in the limitations" is now **§9**. `P1-AUTO-BLINDCHECK` sits in **§8.3** and stays there.
+
+### 3.1 §7.3: the ordering paragraph (RL-33 item 2, RL-7 (d))
+
+Replaces the paragraph "The required ordering is … does not assert that it has been satisfied." and its FACT H30 comment. It is filled at the stage-2 release (or, cut down as §5.4 says, at a Tier D call).
+
+> **What the ordering rests on.** The predictions were committed before the held-out energies were *unblinded*, not before they were measured. The commitment is commit `569591e5…` on the branch `records/2026-11-bytes-stage1` of the project repository, a protected branch that cannot be force-pushed or deleted. GitHub recorded its push at 20:00:59 UTC on 12 November 2026; the branch had been created by a push of the same commit 98 s earlier, and the later time is the one used. Each guarded held-out step (admitting the held-out rows, releasing their keys, running the held-out analysis) first appended a line naming that commitment to a journal on the same branch, and each line was committed and pushed before the next step. The evidence for the order is therefore the order of commits on that branch and GitHub's push log, not the project's own clocks. It has two limits. The journal records admissions made through the guarded commands; it cannot show that a held-out file was never opened some other way, which is what custody (Section 8.2) is for. And the offline check replays saved evidence, so the third party is GitHub's branch history and push log.
+
+> The primary block of Part 1 was released on 8 November 2026, four days before this commitment, and the replication block on 13 November, after it and before the held-out release. Two of the three fit-set models, Qwen3-1.7B and Qwen3-8B (4-bit), are the models of Part 1, measured there with a different prompt length. Whoever made the commitment could therefore have known Part 1's released energies for those two models. The committed lines cannot depend on that knowledge: they are computed from the fit set by an estimator whose digest was registered on 24 October 2026, from a manifest frozen on 22 October 2026, and no analysis choice was left open. Held-out timing of one model was also read before the commitment (Section 8.3).
+
+**Fill seat verifies**, each from the record and not from this ruling: the branch protection; that every journal line's commit precedes the next admission in the branch history; the 98 s; and "a different prompt length" against §5.1 and registration §3. If the prompt lengths are equal, the words "measured there with a different prompt length" are dropped.
+
+### 3.2 §8.3: `P1-AUTO-BLINDCHECK`
+
+Its sources exist today (BY-BLIND-1, `BLINDCHECK.md`, RL-44, RL-45), so it fills now. The order of the three facts is RL-45's.
+
+> **Held-out timing was read before the BYTES commitment.** The BYTES registration kept clock times out of analysis exports, so that a held-out model's decode duration could not be read before the predictions were committed. That closure covered analysis exports. It did not cover reads of raw session records. On 27 and 28 October 2026 an operations agent diagnosing a thermal hazard read such records for the pass-1 session of one held-out model, Llama-3.3-70B: first the timing of the thermal level relative to request ends, then each science request's decode duration, which was committed to the project record and was public from then on. No energy or power field was read. Separately, the public operational record of every BYTES session carried one timestamp per session stage, from which the wall time of a held-out stage can be derived coarsely; those records carry no per-request clock, and whether anyone derived a stage time is not known. Each model's approximate decode time had been measured, without power, in the design pilot and written into the registration before collection. The committed lines cannot depend on any of this: they are computed from the three fit-set models by an estimator whose digest dates from 24 October 2026 and a manifest frozen on 22 October 2026, both before the reads. One registered rule, the pass-2 thermal window, was motivated by the first read; it was registered before any pass-2 session and blind to every energy, and it applies to fit-set sessions too. A structure-only check recorded before the commitment found these reads (deviation BY-BLIND-1). That check covers the committed project record only and cannot show that held-out timing was never read by other means. Llama-3.3-70B stays in the registered families, is marked † in every table, and the H1 words are also stated over the other six held-out models (Section 7.5).
+
+Under Tier D the last sentence ends at "registered families."
+
+### 3.3 §9: the limitation sentence
+
+Appended to the **BYTES** paragraph:
+
+> Before the commitment, per-request decode durations of one held-out model, Llama-3.3-70B, were read and published, and per-stage timestamps of every session were public; no energy was read and the committed lines were frozen earlier (Section 8.3).
+
+### 3.4 The Llama-70B marks
+
+- `†` follows "Llama-3.3-70B" in every row that names it in Tables 7, 8, 9 and 10 (the tier-deviation and leave-one-out rows included) and in each `P1-BY-H1-WORDS-*` list.
+- Each such table's caption gains: "† Per-request decode durations of this model's pass-1 session were read and published before the stage-1 commitment (deviation BY-BLIND-1; Section 8.3). No energy was read. The model stays in the registered families."
+
+### 3.5 The other-six reading
+
+One sentence after the three words lists in §7.5, with three new markers rendered from the same keys as the lists:
+
+> Over the six held-out models other than Llama-3.3-70B†, the words were {{FILL: P1-BY-H1-OTHER6-rails}} at the rails, {{FILL: P1-BY-H1-OTHER6-dc}} at the DC input and {{FILL: P1-BY-H1-OTHER6-rest}} for the rest. This is a second reading of the words printed above: no interval is recomputed, the registered family size stays 21 checks per boundary, and the active-or-resident answer, which is defined over the three MoE models, does not involve Llama-3.3-70B.
+
+Each marker is the count of each word among the six, then the same count over all seven in parentheses, for example "`unresolved` 3, `bytes` 2, `neither` 1 (over all seven: 4, 2, 1)". H2 gets no "other six" fit; Table 10's registered leave-one-out row for Llama-3.3-70B is the only H2 statement without it.
+
+## 4. `P1-RELEASE-BYTES`: the event, the scope, the digests, the accession
+
+### 4.1 Two events
+
+| Event | What it is | Time that prints |
+|---|---|---|
+| A. Stage-1 commitment | commit `569591e53ffcd91efbab7a9ebaff1d580bbc78ba` on `records/2026-11-bytes-stage1`; receipt commit `765f28644706f1033b5b12ee177e6ff7fe5f4e75` | GitHub push time in the receipt, `2026-11-12T20:00:59Z` |
+| B. Stage-2 release | the non-force push to `origin` `records/2026-11-bytes-stage1` of the commit that adds `docs/bytes/stage2/RELEASE.md` and `docs/bytes/stage2/release-record.json` | GitHub's activity timestamp for that push; the record also prints the commit's committer time |
+
+**Event B is the publication event.** It is on the records branch because the commitment guard already requires the evaluating checkout to descend from that branch's tip and requires the journal to be committed and pushed there; the release record is the next commit on the same protected history. It does **not** require the BYTES lineage on `main`, a separate release disposition from me, or an approval from Ed. Ed is told after. RL-53 W-8 already says BYTES keeps its commitment journal in place of an `unseal.json`.
+
+### 4.2 Conditions for the release-record commit
+
+The lead writes and pushes it without returning to me when every line holds. If any line fails, nothing is pushed and it comes to me.
+
+1. **Code.** The P1/M1 change is on a descendant of `765f28644`, merged by PR with CI green on the merged head, cold review passed, RL-92 §4 conditions 2 to 4 met, BY-LABEL-1 entered as §2.4 says. `joulewise/bytes_analysis.py` is `18582818…0a71` there.
+2. **Byte identity.** A `--stage fit` re-run on the desk, same inputs, writes a predictions file byte-identical to the committed one.
+3. **Blinded held-out agreement.** One `heldout_rows` admission line, committed and pushed. Analysis and twin both exit 0 on the same real blinded held-out rows; the registered comparisons are populated; zero fields above §12's bar.
+4. **Key release.** One `heldout_keys` line, committed and pushed, after line 3 and not before. Receipt preserved as `docs/bytes/stage1/heldout-release.json`. No key material is committed.
+5. **Stage 2.** One `heldout_analysis` line, committed and pushed. Analysis and twin exit 0 in fresh directories on the same frozen inputs; the comparer shows zero fields above the bar at every stage and boundary, DC input and rest included.
+6. **Guard.** `bytes_commitment.py check` exits 0 on the tree of the release-record commit.
+7. **Tier.** The push happens before the boundary of §5.1, or the Tier D call has already been recorded.
+
+### 4.3 What the record binds (the digest bundle)
+
+Every digest is re-taken from the file by the writer.
+
+- Event A: commit, predictions SHA-256, receipt commit, push time, and the twin digest that agreed at the commitment (`4820dc2e…`).
+- Registration: SHA-256 of `bytes_pack_v1.md`, of `bytes_deviation_log.md` and of the reading rule, at the release tree; the bytes manifest SHA-256 as the predictions file names it.
+- Evaluating code at the release tree: git commit; SHA-256 of `joulewise/bytes_analysis.py` (committed and evaluating), `scripts/bytes_analyze.py` and `scripts/bytes_twin.py`.
+- Inputs: the frozen input inventory's digest.
+- Journal: SHA-256 of `unblinding.jsonl`, and each line's event name and time.
+- Key release: SHA-256 of `heldout-release.json` and its `released_utc`.
+- Outputs: SHA-256 of the stage-2 analysis output, of the twin's output and of each comparer report; per stage, the counts of fields compared, under the bar and above the bar.
+- Flags: `bytes.module_changed_after_commitment` and `bytes.commitment_not_rebuilt`, present or absent, with their fields.
+- Any second commitment (§4.6).
+- The tier call record's path.
+
+### 4.4 Output and reader scope
+
+- **Before event B** no person or agent reads a held-out number, blinded or unblinded. Only the magistrate's programs touch them. The magistrate reports return codes, counts, hashes and names, as item 291b did. No project seat opens `predictions.json`, `lines-summary.txt` or `stage1-summary.json` either; they are public by registration and are checked by hash.
+- **At event B** the stage-2 analysis output, the twin's output and the comparer reports are released to the project: the fill seat, the second reader, the lead, me and Ed, and any seat after that. The fill reads printed-table keys only, never per-run rows.
+- **Public at event B:** the record, its digests and its counts. The numeric outputs are not committed to git at the event. They reach the public through the paper and through the data release that `P1-AVAIL` names, as Block 6's did. Key material stays private until that data release.
+
+### 4.5 The accession and the clause
+
+- **Accession for the fill reader:** `records/2026-11-bytes-stage1@⟨release commit⟩:docs/bytes/stage2/release-record.json`, plus the stage-2 analysis output identified by the SHA-256 that record prints. `fill_index.md` is regenerated so that every `P1-BY-*` row, `P1-ABS-PART2` and `P1-BY-CONCLUSION` name that pair. Their present source, a "work/2026-10-23-by-slots-draft" branch, is stale. `P1-RELEASE-BYTES`'s supplier is the record itself.
+- **The clause** (digests abbreviated as elsewhere in §5.6):
+
+  > The BYTES predictions were committed on 12 November 2026 (commit `569591e5…` on the protected branch `records/2026-11-bytes-stage1`; predictions file `⟨sha⟩…`; pushed at 20:00:59 UTC), and the BYTES results were released on ⟨date⟩ at ⟨time⟩ PST, when the stage-2 release record was pushed to the same branch (`⟨commit⟩`). The record ties the commitment, the registration (`⟨sha⟩…`), the bytes manifest (`⟨sha⟩…`), the estimator (`18582818…`), the journal of the three held-out steps, the held-out key release of ⟨date, time⟩ and the outputs that print here (analysis `⟨sha⟩…`, twin `⟨sha⟩…`).
+
+- **One sentence joins `P1-BY-COMMIT`:** "The analysis script and the twin, but not the estimator, were changed after the commitment and before any held-out row was read (deviation BY-LABEL-1); the estimator's digest is the committed one."
+
+### 4.6 If an attributed library repair produces a second commitment
+
+Registration §11 and §15 already fix this and I confirm them without change.
+
+1. **The attribution comes to me once**, as text and source, with direction and values out of it (RL-80). I rule which side departs from the registration.
+2. **After that the lead proceeds without returning**, provided: the diff is limited to the attributed difference; both implementations agree again at the bar on the same blinded held-out rows and on every synthetic campaign; the second commitment is written by `--stage fit` from the same stage-1 inputs into a fresh directory, committed as a descendant of the fix, labelled `post-agreement fix`, with the first commitment's SHA-256, both module digests, the attributed difference and the statement that it was written after both implementations had run on blinded held-out rows; and all of this precedes the `heldout_keys` line.
+3. **The first commitment stays the registered one.** The guard, the journal and `--stage1-commit` stay anchored to it. It is never edited or re-signed.
+4. **Print.** Stage 2 runs on each commitment in its own directory.
+   - The run on the first is the registered result. It fills every main table, the abstract and the conclusion, with `bytes.module_changed_after_commitment` and both digests, and `bytes.commitment_not_rebuilt` with its field names where it applies.
+   - The run on the second is the labelled alternative. If the two files differ in the module digest only, §7.5 says in one sentence that the two runs are identical. If they differ in content, a supplementary table prints every word, interval and answer of the alternative beside the registered one, and §7.5's commitment record lists every differing word in the main text. A word that differs is reported, not chosen.
+   - If a word in the abstract's sentence differs between the two, that sentence gains "(a repair made after the commitment changes ⟨k⟩ of these; Section 7.5)".
+   - Where the first commitment's content cannot be evaluated, the registered result prints unavailable with its reason, beside the alternative.
+5. `P1-RELEASE-BYTES` gains: "A second commitment, labelled post-agreement fix, was written on ⟨date⟩ (commit `⟨c⟩`, predictions `⟨sha⟩…`) after both implementations had run on blinded held-out rows and before any held-out key was released; Section 7.5 prints both results, the first as registered."
+
+A twin-only fix needs none of this: the commitment is untouched, the fix is attributed as RL-80 says and recorded in `P1-BY-TWIN`.
+
+## 5. The tier call at 3 December and the scope freeze of 5 December
+
+### 5.1 The test, made exact
+
+RL-7 (e) reads one thing: **GitHub's activity log for `refs/heads/records/2026-11-bytes-stage1` at 2026-12-03 23:59:59 PST (2026-12-04T07:59:59Z).**
+
+- A push of a release record meeting §4.2 is there: Part 2 is the full registered report.
+- It is not there: Part 2 is **Tier D, branch D.1**.
+
+The call is recorded either way, before any person or agent reads a BYTES held-out number. On an early release it is written with the release record.
+
+### 5.2 Moving the date
+
+The date is Ed's. Moving it is admissible only if it is recorded, by a ruling or by Ed's own words in `RUN_STATE.md`, **before the first `heldout_keys` journal line**. After that line the tier cannot be allowed to depend on anything anyone might have seen, so the date stands. If the lead sees the desk slipping, the time to ask is before the keys move.
+
+### 5.3 The call record
+
+`docs/bytes/TIER-CALL.md` on `main`, and one `RUN_STATE.md` item:
+
+> BYTES tier call, ⟨date and time from `date`⟩. Under RL-7 (e) as made exact by RL-201 §5.1: at 2026-12-03 23:59:59 PST GitHub's activity log for `refs/heads/records/2026-11-bytes-stage1` ⟨showed / did not show⟩ a push of a stage-2 release record meeting RL-201 §4.2 (⟨commit and push time, or "none"⟩). Part 2 of Paper 1 is therefore ⟨the full registered report / Tier D, branch D.1⟩. The call was made from the push log and the journal's event names only. No BYTES held-out number, blinded or unblinded, had been read by any person or agent when it was made. Journal state at the call: ⟨event names present⟩. Caller: ⟨session⟩.
+
+### 5.4 Tier D texts
+
+The variant file was written when stage 1 had not run. These replace its texts. Branch D.2 does not apply.
+
+- **Abstract.** Replaces both the sentence beginning "In a second part, BYTES, we test whether" and `P1-ABS-PART2`:
+
+  > In a second part, BYTES, we register a test of whether decode energy per token on the same laptop follows the bytes a model reads per token, its resident size in memory or its decode time, with three straight lines fixed on three dense models and seven held-out models, three of them mixture-of-experts. The lines were committed on 12 November 2026, before any held-out model was unblinded. We report the design, the collection and the instrument checks; the held-out results were not released at this paper's scope freeze and none is reported.
+
+- **§1.3, contribution 3:** "**BYTES, a pre-registered test of what drives decode energy per token** on the same laptop: its design, its collection and the commitment of its rival lines before any held-out model was unblinded. No BYTES result is reported (Section 7)."
+- **§7.5, "Status of the test":**
+
+  > BYTES collection closed at its registered end with {{FILL: P1-BYD-STRUCT}}. Stage 1 was run: the fit set's and the references' factors were released and the three rival lines were committed on 12 November 2026 (predictions file `⟨sha⟩…`, commit `569591e5…`, Section 7.3). ⟨state sentence⟩ Because the predictions were committed before any held-out energy was unblinded, and the design, the family sizes and every output sentence are fixed, the result can be released later without any choice made in the light of it. That this paper reports no BYTES result was decided by date on ⟨date⟩, before any held-out number had been read (`docs/bytes/TIER-CALL.md`).
+
+  The state sentence is chosen by the journal's event names at the call:
+  - no `heldout_rows`: "The held-out models' rows remain in the withheld store and their factors have not been released."
+  - `heldout_rows`, no `heldout_keys`: "The held-out models' rows have entered the blinded comparison of the two implementations, still multiplied by hidden factors that have not been released; no person or agent has read them."
+  - `heldout_keys`: "The held-out factors were released inside custody on ⟨date⟩ and the held-out analysis ⟨had / had not⟩ run, but its outputs had not been released; no person or agent had read them when the tier was called."
+- **Nothing numeric prints under Tier D**, fit-set energies and fit lines included. Tables 8 to 10 do not print. Table 7 keeps its `†`.
+- **`P1-BYD-STAGE`** is "been committed (predictions SHA-256 and commit)". **`P1-BYD-WHEN`** states the journal state and gives no date.
+- **"Synthetic validation"** renders its campaign count from the suite; it is twenty once the P1/M1 campaign joins.
+- **§7.3** prints §3.1's two paragraphs. The sentence "Each guarded held-out step … before the next step." is replaced by "Each guarded held-out step first appends a line naming that commitment to a journal on the same branch." and the words "and before the held-out release" are dropped.
+- **`P1-RELEASE-BYTES`** prints the clause's first half only, ending "pushed at 20:00:59 UTC)." with "No BYTES result had been released at the scope freeze." after it.
+- **`P1-AUTO-BLINDCHECK`** and the §9 sentence print as in §3.
+- **Known-bytes.** §3.3 prints exactly as §1.3, in both tiers. The variant's one-line §3.3 and `P1-BY-KB-STATE` are retired. The test is an instrument check, its outcome is registered text, and withholding it would say less than the registration already does. I make this change knowing the known-bytes outcome and blind to every BYTES energy; it prints more than the variant did.
+- **Conclusion, branch 9.B:**
+
+  > For BYTES we report a registered design, a completed collection and a commitment of the rival predictions made before any held-out model was unblinded. Its held-out results were not released at the scope freeze, and this paper draws no conclusion from them.
+
+### 5.5 The scope freeze of 5 December
+
+One `RUN_STATE.md` item lists the parts and their release events: primary, 8 November; replication, 13 November; BYTES, the event B commit and time, or "not released; Tier D (`TIER-CALL.md`)". Under RL-8 the title and abstract name results only of parts in that list with an event. The present title names no part and stands in either tier.
+
+After a Tier D call the desk continues and the release is recorded as §4 says whenever it happens. Whether a later version of the paper adds the results is Ed's decision. If it does, it prints: "BYTES was released on ⟨date⟩, after this paper's scope freeze of 5 December 2026; that the frozen paper reported no BYTES result was decided by date, before any held-out number was read."
+
+## 6. PATH.md's ordering, and what can go sooner
+
+PATH.md's order of the desk steps is right. Four things in it are wrong or slower than they need to be.
+
+1. **Step 3 is not on the critical path, and it does not join at step 7.** Event B is on the records branch (§4.1). Getting the BYTES lineage into `main` is needed before `P1-AVAIL` and submission, and so that the paper's citations resolve on `main`. RL-95's rule for #701 stands: both hashes are checked on `main` before that merge, and the P1/M1 delta stays explicit and downstream of that baseline. That lane runs at its own pace and holds nothing.
+2. **Step 7's "lead obtains the release disposition" is deleted.** §4.2 is the disposition.
+3. **Steps 4, 5 and 6 are one desk item, not three hand-offs.** The gates between them are mechanical (§4.2 lines 2 to 5). The item gives the key-release authority conditionally on line 3. The magistrate stops only on a refusal, a missing comparison or an above-bar field, and each journal line is still committed and pushed before the next admission.
+4. **The outcome-dependent paper texts are fixed before step 4, not asked for at step 8.** That is §2, and it is why this ruling is committed before the first `heldout_rows` line.
+
+Step 1's "verify byte-for-byte onto the release lineage" is already true by ancestry: `d7098081d` is an ancestor of the records tip. And the script-digest check in step 2 is answered: neither script's digest is bound in code or configuration (see "Checked myself"), so the build does not return to me on that ground. The builder still confirms it.
+
+**In parallel now, with no risk to blinding:**
+
+- The §3.3 / `P1-BY-KB` fill PR (§1).
+- The `P1-AUTO-BLINDCHECK`, §9 and `†` edits (§3.2 to §3.4), and the template edits of §2. All are structure or registered text.
+- `P1-BY-MANIFEST`, `P1-BY-END` and `P1-BYX-STATUS`, from the registration.
+- The fill renderer and its reader check for Tables 8 to 10, built and cold-reviewed against a synthetic campaign's stage-2 output, which has the real schema. Step 8 then becomes one run and one re-read.
+- The desk item, drafted with the code commit left open. The magistrate names the first unarmed gap now.
+- As soon as the build is on the records lineage: on the MBP, outside an armed span and with no live run, `bytes_commitment.py check` and the synthetic agreement suite from the desk checkout. Neither reads a held-out record.
+
+**Not sooner:**
+
+- No fit-set number or fit line is read or filled before event B, although the stage-1 files are public by registration. The P1/M1 builder and reviewer work from "nothing from any run" (RL-92 §4 condition 2), and the paper has one source for §7.5.
+- The stage-1 clause of `P1-RELEASE-BYTES` waits for event B or the tier call. It is one fill either way.
+- No held-out key moves before §4.2 line 3 holds.
+
+## For Ed, plainly.
+
+BYTES stopped on 12 November because the hand-off that locked the predictions said, in so many words, that the next step was not authorized, and nobody picked it up. Nothing scientific was blocking it. The known-bytes check passed on 31 October and its paragraph can go into the paper today. What remains is one small code fix with its review, then a single desk session on the MBP between armed spans that compares the two programs on the still-hidden held-out data, releases the keys and computes the results. I have removed three waits: the release no longer needs the BYTES code merged into `main` first, it no longer needs a separate sign-off from me, and the desk does its three steps in one sitting. I have also written, before anyone sees a held-out number, every sentence the paper will need for the awkward cases. If the release record is not on the protected branch by the end of 3 December, the paper describes BYTES as a registered design with locked predictions and no results; you can move that date, but only before the keys are released. Llama-70B stays in, is flagged, and the result is also stated without it.
+
+## Register
+
+| Row | Change |
+|---|---|
+| `bytes_deviation_log.md`, BY-LABEL-1 | RL-92 §5's text, with "(entered 2026-11-12, …" replaced by "(ruled 2026-11-12 and entered ⟨commit date⟩, …" (§2.4). Entered with the P1/M1 change, before the first `heldout_rows` line. |
+| `bytes_deviation_log.md`, BY-BLIND-1, BY-AGREE-1 | Unchanged. |
+| RL-7 (e) | Made exact: the push-log test of §5.1; the date may move only before the first `heldout_keys` line (§5.2). |
+| RL-7 (d), RL-33 item 2, RL-44 | "§6.3" is §7.3 of the current manuscript; RL-44's "§8" limitation is §9. Texts in §3. |
+| RL-147 §4 item 4 | `P1-RELEASE-BYTES` defined: events A and B, the bundle, the clause (§4). |
+| `paper1.md` §3.3 | Branch 6.6.1 kept, 6.6.2 and 6.6.3 deleted; three paragraphs of §1.3. |
+| `paper1.md` §7.1, §9 | The two memory-controller sentences corrected (§1.3 rule 5); §9 gains §3.3's sentence. |
+| `paper1.md` §7.3 | Ordering paragraph replaced by §3.1's two; FACT H30 retired at the fill. |
+| `paper1.md` §7.5 | Branch 6.5.W6 becomes W6a, W6b, W6c; Table 9 note; family-size sentence; branch 6.5.A4 added; BY-LABEL-1 clause; other-six sentence; one sentence joins `P1-BY-COMMIT`. |
+| `paper1.md` Tables 7 to 10 | `†` and caption sentence (§3.4). |
+| `paper1.md` Appendix C | The known-bytes registered sentence added to the Part 2 list. |
+| `fill_index.md` | `P1-BY-KB` source corrected. `P1-RELEASE-BYTES` supplier named. Every `P1-BY-*` source re-pointed to the release record at regeneration. New: `P1-BY-H1-OTHER6-rails`, `-dc`, `-rest`. Retired: `P1-BY-NOWORD`, `P1-BY-KB-STATE`. |
+| `variants/tierD_bytes_registered_design.md` | Abstract, §7.5, §3.3 and conclusion texts replaced by §5.4; header comment's "stage 1 not committed by about 15 November" replaced by the test of §5.1. |
+| New files | `docs/bytes/stage2/RELEASE.md`, `docs/bytes/stage2/release-record.json` (records branch); `docs/bytes/TIER-CALL.md` (`main`). |
