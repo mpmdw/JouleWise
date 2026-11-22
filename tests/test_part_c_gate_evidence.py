@@ -207,7 +207,19 @@ def evaluation_inputs(root, *, step_d=STEP, d_bank=None, x_g=None, n_chunk=4096)
     return {"predecessor": predecessor, "step_d": step,
             "d_bank": None if d_bank is None else member_record(root, "d-bank", d_bank),
             "x_g": None if x_g is None else member_record(root, "x-g", x_g),
-            "n_chunk": n_chunk}
+            "n_chunk": n_chunk, "oracle": oracle_that_passed(x_g is not None)}
+
+
+def oracle_that_passed(x_g_ran=True):
+    """A frozen oracle whose every required decision was made and passed.
+
+    These tests judge this module's own lines. ``pass`` still needs the oracle as its second conjunct
+    (``_adjudicate``), so they supply one. ``FrozenOracleTests`` covers the oracle itself.
+    """
+    oracle = pc.FrozenOracle()
+    for name in sorted(pc.FrozenOracle.required((*pc.JUDGED_MEMBERS, *(("x-g",) if x_g_ran else ())))):
+        oracle.decide(name, "attempt", lambda: None)
+    return oracle
 
 
 def evaluate_world(*, d_bank=None, x_g=None, step_d=STEP, **kwargs):
@@ -521,6 +533,34 @@ class PartCMutationTests(unittest.TestCase):
                     rejected(("insert cut flag", at), change_evidence(control, at, ["episode.time_guard:3"]))
             self.assertTrue(pc._judge_observations(**control)["pass"])
         print(f"Part C evidence mutations rejected: {mutations}")
+
+
+class FrozenOracleConjunctionTests(unittest.TestCase):
+    """Lead directive of 2026-11-21, item 1: ``pass`` is a conjunction with the frozen oracle in ``_adjudicate``."""
+
+    def test_pass_needs_an_oracle_that_made_and_passed_every_required_decision(self):
+        with TemporaryDirectory() as tmp, evaluator_world():
+            inputs = evaluation_inputs(Path(tmp), d_bank=clean_facts(), x_g=clean_facts(contrast=True))
+            self.assertEqual(pc._judge_observations(**inputs)["verdict"], "pass")
+            missing = pc.FrozenOracle()
+            required = sorted(pc.FrozenOracle.required((*pc.JUDGED_MEMBERS, "x-g")))
+            for name in required[:-1]:
+                missing.decide(name, "attempt", lambda: None)
+            refused = oracle_that_passed()
+            refused.record("x-g/extra", "x-g", self.refuse)
+            without_x_g = oracle_that_passed(x_g_ran=False)      # X_G ran, so its own decisions are required
+            for label, oracle, reason in (("absent", None, "frozen_oracle"), ("not an oracle", object(), "frozen_oracle"),
+                                          ("one decision never made", missing, "frozen_oracle"),
+                                          ("a verdict decision refused", refused, "duty_budget"),
+                                          ("X_G's decisions never made", without_x_g, "frozen_oracle")):
+                with self.subTest(oracle=label):
+                    result = pc._judge_observations(**{**inputs, "oracle": oracle})
+                    self.assertEqual((result["pass"], result["verdict"]), (False, "other_failure"))
+                    self.assertIn(reason, result["evidence_failures"])
+
+    @staticmethod
+    def refuse():
+        raise pc.EvidenceFailure("duty_budget", "d-bank-benign-s1", pc.RECEIPT_NAME, field="duty_bar")
 
 
 class PartCPublicVerdictTests(unittest.TestCase):

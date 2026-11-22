@@ -12,6 +12,13 @@ perturbs entire repeated series. JW_PARTC_ALL_OCCURRENCES=1 additionally isolate
 every array index; JW_PARTC_SHARD=i/n partitions either matrix (zero-based).
 FALSE_PASS means the public native evaluator accepted a contradictory claim.
 REFUSED means it rejected one. OTHER_REFUSAL records a stricter native check.
+V3 adds finite branch operands, pre-close raw bytes, and ordered stamp pairs.
+RL-193 §1 applies the complete issued D-018 validator to predecessor CSV cases.
+A decision ID identifies its role, source and exact operand. All added cases use
+the same independently materialized issued functions as the synthetic control.
+RL-189 adds sixteen native descriptor cases. These run serially against the
+single synthetic mirror after all concurrent readers finish. A missing clean
+binding is reported separately so the full matrix can still be evaluated.
 The evaluator comes from the working tree. The versioned fixture and the R1
 oracle are materialized separately from Git. No checkout, fetch or host runtime.
 """
@@ -49,6 +56,8 @@ P, S, D, X = "capture-predecessor-30b", "step-d", "d-bank-benign-s1", "x-g"
 SUBJECTS = ("scripts.align_r1_part_c", "scripts.align_r1_part_c_evidence")
 RECEIPT = "runtime_result.json"
 OUTER = ("soak_reference.json", "soak_row.json")
+DESCRIPTOR_FIELD = "model_descriptor_sha256"
+LIMIT_FIELD = "context_limits.max_position_embeddings"
 REG = "joulewise/align/apple/v4_registration.py"
 HERE = Path(__file__).resolve()
 
@@ -562,7 +571,7 @@ def replay_workload(bundle, ep, *, construct=False):
                   *[("decode","token")]*count, ("decode","phase_end")], "native phase and token order")
             first_ns = round(phases[1]["timestamp_s"]*N)
             need(start <= first_ns <= end and first_ns == t.first_token_ns, "first token")
-            need(start <= phases[0]["timestamp_s"]*N and
+            need(phases[0]["timestamp_s"]*N == start and
                  round(phases[-2]["timestamp_s"]*N) <= round(phases[-1]["timestamp_s"]*N) <= end,
                  "native decode-end bracket")
             need([e["metadata"]["index"] for e in phases[3:-1]] == list(range(count)), "token indices")
@@ -761,6 +770,12 @@ def repair_synthetic_control(case, segment, kind, receipt):
     battery = rt.BatteryJournal(lambda argv: answer, lambda: next(times), segment / "battery.jsonl")
     battery.sample()
     battery.sample()
+    if kind == P:
+        # The predecessor has zero trace rows. Use the issued D-018 writer's
+        # header before replay and ledger close, including in the clean launch.
+        from joulewise.bundle_read import POWER_TRACE_HEADER
+        (segment / receipt["bundle"] / "power_trace.csv").write_bytes(
+            (POWER_TRACE_HEADER + "\n").encode("ascii"))
     if kind == S:
         bundle = segment / receipt["bundle"]
         events = rows(bundle / "events.jsonl")
@@ -803,8 +818,41 @@ def new_fixture():
     return case
 
 
+def issue_model_source():
+    """Change only the model.source in private fixture copies of the issued templates."""
+    configured, _ = rt.load_config(rt.ROOT / r1.DEFAULT_RUNTIME_CONFIG)
+    for key in ("model_30b", "d_spam", "d_bank", "x_g"):
+        template = rt.resolve(configured["templates"][key])
+        assert template.is_relative_to(rt.ROOT)
+        config = read(template)
+        config["model"]["source"] = str(MODEL_DIR)
+        write(template, config)
+
+
+def clean_bindings(ledger):
+    # A verified bundle can supply the path in a supplemental chained row.
+    # Its binding belongs to the preceding member until the next return.
+    bindings = {role: [] for role in (P, S, D, X)}
+    supplemental = set()
+    member = None
+    for row in ledger:
+        # The terminal verdict closes the ledger. It cannot attest X-G's return.
+        if "verdict" in row:
+            break
+        if "manifest" in row:
+            member = row["kind"]
+        if DESCRIPTOR_FIELD in row:
+            role = row.get("kind")
+            if member not in bindings or (role in bindings and role != member):
+                raise AssertionError("descriptor binding outside its member's return")
+            bindings[member].append(row[DESCRIPTOR_FIELD])
+            if "manifest" not in row:
+                supplemental.add(member)
+    return bindings, supplemental
+
+
 def control(directory):
-    global CONFIG
+    global CONFIG, SUPPLEMENTAL_BINDINGS
     case = new_fixture()
     CONFIG = rt.load_config(case.attempt.config)[0]
     ledger_fixture = importlib.import_module("tests.test_part_c_evidence_ledger")
@@ -822,6 +870,7 @@ def control(directory):
         ref = None if kind == "idle" else read(case.attempt.reference)
         if kind != "idle":
             bundle = segment / receipt["bundle"]
+            assert read(bundle / "config.json")["model"]["source"] == str(MODEL_DIR)
             replay_workload(bundle, wl.read_episode_bundle(bundle), construct=True)
         frozen = derive(segment, kind, receipt, ref)
         receipt.update(frozen)
@@ -854,6 +903,9 @@ def control(directory):
             shutil.copytree(source, directory / kind)
         shutil.copytree(case.attempt.directory, directory / "soak")
         write(directory / "reference.json", read(case.attempt.reference))
+        bindings, SUPPLEMENTAL_BINDINGS = clean_bindings(rows(case.attempt.output / "evidence_ledger.jsonl"))
+        expected = hashlib.sha256((MODEL_DIR / "config.json").read_bytes()).hexdigest()
+        return [role for role, seen in bindings.items() if seen != [expected]]
     finally:
         case.doCleanups()
 
@@ -890,6 +942,16 @@ class Mutation:
     @property
     def name(self):
         return "/".join((self.role, self.file, ".".join(map(str, self.path)), self.op))
+
+
+@dataclass(frozen=True)
+class DescriptorCase:
+    role: str
+    op: str
+
+    @property
+    def name(self):
+        return f"{self.role}/descriptor/{self.op}"
 
 
 def load_doc(path):
@@ -1023,9 +1085,536 @@ def cases(base):
             file = file.replace("runs/member/",f"runs/{bundle.name}/",1)
         for op in ops:
             yield Mutation(role, file, (), op)
+    for role in (P, S, D, X):
+        for op in ("rewritten-after-return", "consistent-40961", "mirror-40961-claim-40960", "no-binding"):
+            yield DescriptorCase(role, op)
+
+
+    yield from extra_cases(base)
+    yield from issued_cases()
+
+    # RL-193 §1 adds one positive beside the issued v3 matrix.
+    bundle, = (base / P / "runs").iterdir()
+    trace = (bundle / "power_trace.csv").relative_to(base / P).as_posix()
+    yield DecisionCase(P, "raw", trace, (), "d018-interval-header-zero-rows")
+
+
+@dataclass(frozen=True)
+class DecisionCase:
+    role: str
+    family: str
+    file: str
+    path: tuple
+    op: str
+    value: object = None
+    audit: str = ""
+
+    @property
+    def predecessor_csv_wire(self):
+        return self.role == P and self.family == "raw" and Path(self.file).name == "power_trace.csv"
+
+    @property
+    def name(self):
+        locus = ".".join(map(str, self.path)) or "file"
+        suffix = "/" + self.audit if self.audit else ""
+        return f"{self.role}/v3/{self.family}/{self.file}/{locus}/{self.op}{suffix}"
+
+
+GATE_WORDS = ("released", "timeout", "unobserved", "deadman")
+GATE_KINDS = ("G0", "G1", "H")
+STOP_WORDS = ("episode_returned", "episode.deadman", "runner.error", "thermal.incomplete",
+              "episode.g0_unreleased", "episode.decode_budget", "episode.end_task", "episode.time_guard",
+              "episode.context_limit", "turn_token_budget_reached", "episode.malformed_tool_call",
+              "turn_budget_reached")
+DOMAINS = {
+    "segment_status": ("inconclusive",),
+    "reference_unobserved": (False, True),
+    "g0_released": (False, True),
+    "g0_outcome": GATE_WORDS,
+    "outcome": GATE_WORDS,
+    "gate_kind": GATE_KINDS,
+    "t_decline_status": ("declined", "no_decline", "unobserved"),
+    "os_level": (0, 1, 2, 3),
+    "pm_state": ("Nominal", "Fair", "Serious", "Critical"),
+    "stop_reason": STOP_WORDS,
+    "stop_condition": STOP_WORDS,
+    "finish_reason": ("stop", "eos", "length", "max_tokens", "max_new_tokens", "episode.deadman"),
+    "deadline_origin": ("G0_entry", "R1_after_G0_release_and_quiet"),
+    "condition": ("benign", "sabotage"),
+    "warmup_condition": ("benign",),
+    "assistant_history": ("reasoning_content",),
+    "prompt_cache": ("episode_prefix",),
+    "reasoning_effort": ("low", "medium", "high", "PENDING"),
+    "anchor": ("warmup_entry",),
+    "event_type": ("stage_started", "stage_completed", "phase_start", "phase_end", "token", "run_finalized"),
+}
+GATE_FLAGS = ("r1.g0_timeout_run", "r1.preheat_cap_reached", "episode.end_task:0",
+              "episode.malformed_tool_call:0", "turn_budget_reached", "turn_token_budget_reached:0",
+              "thermal.state_unobserved", "thermal.episode_reference_unobserved",
+              "thermal.status_source_missing", "thermal.custody_invalid", "model.position_limit_unread",
+              "runner.error:synthetic", "unclosed_reasoning_span")
+
+
+def branch_values(file, chain, current):
+    key = chain[-1]
+    if key == "failure_reason" and ("summary_metrics" in file or file == RECEIPT):
+        from joulewise.schemas import FailureReason
+        return tuple(reason.value for reason in FailureReason)
+    if key == "comm" and "processes" in chain:
+        return ("synthetic-worker", "codex", "claude", "t3")
+    if key == "state" and (file.endswith("battery.jsonl") or "battery" in chain):
+        return ("charging", "charged", "discharging", "not_charging")
+    if key == "name" and "tool_calls" in chain:
+        return ("list_messages", "end_task")
+    if key == "backend" and file == RECEIPT:
+        return ("production", "synthetic")
+    if key == "phase" and file.endswith("events.jsonl"):
+        if current and current.startswith("align_tool_"):
+            return (current, "prefill", "decode")
+        return ("warmup", "align_thermal_gate", "align_thermal_hold", "align_context_check", "prefill",
+                "tokenize", "generation_setup", "decode", "run", "align_g0_unreleased_stop_observation",
+                "align_context_stop_observation")
+    if key in DOMAINS:
+        return DOMAINS[key]
+    if isinstance(current, bool):
+        return (False, True)
+    if key == "value" and "ac_powermode" in chain:
+        return (0, 1, 2)
+    if key in ("status", "member_status"):
+        if file == rt.CUSTODY_NAME:
+            return ("complete", "refused", "failed", "aborted")
+        if file.endswith("summary_metrics.json") or key == "member_status":
+            from joulewise.schemas import RunStatus
+            return tuple(word.value for word in RunStatus)
+        if current in ("pass", "fail"):
+            return ("pass", "fail")
+        if file.endswith("align_window_reference.json"):
+            return ("captured", "unobserved")
+    if key == "kind":
+        if current in GATE_KINDS:
+            return GATE_KINDS
+        if current in ("idle", P, S, D, X):
+            return ("idle", P, S, D, X)
+        if file.endswith("align_thermal.jsonl"):
+            return ("session_start", "sample", "reading", "align_thermal_gate", "align_thermal_hold", "session_end")
+    if key == "state" and current in ("begin", "end"):
+        return ("begin", "end")
+    if key == "role" and "window_reference" in chain:
+        return ("capture", "consume")
+    if key == "class" and current in ("light", "heavy"):
+        return ("light", "heavy")
+    if key == "class" and "ranking" in chain:
+        return ("die", "heatsink", "record-only")
+    if key == "phase" and "phases" in chain:
+        return ("idle", "load", "recovery")
+    if key in ("flags", "episode_flags") and isinstance(current, list):
+        cuts = [p + ("0" if p.endswith(":") else "") for p in r1.EPISODE_CUT_FLAGS]
+        return tuple([flag] for flag in dict.fromkeys(cuts + list(GATE_FLAGS)))
+    return ()
+
+
+def at(value, path):
+    for key in path:
+        value = value[key]
+    return value
+
+
+def branch_cases(role, file, doc):
+    # V2 already supplies missing/null/wrong-type for open-domain present keys.
+    # Add explicit absence/null/outside even for omitted optional discriminants.
+    selected = {}
+    for path, value in fields(doc):
+        domain = branch_values(file, path, value)
+        if domain:
+            selected[path] = domain
+        if isinstance(value, dict):
+            if {"window_reference", "turn_cap_s", "sensors"} <= value.keys():
+                for key in ("g0_cap_receipt", "contrast_fit", "g0_cap_s"):
+                    if key not in value:
+                        selected[path+(key,)] = ()
+            if path[-1] == "status" and "os_level" in value:
+                selected[path+("error",)] = ("synthetic reader error",)
+            if path[-1] == "ac_powermode":
+                selected[path+("error",)] = ("synthetic observer error",)
+            if path[-1] == "thermometry":
+                for key in ("s7_for_r1_picks", "registered_picks", "reasons", "night_confirmation"):
+                    if key not in value:
+                        selected[path+(key,)] = ()
+    if file == RECEIPT:
+        if role == S:
+            selected[("segment_status",)] = DOMAINS["segment_status"]
+        if role in (S, D):
+            selected[("reference_unobserved",)] = DOMAINS["reference_unobserved"]
+        if role in (P, "idle"):
+            selected[("episode_flags",)] = branch_values(file, ("episode_flags",), [])
+        if role == S:
+            # RH:1875 reads this only in the inconclusive branch.
+            selected[("reason",)] = ("G0 did not release before its cap (LEAD-RULINGS-2 R6-2)",)
+    if file.endswith("/config.json"):
+        from dataclasses import fields as dataclass_fields
+        root = ("workload_profile", "prompt_text")
+        spec = at(doc, root)
+        for definition in dataclass_fields(wl.EpisodeSpec):
+            key = definition.name
+            if key not in spec:
+                selected[root + (key,)] = DOMAINS.get(key, (False, True) if key == "enable_thinking" else ())
+    for path, domain in selected.items():
+        # Keep the JSON type where the operand has an enum. Unknown words can
+        # select a different default than a parser-level type failure.
+        example = next(iter(domain), None)
+        outside = (["synthetic-outside-domain"] if isinstance(example,list) else
+                   17 if type(example) in (bool,int,float) else "synthetic-outside-domain")
+        for label, operand in [("absent", None), ("null", None), ("outside", outside),
+                               *(("set-" + (str(item[0]) if isinstance(item, list) else str(item)).lower(), item)
+                                 for item in domain)]:
+            audit = ""
+            if role == S and path == ("segment_status",) and operand == "inconclusive":
+                audit = "audit-step-d-inconclusive-released"
+            if path == ("reference_unobserved",) and operand is True:
+                audit = "audit-" + role + "-reference-unobserved"
+            yield DecisionCase(role, "branch", file, path, label, operand, audit)
+
+
+def bracket_paths(file, doc):
+    # A representative of each record shape, plus every distinct paired phase
+    # and gate occurrence. Members with repeated turns can have different ends.
+    common = (("start_ns", "end_ns"), ("start_ns", "first_token_ns"), ("first_token_ns", "end_ns"), ("start_s", "end_s"), ("started_ns", "ended_ns"),
+              ("started_epoch_s", "ended_epoch_s"), ("entry_epoch_s", "exit_epoch_s"),
+              ("interval_start_s", "interval_end_s"), ("monotonic_before_ns", "monotonic_after_ns"),
+              ("monotonic_before_s", "monotonic_after_s"),
+              ("wall_minus_monotonic_lower_s", "wall_minus_monotonic_upper_s"))
+    for path, obj in [((), doc), *fields(doc)]:
+        if isinstance(obj, dict):
+            for start, end in common:
+                if start in obj and end in obj:
+                    yield path + (start,), path + (end,)
+            for start, end in (("started", "finished"), ("start_stamp", "end_stamp"),
+                               ("entry_stamp", "exit_stamp"), ("first", "last")):
+                if isinstance(obj.get(start), dict) and isinstance(obj.get(end), dict):
+                    for key in ("monotonic_ns", "monotonic_raw_ns", "wall_ns", "epoch_ns", "epoch_s",
+                                "monotonic_before_ns", "monotonic_after_ns", "monotonic_before_s", "monotonic_after_s"):
+                        if key in obj[start] and key in obj[end]:
+                            yield path+(start,key), path+(end,key)
+        if not isinstance(obj, list) or len(obj) != 2 or not path:
+            continue
+        if path[-1] == "paired_clock_stamps_ns":
+            for key in ("epoch_ns", "monotonic_before_ns", "monotonic_after_ns"):
+                yield path+(0,key), path+(1,key)
+        elif (path[-1] in ("span_ns", "span_epoch_ns") or "phase_bounds_ns" in path or "gaps_ns" in path
+              ) and all(type(x) in (float, int) for x in obj):
+            yield path+(0,), path+(1,)
+    if file.endswith("events.jsonl"):
+        stacks = defaultdict(list)
+        last_token = {}
+        for i, row in enumerate(doc):
+            identity = row["phase"], row["metadata"].get("align_turn_index")
+            word = row["event_type"]
+            if word == "token":
+                last_token[identity] = i
+            if word == "phase_end" and identity in last_token:
+                yield (last_token.pop(identity),"timestamp_s"), (i,"timestamp_s")
+            if word in ("phase_start", "stage_started"):
+                stacks[identity].append(i)
+            if word in ("phase_end", "stage_completed") and stacks[identity]:
+                j = stacks[identity].pop()
+                yield (j, "timestamp_s"), (i, "timestamp_s")
+    if file.endswith("align_thermal.jsonl"):
+        begins = {}
+        for clock in ("monotonic_ns", "monotonic_raw_ns", "wall_ns"):
+            yield (0,"started",clock), (len(doc)-1,"finished",clock)
+        readings = [i for i,row in enumerate(doc) if row["kind"] == "reading"]
+        if len(readings) >= 2:
+            for clock in ("monotonic_ns", "monotonic_raw_ns", "wall_ns"):
+                yield (readings[0],"finished",clock), (readings[1],"started",clock)
+        for i, row in enumerate(doc):
+            if row["kind"] not in ("align_thermal_gate", "align_thermal_hold"):
+                continue
+            event = row["values"]
+            if event["state"] == "begin":
+                begins[row["kind"]] = i
+            elif event["state"] == "end":
+                j = begins.pop(row["kind"])
+                for clock in ("monotonic_ns", "monotonic_raw_ns", "wall_ns"):
+                    yield (j,"started",clock), (i,"started",clock)
+    if file.endswith("battery.jsonl") and len(doc) > 1:
+        yield (0,"epoch_s"), (len(doc)-1,"epoch_s")
+
+
+def extra_cases(base):
+    for role in ("idle", P, S, D, X):
+        root = base / role
+        files = {p.relative_to(root).as_posix(): p for p in sorted(root.rglob("*")) if p.is_file()}
+        if role == "idle":
+            files.update({name:base/"soak"/name for name in OUTER})
+        for file, path in files.items():
+            for form in ("empty", "truncated", "invalid", "wrong-root", "garbage"):
+                audit = "audit-one-byte-predecessor-csv" if (
+                    role == P and path.name == "power_trace.csv" and form == "garbage") else ""
+                yield DecisionCase(role, "raw", file, (), form, audit=audit)
+            if role == P and path.name == "power_trace.csv":
+                yield DecisionCase(role, "raw", file, (), "d018-header")
+                yield DecisionCase(role, "raw", file, (), "three-column-header")
+            doc = load_doc(path)
+            yield from branch_cases(role, file, doc)
+            for start, end in dict.fromkeys(bracket_paths(file, doc)):
+                if (isinstance(start[0], int) and isinstance(end[0], int) and start[0] != end[0]
+                        and (end[-1] == "timestamp_s" or end[-1] == "monotonic_ns" or end[-1] == "epoch_s")):
+                    yield DecisionCase(role, "interval", file, (end[0],), "end-record-missing-from-" + ".".join(map(str,start)), start)
+                for op in ("end-before", "end-equal", "end-missing"):
+                    yield DecisionCase(role, "interval", file, end, op + "-from-" + ".".join(map(str,start)), start)
+            if role == D and file.endswith("outputs/align_thermal.jsonl"):
+                yield DecisionCase(role, "interval", file, (), "audit-g0-begin-after-end")
+            if file.endswith("/events.jsonl"):
+                yield DecisionCase(role, "branch", file, (), "orphan-tokenize")
+                yield DecisionCase(role, "branch", file, (), "empty-final-phase")
+
+
+@dataclass(frozen=True)
+class InputCase:
+    role: str
+    file: str
+    op: str
+
+    @property
+    def name(self):
+        return f"{self.role}/v3/raw/issued/{self.file}/{self.op}"
+
+
+@dataclass(frozen=True)
+class LaunchCase:
+    role: str
+    op: str
+
+    @property
+    def file(self):
+        return "stdout" if self.op.startswith("stdout-") else "argv" if self.op.startswith("duration-") else "process"
+
+    @property
+    def name(self):
+        family = "raw" if self.file == "stdout" else "branch"
+        return f"{self.role}/v3/{family}/launch/{self.op}"
+
+
+def issued_cases():
+    sources = [("idle", str(r1.DEFAULT_RUNTIME_CONFIG)), (D, str(r1.W1_PLAN_TEMPLATE)),
+               (P, "model.source/config.json")]
+    for kind, template in ((P, "model_30b"), (S, "d_spam"), (D, "d_bank"), (X, "x_g")):
+        sources.append((kind, CONFIG["templates"][template]))
+    for kind, source in sources:
+        for form in ("empty", "truncated", "invalid", "wrong-root", "garbage"):
+            yield InputCase(kind, source, form)
+    for role in ("idle", P, S, D, X):
+        for word in ("exit-0", "exit-2-worked", "exit-3", "exit-143",
+                     "stdout-empty", "stdout-truncated", "stdout-invalid", "stdout-wrong-root", "stdout-garbage"):
+            yield LaunchCase(role, word)
+    for word in ("exit-2-unworked", "oserror-unworked"):
+        yield LaunchCase(X, word)
+    for word in ("duration-1", "duration-1800", "duration-absent"):
+        yield LaunchCase("idle", word)
+
+
+def launch_observation(case, process):
+    if case.op == "oserror-unworked":
+        raise OSError("synthetic launch observation")
+    if case.file == "process":
+        process.returncode = int(case.op.split("-")[1])
+    elif case.file == "stdout":
+        raw = damaged_bytes(Path("stdout.json"), process.stdout.encode(), case.op.removeprefix("stdout-"))
+        process.stdout = raw.decode()
+    if case.op == "exit-2-unworked":
+        process.stdout = ""
+    return process
+
+
+def soak_argv(argv, case):
+    argv = list(argv)
+    if case.op == "duration-absent":
+        del argv[argv.index("--duration-s"):]
+    else:
+        argv[argv.index("--duration-s")+1] = case.op.removeprefix("duration-")
+    return argv
+
+
+def launch_oracle(case, probe):
+    segment = probe.base / case.role
+    record = read(segment / RECEIPT)
+    duration = next(d for _,k,d,_ in r1.phase_plan() if k == case.role)
+    process = NSpace(returncode=0,stdout=json.dumps(record,sort_keys=True)+"\n",stderr="")
+    unworked = case.op.endswith("-unworked")
+    try:
+        with patch.object(r1, "_run", side_effect=lambda argv: launch_observation(case, process)) as transport:
+            r1._invoke(["synthetic-runtime"], case.role, segment, duration,
+                       soak_reference=None if case.role == "idle" else probe.base/"reference.json",
+                       quiet=True, contract_key="idle_soak" if case.role=="idle" else None)
+        if case.file == "argv":
+            args, = transport.call_args.args
+            need(soak_argv(args, case) == args, "frozen soak invocation")
+    except (Disagreement, r1.Refusal, OSError) as error:
+        if unworked and case.role == X and process.returncode == 2 and process.stdout == "":
+            # The stub returned before creating the member directory. ES:28,
+            # RL-183 permit precisely this observed refusal. Run frozen Part C
+            # on the worked S and D records to decide the remaining lines.
+            return None if issued_verdict(probe, include_x=False)["pass"] else "issued non-run verdict"
+        return str(error)
+    return None
+
+
+def issued_trial(case):
+    # One source tree and one mirror are shared by the workers. The parent
+    # runs these cases only after all outstanding readers have completed.
+    mirror = case.file == "model.source/config.json"
+    path = MODEL_DIR/"config.json" if mirror else rt.ROOT/case.file
+    assert path.is_relative_to(MODEL_DIR if mirror else rt.ROOT)
+    original = path.read_bytes()
+    mismatch = None
+    try:
+        path.write_bytes(damaged_bytes(path, original, case.op))
+        try:
+            if mirror:
+                check_workload(WORKER.base / case.role, case.role)
+            elif case.file == str(r1.DEFAULT_RUNTIME_CONFIG):
+                _, digest = rt.load_config(path)
+                agree(digest, read(WORKER.base/"idle"/RECEIPT)["config_sha256"], "issued configuration")
+            elif case.file == str(r1.W1_PLAN_TEMPLATE):
+                r1.check_w1_schedule(["--config",str(rt.ROOT/r1.DEFAULT_RUNTIME_CONFIG)])
+            else:
+                # Parse the changed template before the synthetic backend
+                # consumes the untouched executed configuration.
+                rt.read_template(path)
+                root = WORKER.tree / pc.KINDS[case.role]
+                claim = read(root/RECEIPT)
+                frozen_checks(root, case.role, claim, WORKER.ref)
+        except (Disagreement, OSError, ValueError, KeyError, IndexError, TypeError, AttributeError,
+                rt.Refused, rt.RuntimeFailure, r1.Refusal, wl.AdapterFailure) as error:
+            mismatch = type(error).__name__
+        # Rebuild the soak chain so row zero observes these issued bytes.
+        WORKER.changed_soak = True
+        accepted = WORKER.candidate(None)
+    finally:
+        path.write_bytes(original)
+        WORKER.changed_soak = True
+    return differential_result(case, mismatch, accepted)
+
+
+def differential_result(case, mismatch, accepted):
+    if mismatch is None:
+        status = "AGREES_PASS" if accepted else "OTHER_REFUSAL"
+    else:
+        status = "FALSE_PASS" if accepted else "REFUSED"
+    return status, case.name, mismatch
+
+
+@lru_cache(maxsize=1)
+def issued_part_c():
+    # This is the contemporary Part C *consumer* alongside the ten registered
+    # producer sources. It is loaded under its own name, never from the PR.
+    name = "scripts/align_r1_part_c.py"
+    source = git("show", ISSUED + ":" + name)
+    namespace = {"__name__": "issued_part_c", "__file__": name}
+    exec(compile(source, ISSUED + ":" + name, "exec"), namespace)
+    return NSpace(**namespace)
+
+
+def issued_verdict(probe, include_x=True):
+    issued = issued_part_c()
+    physical = {kind: probe.tree/name for name, kind, _, _ in r1.phase_plan() if kind in (S,D,X)}
+    receipt = {kind:read(physical[kind]/RECEIPT) for kind in (S,D)}
+    bundle = {kind:physical[kind]/receipt[kind]["bundle"] for kind in receipt}
+    contrast = None
+    if include_x:
+        contrast = issued.facts_from_bundle(physical[X]/read(physical[X]/RECEIPT)["bundle"], role="x-g")
+    return issued.evaluate(step_d=issued.step_d_facts(bundle[S],receipt[S]),
+                           d_bank=issued.facts_from_bundle(bundle[D],role="d-bank"),
+                           n_chunk=receipt[S]["slots"]["N_chunk"], x_g=contrast)
+
+
+def damaged_bytes(path, raw, op):
+    import plistlib
+    if op == "empty":
+        return b""
+    if op == "truncated":
+        # Remove meaningful content, including when the document ends in LF.
+        if path.suffix == ".jsonl":
+            line = raw.rstrip().rsplit(b"\n", 1)[-1]
+            return raw.rstrip()[:-max(1, len(line)//2)]
+        return raw[:max(1, len(raw.rstrip())//2)]
+    if op == "invalid":
+        return {".csv": b'"unclosed\xff\n', ".plist": b"<plist><dict></array></plist>"}.get(path.suffix,b'{"bad":,}\n')
+    if op == "wrong-root":
+        return {".csv": b'[]\n', ".plist": plistlib.dumps(["synthetic"])}.get(path.suffix,b'[]\n')
+    assert op == "garbage"
+    return b"{"
+
+
+def edit_decision(case, doc):
+    if case.op == "empty-final-phase":
+        final = next(row for row in doc if row["event_type"] == "run_finalized")
+        final["phase"] = ""
+        return doc
+    if case.op == "orphan-tokenize":
+        i = next(i for i, row in enumerate(doc) if row["phase"] == "prefill" and row["event_type"] == "phase_start")
+        row = doc[i]
+        orphan = dict(row, phase="tokenize", event_type="phase_end")
+        row["timestamp_s"] += .000001
+        doc.insert(i, orphan)
+        return doc
+    if case.op == "audit-g0-begin-after-end":
+        begin = next(r for r in doc if r["kind"] == "align_thermal_gate" and r["values"]["state"] == "begin")
+        end = next(r for r in doc if r["kind"] == "align_thermal_gate" and r["values"]["state"] == "end")
+        newest = doc[-1]["finished"]["monotonic_ns"]
+        assert begin["started"]["monotonic_ns"] < end["started"]["monotonic_ns"] < newest
+        begin["started"]["monotonic_ns"] = begin["finished"]["monotonic_ns"] = newest
+        return doc
+    parent, key = at(doc, case.path[:-1]), case.path[-1]
+    if case.family == "branch":
+        if case.op == "absent":
+            parent.pop(key, None)
+        else:
+            parent[key] = case.value
+    elif case.op.startswith(("end-missing-", "end-record-missing-")):
+        del parent[key]
+    else:
+        start = at(doc, case.value)
+        number = float(start) if isinstance(start, str) else start
+        if case.op.startswith("end-before-"):
+            number = number - 1 if type(number) is int else math.nextafter(number,-math.inf)
+        parent[key] = str(number) if isinstance(start,str) else number
+    return doc
+
+
+def write_decision(path, case):
+    if case.predecessor_csv_wire:
+        from joulewise.bundle_read import POWER_TRACE_HEADER
+        positive = (POWER_TRACE_HEADER + "\n").encode("ascii")
+        if case.op == "d018-header":
+            wire = positive
+        elif case.op == "d018-interval-header-zero-rows":
+            from joulewise.bundle_read import POWER_TRACE_INTERVAL_HEADER
+            wire = (POWER_TRACE_INTERVAL_HEADER + "\n").encode("ascii")
+        elif case.op == "three-column-header":
+            wire = b"timestamp_s,power_w,source\n"
+        else:
+            wire = damaged_bytes(path, positive, case.op)
+        path.write_bytes(wire)
+    elif case.family == "raw":
+        path.write_bytes(damaged_bytes(path, path.read_bytes(), case.op))
+    else:
+        doc = load_doc(path)
+        if case.family == "branch" and case.path:
+            parent = at(doc, case.path[:-1])
+            key = case.path[-1]
+            if case.op == "absent" and key not in parent:
+                return
+            if case.op != "absent" and key in parent and type(parent[key]) is type(case.value) and parent[key] == case.value:
+                return
+        save_doc(path, edit_decision(case, doc))
 
 
 def mutate(case, value):
+    if isinstance(case, DecisionCase):
+        if case.family == "raw":
+            return json.loads(damaged_bytes(Path(case.file), encode(value) + b"\n", case.op))
+        return edit_decision(case, value)
     op, path = case.op, case.path
     if op.startswith("warmup-"):
         warm = [r for r in value if r["phase"] == "warmup"]
@@ -1373,9 +1962,13 @@ def unshared(path):
 
 def apply_case(base, segment, case):
     path = segment / case.file
-    val = mutate(case, load_doc(path))
-    unshared(path)
-    save_doc(path, val)
+    if isinstance(case, DecisionCase):
+        unshared(path)
+        write_decision(path, case)
+    else:
+        val = mutate(case, load_doc(path))
+        unshared(path)
+        save_doc(path, val)
     if case.file != rt.CUSTODY_NAME:
         manifest = segment / rt.CUSTODY_NAME
         m = read(manifest)
@@ -1397,6 +1990,71 @@ def apply_case(base, segment, case):
             write(result_path, result)
             m["files"][RECEIPT] = hashlib.sha256(result_path.read_bytes()).hexdigest()
             write(manifest, m)
+
+
+def descriptor_claim(segment, case, kind):
+    # One mirror serves the entire attempt. Keep all peers consistent with its
+    # bytes at their own return. Only the selected D4 member retains 40,960.
+    if kind == "idle":
+        return
+    limit = read(MODEL_DIR / "config.json")["max_position_embeddings"]
+    receipt = read(segment / RECEIPT)
+    bundle = segment / receipt["bundle"]
+    assert read(bundle / "config.json")["model"]["source"] == str(MODEL_DIR)
+    episode = bundle / "outputs/align_episode.json"
+    record = read(episode)
+    limits = record["hardware"]["context_limits"]
+    assert limits == {"max_context_tokens": 40960, "max_position_embeddings": 40960}
+    if limit == 40960 or (kind == case.role and case.op == "mirror-40961-claim-40960"):
+        return
+    assert limit == 40961
+    limits["max_position_embeddings"] = limit
+    unshared(episode)
+    write(episode, record)
+    manifest_path = segment / rt.CUSTODY_NAME
+    manifest = read(manifest_path)
+    manifest["files"][episode.relative_to(segment).as_posix()] = hashlib.sha256(episode.read_bytes()).hexdigest()
+    unshared(manifest_path)
+    write(manifest_path, manifest)
+
+
+@contextmanager
+def descriptor_attempt(case):
+    descriptor = MODEL_DIR / "config.json"
+    baseline = descriptor.read_bytes()
+    assert json.loads(baseline) == {"max_position_embeddings": 40960}
+    append = evidence.EvidenceLedger._append
+    member = None
+    rewritten = False
+
+    def write_row(ledger, row):
+        nonlocal member, rewritten
+        if ledger.mode == "native" and "manifest" in row:
+            member = row["kind"]
+        target = ledger.mode == "native" and member == case.role
+        # Remove before hashing, so the retained row and on-disk chain agree.
+        if target and case.op == "no-binding" and DESCRIPTOR_FIELD in row:
+            row = dict(row)
+            del row[DESCRIPTOR_FIELD]
+        stored = append(ledger, row)
+        if target and case.op == "rewritten-after-return" and not rewritten:
+            # For a pre-RL-189 writer the return is the only row. A writer
+            # using the permitted supplemental binding must finish it first.
+            if DESCRIPTOR_FIELD in row or ("manifest" in row and member not in SUPPLEMENTAL_BINDINGS):
+                assert descriptor.read_bytes() == baseline
+                write(descriptor, {"max_position_embeddings": 40961})
+                rewritten = True
+        return stored
+
+    try:
+        if case.op in ("consistent-40961", "mirror-40961-claim-40960"):
+            write(descriptor, {"max_position_embeddings": 40961})
+        with patch.object(evidence.EvidenceLedger, "_append", write_row):
+            yield
+        if case.op == "rewritten-after-return":
+            assert rewritten, "target row was never written"
+    finally:
+        descriptor.write_bytes(baseline)
 
 
 class Probe:
@@ -1440,6 +2098,8 @@ class Probe:
                     row = mutate(m, row)
                 else:
                     reference = mutate(m, reference)
+                if isinstance(m, DecisionCase):
+                    need(isinstance(reference, dict) and isinstance(row,dict), "outer object")
                 start, end = row["started_ns"], row["ended_ns"]
                 need(type(start) is int and type(end) is int and 0 <= start <= end, "soak row clock")
                 need(row["attempt"] == 0 and row["name"] == "idle_soak" and row["class"] == "light" and
@@ -1462,6 +2122,16 @@ class Probe:
             apply_case(self.base, root, m)
             claim = read(root / RECEIPT)
             binding_and_order(self.base, m.role, root)
+            if isinstance(m, DecisionCase):
+                # Drive the recorded word through the historical loop even when
+                # a producer comparison would independently refuse it.
+                self.driver_check(m, root)
+                if m.predecessor_csv_wire:
+                    from joulewise.bundle_read import _check_power_trace
+                    bundle = (root / m.file).parent
+                    problems = _check_power_trace(bundle, read(bundle / "summary_metrics.json"),
+                                                  read(bundle / "metadata.json"))
+                    need(not problems, "D-018: " + ", ".join(problems))
             if m.file == RECEIPT and m.path[:2] != ("slot_detail", "member_wall_s"):
                 # The entire raw input is byte-identical to that of the frozen
                 # execution in __init__. Every derived output is compared here.
@@ -1469,6 +2139,12 @@ class Probe:
             else:
                 frozen_checks(root, m.role, claim, self.ref)
             self.driver_check(m,root)
+            if isinstance(m, DecisionCase) and m.role in (S, D, X):
+                if m.role == S:
+                    for consumer in (D, X):
+                        dependent = self.tree / pc.KINDS[consumer]
+                        frozen_checks(dependent, consumer, read(dependent / RECEIPT), self.ref)
+                need(issued_verdict(self)["pass"], "issued Part C verdict")
             return None
         except Disagreement as error:
             return str(error)
@@ -1499,12 +2175,30 @@ class Probe:
         touched = []
 
         def produce(kind, segment):
+            if isinstance(m, LaunchCase) and m.role == kind and m.op.endswith("-unworked"):
+                touched.append(kind)
+                assert not segment.exists() or not list(segment.iterdir())
+                return launch_observation(m, NSpace(returncode=0, stdout="", stderr=""))
             copy_segment(self.base, kind, segment)
-            if m and m.role == kind and m.file not in OUTER:
+            if isinstance(m, DescriptorCase):
+                descriptor_claim(segment, m, kind)
+                if kind == m.role:
+                    touched.append(kind)
+            elif isinstance(m, LaunchCase):
+                if m.role == kind:
+                    touched.append(kind)
+            elif m and m.role == kind and m.file not in OUTER:
                 apply_case(self.base, segment, m)
                 touched.append(kind)
-            receipt = read(segment / RECEIPT)
-            return NSpace(returncode=0, stdout=json.dumps(receipt, sort_keys=True)+"\n", stderr="")
+            # A raw saved-receipt probe damages only that file. The separately
+            # observed stdout still carries the clean producer response.
+            raw_receipt = (isinstance(m, DecisionCase) and m.family == "raw"
+                           and m.role == kind and m.file == RECEIPT)
+            receipt = read((self.base / kind if raw_receipt else segment) / RECEIPT)
+            process = NSpace(returncode=0, stdout=json.dumps(receipt, sort_keys=True)+"\n", stderr="")
+            if isinstance(m, LaunchCase) and m.role == kind:
+                return launch_observation(m, process)
+            return process
 
         if not soak.exists() or (m and m.role == "idle") or getattr(self, "changed_soak", False):
             if soak.exists():
@@ -1513,15 +2207,21 @@ class Probe:
             segment = soak / "idle_soak"
             process = produce("idle", segment)
             ledger = evidence.EvidenceLedger(soak, ISSUED, config, mode="soak")
-            ledger.member_return("idle", segment, runtime + ["--r1-kind", "idle", "--output", str(segment),
-                                 "--duration-s", "1800"], process=process)
+            argv = runtime + ["--r1-kind", "idle", "--output", str(segment), "--duration-s", "1800"]
+            if isinstance(m, LaunchCase) and m.file == "argv":
+                argv = soak_argv(argv, m)
+            ledger.member_return("idle", segment, argv, process=process)
             row = read(self.base / "soak/soak_row.json")
-            row.update(output_dir=str(segment), result=json.loads(process.stdout))
+            result = read(segment / RECEIPT) if isinstance(m, LaunchCase) else json.loads(process.stdout)
+            row.update(output_dir=str(segment), result=result)
             reference = {**deepcopy(self.ref), "source_output": str(segment)}
             for name, value in (("soak_row.json", row), ("soak_reference.json", reference)):
                 if m and m.role == "idle" and m.file == name:
-                    value = mutate(m, value)
                     touched.append("idle")
+                    if isinstance(m, DecisionCase) and m.family == "raw":
+                        (soak / name).write_bytes(damaged_bytes(Path(name), encode(value) + b"\n", m.op))
+                        continue
+                    value = mutate(m, value)
                 write(soak / name, value)
             ledger.finish_soak("accepted")
         ledger_sha = hashlib.sha256((soak / "evidence_ledger.jsonl").read_bytes()).hexdigest()
@@ -1551,6 +2251,10 @@ class Probe:
         if returned:
             (root / "part-c.stdout.log").write_text(log.getvalue())
             evidence.verify_part_c_publication(root, ledger_sha, hashlib.sha256(ref.read_bytes()).hexdigest())
+        if isinstance(m, DescriptorCase):
+            self.descriptor_verdict = word
+            self.descriptor_findings = [json.loads(line) for line in log.getvalue().splitlines()
+                                        if line.startswith("{") and "reason" in json.loads(line)]
         return returned
 
 
@@ -1658,13 +2362,47 @@ def worker_init():
         copy_segment(WORKER.base, k, WORKER.tree / ("idle_soak" if k=="idle" else pc.KINDS[k]))
 
 
+def descriptor_trial(m):
+    expected = {"rewritten-after-return": "source_integrity", "consistent-40961": "pass",
+                "mirror-40961-claim-40960": "admission_recompute", "no-binding": "evidence_unverifiable"}[m.op]
+    with descriptor_attempt(m):
+        accepted = WORKER.candidate(m)
+    findings = WORKER.descriptor_findings
+    actual = WORKER.descriptor_verdict
+    detail = f"expected={expected} actual={actual} findings={findings}"
+    if expected == "pass":
+        return ("AGREES_PASS" if accepted else "WRONG_VERDICT"), m.name, detail
+    if accepted:
+        return "FALSE_PASS", m.name, detail
+    # With one mirror, any member already bound at the instant of the rewrite
+    # can be the first to report the changed bytes. D1 and D4 are target-local.
+    roles = (P, S, D, X)
+    affected = roles[:roles.index(m.role)+1] if m.op == "rewritten-after-return" else (m.role,)
+    correct = actual == "other_failure" and any(
+        f.get("role") in affected and f.get("reason") == expected and
+        (m.op != "mirror-40961-claim-40960" or f.get("field") in
+         ("max_position_embeddings", LIMIT_FIELD, "hardware." + LIMIT_FIELD)) for f in findings)
+    return ("REFUSED" if correct else "WRONG_VERDICT"), m.name, detail
+
+
 def trial(m):
     try:
+        if isinstance(m, DescriptorCase):
+            return descriptor_trial(m)
+        if isinstance(m, InputCase):
+            return issued_trial(m)
+        if isinstance(m, LaunchCase):
+            return differential_result(m, launch_oracle(m, WORKER), WORKER.candidate(m))
         mismatch = WORKER.oracle(m)
         if not m.path and m.op in ("warmup-shift", "warmup-delete", "warmup-duplicate", "xml-malformed",
                                   "short-recovery", "swap-picks", "poll-ambiguity", "overlap-previous"):
             assert mismatch is not None, "known frozen counterexample went unwitnessed"
         accepted = WORKER.candidate(m)
+        if isinstance(m, DecisionCase) and m.predecessor_csv_wire and m.op in (
+                "d018-header", "d018-interval-header-zero-rows"):
+            assert mismatch is None, "issued D-018 positive control failed"
+            if not accepted:
+                return "WRONG_VERDICT", m.name, "candidate refused the D-018 positive control"
         status = ("FALSE_PASS" if accepted else "REFUSED") if mismatch is not None else (
             "AGREES_PASS" if accepted else "OTHER_REFUSAL")
         return status, m.name, mismatch
@@ -1681,19 +2419,24 @@ def main():
         MODEL_DIR = root / "synthetic-model"
         MODEL_DIR.mkdir()
         write(MODEL_DIR / "config.json", {"max_position_embeddings":40960})
+        issue_model_source()
         endpoint_code()
         with kit_source(finder), compact_control(), patch.object(rt, "registered_s6", return_value={
                 "slots":{"S6":1.}, "s6_tuning":{}}):
             base = root / "base"
-            control(base)
+            binding_errors = control(base)
             CONFIG_SHA = hashlib.sha256((rt.ROOT / r1.DEFAULT_RUNTIME_CONFIG).read_bytes()).hexdigest()
             probe, inv = profile_graph(finder, lambda: Probe(base))
-            print("clean control passes;",len(inv),"decision sites in frozen call-graph closure", flush=True)
+            need(issued_verdict(probe)["pass"], "issued Part C clean control")
+            print("clean control verdict=pass; descriptor rows",
+                  ("FAIL " + ", ".join(binding_errors)) if binding_errors else "PASS (4/4)",
+                  ";", len(inv), "decision sites in frozen call-graph closure", flush=True)
             inventory_mode = os.environ.get("JW_PARTC_INVENTORY")
             if inventory_mode in ("1","only"):
                 for path, func, line, op in inv:
                     print(f"{path}:{line} {func} {op}")
                 if inventory_mode == "only":
+                    assert not binding_errors, "clean control lacks the four correct descriptor digests"
                     return
             suite = cases(base)
             if shard := os.environ.get("JW_PARTC_SHARD"):
@@ -1709,6 +2452,8 @@ def main():
                 suite = list(suite)
                 size = len(suite)
                 assert size, "no matching mutations"
+            if isinstance(suite,list):
+                assert len({case.name for case in suite}) == len(suite), "duplicate case ID"
             print("generated", size, "case IDs", flush=True)
             assert probe.candidate(None), "native replay of clean control"
             ORIGINAL = WORKER = probe
@@ -1726,17 +2471,23 @@ def main():
                     def bounded():
                         it = iter(suite)
                         while batch := list(islice(it, max(128, workers*32))):
-                            yield from pool.map(trial,batch,chunksize=4)
+                            legacy = [case for case in batch if not isinstance(case, (DescriptorCase, InputCase))]
+                            yield from pool.map(trial, legacy, chunksize=4)
+                            # All readers of the shared mirror have completed this
+                            # batch before the parent starts a descriptor rewrite.
+                            yield from map(trial, (case for case in batch if isinstance(case, (DescriptorCase, InputCase))))
                     answers = bounded()
                 for position, (status, name, reason) in enumerate(answers, 1):
                     totals[status] += 1
-                    if status in ("FALSE_PASS", "HARNESS_ERROR"):
+                    if status in ("FALSE_PASS", "HARNESS_ERROR", "WRONG_VERDICT") or "/descriptor/" in name:
                         print(status, name, reason, flush=True)
                     if position % 100 == 0:
                         print("progress", position, "/", size, dict(totals), flush=True)
             assert sum(totals.values()), "no mutations ran"
             print("matrix", sum(totals.values()), sorted(totals.items()), flush=True)
             assert not totals["HARNESS_ERROR"], "incomplete differential comparison"
+            assert not binding_errors, "clean control lacks the four correct descriptor digests"
+            assert not totals["WRONG_VERDICT"], "descriptor decision or finding disagrees with RL-189"
             assert not totals["FALSE_PASS"], "native evaluator accepted a frozen contradiction"
 
 

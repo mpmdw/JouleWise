@@ -5,6 +5,19 @@ Part C is a gated smoke on the final bytes (fresh soak, step-D, then the gated D
 member seed 1 on W1's inter-member schedule, then X_G). It is not an arm, produces no
 slots and enters nothing. This module reconciles the receipts, episode facts and
 thermal journal before applying the fixed test. It starts nothing and writes nothing.
+The pinned D-018 check is the exception: it runs ``git cat-file`` and one child interpreter
+over a private temporary directory (``_pinned_trace_problems``).
+
+One authority grants ``pass`` (lead directive of 2026-11-21): ``FrozenOracle``. Every gated
+decision is recomputed by frozen R1 code from the raw records the ledger bound and recorded
+there by name. ``_adjudicate`` returns ``pass`` only as a conjunction with the oracle, and
+``_emit_part_c`` publishes it only for a native evaluation whose oracle passed.
+
+Derive, don't trust (lead directive of 2026-11-21, fix-2). A field frozen R1 derives from a raw
+record is derived again here with the frozen function and compared: every sensor-journal row
+(``_replay_frozen_sidecar``), each gate's entry and exit views whatever its outcome
+(``_gate_witnesses``), the soak's window and duration (``_check_soak_window``) and the census
+structure (``_check_census``). A required check whose input is missing or unobservable refuses.
 
 The test, as ruled (RL-145 step 3 and the addendum's section 6, which replaces the
 D_bank line):
@@ -56,8 +69,8 @@ from types import SimpleNamespace
 import time
 
 from scripts.align_r1_part_c_evidence import (
-    BATTERY_SOURCE, BoundMember, BoundSoak, EvidenceFailure, EvidenceLedger, KINDS, MANIFEST_NAME,
-    SOAK_DIRECTORY, SOAK_FILES, SOAK_SEGMENT, canonical, digest,
+    BATTERY_SOURCE, BoundMember, BoundSoak, DESCRIPTOR_SOURCE, EvidenceFailure, EvidenceLedger, KINDS,
+    LEDGER_NAME, MANIFEST_NAME, SOAK_DIRECTORY, SOAK_FILES, SOAK_SEGMENT, canonical, digest, native_limit,
     parse_json as parse_evidence_json, read_regular, stdout_payload,
 )
 
@@ -86,6 +99,29 @@ EPISODE_IDENTITIES = {
     "d-bank": ("Qwen3.8-27B-8bit", "shade/bank_transfer_2", "benign", 1),
     "x-g": ("Qwen3-30B-A3B-4bit", "shade/spam_filter_update", "sabotage", 16),
 }
+# The frozen dispatch's template for each Part C member (r1_runtime k_capture_predecessor_30b,
+# k_step_d, k_gated_d and k_x_g). RL-189 D3 holds each member's own config.json to it.
+TEMPLATE_KEYS = {"capture-predecessor-30b": "model_30b", "step-d": "d_spam",
+                 "d-bank-benign-s1": "d_bank", "x-g": "x_g"}
+UNREAD_LIMIT_FLAG = "model.position_limit_unread"
+# The events the pinned producer records for a turn between the endpoint's start stamp and
+# the prefill start, in order (mlx_runtime._generate). Only the whole sequence witnesses a
+# delayed prefill start.
+PRE_PREFILL_EVENTS = (("tokenize", "phase_start"), ("tokenize", "phase_end"),
+                      ("generation_setup", "phase_start"), ("generation_setup", "phase_end"))
+PRE_PREFILL_PHASES = frozenset(phase for phase, _ in PRE_PREFILL_EVENTS)
+# bundle.RunBundleWriter.finalize at the pin appends exactly this event.
+FINAL_EVENT = {"event_type": "run_finalized", "phase": "run", "message": "bundle finalized", "metadata": {}}
+# D-018 (bundle_read.POWER_TRACE_HEADER and POWER_TRACE_INTERVAL_HEADER): the four-column header or
+# this six-column one. Nothing else is a power trace.
+TRACE_HEADER = ("timestamp_s", "power_w", "source", "rail", "interval_start_s", "interval_end_s")
+JOURNAL_CLOCKS = ("wall_ns", "monotonic_ns", "monotonic_raw_ns")
+ISSUED_DRIVER = "issued_driver"
+FROZEN_ORACLE = "frozen_oracle"
+ISSUED_PART_C = "issued_part_c"
+# The Part C consumer issued with R1 at b2e01464d, by blob id. Its verdict on the same bound bundles is one of the
+# frozen oracle's decisions. It is read from git and verified, never taken from the checkout.
+ISSUED_PART_C_SOURCE = ("scripts/align_r1_part_c.py", "89862a56b55fa9d9f92cdd08d6dc9e260b824bd1")
 POWERMODE_SOURCE = "pmset -g custom (AC Power block, exact powermode key)"
 CUT_FLAGS = frozenset({"episode.deadman", "episode.g0_unreleased", "episode.malformed_tool_call",
                        "episode.time_guard", "episode.context_limit", "thermal.start_gate_timeout",
@@ -434,6 +470,38 @@ class RuntimeAdmissionRefusal(ValueError):
         self.kind, self.reason = kind, reason
 
 
+def issued_model_source(kind, configured):
+    """RL-189 1.2, first route: the member's ``model.source`` from the issued runtime config.
+
+    The frozen ``read_template`` is called unchanged on the template the issued
+    config names for this member. No file of the member is read.
+    """
+    from joulewise.align.apple import r1_runtime as rt
+
+    template, _spec = rt.read_template(configured["templates"][TEMPLATE_KEYS[kind]])
+    return template["model"]["source"]
+
+
+def _descriptor_witness(kind, ledger):
+    """The judged invoker's observation of ``<model.source>/config.json`` at a member's return.
+
+    The path comes from the runtime config whose digest row 0 binds. An
+    observation that cannot be made is recorded as such. It never raises.
+    """
+    if ledger is None or ledger.mode != "native" or kind not in TEMPLATE_KEYS:
+        return None
+    try:
+        from joulewise.align.apple import r1_runtime as rt
+
+        configured, config_sha = rt.load_config(ledger.runtime_config)
+        if config_sha != ledger.config_sha:
+            return "unreadable"
+        source = issued_model_source(kind, configured)
+    except Exception:  # noqa: BLE001 - the row must still be written
+        return "unreadable"
+    return ledger.descriptor_witness(source)
+
+
 def judged_invoke(runtime, kind, output, duration=None, *, soak_reference=None, quiet=False,
                   contract_key=None, watch=None, ledger=None):
     """Part C's evidence transport around the byte-frozen R1 process driver."""
@@ -464,14 +532,16 @@ def judged_invoke(runtime, kind, output, duration=None, *, soak_reference=None, 
         process = r1._run(argv)
     except BaseException as error:
         if ledger is not None:
-            ledger.member_return(kind, output, argv, error=error)
+            ledger.member_return(kind, output, argv, error=error,
+                                 model_descriptor=_descriptor_witness(kind, ledger))
         if isinstance(error, UnicodeError):
             raise RuntimeEvidenceError(kind, "stdout_receipt", "invalid", field="invalid") from None
         if not isinstance(error, (OSError, TimeoutExpired)):
             raise
         raise RuntimeEvidenceError(kind, "process_exit", type(error).__name__) from None
     if ledger is not None:
-        ledger.member_return(kind, output, argv, process=process)
+        ledger.member_return(kind, output, argv, process=process,
+                             model_descriptor=_descriptor_witness(kind, ledger))
     code, stdout = process.returncode, process.stdout
     if type(code) is not int:
         raise RuntimeEvidenceError(kind, "process_exit", "invalid exit status")
@@ -764,8 +834,13 @@ def _check_launch_refusal(segment):
 
 
 def _adjudicate(step, bank, contrast, launcher_refusal, n_chunk, lines, predecessor, runtime_error, ledger,
-                *, archived=False):
-    """The sole pass decision. Every required evidence check must succeed."""
+                *, archived=False, oracle=None):
+    """The sole pass decision. Every required evidence check must succeed, and so must the frozen oracle.
+
+    ``pass`` is a conjunction: the lines this module judges, and ``oracle.refusal`` being None for the
+    members judged. An absent oracle, a decision it never made and a decision it refused each refuse here,
+    with the oracle's own reason.
+    """
     if runtime_error:
         return "other_failure", {"runtime_receipt": runtime_error}
     issues = {}
@@ -811,7 +886,13 @@ def _adjudicate(step, bank, contrast, launcher_refusal, n_chunk, lines, predeces
     if not (launcher_refusal and contrast is None) and (x_line is None or x_line["pass"] is not True):
         return "other_failure", issues
     if mechanics["pass"] is True:
-        return "pass", issues
+        judged = (*JUDGED_MEMBERS, *(("x-g",) if contrast is not None else ()))
+        refusal = (EvidenceFailure(FROZEN_ORACLE, "attempt", "evaluation", field="absent")
+                   if not isinstance(oracle, FrozenOracle) else oracle.refusal(judged))
+        if refusal is None:
+            return "pass", issues
+        issues[refusal.reason] = f"{refusal.role} {refusal.source} {refusal.field}"
+        return "other_failure", issues
     failed = [key for key, check in _judged(mechanics.get("checks", {})).items() if check["pass"] is not True]
     if failed == ["gate_time"]:
         return "mechanics_gate_time_failed", issues
@@ -819,7 +900,8 @@ def _adjudicate(step, bank, contrast, launcher_refusal, n_chunk, lines, predeces
 
 
 def _judge_observations(*, predecessor=None, step_d=None, d_bank=None, n_chunk=None, x_g=None,
-                        x_g_not_run_reason=None, printed=None, runtime_error=None, ledger=None, archived=False):
+                        x_g_not_run_reason=None, printed=None, runtime_error=None, ledger=None, archived=False,
+                        oracle=None):
     """Judge observations after the native verifier establishes their binding."""
     def mechanics_line():
         checks = d_bank_mechanics(d_bank, n_chunk)
@@ -834,7 +916,7 @@ def _judge_observations(*, predecessor=None, step_d=None, d_bank=None, n_chunk=N
                         and x_g_not_run_reason.reason in ("no soak reference before launch", "native exit 2"))
     verdict, issues = _adjudicate(step_d if isinstance(step_d, dict) else {}, d_bank, x_g,
                                   launcher_refusal, n_chunk, lines, predecessor, runtime_error, ledger,
-                                  archived=archived)
+                                  archived=archived, oracle=oracle)
     # RL-152 section 1.4: the slot session's three-turn set clause is not applied here.
     log = [THREE_TURN_CLAUSE_LINE] if d_bank is not None else []
     if x_g is None and launcher_refusal and "x_g_launch" not in issues:
@@ -1085,6 +1167,9 @@ STEP_INVENTORY = "inventory/inventory_journal.jsonl"
 STEP_PM_SOURCES = ("rich_telemetry.jsonl", "raw/powermetrics.plist")
 LOAD_SOURCE = "load_journal.json"
 QUIET_MEMBERS = ("capture-predecessor-30b", "step-d")
+# r1_runtime.Segment.run takes the process census at these points, in this order, once each: start_journals
+# before the member and stop_journals(final=True) after it.
+CENSUS_POINTS = ("start", "end")
 RELEASE_COPIES = ("smoke_part_c.json", "smoke.json")
 RELEASE_LINES = ("step_d", "d_bank_mechanics", "d_bank_start_state", "x_g")
 
@@ -1116,6 +1201,75 @@ def _bound_member_files(bound, receipt):
     if role in QUIET_MEMBERS:
         data[LOAD_SOURCE] = bound.read(LOAD_SOURCE, LOAD_SOURCE)
     return bound.root / relative, data
+
+
+JUDGED_MEMBERS = ("capture-predecessor-30b", "step-d", "d-bank-benign-s1")   # X_G joins when it ran
+ORACLE_ATTEMPT_DECISIONS = ("soak", "idle/identity", "issued_inputs", "schedule", ISSUED_DRIVER)
+ORACLE_MEMBER_DECISIONS = ("identity", "window", "records", "workload")
+ORACLE_VERDICT_DECISIONS = ("duty_bar", ISSUED_PART_C)
+
+
+class FrozenOracle:
+    """The single authority for ``pass`` (lead directive of 2026-11-21, item 1).
+
+    Each gated decision is recomputed by frozen R1 code from the raw records the ledger bound, and recorded
+    here by name. For the attempt: the soak, its identity, the issued inputs, the W1 schedule and the frozen
+    driver. For each judged member: its identity against the issued config, its terminal window, its records,
+    the frozen workload replay and, for a gated member, every gate. Then two verdicts on the whole attempt: the
+    frozen duty bar and the issued Part C consumer.
+
+    ``refusal`` is None only when every decision ``required`` names was recorded and none refused. A refused
+    or failed decision keeps the frozen check's own reason. ``_adjudicate`` and ``_emit_part_c`` both require
+    ``refusal`` to be None, so no path reaches ``pass`` without it.
+    """
+
+    def __init__(self):
+        self._decisions = {}
+
+    def decide(self, name, role, check, *args, **kwargs):
+        """Make one evidence decision. A refusal is recorded and raised, so the attempt refuses with it."""
+        if name in self._decisions:
+            failure = EvidenceFailure(FROZEN_ORACLE, role, "evaluation", field=f"decided twice: {name}")
+            self._decisions[name] = failure
+            raise failure
+        self._decisions[name] = EvidenceFailure(FROZEN_ORACLE, role, "evaluation", field=f"unfinished: {name}")
+        try:
+            value = check(*args, **kwargs)
+        except EvidenceFailure as error:
+            self._decisions[name] = error
+            raise
+        except Exception as error:  # noqa: BLE001 - a frozen decision that cannot be made is never a pass
+            failure = EvidenceFailure(FROZEN_ORACLE, role, "evaluation", field=name)
+            self._decisions[name] = failure
+            raise failure from error
+        self._decisions[name] = None
+        return value
+
+    def record(self, name, role, check, *args, **kwargs):
+        """Make one verdict decision. Its refusal decides ``pass`` alone and raises nothing here."""
+        try:
+            self.decide(name, role, check, *args, **kwargs)
+        except EvidenceFailure:
+            pass
+
+    @staticmethod
+    def required(judged):
+        names = {*ORACLE_ATTEMPT_DECISIONS, *ORACLE_VERDICT_DECISIONS}
+        for kind in judged:
+            names.update(f"{kind}/{part}" for part in ORACLE_MEMBER_DECISIONS)
+            if kind != "capture-predecessor-30b":
+                names.add(f"{kind}/gates")
+        return names
+
+    def refusal(self, judged):
+        """The first refused decision, else the first required one never made, else None."""
+        for outcome in self._decisions.values():
+            if outcome is not None:
+                return outcome
+        missing = sorted(self.required(judged) - set(self._decisions))
+        if missing:
+            return EvidenceFailure(FROZEN_ORACLE, "attempt", "evaluation", field=f"undecided: {missing[0]}")
+        return None
 
 
 def _release_table(table=None, *, failures=()):
@@ -1151,18 +1305,28 @@ def _release_table(table=None, *, failures=()):
 
 
 class _NativeEvaluation(dict):
-    """A table bound to the ledger whose observations were adjudicated."""
+    """A table bound to the ledger whose observations were adjudicated, and to the oracle that judged them."""
 
-    def __init__(self, table, ledger):
+    def __init__(self, table, ledger, oracle, judged):
         super().__init__(table)
-        self.ledger = ledger
+        self.ledger, self.oracle, self.judged = ledger, oracle, tuple(judged)
+
+    def oracle_refusal(self):
+        if not isinstance(self.oracle, FrozenOracle):
+            return EvidenceFailure(FROZEN_ORACLE, "attempt", "evaluation", field="absent")
+        return self.oracle.refusal(self.judged)
 
 
 def _emit_part_c(output, started, table=None, *, failures=(), ledger=None):
+    """The single publication point. A ``pass`` is published only for this ledger's native evaluation, and only
+    when its frozen oracle passed every required decision (the second conjunct after ``_adjudicate``)."""
     if table is not None and table["verdict"] == "pass" and (
             ledger is None or not isinstance(table, _NativeEvaluation) or table.ledger is not ledger):
         table = None
         failures = (*failures, EvidenceFailure("verdict_binding", "attempt", "evaluation"))
+    elif table is not None and table["verdict"] == "pass" and table.oracle_refusal() is not None:
+        failures = (*failures, table.oracle_refusal())
+        table = None
     result = {"part": "C", "authority": "RL-145 step 3; RL-145 addendum section 6",
               "slots_entered": False, "members": {}, "elapsed_s": time.monotonic() - started}
     def write(table, failures, *, replace=False):
@@ -1291,6 +1455,10 @@ def _validate_sidecar(rows, sensors, kind, source, *, gated=False):
             for clock in ("wall_ns", "monotonic_ns", "monotonic_raw_ns")), "stamp", i)
         check(begin_ns <= a["monotonic_ns"] <= b["monotonic_ns"] <= end["finished"]["monotonic_ns"],
               "stamp", i)
+        # The frozen Sidecar takes every stamp under one lock (thermal.py tick, event and _write),
+        # so a row, reading or boundary, never starts before the row above it has finished.
+        check(i == 0 or all(rows[i - 1]["finished"][clock] <= a[clock] for clock in JOURNAL_CLOCKS),
+              "stamp_order", i)
         if i in (0, len(rows) - 1):
             continue
         check(row["kind"] == "reading" or row["kind"] in boundary_kinds, "kind", i)
@@ -1331,10 +1499,102 @@ def _validate_sidecar(rows, sensors, kind, source, *, gated=False):
     check(isinstance(span, list) and len(span) == 2 and span[0] == begin_ns and _uint(span[1])
           and rows[-2]["finished"]["monotonic_ns"] <= span[1] <= terminal_ns, "coverage")
     check(canonical(counter.report(span[1])) == canonical(coverage), "coverage")
+    _replay_frozen_sidecar(rows, sensors, kind, source, gated=gated)
+
+
+def _replay_frozen_sidecar(rows, sensors, kind, source, *, gated):
+    """Derive, don't trust (lead directive of 2026-11-21, fix-2, D1): the frozen Sidecar writes every row again.
+
+    ``thermal.Sidecar.start`` names the session from its opening monotonic stamp, ``_write`` numbers each
+    row, joins its read errors and serializes it, ``tick`` projects each raw reading (value, error and the
+    reader's raw fields) and its status, and ``stop`` reports coverage. The frozen Sidecar is driven here with
+    only the recorded stamps, raw readings, status and gate events, the inputs it cannot derive. Every row it
+    writes must equal the recorded row. A session ID, sequence number, error string, unit, projected value
+    or coverage figure that frozen R1 would not have written refuses.
+    """
+    from joulewise.align.apple import thermal
+    from joulewise.hazards.base import Stamp
+
+    def refuse(index, field, error=None):
+        raise EvidenceFailure("sidecar_derivation", kind, source, index=index, field=field,
+                              peer="thermal.Sidecar") from error
+
+    def same(index, recorded, written):
+        if canonical(recorded) != canonical(written):
+            fields = sorted(key for key in {*recorded, *written} if canonical(recorded.get(key)) !=
+                            canonical(written.get(key)))
+            refuse(index, ",".join(fields) or "row")
+
+    clock = SimpleNamespace(stamps=iter(()))
+    context = SimpleNamespace(stamp=lambda: next(clock.stamps))
+    reader = SimpleNamespace(read=None, close=lambda: None)
+    written_rows = []
+    try:
+        native = thermal.Sidecar(None, sensors, reader=reader, ctx=context)
+        write = native._write
+
+        def record(*args, **kwargs):                    # keeps every row the frozen _write returns
+            written_rows.append(write(*args, **kwargs))
+            return written_rows[-1]
+
+        native._write = record
+        clock.stamps = iter((Stamp.from_json(rows[0]["started"]),))
+        native.start(background=False)
+    except Exception as error:  # noqa: BLE001 - a journal the frozen Sidecar cannot replay is never a pass
+        refuse(0, "session_start", error)
+    same(0, rows[0], written_rows[0])
+    for index, row in enumerate(rows[1:-1], start=1):
+        try:
+            values = row["values"]
+            if row["kind"] == "reading":
+                clock.stamps = iter((Stamp.from_json(row["started"]), Stamp.from_json(row["finished"])))
+                entries = values["readings"]
+                inputs = {"values": {key: entries[key]["value"] for key in native.selected},
+                          "errors": {key: entries[key]["error"] for key in native.selected
+                                     if entries[key]["error"] is not None},
+                          "raw": {key: {name: value for name, value in entries[key].items()
+                                        if name not in ("value", "error")} for key in native.selected}}
+                reader.read = lambda keys, inputs=inputs: inputs
+                status = values.get("status")
+                native.status_reader = (lambda status=status: status) if gated or "status" in values else None
+                written = native.tick()
+            else:
+                clock.stamps = iter((Stamp.from_json(row["started"]),))
+                written = native.event(row["kind"], values)
+        except EvidenceFailure:
+            raise
+        except Exception as error:  # noqa: BLE001
+            refuse(index, "row", error)
+        same(index, row, written)
+    last = rows[-1]
+    try:
+        report_end = last["values"]["coverage"]["span_ns"][1]
+        written = native._write("session_end", {"coverage": native.counter.report(report_end),
+                                                "collector_error": None},
+                                Stamp.from_json(last["started"]), Stamp.from_json(last["finished"]))
+    except Exception as error:  # noqa: BLE001
+        refuse(len(rows) - 1, "session_end", error)
+    same(len(rows) - 1, last, written)
+
+
+def _check_event_rows(kind, events):
+    """Every controller event is typed, and the stream ends with the producer's one finalization event."""
+    source = "events.jsonl"
+    for index, event in enumerate(events):
+        # EVIDENCE-SPEC row 38: event_type and phase are nonempty strings; a message may be empty.
+        _required(_finite(event.get("timestamp_s")) and isinstance(event.get("event_type"), str)
+                  and bool(event["event_type"]) and isinstance(event.get("phase"), str) and bool(event["phase"])
+                  and isinstance(event.get("message"), str) and isinstance(event.get("metadata"), dict),
+                  "bundle_binding", kind, source, index=index)
+    _required(all(key in events[-1] and canonical(events[-1][key]) == canonical(value)
+                  for key, value in FINAL_EVENT.items())
+              and sum(row["event_type"] == "run_finalized" for row in events) == 1
+              and all(row["timestamp_s"] <= events[-1]["timestamp_s"] for row in events[:-1]),
+              "bundle_binding", kind, source, field="run_finalized")
 
 
 def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, *,
-                          step_binding=None, gate_counts=None):
+                          step_binding=None, gate_counts=None, descriptor=None, oracle=None):
     from joulewise.align.apple import r1_runtime as rt
     from joulewise.align.apple.budget import budget_record
     from joulewise.align.apple.sampler import seconds_ns
@@ -1357,6 +1617,11 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
     def rows(source, reason):
         return _jsonl_objects(data[source], kind, source, reason)
 
+    def decide(name, check, *args, **kwargs):
+        if oracle is None:
+            return check(*args, **kwargs)
+        return oracle.decide(f"{kind}/{name}", kind, check, *args, **kwargs)
+
     _check_receipt_fields(kind, receipt)
     summary = doc(summary_name, "member_status")
     require(summary.get("status") == "succeeded" and "failure_reason" in summary
@@ -1366,14 +1631,7 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
             and receipt.get("failure_reason") is None, "member_status", summary_name, peer=RECEIPT_NAME)
 
     events = rows(events_name, "bundle_binding")
-    for index, event in enumerate(events):
-        require(_finite(event.get("timestamp_s")) and isinstance(event.get("event_type"), str)
-                and isinstance(event.get("phase"), str) and isinstance(event.get("message"), str)
-                and isinstance(event.get("metadata"), dict), "bundle_binding", events_name, index=index)
-    require(events[-1]["event_type"] == "run_finalized"
-            and sum(row["event_type"] == "run_finalized" for row in events) == 1
-            and all(row["timestamp_s"] <= events[-1]["timestamp_s"] for row in events[:-1]),
-            "bundle_binding", events_name, field="run_finalized")
+    _check_event_rows(kind, events)
 
     episode = doc(episode_name, "episode_identity")
     config, meta = doc(config_name), doc(metadata_name)
@@ -1490,6 +1748,14 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
     ):
         require(type(claim) is int and claim == expected_total, "token_accounting", source, peer=turns_name)
 
+    # The issued predecessor template carries no thermal policy (r1_runtime.k_capture_predecessor_30b refuses
+    # one), so its episode records none. Every other member records its gates.
+    require(("thermal" in hardware) == (role != "predecessor"), "gate_cardinality", episode_name,
+            field="thermal")
+    # The frozen predecessor receipt records no stop evidence (k_capture_predecessor_30b). A flags field on it
+    # would be a second account of how the member ended, so it must be the raw episode's own list.
+    require(role != "predecessor" or "episode_flags" not in receipt or receipt["episode_flags"] == episode["flags"],
+            "flag_source", RECEIPT_NAME, field="episode_flags", peer=episode_name)
     thermal = None if role == "predecessor" else hardware["thermal"]
     all_flags = [episode["flags"]]
     if thermal is not None:
@@ -1499,6 +1765,10 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
     intervals = () if thermal is None else thermal["intervals"]
     parsed_episode = from_json(Episode, data[episode_name])
     execution = _recompute_member_config(kind, receipt, config, spec, configured, gate_inputs)
+    if descriptor is not None:
+        # RL-189 D3. The whole-config comparisons above already imply it; this names the field.
+        require(config["model"].get("source") == descriptor.source, "execution_config", config_name,
+                field="model.source", peer="issued_inputs")
     _recompute_turn_boundaries(kind, parsed_episode, witnessed, events, intervals, execution.max_tokens)
     context_checks = _recompute_controller_phases(kind, parsed_episode, witnessed, intervals, events)
     _recompute_continuation(kind, parsed_episode, witnessed, execution, config["model"]["family"])
@@ -1512,7 +1782,10 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
     limits = hardware.get("context_limits")
     reason = next((flag for flag in reversed(episode["flags"]) if flag.startswith(stop + ":")), stop)
     effective_context_cap = _recompute_admissions(kind, execution, parsed_episode, witnessed, limits,
-                                                  budget, context_checks)
+                                                  budget, context_checks, episode["flags"], descriptor)
+    # The frozen workload decides last, so a claim D4 to D6 already refuses is reported as that claim.
+    decide("workload", _replay_frozen_workload, kind, config, witnessed, events, meta, episode, parsed_episode,
+           descriptor.raw if descriptor is not None else _claimed_descriptor(hardware))
     expected_budget = budget_record(execution, parsed_episode.turns, reason,
                                     effective_context_cap=effective_context_cap).get("token_budget")
     if expected_budget is None:
@@ -1528,6 +1801,7 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
 
     if role == "predecessor":
         require(not _thermal_events(events), "gate_journal_disagreement", events_name, peer=episode_name)
+        _strict_documents(kind, data)
         return
     require(receipt.get("g0_timeout_s") == configured["g0_timeout_s"] == G0_LIMIT_S, "gate_summary", RECEIPT_NAME)
     sensors = rt.sensors_policy(configured)
@@ -1545,9 +1819,45 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
     require(binding is not None and canonical(thermal.get("custody")) == canonical({
                     **binding, **({"source_journal_sha256": None} if role == "step-d" else {})}),
             "reference_binding", episode_name, field="thermal.custody", peer=REFERENCE_SOURCE)
-    _check_release_evidence(kind, receipt, thermal, episode["flags"], journal, spec, configured,
-                            gate_inputs, budget["deadline_ns"], counts=gate_counts)
+    decide("gates", _check_release_evidence, kind, receipt, thermal, episode["flags"], journal, spec, configured,
+           gate_inputs, budget["deadline_ns"], counts=gate_counts)
+    _strict_documents(kind, data)
     return binding if role == "step-d" else None
+
+
+def planned_run_id(kind, configured):
+    """The run id the frozen dispatch issues for ``kind``, taken from the dispatch itself.
+
+    ``Segment.dispatch`` is called with its member runner replaced by one that stops at the first config it
+    would run. Nothing is launched and no file is read beyond the issued templates.
+    """
+    from joulewise.align.apple import r1_runtime as rt
+
+    class Planned(Exception):
+        pass
+
+    def capture(config, hook=None):
+        raise Planned(config["run_id"])
+
+    plan = object.__new__(rt.Segment)
+    plan.kind, plan.config = kind, configured
+    plan.start_inventory = lambda: None
+    plan.step_d_result = lambda: {"slots": {"T_dead": 1000., "B_D": 6144, "N_chunk": 4096, "S7": 60.}}
+    plan.reference = lambda: {}
+    plan.bands = lambda: {"delta_fast_c": 1., "delta_slow_c": 1.}
+    plan.run_member = capture
+    try:
+        plan.dispatch()
+    except Planned as seen:
+        return seen.args[0]
+    raise ValueError("the frozen dispatch issued no run id")
+
+
+def _claimed_descriptor(hardware):
+    """The archive has no ledger. Its mirror is whatever descriptor reproduces the recorded claim (RL-189 1.4)."""
+    limits = hardware.get("context_limits")
+    claim = limits.get("max_position_embeddings") if isinstance(limits, dict) else None
+    return json.dumps({"max_position_embeddings": claim}).encode() if type(claim) is int and claim > 0 else b"{"
 
 
 def _recompute_member_config(kind, receipt, config, spec, configured, gate_inputs):
@@ -1555,9 +1865,14 @@ def _recompute_member_config(kind, receipt, config, spec, configured, gate_input
     from joulewise.align.apple.workload import EpisodeSpec
     from joulewise.schemas import BenchmarkConfig
 
-    template_key = {"capture-predecessor-30b": "model_30b", "step-d": "d_spam",
-                    "d-bank-benign-s1": "d_bank", "x-g": "x_g"}[kind]
+    template_key = TEMPLATE_KEYS[kind]
     source = "config.json"
+    try:
+        run_id = planned_run_id(kind, configured)
+    except Exception as error:
+        raise EvidenceFailure("execution_limits_recompute", kind, source, field="run_id") from error
+    _required(config.get("run_id") == run_id, "execution_config", kind, source, field="run_id",
+              peer="issued_inputs")
     try:
         actual = EpisodeSpec.from_text(config["workload_profile"]["prompt_text"])
         if kind == "capture-predecessor-30b":
@@ -1572,7 +1887,7 @@ def _recompute_member_config(kind, receipt, config, spec, configured, gate_input
             t_dead, budget = rt.gated_budget(gate_inputs[0]["slots"])
             expected.update(deadman_s=t_dead, max_episode_decode_tokens=budget)
         generated = BenchmarkConfig.from_mapping(rt.member_config(
-            template_config, expected, run_id=config["run_id"], kind=kind)).to_dict()
+            template_config, expected, run_id=run_id, kind=kind)).to_dict()
         declared = {**config, "workload_profile": {
             **config["workload_profile"], "prompt_text": rt.canonical(spec)}}
     except Exception as error:
@@ -1589,20 +1904,66 @@ def _recompute_member_config(kind, receipt, config, spec, configured, gate_input
     return actual
 
 
-def _recompute_admissions(kind, execution, episode, witnessed, limits, budget, context_checks):
+class _AttestedDescriptor:
+    """RL-189 1.3: the mirror the ledger binds for one member and the limit frozen code reads from it."""
+
+    def __init__(self, source, limit, raw=None):
+        self.source, self.limit, self.raw = source, limit, raw
+
+
+def _attested_descriptor(ledger, kind, configured):
+    """D1 and D2. ``A`` is WL:268-272 on bytes whose digest is the member row's, before and after the parse."""
+    try:
+        source = issued_model_source(kind, configured)
+    except Exception as error:
+        raise EvidenceFailure("execution_limits_recompute", kind, "config.json", field="model.source",
+                              peer="issued_inputs") from error
+    raw = ledger.model_descriptor(kind, source)
+    limit = native_limit(raw)
+    ledger.verify_descriptor(kind)
+    return _AttestedDescriptor(source, limit, raw)
+
+
+def frozen_context_cap(limit, execution):
+    """WL:283-289 from a native limit (None when unread), the configured cap and the budget flags."""
+    configured = execution.max_context_tokens
+    cap = (min(value for value in (limit, configured) if value is not None)
+           if limit is not None or configured is not None else None)
+    if execution.max_episode_decode_tokens is not None or execution.deadman_s is not None:
+        cap = min(40960, cap or 40960)
+    return cap
+
+
+def _same_limit(claim, expected):
+    return type(claim) is type(expected) and claim == expected
+
+
+def _recompute_admissions(kind, execution, episode, witnessed, limits, budget, context_checks, flags,
+                          descriptor=None):
     source = "outputs/align_episode.json"
 
-    def check(ok, field, index=None):
-        _required(ok, "admission_recompute", kind, source, field=field, index=index, peer="config.json")
+    def check(ok, field, index=None, peer="config.json"):
+        _required(ok, "admission_recompute", kind, source, field=field, index=index, peer=peer)
 
-    position_cap = limits.get("max_position_embeddings") if isinstance(limits, dict) else None
-    # The descriptor is unbound. A positive recorded cap is a possible native
-    # descriptor, but its effective cap must still follow the issued limits.
-    check(_uint(position_cap) and position_cap > 0, "context_limits.max_position_embeddings")
-    context_cap = min(position_cap, execution.max_context_tokens or position_cap)
-    if execution.deadman_s is not None or execution.max_episode_decode_tokens is not None:
-        context_cap = min(context_cap, 40960)
-    check(type(limits.get("max_context_tokens")) is int and limits["max_context_tokens"] == context_cap,
+    claimed = isinstance(limits, dict) and "max_position_embeddings" in limits
+    claim = limits["max_position_embeddings"] if claimed else None
+    if descriptor is None:
+        # RL-189 1.4, the replay: no ledger exists, so the claim is judged by existence.
+        # It is null, or a positive integer that must reproduce the recorded cap below.
+        check(claimed and (claim is None or type(claim) is int and claim > 0),
+              "context_limits.max_position_embeddings")
+        position_cap = claim
+    else:
+        # D4: the claim equals the attested limit, by type and value.
+        position_cap = descriptor.limit
+        check(claimed and _same_limit(claim, position_cap), "context_limits.max_position_embeddings",
+              peer=DESCRIPTOR_SOURCE)
+    # D5: the limit is unread exactly when the episode says so.
+    _required((UNREAD_LIMIT_FLAG in flags) == (position_cap is None), "flag_source", kind, source,
+              field=UNREAD_LIMIT_FLAG, peer=DESCRIPTOR_SOURCE if descriptor is not None else None)
+    # D6: the recorded effective cap follows from that limit and the issued configuration.
+    context_cap = frozen_context_cap(position_cap, execution)
+    check("max_context_tokens" in limits and _same_limit(limits["max_context_tokens"], context_cap),
           "context_limits.max_context_tokens")
     check(len(episode.turns) <= execution.max_turns, "max_turns")
     deadline = budget.get("deadline_ns") if isinstance(budget, dict) else None
@@ -1617,7 +1978,8 @@ def _recompute_admissions(kind, execution, episode, witnessed, limits, budget, c
               "max_episode_decode_tokens", index)
         tokens_used += turn.decode_tokens
         rendered_tokens = len(record["generation"]["prompt_token_ids"])
-        check(rendered_tokens + execution.max_tokens <= context_cap,
+        # WL:518-526 guards an admission only when a limit exists.
+        check(context_cap is None or rendered_tokens + execution.max_tokens <= context_cap,
               "max_context_tokens", index)
         guard_start, guard_end = context_checks[index]
         if execution.deadman_s is not None:
@@ -1691,9 +2053,17 @@ def _recompute_turn_boundaries(kind, episode, witnessed, events, intervals, turn
 
     source = "events.jsonl"
     by_turn = defaultdict(list)
+    lead = defaultdict(list)
     previous_turn = 0
-    for event in events:
+    for position, event in enumerate(events):
         phase, event_type = event["phase"], event["event_type"]
+        if phase in PRE_PREFILL_PHASES:
+            # Such an event belongs to one turn and precedes that turn's prefill. Anything else is an orphan.
+            index = event["metadata"].get("align_turn_index")
+            _required(_uint(index) and index < len(episode.turns) and index not in by_turn,
+                      "turn_boundary_recompute", kind, source, field="prefill_start", index=position)
+            lead[index].append((phase, event_type, event["timestamp_s"]))
+            continue
         if phase not in ("prefill", "decode") or event_type not in ("phase_start", "phase_end", "token"):
             continue
         index = event["metadata"].get("align_turn_index")
@@ -1735,6 +2105,15 @@ def _recompute_turn_boundaries(kind, episode, witnessed, events, intervals, turn
               and final_decode.timestamp_s <= end.epoch_s
               and all(left.timestamp_s <= right.timestamp_s for left, right in zip(phase, phase[1:])),
               "phase_order")
+        # The prefill start has no stamp of its own. A start later than the endpoint's start
+        # stamp is accepted only when the turn records the producer's whole pre-prefill sequence,
+        # in order, inside that bracket. With none recorded nothing witnesses a delay and the
+        # two must coincide. A partial, repeated or reordered sequence witnesses nothing.
+        witnessed = lead.get(index, [])
+        bracket = [start.epoch_s, *(stamp for _, _, stamp in witnessed), prefill_start.timestamp_s]
+        check(all(left <= right for left, right in zip(bracket, bracket[1:]))
+              and (tuple(mark[:2] for mark in witnessed) == PRE_PREFILL_EVENTS if witnessed
+                   else bracket[0] == bracket[-1]), "prefill_start")
         check(type(final_decode.metadata.get("emitted_tokens")) is int
               and final_decode.metadata["emitted_tokens"] == turn.decode_tokens
               and type(first_decode.metadata.get("max_tokens")) is int
@@ -1837,6 +2216,318 @@ def _recompute_controller_phases(kind, episode, witnessed, intervals, events):
     return guards
 
 
+ISSUED_WORKLOAD = "issued_workload"
+_WORKLOAD_CODE = {}
+
+
+def _frozen_workload_code(wl, tg):
+    """Two statement lists lifted from the frozen sources: the endpoint's finish classification and the
+    gate's flag classification. They are run as written, so no rule is restated here."""
+    import ast
+    import inspect
+    import textwrap
+
+    key = id(wl.MlxEndpoint), id(tg.ThermalSession._wait)
+    if key not in _WORKLOAD_CODE:
+        body = ast.parse(textwrap.dedent(inspect.getsource(wl.MlxEndpoint.chat))).body[0].body
+        begin = next(i for i, node in enumerate(body) if isinstance(node, ast.If)
+                     and ast.unparse(node.test) == "finish_reason == 'episode.deadman'")
+        end = next(i for i in range(begin + 1, len(body)) if isinstance(body[i], ast.Expr)
+                   and isinstance(body[i].value, ast.Call)
+                   and ast.unparse(body[i].value.func) == "provenance.update")
+        finish = compile(ast.Module(body=body[begin:end], type_ignores=[]), "issued-finish", "exec")
+        wait = ast.parse(textwrap.dedent(inspect.getsource(tg.ThermalSession._wait))).body[0].body
+        start = next(i for i, node in enumerate(wait) if isinstance(node, ast.If)
+                     and ast.unparse(node.test) == "unobserved and unreferenced")
+        gate = compile(ast.Module(body=wait[start:start + 2], type_ignores=[]), "issued-gate-flags", "exec")
+        _WORKLOAD_CODE[key] = finish, gate
+    return _WORKLOAD_CODE[key]
+
+
+class _ReplayClocks:
+    """Lead directive item 4: the frozen epoch/monotonic mapping for every replay comparison.
+
+    The producer stamps controller events on the epoch clock (``ClockStamp.epoch_s``) and the turn, tool and
+    deadline values on the monotonic clock. A comparison between the two goes through
+    ``sampler.stamp_mapping``, the conversion the frozen endpoint itself uses for the first token, over the
+    paired stamps that bracket the event:
+
+    - during turn ``i``: the endpoint's own start and end stamps for that turn;
+    - before turn ``i`` (its context check): the previous turn's end stamp, or the episode's opening stamp,
+      and turn ``i``'s start stamp;
+    - after turn ``i`` (its tool calls): turn ``i``'s end stamp and the next turn's start stamp, or the
+      episode's closing stamp.
+
+    A value produced from the same stamp as the event must agree within that mapping's uncertainty.
+    """
+
+    def __init__(self, episode, witnessed):
+        from joulewise.align.apple.sampler import _restore_stamp, stamp_mapping
+        from joulewise.clock import ClockStamp
+
+        outer = tuple(map(_restore_stamp, episode.hardware["paired_clock_stamps_ns"]))
+        turns = [tuple(ClockStamp(**record[key]) for key in ("start_stamp", "end_stamp")) for record in witnessed]
+
+        def mapping(*stamps):
+            return stamp_mapping(stamps, episode_domain=episode.clock_domain)[0]
+
+        last = len(turns) - 1
+        self._during = [mapping(*pair) for pair in turns]
+        self._before = [mapping(turns[i - 1][1] if i else outer[0], turns[i][0]) for i in range(len(turns))]
+        self._after = [mapping(turns[i][1], turns[i + 1][0] if i < last else outer[1]) for i in range(len(turns))]
+
+    @staticmethod
+    def _convert(mapping, epoch_s):
+        from joulewise.align.apple.sampler import seconds_ns
+
+        return seconds_ns(epoch_s) + mapping.offset_ns
+
+    def during(self, turn, epoch_s):
+        return self._convert(self._during[turn], epoch_s)
+
+    def before(self, turn, epoch_s):
+        return self._convert(self._before[turn], epoch_s)
+
+    def after(self, turn, epoch_s):
+        return self._convert(self._after[turn], epoch_s)
+
+    def matches_after(self, turn, epoch_s, monotonic):
+        mapping = self._after[turn]
+        return abs(self._convert(mapping, epoch_s) - monotonic) <= mapping.uncertainty_ns
+
+
+def _replay_clock_mappings(episode, witnessed):
+    return _ReplayClocks(episode, witnessed)
+
+
+def _replay_frozen_workload(kind, config_doc, witnessed, events, meta, raw_episode, episode, descriptor_raw):
+    """Run the frozen ``EpisodeRuntimeAdapter.run_workload`` over the recorded model returns.
+
+    The model, the tools and the host observations are replaced by what the bundle recorded. The frozen
+    admission, deadman, continuation, flag and stop logic decides everything else. Its flags, outcome, token
+    budget and context limits must equal the episode's, and an exception it raises is a disagreement.
+    ``descriptor_raw`` is the attested mirror's config.json (None when the mirror held none).
+    """
+    import tempfile
+    from dataclasses import replace
+    from unittest.mock import patch
+
+    from joulewise.align.apple import r1_runtime as rt, thermal_gates as tg, workload as wl
+    from joulewise.align.apple.endpoint import _StreamObservation, normalize_model_family
+    from joulewise.align.interfaces import ChatMessage
+    from joulewise.clock import ClockStamp
+    from joulewise.schemas import BenchmarkConfig
+
+    source = "outputs/align_episode.json"
+
+    def agree(actual, expected, field):
+        def same(a, b):
+            if isinstance(b, dict):
+                return isinstance(a, dict) and set(a) >= set(b) and all(same(a[k], v) for k, v in b.items())
+            if isinstance(b, (list, tuple)):
+                return isinstance(a, (list, tuple)) and len(a) == len(b) and all(map(same, a, b))
+            return a == b and isinstance(a, bool) == isinstance(b, bool)
+
+        _required(same(actual, expected), "workload_replay", kind, source, field=field, peer=ISSUED_WORKLOAD)
+
+    def check(ok, field):
+        _required(ok, "workload_replay", kind, source, field=field, peer=ISSUED_WORKLOAD)
+
+    def stamp(ns):
+        seconds = ns / NS
+        return ClockStamp(seconds, seconds, seconds, 1e-9, 1e-9)
+
+    finish_code, gate_code = _frozen_workload_code(wl, tg)
+    try:
+        config = BenchmarkConfig.from_mapping(config_doc)
+        spec = wl.EpisodeSpec.from_text(config.workload_profile.prompt_text)
+        hardware = episode.hardware
+        gates = hardware.get("thermal", {}).get("intervals", [])
+        budget = hardware.get("token_budget") or {}
+        meta_flags = meta["workload_provenance"]["flags"]
+        clock = SimpleNamespace(ns=gates[0]["start_ns"] if gates else episode.start_ns)
+        clock.stamp = lambda: stamp(clock.ns)
+        clock.sleep = lambda seconds: setattr(clock, "ns", clock.ns + round(seconds * NS))
+        task = SimpleNamespace(task_pair=episode.task_pair, reset=lambda seed: None,
+                               system_prompt=lambda condition: "", user_prompt=lambda: "", tool_schemas=lambda: [],
+                               call_tool=lambda *args: "{}", score_main=lambda messages: None,
+                               score_side=lambda messages: None, scratchpad_tags=None,
+                               task_description=lambda: "")
+
+        class ReplayThermal(SimpleNamespace):
+            holds_suppressed = tg.ThermalSession.holds_suppressed
+
+        thermal = ReplayThermal(policy=spec.thermal, intervals=[], flags=[], events=[], episode_reference=None,
+                                record=lambda: hardware.get("thermal", {}))
+        position = 0
+        check(all(a["timestamp_s"] <= b["timestamp_s"] for a, b in zip(events, events[1:])), "event order")
+        guards = [row for row in events if row["phase"] == "align_context_check"]
+        clocks = _replay_clock_mappings(episode, witnessed)
+
+        def wait(gate_kind, turn=0, deadman=None, token_count=None, defer_resume=False):
+            matches = [g for g in gates if g["kind"] == gate_kind and g["turn"] == turn
+                       and g["token_count"] == token_count]
+            check(len(matches) == 1, "gate admission")
+            gate, = matches
+            thermal.intervals.append(gate)
+            if gate["outcome"] != "released":
+                state = dict(self=thermal, kind=gate_kind, turn=turn, reason=gate["outcome"],
+                             unobserved=gate["outcome"] == "unobserved",
+                             unreferenced=gate["reference"] is None and gate_kind != "G0")
+                exec(gate_code, state)
+            clock.ns = gate["end_ns"]
+            if gate_kind == "G0":
+                thermal.episode_reference = gate["release"] if gate["outcome"] == "released" else None
+                if budget.get("deadline_origin") == "R1_after_G0_release_and_quiet":
+                    rearm = budget["deadline_ns"] - round(spec.deadman_s * NS)
+                    check(clock.ns + rt.STEP_QUIET_S * NS <= rearm <= episode.start_ns, "step-d re-arm")
+                    clock.ns = rearm
+                    rt.rearm_deadman(deadman, spec.deadman_s, "R1_after_G0_release_and_quiet")
+            return gate
+
+        thermal.wait = wait
+        thermal.resume_hold = thermal.persist_interval = lambda row: None
+        thermal.start = thermal.close = lambda: None
+        thermal.capture_reference = lambda member: None
+
+        class Endpoint:
+            def __init__(self, *args, **kwargs):
+                self.deadman = kwargs.get("deadman")
+                self.model_family = normalize_model_family(config.model.family)
+                self.flags, self.events, self.turn_provenance = [], [], []
+                self.identity, self.prompt_token_ids = episode.endpoint, []
+                self.tokenizer_provenance, self.cache_policy = {}, {}
+
+            def rendered_prompt_length(self, messages, tools):
+                nonlocal position
+                check(position < len(witnessed), "unwitnessed admission")
+                begin, end_event = guards[2 * position:2 * position + 2]
+                check(begin["event_type"] == "phase_start" and end_event["event_type"] == "phase_end",
+                      "context order")
+                start, end = (clocks.before(position, row["timestamp_s"]) for row in (begin, end_event))
+                check(start <= end, "context bracket")
+                if spec.deadman_s is not None:
+                    check(end < budget["deadline_ns"], "admitted context bracket")
+                clock.ns = end
+                return len(witnessed[position]["generation"]["prompt_token_ids"])
+
+            def chat(self, messages, **kwargs):
+                nonlocal position
+                check(position < len(episode.turns) and position < len(witnessed), "unwitnessed model call")
+                turn, record = episode.turns[position], witnessed[position]
+                check(record["turn"] == turn.index == position, "turn order")
+                ids = record["generation"]
+
+                def mono(name):
+                    before, after = record[name]["monotonic_before_s"], record[name]["monotonic_after_s"]
+                    check(before <= after, name)
+                    return round((before + (after - before) / 2) * NS)
+
+                start, end = mono("start_stamp"), mono("end_stamp")
+                check(start <= end and start == turn.start_ns and end == turn.end_ns, "endpoint clock")
+                emitted = [row for row in events if row.get("metadata", {}).get("align_turn_index") == position]
+                phases = [row for row in emitted if row["phase"] in ("prefill", "decode")]
+                count = len(ids["output_token_ids"])
+                check([(row["phase"], row["event_type"]) for row in phases] ==
+                      [("prefill", "phase_start"), ("prefill", "phase_end"), ("decode", "phase_start"),
+                       *[("decode", "token")] * count, ("decode", "phase_end")], "native phase and token order")
+                # The frozen endpoint's own conversion: prefill end on the epoch clock plus the turn's offset.
+                first_ns = clocks.during(position, phases[1]["timestamp_s"])
+                check(start <= first_ns <= end and first_ns == turn.first_token_ns, "first token")
+                # Two stamps on the same epoch clock compare directly.
+                epoch = {key: record[key]["epoch_s"] for key in ("start_stamp", "end_stamp")}
+                check(epoch["start_stamp"] <= phases[0]["timestamp_s"]
+                      and phases[-2]["timestamp_s"] <= phases[-1]["timestamp_s"] <= epoch["end_stamp"],
+                      "native decode-end bracket")
+                check([row["metadata"]["index"] for row in phases[3:-1]] == list(range(count)), "token indices")
+                check(phases[-1]["metadata"]["emitted_tokens"] == count
+                      and phases[-1]["metadata"]["requested_output_tokens"] == kwargs["max_tokens"], "token cap")
+                tool_events = [row for row in emitted if row["phase"].startswith("align_tool_")]
+                check(len(tool_events) == len(turn.tool_calls) * 2, "tool event count")
+                calls = []
+                for i, call in enumerate(turn.tool_calls):
+                    begin, close = tool_events[2 * i:2 * i + 2]
+                    check((begin["event_type"], close["event_type"]) == ("phase_start", "phase_end")
+                          and begin["phase"] == close["phase"] == f"align_tool_{position}_{i}"
+                          and begin["message"] == close["message"] == call.name
+                          and begin["metadata"] == close["metadata"]
+                          and clocks.matches_after(position, begin["timestamp_s"], call.start_ns)
+                          and clocks.matches_after(position, close["timestamp_s"], call.end_ns),
+                          "tool order, identity or time")
+                    if spec.deadman_s is not None:
+                        check(clocks.after(position, close["timestamp_s"]) < budget["deadline_ns"],
+                              "tool deadman bracket")
+                    calls.append(SimpleNamespace(name=begin["message"], arguments_json="{}",
+                                                 call_id=begin["metadata"]["tool_call_id"]))
+
+                def stream():
+                    for j, event in enumerate(phases[3:-1]):
+                        clock.ns = clocks.during(position, event["timestamp_s"])
+                        yield SimpleNamespace(finish_reason=ids.get("finish_reason") if j + 1 == count else None)
+
+                observed = _StreamObservation(SimpleNamespace(stream_generate=stream), deadman=self.deadman,
+                                              max_tokens=kwargs["max_tokens"],
+                                              thermal=thermal if gates else None, turn_index=position)
+                with patch.object(tg, "drain_decode", lambda stream: None):
+                    check(sum(1 for _ in observed.stream_generate()) == count, "frozen stream cap/deadman")
+                state = dict(finish_reason=observed.finish_reason, completion_tokens=count,
+                             max_tokens=kwargs["max_tokens"], turn_index=position, flags=[])
+                exec(finish_code, state)
+                classified = state["flags"]
+                check(all(flag in record["flags"] for flag in classified)
+                      and (f"turn_token_budget_reached:{position}" in record["flags"]) ==
+                      (f"turn_token_budget_reached:{position}" in classified), "native finish classification")
+                self.flags.extend(record["flags"])
+                self.turn_provenance.append({"flags": list(record["flags"])})
+                clock.ns, position = end, position + 1
+                return SimpleNamespace(prompt_tokens=len(ids["prompt_token_ids"]),
+                                       cached_prompt_tokens=turn.context_tokens, completion_tokens=count,
+                                       reasoning_tokens=turn.hidden_tokens, first_token_ns=turn.first_token_ns,
+                                       start_ns=start, end_ns=end, tool_calls=calls,
+                                       raw_usage={"joulewise": {"flags": record["flags"]}})
+
+            def assistant_history_message(self, result):
+                return ChatMessage("assistant", "")
+
+        # An isolated mirror carries exactly the attested descriptor bytes. No model path is opened.
+        with tempfile.TemporaryDirectory() as mirror:
+            if descriptor_raw is not None:
+                (Path(mirror) / "config.json").write_bytes(descriptor_raw)
+            safe = replace(config, model=replace(config.model, source=mirror))
+            fake_factory = SimpleNamespace(**{spec.task_factory.split(":")[1]: lambda **kw: task})
+            runtime = SimpleNamespace(name="synthetic", prepare=lambda *args: wl.AdapterResult(ok=True),
+                                      warmup=lambda *args: wl.AdapterResult(ok=True))
+            adapter = wl.EpisodeRuntimeAdapter(runtime, clock, thermal_factory=lambda *args: thermal)
+            with patch.object(wl, "importlib", SimpleNamespace(import_module=lambda _: fake_factory)):
+                prepared = adapter.prepare(safe)
+            check(prepared.ok, "frozen preparation")
+            agree(hardware["context_limits"],
+                  {key: adapter.prepared[key] for key in ("max_context_tokens", "max_position_embeddings")},
+                  "context_limits")
+            check(adapter.warmup(safe).ok, "frozen warmup")
+            adapter.powermode_reader = lambda: hardware["ac_powermode"]["value"]
+            adapter.identity_projection_metadata = lambda cfg: dict(model={}, sampler={}, output_policy={})
+            with patch.object(wl, "MlxEndpoint", Endpoint):
+                result = adapter.run_workload(safe)
+    except EvidenceFailure:
+        raise
+    except Exception as error:  # noqa: BLE001 - an exception the frozen workload raises is a disagreement
+        raise EvidenceFailure("workload_replay", kind, source, field="raised", peer=ISSUED_WORKLOAD) from error
+    check(position == len(witnessed) == len(episode.turns), "admissions")
+    agree(gates, thermal.intervals, "gate sequence")
+    outcome = result.workload_provenance["episode_outcome"]
+    recorded = meta["workload_provenance"]["episode_outcome"]
+    agree(recorded["stop_condition"], outcome["stop_condition"], "stop_condition")
+    agree(recorded["emitted_tokens"], outcome["emitted_tokens"], "emitted_tokens")
+    if budget:
+        agree(budget, outcome["token_budget"], "token_budget")
+    flags = result.workload_provenance["flags"]
+    if gates:
+        agree(hardware["thermal"]["flags"], thermal.flags, "thermal flags")
+    agree(raw_episode["flags"], flags, "episode flags")
+    agree(meta_flags, flags, "provenance flags")
+
+
 def _recompute_continuation(kind, episode, witnessed, execution, family):
     """Check stop observations before using the frozen stop precedence."""
     from joulewise.align.apple.xml_tool_calls import XML_MODEL_FAMILIES, normalize_model_family
@@ -1934,6 +2625,13 @@ def _check_gate_boundaries(intervals, journal, events, kind):
             "entry_stamp": interval.get("entry_stamp"),
         }) and canonical(close["values"]) == canonical({"state": "end", "gate": interval}),
             "gate_journal_disagreement", kind, THERMAL_SOURCE, index=index, peer=episode)
+        # The frozen _wait takes its entry and exit stamps, then writes the row (ThermalSession._wait).
+        for row, label in ((begin, "entry"), (close, "exit")):
+            stamp = interval.get(f"{label}_stamp")
+            _required(_paired_stamp(stamp, start if label == "entry" else end)
+                      and row["started"]["monotonic_ns"] >= stamp["monotonic_before_ns"],
+                      "gate_journal_disagreement", kind, THERMAL_SOURCE, index=index, field=f"{label}_stamp",
+                      peer=episode)
         for offset, (label, direction, ns) in enumerate((("entry", "start", start), ("exit", "end", end))):
             stamp = interval.get(f"{label}_stamp")
             epoch = interval.get(f"{label}_epoch_s")
@@ -2120,7 +2818,7 @@ def _gate_findings(kind, journal, intervals, references, policy, deadline, *, co
 
 
 def _gate_witnesses(kind, index, interval, readings, reference, policy, deadline, *, counts=None):
-    from joulewise.align.apple.thermal_gates import G0_UNOBSERVED_LIMIT_S, _status_observed
+    from joulewise.align.apple.thermal_gates import G0_UNOBSERVED_LIMIT_S, ThermalSession, _status_observed
     from joulewise.align.apple.thermal import valid_value
 
     findings = []
@@ -2147,17 +2845,20 @@ def _gate_witnesses(kind, index, interval, readings, reference, policy, deadline
 
     if word == "deadman":
         check(_uint(deadline) and start < deadline <= end, "deadline", "gate_outcome")
-        return findings
-    if deadline is not None:
+    elif deadline is not None:
         check(deadline > end, "U4", "gate_outcome" if deadline <= start else "evidence_unverifiable")
 
     sure, possible = (readings.visible_count(start, lag) for lag in (GATE_VISIBILITY_NS, 0))
     entry_views = range(sure, possible + 1)
-    check(any(canonical(interval["entry_sensors"]) ==
-              canonical(readings.rows[count - 1]["sensors"] if count else {}) for count in (sure, possible)),
-          "N5.entry_sensors", "evidence_unverifiable")
-    check(any(interval["entry_slope_c_per_min"] == readings.slope(start, count) for count in (sure, possible)),
-          "N5.entry_slope", "evidence_unverifiable")
+
+    def entry(count):
+        # The frozen gate reads the entry sensors and the entry slope from one view of its rows at entry
+        # (``ThermalSession._wait``). Both claimed fields must come from the same visible prefix.
+        sensors = ThermalSession._entry_values(SimpleNamespace(rows=readings.rows[:count]), start)
+        return (canonical(interval["entry_sensors"]) == canonical(sensors)
+                and interval["entry_slope_c_per_min"] == readings.slope(start, count))
+
+    check(any(entry(count) for count in dict.fromkeys((sure, possible))), "N5.entry", "evidence_unverifiable")
 
     def status_fault(count):
         prior = readings.rows[bisect_left(readings.starts, start - 10 * NS, hi=count):count]
@@ -2170,6 +2871,36 @@ def _gate_witnesses(kind, index, interval, readings, reference, policy, deadline
     needed = 10 if gate == "G0" else 5
     first = max(0, sure - 1)
     last = readings.visible_count(end)
+
+    def final_view(lower, *, closing=True, no_poll=False):
+        """D1: the exit sample, the release values and the exit slope are one derivation, not three records.
+
+        ``ThermalSession._wait`` keeps them from its final poll: ``latest`` (the last visible row), its two
+        temperatures, and ``slow_slope`` over the same rows at the same instant. That instant lies in
+        ``[lower, end]``. ``closing``: the exit stamp follows the final poll at once, so its view already
+        holds every row surely visible at the exit. ``no_poll``: a deadman can end the wait before its first
+        poll, which records nothing.
+        """
+        exit_ns, claim = interval["exit_sample_ns"], interval["slope_c_per_min"]
+        if exit_ns is None:
+            count = 0
+        elif exit_ns in readings.index:
+            count = readings.index[exit_ns] + 1
+        else:
+            check(False, "exit_sample", "release_sample")
+            return
+        release = readings.temperatures(count - 1) if count else dict.fromkeys(TEMPERATURE_KEYS)
+        floor = readings.visible_count(end, GATE_VISIBILITY_NS) if closing else 0
+        check(floor <= count <= last and canonical(interval["release"]) == canonical(release),
+              "exit_sample", "release_sample")
+        if no_poll and count == 0 and claim is None:
+            return
+        check(lower <= end and _gate_exit_slope(claim, readings, lower, end, count),
+              "N5.exit_slope", "evidence_unverifiable")
+
+    if word == "deadman":
+        final_view(start, closing=False, no_poll=True)
+        return findings
 
     def row_terms(at, previous):
         row = readings.rows[at]
@@ -2228,6 +2959,10 @@ def _gate_witnesses(kind, index, interval, readings, reference, policy, deadline
 
     if word == "timeout":
         check(end - start >= cap and earliest_release() is None, "timeout", "gate_outcome")
+        # D2: every poll of a timed-out wait saw coverage, so its final slope is a number. A null is
+        # unobservable and never certifies the outcome.
+        check(_finite(interval["slope_c_per_min"]), "N5.exit_slope", "evidence_unverifiable")
+        final_view(start + cap)                         # the wait ends at its first poll at or past the cap
         return findings
     if word == "unobserved":
         earliest = earliest_release()
@@ -2235,15 +2970,9 @@ def _gate_witnesses(kind, index, interval, readings, reference, policy, deadline
               "unobserved", "evidence_unverifiable")
         required = min(cap, G0_UNOBSERVED_LIMIT_S * NS) if gate == "G0" else cap
         check(end - start >= required, "unobserved_cap", "gate_outcome")
-        at = readings.index.get(interval["exit_sample_ns"])
-        if at is None:
-            check(interval["exit_sample_ns"] is None and not readings.visible_count(end, GATE_VISIBILITY_NS)
-                  and canonical(interval["release"]) == canonical(dict.fromkeys(TEMPERATURE_KEYS)),
-                  "unobserved_sample", "release_sample")
-        else:
-            check(max(0, readings.visible_count(end, GATE_VISIBILITY_NS) - 1) <= at < last
-                  and canonical(interval["release"]) == canonical(readings.temperatures(at)),
-                  "unobserved_sample", "release_sample")
+        # An unobserved wait's final slope is whatever the frozen reducer gives on that view, null included:
+        # the outcome itself says the state was unobservable, and the Part C lines decide whether it may.
+        final_view(start + required)
         return findings
 
     if word != "released":
@@ -2253,6 +2982,8 @@ def _gate_witnesses(kind, index, interval, readings, reference, policy, deadline
     if at is None:
         check(False, "N1.exit_sample", "release_sample")
         return findings
+    # D2: a release poll saw coverage, so its slope is a number. A null is unobservable, never a pass.
+    check(_finite(interval["slope_c_per_min"]), "N5.exit_slope", "evidence_unverifiable")
     finish = readings.finishes[at]
     check(finish + GATE_CONSUMPTION_NS - start < cap, "U3",
           "gate_outcome" if finish - start >= cap else "evidence_unverifiable")
@@ -2551,6 +3282,7 @@ def _check_load(raw, receipt, kind, wall_s=None):
                                and _uint(process.get("ppid")) and _finite(process.get("pcpu"))
                                and isinstance(process.get("comm"), str) for process in snapshot["processes"])):
                 raise ValueError("invalid census")
+        _check_census(kind, census, times, reason)
         if wall_s is None:
             return
         if load["errors"]:
@@ -2559,8 +3291,63 @@ def _check_load(raw, receipt, kind, wall_s=None):
         if verdict["redo"] is not False:
             raise ValueError("load redo required")
         return verdict
+    except EvidenceFailure:
+        raise
     except (ValueError, ArithmeticError, LookupError, TypeError, AttributeError, r1.Refusal) as error:
         raise EvidenceFailure(reason, kind, LOAD_SOURCE, peer=RECEIPT_NAME) from error
+
+
+def _check_census(kind, census, sample_times, reason):
+    """D3: the census points are the ones ``Segment.run`` takes, each exactly once, in order.
+
+    ``start_journals`` snapshots ``start`` before the member and ``stop_journals(final=True)`` snapshots
+    ``end`` after it, both on the load journal's own monotonic clock, with every CPU sample between them.
+    A quiet member's admission rests on both points, so each must appear once, ``start`` before ``end``, and
+    their span must hold the whole CPU sample series. A duplicate, a reversal, an unknown label or a missing
+    point refuses. Elsewhere the points present must still be a duplicate-free prefix of that order; the soak
+    must have ``start``. (The frozen suite's synthetic soak has no ``end`` and its gated members none at all,
+    so the producer's full structure is required where the frozen verdicts rest on it.)
+    """
+    def refuse(field):
+        raise EvidenceFailure(reason, kind, LOAD_SOURCE, field=field, peer=RECEIPT_NAME)
+
+    labels = [snapshot["label"] for snapshot in census]
+    stamps = [snapshot["t_s"] for snapshot in census]
+    if labels != list(CENSUS_POINTS[:len(labels)]):
+        refuse("census")
+    if kind in QUIET_MEMBERS and len(labels) != len(CENSUS_POINTS) or kind == "idle" and not labels:
+        refuse("census")
+    if any(later < earlier for earlier, later in zip(stamps, stamps[1:])):
+        refuse("census.t_s")
+    if len(labels) == len(CENSUS_POINTS) and sample_times and stamps[1] - stamps[0] < sample_times[-1] - sample_times[0]:
+        refuse("census.t_s")
+
+
+def _check_soak_window(bound, receipt, rows):
+    """D1: the idle's window and duration are derived from its own records, not taken from the receipt.
+
+    ``r1_runtime.main`` stamps the soak segment's terminal bracket around everything it does, on the wall
+    clock, so every sensor-journal row lies inside it. ``Segment.idle`` loops on the monotonic clock until the
+    configured duration has passed inside one sensor session, so that session spans the duration, and so does
+    the bracket around it.
+    """
+    from joulewise.align.apple.sampler import seconds_ns
+
+    source = "sensors/align_thermal.jsonl"
+    started, ended = bound.started_epoch_s, bound.ended_epoch_s
+    duration = receipt.get("duration_s")
+    _required(_finite(duration) and duration > 0, "fresh_soak", "idle", RECEIPT_NAME, field="duration_s")
+    low, high = seconds_ns(started), seconds_ns(ended)
+    for index, row in enumerate(rows):
+        for end in ("started", "finished"):
+            wall = (row.get(end) or {}).get("wall_ns")
+            _required(_uint(wall) and low <= wall <= high, "member_order", "idle", source, index=index, field=end,
+                      peer=MANIFEST_NAME)
+    opened, closed = (row["started"]["monotonic_ns"] for row in (rows[0], rows[-1]))
+    _required(closed - opened >= round(duration * NS), "fresh_soak", "idle", source, field="duration_s",
+              peer=RECEIPT_NAME)
+    _required(ended - started >= duration, "member_order", "idle", MANIFEST_NAME, field="duration_s",
+              peer=RECEIPT_NAME)
 
 
 def _check_battery(raw, receipt, kind):
@@ -2595,6 +3382,197 @@ def _check_terminal_order(bound, prior_end):
     return bound.ended_epoch_s
 
 
+def _strict_object(raw, kind, source, reason, field="strict_parse"):
+    """Parse JSON as the evidence parser does: a duplicate key, a non-finite number or invalid JSON refuses."""
+    try:
+        return parse_evidence_json(raw)
+    except (ValueError, TypeError, RecursionError) as error:
+        raise EvidenceFailure(reason, kind, source, field=field) from error
+
+
+def _issued_documents(configured):
+    """The issued JSON documents the frozen R1 chain reads for Part C, by name: the four member templates the
+    runtime config names, and the W1 plan template that ``align_r1_rehearsal.check_w1_schedule`` reads from
+    the driver's root. The member configs the plan lists are added once the plan has parsed."""
+    from joulewise.align.apple import r1_runtime as rt
+    from scripts import align_r1_rehearsal as r1
+
+    documents = {f"templates.{key}": rt.resolve(configured["templates"][key])
+                 for key in sorted(set(TEMPLATE_KEYS.values()))}
+    documents["w1_plan_template"] = Path(r1.ROOT) / r1.W1_PLAN_TEMPLATE
+    return documents, Path(r1.ROOT)
+
+
+def _check_issued_inputs(configured, config_path, config_sha):
+    """Lead directive item 2: a duplicate JSON key anywhere in an issued config or template refuses at parse.
+
+    The frozen readers (``r1_runtime.load_config``, ``read_template``, ``check_w1_schedule`` and the kit's
+    ``w1_inter_member_idle_s`` it calls) keep the last of two equal keys, so a template that says both 0 and
+    300 would run as 300. Each issued document is parsed here strictly from its own bytes first: the runtime
+    config; each member template and the episode spec it carries as JSON text; and the W1 plan template and
+    every member config it lists. Each is parsed as far as a frozen reader parses it. Never last-wins.
+    """
+    config_path = Path(config_path)
+    raw = read_regular(config_path.parent, config_path.name)
+    _required(digest(raw) == config_sha, "source_integrity", "attempt", "issued_inputs", field="runtime_config")
+    _strict_object(raw, "attempt", "runtime_config", "issued_inputs")
+
+    def document(source, path):
+        try:
+            value = _strict_object(read_regular(path.parent, path.name), "attempt", source, "issued_inputs")
+        except EvidenceFailure:
+            raise
+        except (OSError, ValueError) as error:
+            raise EvidenceFailure("issued_inputs", "attempt", source, field="unreadable") from error
+        _required(isinstance(value, dict), "issued_inputs", "attempt", source, field="strict_parse")
+        if source.startswith("templates."):               # read_template parses the episode spec as JSON too
+            profile = value.get("workload_profile")
+            prompt = profile.get("prompt_text") if isinstance(profile, dict) else None
+            _required(isinstance(prompt, str), "issued_inputs", "attempt", source, field="prompt_text")
+            _strict_object(prompt, "attempt", source, "issued_inputs", field="prompt_text")
+        return value
+
+    documents, root = _issued_documents(configured)
+    for source, path in documents.items():
+        value = document(source, path)
+        if source == "w1_plan_template":
+            members = (value.get("align_v4") or {}).get("members") if isinstance(value.get("align_v4"), dict) else None
+            _required(isinstance(members, list) and members and all(
+                isinstance(member, dict) and isinstance(member.get("config_path"), str) for member in members),
+                "issued_inputs", "attempt", source, field="members")
+            for index, member in enumerate(members):
+                document(f"w1_plan_template.members[{index}]", root / member["config_path"])
+
+
+def _check_member_identity(kind, receipt, configured, config_sha):
+    """Lead directive item 3: the issued config and a receipt agree on every identity field both carry.
+
+    ``r1_runtime.make_backend`` builds the backend the issued config names and the receipt records that
+    backend, so the two must be equal, and Part C admits production only. The receipt names the config by
+    digest and the member by kind. Every other top-level field the receipt shares with the issued config
+    (``g0_timeout_s`` for a gated member) must hold the same value. ``schema`` names each document's own
+    format, so each is held to its own issued schema instead.
+    """
+    from joulewise.align.apple import r1_runtime as rt
+
+    def require(ok, field, source=RECEIPT_NAME):
+        _required(ok, "issued_identity", kind, source, field=field, peer="issued_inputs")
+
+    require(isinstance(receipt, dict), "receipt")
+    require(configured.get("schema") == rt.CONFIG_SCHEMA, "schema", "runtime_config")
+    require(configured.get("backend") == "production", "backend", "runtime_config")
+    require(receipt.get("backend") == configured["backend"], "backend")
+    require(receipt.get("schema") == rt.RESULT_SCHEMA, "schema")
+    require(receipt.get("kind") == kind, "kind")
+    require(receipt.get("config_sha256") == config_sha, "config_sha256")
+    for key in sorted(set(receipt) & set(configured) - {"schema"}):
+        require(canonical(receipt[key]) == canonical(configured[key]), key)
+
+
+def _check_member_window(bound, receipt, data):
+    """Lead directive item 1, the window: every instant a segment recorded lies inside its terminal bracket.
+
+    ``r1_runtime.main`` stamps ``started_epoch_s`` before the segment exists and ``ended_epoch_s`` after its
+    teardown, both on the wall clock. So the controller events, the paired episode stamps, the endpoint's
+    turn stamps and every sidecar journal row (Step D's recovery journal included) were written inside it.
+    RL-186: Step D's ``member_wall_s`` is measured inside the segment and cannot exceed the bracket. Only
+    well-formed values are compared here; a malformed one is refused by the member's records.
+    """
+    from joulewise.align.apple.sampler import seconds_ns
+
+    kind = bound.kind
+    started, ended = bound.started_epoch_s, bound.ended_epoch_s
+    low, high = seconds_ns(started), seconds_ns(ended)
+
+    def inside(ok, source, field, index=None):
+        _required(ok, "member_order", kind, source, field=field, index=index, peer=MANIFEST_NAME)
+
+    _check_events_inside(kind, data, started, ended)
+    episode_name, turns_name = "outputs/align_episode.json", "outputs/align_turns.jsonl"
+    episode = _strict_object(data[episode_name], kind, episode_name, "episode_identity")
+    stamps = (episode.get("hardware") or {}).get("paired_clock_stamps_ns") if isinstance(episode, dict) else None
+    epochs = [stamp.get("epoch_ns") if isinstance(stamp, dict) else None
+              for stamp in (stamps if isinstance(stamps, list) else ())]
+    if len(epochs) == 2 and all(map(_uint, epochs)):
+        # The episode opens and closes in that order, inside the segment.
+        inside(low <= epochs[0] <= epochs[1] <= high, episode_name, "episode_bracket")
+    for index, line in enumerate(data[turns_name].splitlines()):
+        record = _strict_object(line, kind, turns_name, "turn_record")
+        for key in ("start_stamp", "end_stamp"):
+            epoch = (record.get(key) or {}).get("epoch_s") if isinstance(record, dict) else None
+            if _finite(epoch):
+                inside(started <= epoch <= ended, turns_name, key, index)
+    for source in sorted(name for name in data if name.endswith("align_thermal.jsonl")):
+        for index, line in enumerate(data[source].splitlines()):
+            row = _strict_object(line, kind, source, "journal_session")
+            for end in ("started", "finished"):
+                wall = (row.get(end) or {}).get("wall_ns") if isinstance(row, dict) else None
+                if _uint(wall):
+                    inside(low <= wall <= high, source, end, index)
+    if kind == "step-d":
+        wall = (receipt.get("slot_detail") or {}).get("member_wall_s")
+        if _finite(wall):
+            inside(wall <= ended - started, RECEIPT_NAME, "member_wall_s")
+
+
+def _strict_documents(kind, data):
+    """Lead directive item 2 for the member's own records: every bound JSON or JSON Lines document parses
+    strictly, whichever reader consumes it. A frozen reader that keeps the last of two keys never sees one."""
+    for source, raw in sorted(data.items()):
+        if source.endswith(".json"):
+            _strict_object(raw, kind, source, "bundle_binding")
+        elif source.endswith(".jsonl"):
+            for index, line in enumerate(raw.splitlines()):
+                _required(bool(line.strip()), "bundle_binding", kind, source, field="strict_parse", index=index)
+                _strict_object(line, kind, source, "bundle_binding")
+
+
+_ISSUED_PART_C = {}
+
+
+def _issued_part_c():
+    """The issued Part C consumer, compiled from its verified blob (``ISSUED_PART_C_SOURCE``) in its own namespace."""
+    path, oid = ISSUED_PART_C_SOURCE
+    if oid not in _ISSUED_PART_C:
+        raw = _pinned_blobs("attempt", {path: oid}, field=ISSUED_PART_C)[path]
+        namespace = {"__name__": "issued_part_c", "__file__": path}
+        exec(compile(raw, f"b2e01464d:{path}", "exec"), namespace)
+        _ISSUED_PART_C[oid] = SimpleNamespace(**namespace)
+    return _ISSUED_PART_C[oid]
+
+
+def _check_issued_part_c(members, receipts):
+    """The issued Part C consumer judges the same bound bundles and must return ``pass``.
+
+    It is the R1-era evaluator: Step D's G0 line, D_bank's mechanics and start state, X_G's line. It reads
+    paths, so each judged bundle's bound bytes are written to a private directory and it reads those, never
+    the member directories. X_G is absent from it exactly when the launcher's refusal is the one permitted.
+    """
+    import tempfile
+
+    issued = _issued_part_c()
+    bundle_sources = {*BUNDLE_SOURCES, THERMAL_SOURCE, REFERENCE_SOURCE, *STEP_PM_SOURCES}
+    with tempfile.TemporaryDirectory() as private:
+        paths = {}
+        for kind, member in members.items():
+            bundle, data = _bound_member_files(member, receipts[kind])
+            paths[kind] = Path(private, KINDS[kind], bundle.name)
+            for source, raw in data.items():
+                if source in bundle_sources:
+                    target = paths[kind] / source
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(raw)
+        verdict = issued.evaluate(
+            step_d=issued.step_d_facts(paths["step-d"], receipts["step-d"]),
+            d_bank=issued.facts_from_bundle(paths["d-bank-benign-s1"], role="d-bank"),
+            n_chunk=receipts["step-d"]["slots"]["N_chunk"],
+            x_g=issued.facts_from_bundle(paths["x-g"], role="x-g") if "x-g" in paths else None,
+            x_g_not_run_reason=None if "x-g" in paths else "native exit 2")
+    failed = sorted(name for name, line in verdict["lines"].items() if line is not None and line["pass"] is not True)
+    _required(verdict["pass"] is True and verdict["verdict"] == "pass", ISSUED_PART_C, "attempt", "evaluation",
+              field=",".join(failed) or str(verdict["verdict"]), peer=ISSUED_PART_C)
+
+
 def _check_gated_energy(episode, data, receipt, kind):
     from joulewise.align.apple.thermal_desk import member_record
 
@@ -2616,23 +3594,381 @@ def _check_gated_energy(episode, data, receipt, kind):
                   RECEIPT_NAME, field=key, peer="power_trace.csv")
 
 
-def _native_bundle(bound, receipt, configured, gate_inputs, step_binding):
-    from joulewise.align.apple.sampler import seconds_ns
+_DRIVER_PROGRAMS = {}
 
+
+def _issued_driver_program():
+    """Compile the frozen rehearsal's phase loop and close statements from its own source.
+
+    ``align_r1_rehearsal.run`` decides admission, skips and INCONCLUSIVE segments inline, so
+    there is no frozen function to call. The statements are taken as written: the phase loop
+    under ``with guard``, then the thermometry bar and the feed checks. Nothing is restated.
+    """
+    import ast
+
+    from scripts import align_r1_rehearsal as r1
+
+    raw = Path(r1.__file__).read_bytes()
+    key = r1.__file__, digest(raw)
+    if key not in _DRIVER_PROGRAMS:
+        run = next(node for node in ast.parse(raw).body
+                   if isinstance(node, ast.FunctionDef) and node.name == "run")
+        guard = next(node for node in ast.walk(run) if isinstance(node, ast.With)
+                     and any(ast.unparse(item.context_expr) == "guard" for item in node.items))
+        loop = next(index for index, node in enumerate(guard.body) if isinstance(node, ast.For)
+                    and isinstance(node.iter, ast.Call) and ast.unparse(node.iter.func) == "phase_plan")
+        outer = next(node.body for node in ast.walk(run) if isinstance(node, ast.Try) and guard in node.body)
+        bar = next(index for index, node in enumerate(outer) if isinstance(node, ast.Assign)
+                   and ast.unparse(node.targets[0]) == "thermometry['bar']")
+        mode = next(index for index, node in enumerate(outer[bar:], bar) if isinstance(node, ast.Assign)
+                    and ast.unparse(node.targets[0]) == "ac_powermode")
+        feeds = next(node for node in outer[mode:] if isinstance(node, ast.For)
+                     and ast.unparse(node.iter) == "results.items()")
+        _DRIVER_PROGRAMS[key] = tuple(
+            compile(ast.Module(body=list(block), type_ignores=[]), r1.__file__, "exec")
+            for block in (guard.body[:loop + 1], [*outer[bar:mode], feeds]))
+    return _DRIVER_PROGRAMS[key]
+
+
+def _check_issued_driver(runtime, schedule, soak_receipt, soak_reference, receipts):
+    """Replay the frozen rehearsal's decisions over the bound receipts.
+
+    The frozen statements run in a private namespace. Only the transport is replaced: it
+    serves the receipts this attempt bound, where the driver would launch the runtime. The
+    driver must admit every judged member, skip none, call none INCONCLUSIVE and keep the
+    thermometry bar. Its own Refusal is a refusal here.
+    """
+    from copy import deepcopy
+
+    from scripts import align_r1_rehearsal as r1
+
+    def refuse(field, role="attempt", error=None):
+        raise EvidenceFailure(ISSUED_DRIVER, role, RECEIPT_NAME, field=field) from error
+
+    served = {kind: deepcopy(receipt) for kind, receipt in {"idle": soak_receipt, **receipts}.items()}
+    try:
+        loop_code, close_code = _issued_driver_program()
+        plan = [row for row in r1.phase_plan() if row[1] in served and (row[1] != "idle" or row[0] == SOAK_SEGMENT)]
+        kinds = {row[0]: row[1] for row in plan}
+        if list(kinds.values()) != list(served):
+            refuse("phase_plan")
+
+        def role(names):
+            return next((kinds[name] for name in names if name in kinds),
+                        "step-d" if any(str(name).startswith("thermometry") for name in names) else "attempt")
+
+        def unit(args, output, rows, record, *, soak_reference=None, extra=None):
+            return {name: (served[kind], {"name": name, "class": workload_class, "result": served[kind]})
+                    for name, kind, _duration, workload_class in rows if name in kinds}
+
+        state = {**vars(r1), "args": SimpleNamespace(runtime=list(runtime), include_4bit=False),
+                 "output": None, "schedule": schedule, "precool_cap": r1.runtime_precool_cap_s(runtime),
+                 "record": {"phases": []}, "results": {}, "phase_plan": lambda *args, **kwargs: plan,
+                 "_admission_unit": unit, "write_soak_reference": lambda output, row: soak_reference}
+        exec(loop_code, state)
+        results = state["results"]
+        if state["skipped"] or set(results) != set(kinds):
+            refuse("skipped", role([*state["skipped"], *(set(kinds) - set(results))]))
+        step_name = r1.STEP_D_NAME
+        state["thermometry_d"] = r1.thermometry_record(step_name, results[step_name])
+        state["thermometry"] = {"D": state["thermometry_d"]}
+        exec(close_code, state)
+        if state["inconclusive"]:
+            refuse("inconclusive", role(list(state["inconclusive"])))
+        if state["thermometry"]["bar"] != "pass":
+            refuse("thermometry_bar", "step-d")
+        for name, kind in kinds.items():
+            if kind != "idle":
+                # The Part C series mode is Automatic. The loop checks it only after an A-B-A decision.
+                r1._check_member_powermode(name, results[name], 0)
+    except EvidenceFailure:
+        raise
+    except Exception as error:  # noqa: BLE001 - an unreplayable driver decision is never a pass
+        refuse("refused" if isinstance(error, getattr(r1, "Refusal", ())) else "unavailable", error=error)
+
+
+def _check_issued_duty_bar(receipt):
+    """A passing mechanics line must also be the frozen ``deadman_summary``'s duty bar."""
+    from scripts import align_r1_rehearsal as r1
+
+    kind = "d-bank-benign-s1"
+    try:
+        verdict = r1.deadman_summary(KINDS[kind], receipt)["duty_bar"]["verdict"]
+    except Exception as error:  # noqa: BLE001
+        raise EvidenceFailure("duty_budget", kind, RECEIPT_NAME, field="duty_bar", peer=ISSUED_DRIVER) from error
+    _required(verdict == "pass", "duty_budget", kind, RECEIPT_NAME, field="duty_bar", peer=ISSUED_DRIVER)
+
+
+def _check_power_trace(kind, raw, started_epoch_s, ended_epoch_s):
+    """The bundle trace parses as the producer's CSV and lies inside this member's terminal bracket.
+
+    The bracket is what binds a trace to its member: the runtime stamps it around the whole
+    segment (r1_runtime.main), so another member's trace cannot fall inside it.
+    """
+    import csv
+
+    source = "power_trace.csv"
+
+    def check(ok, field, index=None):
+        _required(ok, "bundle_binding", kind, source, field=field, index=index, peer=MANIFEST_NAME)
+
+    try:
+        lines = list(csv.reader(StringIO(raw.decode("utf-8"), newline=""), strict=True))
+    except (UnicodeError, csv.Error) as error:
+        raise EvidenceFailure("bundle_binding", kind, source, field="invalid") from error
+    check(bool(lines), "header")
+    header = tuple(lines[0])
+    check(len(header) in (4, 6) and header == TRACE_HEADER[:len(header)], "header")
+    for index, row in enumerate(row for row in lines[1:] if row):   # the frozen DictReader skips blank lines too
+        check(len(row) == len(header), "row", index)
+        fields = dict(zip(header, row))
+        try:
+            stamps = [float(fields["timestamp_s"]), *(float(fields[name]) for name in TRACE_HEADER[4:]
+                                                      if fields.get(name))]
+            power = float(fields["power_w"])
+        except ValueError as error:
+            raise EvidenceFailure("bundle_binding", kind, source, field="row", index=index) from error
+        check(all(map(math.isfinite, (power, *stamps))) and len(stamps) in (1, 3)
+              and (len(stamps) == 1 or stamps[1] <= stamps[2]), "row", index)
+        check(started_epoch_s <= min(stamps) and max(stamps) <= ended_epoch_s, "window", index)
+
+
+# RL-193 section 1 names ``bundle_read._check_power_trace`` at the R1 pin b2e01464d6d4fbf2901ff4d4154df9455104a12a.
+# By the lead's decision of 2026-11-20 (content addressing, RL-194) Part C does not take that function from its
+# checkout. It takes these git blobs: the module and every joulewise module it imports at the pin. The eleven are
+# the whole import closure. No file of them imports another joulewise module, lazily or dynamically, and none
+# imports a third-party package. A change to a checkout copy of any of them cannot reach Part C.
+PINNED_D018_CLOSURE = {
+    "joulewise/__init__.py": "c9e02c3f0c86f48bfb1e8b6165f264773243143c",
+    "joulewise/authentication_io.py": "c872fd7a7f666a4ab959119dd745c1a4d3fb392b",
+    "joulewise/axi_decode_config.py": "287a358c4a67a2f39b6e36e866c6460377c75afa",
+    "joulewise/bundle_read.py": "37bf8286bf9a998e382a3b5b29edb9aac39a2abc",
+    "joulewise/desk_compress.py": "f7673cd8d45d342269c0ff0610e948059b820c6a",
+    "joulewise/desk_restore.py": "39f0375ce75b3354bcfa73a49d62e3e3dd687353",
+    "joulewise/idle_admission.py": "879ce820e579fe4a08a6c1e2af64f580d58ba2e0",
+    "joulewise/provenance.py": "e4a9c4f0b81e0fba042ed4f12acdc6dea099e2a4",
+    "joulewise/schemas.py": "d832777af088da5b60a261fdb21e7b5ae48f13f0",
+    "joulewise/suite.py": "0f7f1ac6dfa819c2ac88a79e15461904a3b927db",
+    "joulewise/validation.py": "32856ca439e08f1cfd9a028e04b79756635d417e",
+}
+PINNED_D018_OBJECTS = Path(__file__).resolve().parents[1]    # the checkout whose git object database is read
+PINNED_D018_TIMEOUT_S = 600.0                                # bounds a hang; a timeout refuses
+
+# The child interpreter runs with -I -S, so its path is the standard library alone until it adds the private
+# directory. It answers with one JSON object. It checks, before and after the call, that every module it has
+# loaded is a pinned file in the private directory whose bytes still carry the pinned blob id, or part of the
+# interpreter's own library.
+_PINNED_D018_CHILD = r"""
+import hashlib, json, os, pathlib, sys
+
+request = json.loads(sys.stdin.buffer.read())
+reply, sys.stdout = sys.stdout.buffer, sys.stderr       # nothing the pinned code prints can pose as the answer
+source = os.path.realpath(request["source"])
+library = [os.path.realpath(entry) for entry in sys.path if entry]
+sys.path.insert(0, source)
+
+
+def answer(**fields):
+    reply.write(json.dumps(fields).encode("ascii"))
+    reply.flush()
+    raise SystemExit(0)
+
+
+def under(path, root):
+    return os.path.realpath(path).startswith(root + os.sep)
+
+
+def audit():
+    loaded = {}
+    for name, module in sorted(sys.modules.items(), key=lambda item: item[0]):
+        origin = getattr(module, "__file__", None)
+        if origin is not None and under(origin, source):
+            relative = os.path.relpath(os.path.realpath(origin), source).replace(os.sep, "/")
+            with open(origin, "rb") as handle:
+                raw = handle.read()
+            blob = hashlib.sha1(b"blob %d\0" % len(raw) + raw, usedforsecurity=False).hexdigest()
+            if request["pins"].get(relative) != blob:
+                answer(outcome="mismatch", path=relative)
+            loaded[name] = relative
+        elif name.partition(".")[0] == "joulewise" or (
+                origin is not None and not any(under(origin, root) for root in library)):
+            answer(outcome="import_escape", module=name)
+    return loaded
+
+
+try:
+    from joulewise.bundle_read import _check_power_trace
+except ModuleNotFoundError as error:                    # a pinned module asked for one that is not pinned
+    answer(outcome="import_escape", module=str(error.name))
+audit()
+problems = _check_power_trace(pathlib.Path(request["bundle"]), request["summary"], request["metadata"])
+answer(outcome="judged", modules=audit(), problems=problems if type(problems) is list else None)
+"""
+
+
+def _git_blob_id(raw):
+    return hashlib.sha1(b"blob %d\0" % len(raw) + raw, usedforsecurity=False).hexdigest()
+
+
+def _git_cat_file(ids):
+    """``git cat-file --batch`` for these ids over the checkout's object database, or None when git gives no answer.
+
+    Nothing is fetched and no replacement object is honoured. The object database is trusted for nothing: the
+    caller verifies every object it uses against its id.
+    """
+    from subprocess import SubprocessError, run
+
+    env = {**os.environ, "GIT_NO_LAZY_FETCH": "1", "GIT_NO_REPLACE_OBJECTS": "1", "GIT_OPTIONAL_LOCKS": "0"}
+    try:
+        proc = run(["git", "-C", str(PINNED_D018_OBJECTS), "cat-file", "--batch"], capture_output=True, env=env,
+                   input="".join(f"{oid}\n" for oid in ids).encode("ascii"), timeout=PINNED_D018_TIMEOUT_S)
+    except (OSError, SubprocessError):
+        return None
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def _pinned_closure(kind):
+    """Every pinned file's bytes, read from git by blob id and verified against that id before use."""
+    return _pinned_blobs(kind, PINNED_D018_CLOSURE)
+
+
+def _pinned_blobs(kind, table, *, field="D-018"):
+    """The bytes of each ``path: blob id`` in ``table``, read from git and verified against the id before use."""
+    ids = sorted(set(table.values()))
+    answer, position, objects = _git_cat_file(ids) or b"", 0, {}
+    for oid in ids:                 # one record per id, in order: "<id> <type> <size>\n<bytes>\n" or "<id> missing\n"
+        end = answer.find(b"\n", position)
+        header = answer[position:end].split() if end >= 0 else []
+        if len(header) == 3 and header[0] == oid.encode("ascii") and header[2].isdigit():
+            size = int(header[2])
+            objects[oid] = header[1], answer[end + 1:end + 1 + size]
+            position = end + size + 2
+        else:
+            position = end + 1 if end >= 0 else len(answer)
+    closure = {}
+    for path, oid in sorted(table.items()):
+        if oid not in objects:
+            raise EvidenceFailure("pinned_closure_missing_object", kind, path, field=field, peer=oid)
+        object_type, raw = objects[oid]
+        if object_type != b"blob" or _git_blob_id(raw) != oid:
+            raise EvidenceFailure("pinned_closure_mismatch", kind, path, field=field, peer=oid)
+        closure[path] = raw
+    return closure
+
+
+def _pinned_trace_problems(kind, name, trace, summary, meta):
+    """The pinned check's problem list for ``trace``, from an interpreter that can load only the pinned closure.
+
+    The verified blobs and the bound trace are written to a private directory. A child interpreter imports the
+    closure from there in isolated mode, without site packages, and calls the function as the pinned bundle
+    validation calls it. A module that resolves, or tries to resolve, outside the private directory refuses.
+    """
+    from subprocess import run
+    import sys
+    import tempfile
+
+    closure = _pinned_closure(kind)
+    with tempfile.TemporaryDirectory() as private:
+        source, judged = Path(private, "pin"), Path(private, "bundle", name)
+        for path, raw in closure.items():
+            target = source / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(raw)
+        judged.mkdir(parents=True)
+        (judged / "power_trace.csv").write_bytes(trace)
+        request = {"source": str(source), "bundle": str(judged), "summary": summary, "metadata": meta,
+                   "pins": PINNED_D018_CLOSURE}
+        proc = run([sys.executable, "-I", "-S", "-B", "-X", "utf8", "-c", _PINNED_D018_CHILD], cwd=private,
+                   input=json.dumps(request).encode("ascii"), capture_output=True, timeout=PINNED_D018_TIMEOUT_S)
+    if proc.returncode != 0:
+        raise RuntimeError("the pinned D-018 check did not finish: " + proc.stderr[-2000:].decode("utf-8", "replace"))
+    reply = json.loads(proc.stdout)
+    outcome = reply.get("outcome")
+    if outcome == "import_escape":
+        raise EvidenceFailure("pinned_closure_import_escape", kind, "joulewise/bundle_read.py", field="D-018",
+                              peer=str(reply.get("module")))
+    if outcome == "mismatch":
+        path = str(reply.get("path"))
+        raise EvidenceFailure("pinned_closure_mismatch", kind, path, field="D-018",
+                              peer=PINNED_D018_CLOSURE.get(path))
+    modules = reply["modules"]
+    if (outcome != "judged" or modules.get("joulewise.bundle_read") != "joulewise/bundle_read.py"
+            or not set(modules.values()) <= set(PINNED_D018_CLOSURE)):
+        raise RuntimeError("the pinned D-018 check gave no judgment")
+    return reply["problems"]
+
+
+def _check_pinned_trace(kind, bundle, data):
+    """RL-193 section 1: the pinned D-018 check judges the predecessor's bound trace bytes.
+
+    ``bundle_read._check_power_trace`` at the R1 pin is the contract, whole and unchanged. It is called as the
+    pinned bundle validation calls it, with the bundle's own summary and metadata. An empty problem list passes
+    this check. A reported problem, a read failure or an exception refuses. Both headers the function accepts
+    pass, with or without rows; Part C's other checks still apply.
+
+    The function is content-addressed (``PINNED_D018_CLOSURE``). It never comes from the checkout. Three
+    failures to obtain it refuse under their own reasons: ``pinned_closure_missing_object``,
+    ``pinned_closure_mismatch`` and ``pinned_closure_import_escape``.
+
+    The function reads a path. The bound bytes are written to a private directory of the bundle's name and
+    judged there, so the bytes it reads are the ones the manifest binds, whatever the member's directory
+    holds by then. The member's own reader examines no heading when a trace has zero rows, which is why a
+    lone ``{`` was once admitted.
+    """
+    summary = _object_from_bytes(data["summary_metrics.json"], kind, "summary_metrics.json", "bundle_binding")
+    meta = _object_from_bytes(data["metadata.json"], kind, "metadata.json", "bundle_binding")
+    try:
+        problems = _pinned_trace_problems(kind, Path(bundle).name, data["power_trace.csv"], summary, meta)
+    except EvidenceFailure:
+        raise
+    except Exception as error:  # noqa: BLE001 - a validator that cannot run is never a pass
+        raise EvidenceFailure("bundle_binding", kind, "power_trace.csv", field="D-018", peer="bundle_read") from error
+    _required(isinstance(problems, list) and not problems, "bundle_binding", kind, "power_trace.csv",
+              field="D-018", peer="bundle_read")
+
+
+def _check_events_inside(kind, data, started_epoch_s, ended_epoch_s):
+    """Every controller event lies inside the member's own terminal bracket, which the runtime stamps around it."""
+    events = _jsonl_objects(data["events.jsonl"], kind, "events.jsonl", "bundle_binding")
+    for index, event in enumerate(events):
+        _required(_finite(event.get("timestamp_s")) and started_epoch_s <= event["timestamp_s"] <= ended_epoch_s,
+                  "member_order", kind, "events.jsonl", index=index, field="timestamp_s", peer=MANIFEST_NAME)
+
+
+def _check_segment_inventory(root, allowed, *, source):
+    """EVIDENCE-SPEC row 23: no inserted precool, retry or substituted segment beside the issued ones."""
+    try:
+        entries = list(Path(root).iterdir())
+    except OSError as error:
+        raise EvidenceFailure("sequence", "attempt", source, field="segments") from error
+    for entry in entries:
+        if entry.name in allowed:
+            continue
+        try:
+            directory = S_ISDIR(entry.lstat().st_mode)
+        except OSError as error:
+            raise EvidenceFailure("sequence", "attempt", source, field="segments") from error
+        _required(not (directory or "rejected" in entry.name or "precool" in entry.name),
+                  "sequence", "attempt", source, field="segments")
+
+
+def _native_bundle(bound, receipt, configured, gate_inputs, step_binding, descriptor, *, oracle, config_sha):
     kind = bound.kind
     bundle, data = _bound_member_files(bound, receipt)
     try:
+        oracle.decide(f"{kind}/identity", kind, _check_member_identity, kind, receipt, configured, config_sha)
         _required({item.name for item in bundle.parent.iterdir()} == {bundle.name},
                   "bundle_binding", kind, "runs")
+        _check_power_trace(kind, data["power_trace.csv"], bound.started_epoch_s, bound.ended_epoch_s)
+        oracle.decide(f"{kind}/window", kind, _check_member_window, bound, receipt, data)
+        if kind == "capture-predecessor-30b":
+            _check_pinned_trace(kind, bundle, data)
         if kind in QUIET_MEMBERS:
             _check_load(data[LOAD_SOURCE], receipt, kind, bound.ended_epoch_s - bound.started_epoch_s)
-        binding = _check_member_records(kind, bundle, receipt, data, configured, gate_inputs,
-                                        step_binding=step_binding)
+        binding = oracle.decide(f"{kind}/records", kind, _check_member_records, kind, bundle, receipt, data,
+                                configured, gate_inputs, step_binding=step_binding, descriptor=descriptor,
+                                oracle=oracle)
         joined = _episode_from_bound_trace(data)
-        first, last = joined.hardware["paired_clock_stamps_ns"]
-        _required(seconds_ns(bound.started_epoch_s) <= first["epoch_ns"] <= last["epoch_ns"]
-                  <= seconds_ns(bound.ended_epoch_s), "member_order", kind, MANIFEST_NAME,
-                  field="episode_bracket", peer="outputs/align_episode.json")
         _check_battery(bound.read(BATTERY_SOURCE, BATTERY_SOURCE), receipt, kind)
         if kind not in QUIET_MEMBERS:
             _check_load(bound.read(LOAD_SOURCE, LOAD_SOURCE), receipt, kind)
@@ -2648,8 +3984,8 @@ def _check_native_soak(soak, config_path):
     """Reconcile the bound soak records with the unchanged producer reductions."""
     from scripts import align_r1_rehearsal as r1
     from joulewise.align.apple import r1_runtime as rt
-    from joulewise.align.apple.thermal_gates import sample_rows
 
+    journal = "sensors/align_thermal.jsonl"
     row, reference = soak.row, soak.reference
     receipt = row["result"]
     if (receipt.get("schema") != rt.RESULT_SCHEMA or receipt.get("config_sha256") != soak.config_sha
@@ -2673,10 +4009,36 @@ def _check_native_soak(soak, config_path):
         "valid 1 Hz reads in order with their times (s from the first journal row); "
         "a failed read is dropped, never interpolated"), "soak_readings", "idle", RECEIPT_NAME,
         field="sensor_series_note")
+    derived = _derive_soak(soak.sources[journal], receipt, sensors, soak.member)
+    if any(stat["settled"] is not True for stat in derived.values()):
+        raise EvidenceFailure("soak_unsettled", "idle", journal)
+    if (canonical(derived) != canonical(row.get("soak_detrended"))
+            or canonical(derived) != canonical(reference.get("detrended"))
+            or canonical({key: stat["mean_c"] for key, stat in derived.items()}) != canonical(reference.get("sensors_c"))
+            or reference.get("schema") != r1.SOAK_REFERENCE_SCHEMA or reference.get("window_s") != r1.SOAK_TAIL_S):
+        raise EvidenceFailure("fresh_soak", "idle", "soak_reference.json", peer=journal)
+    load_verdict = _check_load(soak.sources[LOAD_SOURCE], receipt, "idle", (ended - started) / NS)
+    _required(canonical(load_verdict) == canonical(row.get("os_load")),
+              "soak_load", "idle", LOAD_SOURCE, peer="soak_row.json")
+    soak.verify_reads()
+    return configured
+
+
+def _derive_soak(raw_journal, receipt, sensors, bound):
+    """The soak's series, read times, failures, end and detrended statistics, derived from its sensor journal.
+
+    The frozen ``Segment.k_idle`` reduces the journal to these receipt fields and the frozen driver detrends
+    them (``soak_detrended``). Both are recomputed here from the journal; the receipt's copies must equal them.
+    """
+    from scripts import align_r1_rehearsal as r1
+    from joulewise.align.apple import r1_runtime as rt
+    from joulewise.align.apple.thermal_gates import sample_rows
+
     journal = "sensors/align_thermal.jsonl"
     try:
-        entries = _jsonl_objects(soak.sources[journal], "idle", journal, "soak_readings")
+        entries = _jsonl_objects(raw_journal, "idle", journal, "soak_readings")
         _validate_sidecar(entries, sensors, "idle", journal)
+        _check_soak_window(bound, receipt, entries)
         readings = sample_rows(entries)
         first_ns = readings[0]["monotonic_ns"]
         series, times, failed = {}, {}, {}
@@ -2690,23 +4052,11 @@ def _check_native_soak(soak, config_path):
                               ("sensor_series_failed_reads", failed), ("sensor_series_end_t_s", end_time)):
             if canonical(receipt[key]) != canonical(expected):
                 raise ValueError("soak readings disagree with their receipt")
-        derived = r1.soak_detrended(series, times, end_time)
+        return r1.soak_detrended(series, times, end_time)
     except EvidenceFailure:
         raise
-    except (ValueError, ArithmeticError, LookupError, TypeError, AttributeError) as error:
+    except (ValueError, ArithmeticError, LookupError, TypeError, AttributeError, r1.Refusal) as error:
         raise EvidenceFailure("soak_readings", "idle", journal, peer=RECEIPT_NAME) from error
-    if any(stat["settled"] is not True for stat in derived.values()):
-        raise EvidenceFailure("soak_unsettled", "idle", journal)
-    if (canonical(derived) != canonical(row.get("soak_detrended"))
-            or canonical(derived) != canonical(reference.get("detrended"))
-            or canonical({key: stat["mean_c"] for key, stat in derived.items()}) != canonical(reference.get("sensors_c"))
-            or reference.get("schema") != r1.SOAK_REFERENCE_SCHEMA or reference.get("window_s") != r1.SOAK_TAIL_S):
-        raise EvidenceFailure("fresh_soak", "idle", "soak_reference.json", peer=journal)
-    load_verdict = _check_load(soak.sources[LOAD_SOURCE], receipt, "idle", (ended - started) / NS)
-    _required(canonical(load_verdict) == canonical(row.get("os_load")),
-              "soak_load", "idle", LOAD_SOURCE, peer="soak_row.json")
-    soak.verify_reads()
-    return configured
 
 
 def _w1_schedule(runtime):
@@ -2729,12 +4079,12 @@ def _check_member_schedule(kind, receipt, schedule):
             raise EvidenceFailure("inter_member_schedule", kind, RECEIPT_NAME) from error
 
 
-def _native_verdict(ledger, runtime, invoke, configured, soak):
+def _native_verdict(ledger, runtime, invoke, configured, soak, oracle):
     from joulewise.align.apple.r1_runtime import BAND_FLOOR_C, bands_c, sensors_policy
 
     receipts = {}
     refusal = None
-    schedule = _w1_schedule(runtime)
+    schedule = oracle.decide("schedule", "attempt", _w1_schedule, runtime)
     for kind, segment in KINDS.items():
         try:
             receipts[kind] = invoke(runtime, kind, ledger.root / segment,
@@ -2752,6 +4102,7 @@ def _native_verdict(ledger, runtime, invoke, configured, soak):
             if not isinstance(slots, dict) or type(slots.get("N_chunk")) is not int or slots["N_chunk"] <= 0:
                 raise EvidenceFailure("step_configuration", kind, RECEIPT_NAME, field="slots")
         _check_member_schedule(kind, receipts[kind], schedule)
+    _check_segment_inventory(ledger.root, set(KINDS.values()), source=LEDGER_NAME)
     step_receipt = receipts["step-d"]
     sensors = sensors_policy(configured)
     bands = bands_c(soak.reference, sensors, slow_floor=configured["slow_band_floor_c"])
@@ -2763,21 +4114,29 @@ def _native_verdict(ledger, runtime, invoke, configured, soak):
         member = ledger.member(kind)
         prior_end = _check_terminal_order(member, prior_end)
         bundles[kind], binding = _native_bundle(member, receipt, configured,
-                                                (step_receipt, bands, s5_bands), step_binding)
+                                                (step_receipt, bands, s5_bands), step_binding,
+                                                _attested_descriptor(ledger, kind, configured),
+                                                oracle=oracle, config_sha=ledger.config_sha)
         if kind == "step-d":
             step_binding = binding
+    oracle.decide(ISSUED_DRIVER, "attempt", _check_issued_driver, runtime, schedule, soak.row["result"],
+                  str(ledger.soak_reference), receipts)
     step = step_d_facts(bundles["step-d"], step_receipt)
     bank = {**facts_from_bundle(bundles["d-bank-benign-s1"], role="d-bank", native=True),
             "runtime": receipts["d-bank-benign-s1"]}
     contrast = ({**facts_from_bundle(bundles["x-g"], role="x-g"), "runtime": receipts["x-g"]}
                 if refusal is None else None)
+    oracle.record("duty_bar", "d-bank-benign-s1", _check_issued_duty_bar, receipts["d-bank-benign-s1"])
+    oracle.record(ISSUED_PART_C, "attempt", _check_issued_part_c,
+                  {kind: ledger.member(kind) for kind in receipts if kind != "capture-predecessor-30b"}, receipts)
     verdict = _judge_observations(predecessor=receipts["capture-predecessor-30b"], step_d=step, d_bank=bank,
                        n_chunk=step_receipt["slots"]["N_chunk"], x_g=contrast,
-                       x_g_not_run_reason=refusal, ledger=ledger)
+                       x_g_not_run_reason=refusal, ledger=ledger, oracle=oracle)
+    _check_segment_inventory(ledger.root, set(KINDS.values()), source=LEDGER_NAME)
     ledger.verify_final_sources()
     _required(canonical(schedule) == canonical(_w1_schedule(runtime)),
               "inter_member_schedule", "attempt", "W1 roster")
-    return _NativeEvaluation(verdict, ledger)
+    return _NativeEvaluation(verdict, ledger, oracle, receipts)
 
 
 def run_bound_part_c(output, runtime, *, soak_reference, soak_ledger_sha256=None, invoke=None):
@@ -2793,10 +4152,16 @@ def run_bound_part_c(output, runtime, *, soak_reference, soak_ledger_sha256=None
         revision = r1.executed_commit(Path(__file__).resolve().parents[1])
         config = Path(r1.runtime_config_path(runtime))
         soak = BoundSoak(output, soak_reference, soak_ledger_sha256, revision, config)
+        soak.verify_argv(runtime, next(seconds for name, _kind, seconds, _size in r1.phase_plan()
+                                       if name == SOAK_SEGMENT))
         ledger = EvidenceLedger(output, revision, config, soak_reference, soak=soak)
+        oracle = FrozenOracle()
         with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
-            configured = _check_native_soak(soak, config)
-            table = _native_verdict(ledger, runtime, invoke or judged_invoke, configured, soak)
+            configured = oracle.decide("soak", "idle", _check_native_soak, soak, config)
+            oracle.decide("idle/identity", "idle", _check_member_identity, "idle", soak.row["result"],
+                          configured, soak.config_sha)
+            oracle.decide("issued_inputs", "attempt", _check_issued_inputs, configured, config, soak.config_sha)
+            table = _native_verdict(ledger, runtime, invoke or judged_invoke, configured, soak, oracle)
     except EvidenceFailure as error:
         failures = (error,)
     except Exception:
@@ -2864,26 +4229,39 @@ def replay_archived(output, runtime_config):
     from scripts import align_r1_rehearsal as r1
 
     counts = []
+    # RL-189 1.4: a replay has no ledger and so no descriptor witness. It says so for each member.
     result = {"binding": "archived_custody", "verdict": "other_failure", "failing_checks": [],
-              "gate_counts": counts}
+              "gate_counts": counts, "native_limit": dict.fromkeys(KINDS, "unattested")}
     kind = "idle"
+    oracle = FrozenOracle()
     try:
-        configured, config_sha = rt.load_config(runtime_config)
+        rt.load_config(runtime_config)
+        config_path = Path(runtime_config)
+        config_raw = read_regular(config_path.parent, config_path.name)
+        configured, config_sha = _object_from_bytes(config_raw, "attempt", "issued_inputs", "issued_inputs"), digest(config_raw)
         idle = _archived_member(output, runtime_config, kind)
         soak = _object_from_bytes(idle.read(RECEIPT_NAME, RECEIPT_NAME), kind, RECEIPT_NAME, "saved_receipt")
-        _required(soak.get("schema") == rt.RESULT_SCHEMA and soak.get("kind") == kind
-                  and soak.get("backend") == "production" and soak.get("config_sha256") == config_sha
-                  and not r1.contract.missing_fields(kind, soak, quiet=True, contract_key=SOAK_SEGMENT),
-                  "receipt_contract", kind, RECEIPT_NAME)
-        detrended = r1.soak_detrended(soak["sensor_series_c"], soak["sensor_series_t_s"],
-                                     soak["sensor_series_end_t_s"])
-        _check_load(idle.read(LOAD_SOURCE, LOAD_SOURCE), soak, kind, idle.ended_epoch_s - idle.started_epoch_s)
-        idle.verify_reads()
+
+        def archived_soak():
+            _required(soak.get("schema") == rt.RESULT_SCHEMA and soak.get("kind") == kind
+                      and soak.get("backend") == "production" and soak.get("config_sha256") == config_sha
+                      and not r1.contract.missing_fields(kind, soak, quiet=True, contract_key=SOAK_SEGMENT),
+                      "receipt_contract", kind, RECEIPT_NAME)
+            journal = "sensors/align_thermal.jsonl"
+            detrended = _derive_soak(idle.read(journal, journal), soak, rt.sensors_policy(configured), idle)
+            _check_load(idle.read(LOAD_SOURCE, LOAD_SOURCE), soak, kind, idle.ended_epoch_s - idle.started_epoch_s)
+            idle.verify_reads()
+            return detrended
+
+        detrended = oracle.decide("soak", kind, archived_soak)
+        oracle.decide("idle/identity", kind, _check_member_identity, kind, soak, configured, config_sha)
+        oracle.decide("issued_inputs", "attempt", _check_issued_inputs, configured, config_path, config_sha)
         sensors = rt.sensors_policy(configured)
         bands = rt.bands_c({"detrended": detrended}, sensors, slow_floor=configured["slow_band_floor_c"])
         s5_bands = rt.bands_c({"detrended": detrended}, sensors, slow_floor=rt.BAND_FLOOR_C)
-        schedule = _w1_schedule(["--config", str(runtime_config)])
+        schedule = oracle.decide("schedule", "attempt", _w1_schedule, ["--config", str(runtime_config)])
         receipt, projected, failures = {}, {}, []
+        members = {}
         step_binding = None
         prior_end = idle.ended_epoch_s
         roles = {"step-d": "step-d", "d-bank-benign-s1": "d-bank", "x-g": "x-g"}
@@ -2897,14 +4275,19 @@ def replay_archived(output, runtime_config):
                           and row.get("backend") == "production" and row.get("config_sha256") == config_sha
                           and not r1.contract.missing_fields(kind, row, quiet=False),
                           "receipt_contract", kind, RECEIPT_NAME)
-                receipt[kind] = row
+                receipt[kind], members[kind] = row, member
+                oracle.decide(f"{kind}/identity", kind, _check_member_identity, kind, row, configured, config_sha)
                 _check_member_schedule(kind, row, schedule)
                 bundle, data = _bound_member_files(member, row)
+                _check_power_trace(kind, data["power_trace.csv"], member.started_epoch_s, member.ended_epoch_s)
+                oracle.decide(f"{kind}/window", kind, _check_member_window, member, row, data)
+                if kind == "capture-predecessor-30b":
+                    _check_pinned_trace(kind, bundle, data)
                 if kind in QUIET_MEMBERS:
                     _check_load(data[LOAD_SOURCE], row, kind, member.ended_epoch_s - member.started_epoch_s)
-                binding = _check_member_records(kind, bundle, row, data, configured,
-                                                (receipt.get("step-d"), bands, s5_bands),
-                                                step_binding=step_binding, gate_counts=counts)
+                binding = oracle.decide(f"{kind}/records", kind, _check_member_records, kind, bundle, row, data,
+                                        configured, (receipt.get("step-d"), bands, s5_bands),
+                                        step_binding=step_binding, gate_counts=counts, oracle=oracle)
                 if kind == "step-d":
                     step_binding = binding
                 if kind in roles:
@@ -2927,9 +4310,14 @@ def replay_archived(output, runtime_config):
             result["failing_checks"] = sorted(set(failures))
             return result
         step = receipt["step-d"]
+        oracle.decide(ISSUED_DRIVER, "attempt", _check_issued_driver, ["--config", str(runtime_config)], schedule,
+                      soak, None, receipt)
+        oracle.record("duty_bar", "d-bank-benign-s1", _check_issued_duty_bar, receipt["d-bank-benign-s1"])
+        oracle.record(ISSUED_PART_C, "attempt", _check_issued_part_c,
+                      {kind: members[kind] for kind in receipt if kind != "capture-predecessor-30b"}, receipt)
         table = _judge_observations(step_d=_project_step(projected["step-d"], step),
                                     d_bank=projected["d-bank-benign-s1"], x_g=projected["x-g"],
-                                    n_chunk=step["slots"]["N_chunk"], archived=True)
+                                    n_chunk=step["slots"]["N_chunk"], archived=True, oracle=oracle)
         config = Path(runtime_config)
         _required(digest(read_regular(config.parent, config.name)) == config_sha,
                   "source_integrity", "attempt", "runtime_config")
