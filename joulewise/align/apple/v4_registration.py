@@ -1180,6 +1180,12 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
     selections = {}
     generated_bound = None
 
+    def same_head_pin(consumer, path):
+        # Every later reader judges the pin that the reservation's read-only
+        # pre-reserve check judged, as every reader uses the one live ledger.
+        if view.locate(path) != selections['head_pin']:
+            raise ValueError(f"C1 {consumer} head pin differs from the reservation's head pin: {path}")
+
     def check_order(manifest_path, args):
         directory = view.root / Path(manifest_path).parent
         resolved = view.locate(directory, directory=True)
@@ -1255,7 +1261,9 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
             # every prepared input: session, runs root, slots and custody.
             epoch = dict.fromkeys(ledger.IDENTITY_EPOCH_FIELDS, MEASURED_AT_LAUNCH)
             t1 = dict.fromkeys(ledger.T1_FIELDS, MEASURED_AT_LAUNCH)
-            consumer_check('reservation', lambda: reservation.reservation_inputs(args, epoch, t1))
+            _, _, _, reserved_slots = consumer_check(
+                'reservation', lambda: reservation.reservation_inputs(args, epoch, t1))
+            reserved_session = args.session_id
             # C1 launches under the HAZARD_PACK driver, so the reservation takes
             # its HAZARD route: no committed-pin or custody pass, a lagging pin
             # allowed, rollback refused. Read-only here: no lease, no append.
@@ -1274,7 +1282,7 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
             if args.rederive_from is not None or args.output is not None:
                 raise ValueError('C1 capture must be a live bracket capture')
             check_ledger(view.locate(args.ledger), pin, starting=starting)
-            view.locate(args.head_pin)
+            same_head_pin('capture', args.head_pin)
             for field in ('identity_epoch_json', 't1_bindings_json', 'plan',
                           'identity_epoch_json_for_test', 'battery_probe_fixture_for_test',
                           'test_writer_crash_authorization'):
@@ -1289,11 +1297,12 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
                 args.custody_budget_s, args.custody_deadline_epoch_s, telemetry_stream=None))
             consumer_check('capture', lambda: fiducial._capture_mode_refusal(args))
             consumer_check('capture', lambda: fiducial._live_capture_refusal(args))
-            consumer_check('capture', lambda: fiducial.reserved_identity_refusal(
-                args, power_policy=reserved_policy, sampler=reserved_sampler))
+            consumer_check('capture', lambda: fiducial.reserved_slot_refusal(
+                args, session_id=reserved_session, slot_reservation=reserved_slots.get(args.slot),
+                power_policy=reserved_policy, sampler=reserved_sampler))
         else:
             check_ledger(view.locate(args.calibration_ledger), pin, starting=starting)
-            view.locate(args.head_pin)
+            same_head_pin('campaign', args.head_pin)
             _, runs_binding = chain.c1_dispatch_selection(stage, tree)
             if view.root / args.runs_dir != view.root / bindings[runs_binding]:
                 raise ValueError('C1 campaign resolves to a different runs directory')

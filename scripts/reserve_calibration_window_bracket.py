@@ -434,6 +434,7 @@ def pre_reserve_readiness(
                 require_committed_pin=require_committed_pin,
                 repo_root=REPO_ROOT,
                 custody_deadline=custody_deadline,
+                probe_live_writer=probe_live_writer,
             )
         except CalibrationLedgerError as exc:
             if exc.code == RefusalCode.SESSION_NOT_FOUND:

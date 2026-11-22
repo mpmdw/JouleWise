@@ -2207,21 +2207,44 @@ def _live_capture_refusal(
     return None
 
 
-def reserved_identity_refusal(
+def bracket_custody_locator(output_root: Path, attempt_id: str) -> str:
+    """The custody locator a bracket capture claims: its output root plus attempt."""
+
+    return normalize_calibration_custody_path(Path(output_root) / attempt_id)
+
+
+def reserved_slot_refusal(
     args: argparse.Namespace,
     *,
+    session_id: str,
+    slot_reservation: Mapping[str, Any] | None,
     power_policy: Any,
     sampler: Path,
 ) -> tuple[RefusalCode, dict[str, Any]] | None:
-    """This capture's prepared identity against what its reservation records.
+    """This capture's prepared slot binding and identity against its reservation.
 
-    At launch the capture refuses ``RESERVED_SLOT_MISMATCH`` when its identity
-    differs from the reserved one. Two fields come from prepared inputs: the
-    power policy and the sampler executable. The C1 arm preflight calls this
-    with the reservation's own recorded values. It compares sampler paths
-    without opening either file; host-measured fields keep their live check.
+    At launch the capture refuses ``RESERVED_SLOT_MISMATCH`` before any capture
+    state when its session, attempt, custody locator or identity differs from
+    the reserved slot. The C1 arm preflight calls this with the reservation's
+    own validated slot and recorded values for every field that comes from
+    prepared inputs. It compares sampler paths without opening either file;
+    host-measured identity fields keep their live check.
     """
 
+    if args.session_id != session_id:
+        return RefusalCode.RESERVED_SLOT_MISMATCH, {
+            "field": "session_id", "capture": args.session_id, "reservation": session_id}
+    if slot_reservation is None:
+        return RefusalCode.RESERVED_SLOT_MISMATCH, {"field": "slot", "capture": args.slot}
+    if args.attempt_id != slot_reservation.get("attempt_id"):
+        return RefusalCode.RESERVED_SLOT_MISMATCH, {
+            "field": "attempt_id", "capture": args.attempt_id,
+            "reservation": slot_reservation.get("attempt_id")}
+    locator = bracket_custody_locator(args.output_root, args.attempt_id)
+    if locator != slot_reservation.get("custody_locator"):
+        return RefusalCode.RESERVED_SLOT_MISMATCH, {
+            "field": "custody_locator", "capture": locator,
+            "reservation": slot_reservation.get("custody_locator")}
     if args.power_policy != power_policy:
         return RefusalCode.RESERVED_SLOT_MISMATCH, {
             "field": "power_policy", "capture": args.power_policy, "reservation": power_policy}
@@ -2536,7 +2559,7 @@ def main(argv: list[str] | None = None) -> int:
         else time.strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:8]
     )
     out_dir = args.output_root / validation_id
-    custody_locator = normalize_calibration_custody_path(out_dir)
+    custody_locator = bracket_custody_locator(args.output_root, validation_id)
     planned_t1 = _planned_t1_bindings(
         planned_epoch=planned_epoch,
         sampler_binary=args.sampler_binary,
