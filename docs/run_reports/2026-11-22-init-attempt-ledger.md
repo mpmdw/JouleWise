@@ -58,8 +58,52 @@ failure between the two publications can leave a complete ledger by itself.
   permission errors on this host, so the hosted quick tier runs that regression.
 - The draft awaits the independent executing Astra review and hosted suite
   before the lead issues initializer authority.
-- **NEEDS_SPEC.** RL-197c names `git diff f45e22e4e -- scripts/` for the merge
-  check. The requested `main` base already differs from the ctl pin across
-  `scripts/`. Confirm whether the merger should use the PR delta from `main`
-  to check initializer scope. The PR delta adds the initializer, its test and
-  this report.
+
+## Merge scope
+
+The lead verified both comparisons for PR #955 at merge base
+`83f296a8e71a13ce655acdf67fa1c8909cd1253d` and head
+`d39087064646a3cb74a45db4f164c052347a2cb0`. All 202 pre-existing raw
+script records against the ctl pin matched byte for byte, including modes and
+blob IDs. The initializer was the sole addition. [Verified comparison](https://github.com/mpmdw/JouleWise/compare/83f296a8e71a13ce655acdf67fa1c8909cd1253d...d39087064646a3cb74a45db4f164c052347a2cb0)
+
+Refresh `origin/main` and set `REVIEWED_HEAD` to the full reviewed PR head.
+Repeat both checks on the final head and hold the merge if any command fails
+or either comparison differs. The independent executing Astra review and a
+green suite are still required.
+
+```bash
+H=$(git rev-parse --verify "${REVIEWED_HEAD:?Set REVIEWED_HEAD}^{commit}") || exit 1
+B=$(git merge-base origin/main "$H") || exit 1
+P=f45e22e4efa6b48dd05f099f39eb62246e324177
+python3 -B - "$B" "$H" "$P" <<'PY'
+import subprocess
+import sys
+
+base, head, pin = sys.argv[1:]
+
+def diff(*args):
+    return subprocess.check_output(["git", "diff", *args])
+
+expected = (
+    b"A\tdocs/run_reports/2026-11-22-init-attempt-ledger.md\n"
+    b"A\tscripts/init_attempt_ledger.py\n"
+    b"M\ttests/test_magistrate_desk_fence.py\n"
+)
+if diff("--no-renames", "--name-status", base, head, "--") != expected:
+    sys.exit("PR path scope differs")
+
+raw = ("--raw", "--no-abbrev", "--no-renames")
+before = diff(*raw, pin, base, "--", "scripts/")
+after = diff(*raw, pin, head, "--", "scripts/")
+path = "scripts/init_attempt_ledger.py"
+addition = diff(*raw, base, head, "--", path)
+if len(addition.splitlines()) != 1 or not addition.endswith(f" A\t{path}\n".encode()):
+    sys.exit("initializer must be one added raw diff record")
+if after.count(addition) != 1 or after.replace(addition, b"", 1) != before:
+    sys.exit("ctl pin comparison differs beyond the initializer addition")
+
+print(f"PASS base {base}, head {head}, pin {pin}")
+print(f"PASS three scoped paths, {len(before.splitlines())} raw records unchanged, one addition")
+PY
+```
