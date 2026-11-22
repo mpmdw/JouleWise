@@ -7,7 +7,7 @@
   "authorizes_spans": false
  },
  "frozen": {
-  "commit": "fae29cf50016205602ec3eee3cafbf67b2205320",
+  "commit": "043b972f999913d248769237f1901d78119ceb72",
   "paths": {
    "configs/align/v4/qwen38-27b-8bit-hf-pins.json": "3a1835342b4576b53fb715eb18e53877b54de8e9d04b1f71854d302c9d3635b8",
    "configs/align/v4/r1_runtime.json": "272aecb8bc0d9e33defd7f686b129ea236b925fdfbf68137697120dd63232f46",
@@ -45,7 +45,7 @@
    "scripts/cadence_legs_runner.py": "a449c755f23e2a254866acfac3f7fc55806ce3c1a2bdbb269c2137ed028d5f40",
    "scripts/km003c_monitor.py": "211a807f152e18b28b622f1d914fca115f308e5938c979269842e2df91601ef9",
    "scripts/launch_align_r0.py": "242cd7aa0bf5788786ca8630e6931abcaaa3e01dc3bf014255a6191b50c6e799",
-   "scripts/launch_cadence_span.py": "5b7e0cc9ef98a80fcc4a70eb31638f703636b9a7c50d75a26c136d8acc726d3a",
+   "scripts/launch_cadence_span.py": "609a46217e6e885082916870e3d2c8f8fe1b48a7313b11f260c698d4bc84eb86",
    "scripts/run_align_r0_launchagent.sh": "ac1dc2a223754cfc3295dd1352a838a3077671da140ffeeba484400e1bd249c6",
    "scripts/run_align_r1_smoke.py": "6f1fb9f4ac3109650b36b07012e24728c17e7112e7b59953e6557f2b5fdd35aa",
    "scripts/run_night.py": "b3c58c91125b8355a5269928cda3b30e26f362b9927b03cbebf71d71f1fb28c0"
