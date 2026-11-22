@@ -23956,3 +23956,129 @@ Owner `research_lead`.
 - **Stand unchanged:** RL-187 3.1 to 3.6 and 3.8; RL-186 2.2, 2.3, 2.5, 2.6; RLD:22490's sentence; the V2 suite's bytes.
 
 **What comes back to me.** A read whose rule would have raised the doses. A `ctl01_withheld` row. A pilot view check that fails. A disagreement between the two hand-vector sets. A runner that cannot take the gap, recovery or prefill as kit data.
+
+# RL-197a. Addendum to RL-197 for `lm-ctl-01`'s hand vectors: a window mean is the frozen integrator's integral over exactly 40 s divided by 40 s; floor units are taken on above-baseline energy only; the burn order is strict on absolute joules, so a tie is `no`; a null baseline's reason is `recovery_incomplete` or `gap_over_u1`. The v2 suite's burn-order row stands as written. With four edits to the oracle's files the nine vectors satisfy RL-187 3.8: yes
+
+Research lead (Fable 5.2), Sat Nov 21 23:19:55 PST 2026 (from `date`). Answers the oracle seat's ambiguities A1 to A11 and its note §N, and closes RL-197 3.1's comparison of the two hand-vector sets.
+
+**Cites.**
+- `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch. For RL-187 I used the scratch copy `fable-rl187.md`, line plus 21511. That offset matches the oracle's span (RLD:21512-21867) and three cites made by others (RLD:21791, 21811, 21821). I did not open the branch.
+- `HV` is `/Volumes/JW-EXT/scratch/oracle-ctl01-hand-vectors/`; `V2` is `/Volumes/JW-EXT/scratch/d-ctl01-print-suite-v2/`.
+
+**Read.**
+- `HV/HAND-VECTORS.md` whole; the V3, V6 and V9 expectations and the ambiguity list of `HV/hand_vectors.json`.
+- RL-187 §3 and its register whole; RL-197 whole; RL-186 2.3; RL-176 B.1's qualifier line (RLD:18004); RL-190 3.8.
+- `V2/SPEC-DELTA.md` from "Independent arithmetic" to the end; four rows of `d-ctl01-print-freeze-spec/SPEC.md` (phases, floor units, closure and qualifier, conventions).
+
+**Checked myself.**
+- **The oracle's verifier runs clean and regenerates its JSON byte for byte.** Run on a copy in my scratchpad; sha256 of `hand_vectors.json` is `5121bda9…0414364`.
+- **Six values by hand:** V1's CPU whole (902 J); V3's GPU decode (72 J above baseline, 9/16 J/token); V4's slope and intercept (0.5 J/token, 10 J); V7's pooled SD at 10 s (0.8 W); V9a's 10 s leg (486 J); the suite row's 1441 J (131 s at 11 W).
+- **All nine items of RL-187 3.8 have a vector.**
+
+**Not checked.**
+- **The frozen `qualify_ctl01` and the frozen integrator.** I opened no code. Section 3 says what happens if the code disagrees.
+- The other values of V1 to V9 beyond the six above; I rely on the verifier's exact recomputation for those.
+- `test_ctl01_print_v2.py`, #853, and whether the suite's table matches its own tests.
+- No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened.
+
+**Not done.** No commit, push, comment, SSH, fetch or signal. **One slip:** my first call to the verifier ran it in place, and it rewrote `HV/hand_vectors.json` at 23:19. The rewrite is byte-identical to a fresh regeneration, and the file's size is unchanged. The only file I meant to write is this one.
+
+---
+
+## 1. A3: the window mean
+
+> The mean power over a window [a, b] is the phase code's integral of the channel's trace over [a, b], divided by the exact seconds b − a. The baseline window is [E − 40 s, E], where E is the recovery's recorded end in integer nanoseconds. The check window is [E − 80 s, E − 40 s]. No sample count enters.
+
+- **Why.** RL-187 3.2 has "the mean power over the last 40 s" and a value above baseline as "absolute joules less the baseline times the phase's exact seconds" (RLD:21714). Only a time average makes those two agree, and it does not depend on the sample rate or on which endpoint a sample sits.
+- **V3's check is 1/20 W, and 1/8 in units of the 40 s floor** (RLD:21718). 2/41 W is wrong.
+- **Tests.** V3 gives exactly 1/20 W. The above-baseline energy of the baseline window itself is exactly zero. An implementation that averages 41 samples fails the first.
+
+## 2. A4: the floor-unit numerator
+
+> Floor units are an above-baseline value in joules over its floor. An absolute value gets no floor units. When several nulls apply, the reason is the first of: `no_matched_floor`; the instrument's reason for a null floor; the baseline's reason.
+
+- **Why.** s(c, w\*) × T is the noise of a mean times a duration (RLD:21763). That is the uncertainty of an excess, not of a total; an absolute numerator grows with the idle level and says nothing. RL-186 2.3 lists "energy above baseline by phase" and then "each value in units of the floor" (RLD:21364-21366). RL-187 3.5's "the value" (RLD:21765) is that value.
+- **The baseline check is the one exception already written:** a difference of two means in watts over s(c, 40) in watts (RLD:21718).
+- **V8 stands on the seat's reading:** GPU 0, rail sum 58/3, DC-in 29/3, CPU null with `no_matched_floor`. The reading-B figures 2.5, 88/3 and 62/3 must not appear. V7's bare 48 J is an above-baseline value.
+- **Tests.** V8's four rows. A leg with a null baseline has null floor units with the baseline's reason on GPU, rail sum and DC-in, and `no_matched_floor` on CPU.
+
+## 3. A6 and A5: the burn order
+
+> `cpu_burn_order` is true when other(10 s) < other(30 s) < other(90 s), both strict, keyed by burn dose. "Other" is the CPU-rail absolute joules of other ungated time from the frozen phase table on the view. No baseline enters. A tie is false, and the word is `no`.
+
+- **Why strict.** RL-176 B.1 says the energy "rises in order" (RLD:18004), and RL-187 3.1 says it "rises across 10, 30 and 90 s" (RLD:21696). Equal does not rise. The freeze spec already reads it as strict.
+- **Why absolute.** The qualifier is the frozen code on the phase table, and the baseline "enters only the above-baseline prints" (register row 10, RLD:21861; RLD:21690). This rules A5.
+- **V9c is `cpu_burn_order: false`, `qualified: no`.**
+- **Tests.** V9a `yes`, V9b `no`, V9c `no`. The values are compared as the phase table gives them, with no tolerance.
+- **If the frozen `qualify_ctl01` is not strict, or does not read the absolute table, it comes to me before anything is changed.** I have not read it.
+
+## 4. A10 and A8: the null baseline's reason
+
+> A leg's baseline on a channel is null with exactly one reason, the first that applies:
+> 1. the frozen reason for a missing trace or clock mapping, as the phase code gives it;
+> 2. `recovery_incomplete`, when the physical record does not mark the recovery complete or its recorded length is under 40 s;
+> 3. `gap_over_u1`, when the baseline window holds a gap over U1 on that channel.
+>
+> No other token is allowed. Every above-baseline value of that leg and channel is null with the same reason.
+
+- **Why these.** RL-187 3.2 names the two cases and no token (RLD:21719). `gap_over_u1` is the token RL-190 3.8 already uses for the same event.
+- **A recovery shorter than the kit's but marked complete and at least 40 s long has a baseline.** The record's own mark decides. This is A8.
+- **The check** is null with `gap_over_u1` on a gap in its own window, and with `recovery_incomplete` when the recovery is under 80 s. It still gates nothing.
+- **V6's placeholder becomes `recovery_incomplete`.**
+- **Tests.** V6 with the exact token. A complete 600 s recovery with one gap over U1 inside the last 40 s gives `gap_over_u1` on that channel only. A gap before the window gives a numeric baseline.
+
+## 5. The other six
+
+| # | Ruling |
+|---|---|
+| A1 | **None.** The frozen integrator is the integrator. The vectors hold under trapezoid, left and right sums by construction. If the frozen code reproduces none of them, that comes to me |
+| A2 | **None.** Both readings give 90 s here, and the envelope is the runner's record, not the print's choice |
+| A7 | **One line.** The minimum of RL-187 3.3 (RLD:21735) governs the contributing set only. Every leave-one-out refit enters the range, two-level refits included. No vector changes |
+| A9 | **One line.** "After the G0 gate" is at or after: the first step's start is not before the gate's end (RLD:21702). The vectors avoid the case |
+| A11 | **None.** The phase table's joules per token are absolute, as the frozen code has them. Hidden joules per token are above baseline (RLD:21729) |
+
+A5 and A8 are ruled in sections 3 and 4.
+
+## 6. The v2 suite's burn-order row: it stands
+
+**No change is required.** Raising the 10 s leg's whole level to 11 W gives 1441 / 453 / 633 J on absolute other energy, and section 3 makes absolute the rule. The row is correct under the ruled reading.
+
+- **It is worth keeping as it is.** It is the vector that fails an implementation that subtracts a baseline before ordering; V9b cannot do that, because it holds under both readings.
+- **The oracle's note §N is answered, not a disagreement of values.** RL-197 3.1's comparison is closed with no conflict between the sets.
+
+## 7. Does this satisfy RL-187 3.8: yes
+
+**Yes, once these four edits are in `HV`, made by the Opus seat or the lead and by no GPT seat.**
+
+1. V3: the 2/41 key is removed; A3's row cites section 1.
+2. V8: the reading-B sentence is removed.
+3. V9c: one expectation, `false` and `no`.
+4. V6: `baseline_reason` is `recovery_incomplete`.
+
+The verifier is then re-run and the three files' sha256 are recorded. The edits do not return to me.
+
+**The suite may then be updated under a new named freeze** (`d-ctl01-print-suite-v3`, a new `SUITE.sha256`). It adds the nine vectors and the tests of sections 1 to 4, and changes no existing case. The builder reproduces the vectors; it does not edit them.
+
+**Blind status.** Blind. I read rulings, spec text and the oracle's synthetic files. Four conventions are fixed before any ctl leg exists and before the instrument read. No estimator, threshold, level, population or outcome word of K, S or Q changes.
+
+**For Ed, plainly.** "A second, independent AI wrote worked examples for the control experiment's arithmetic and found four places where my rules could be read two ways. I have picked one reading for each, before any control run exists. None changes the design or costs machine time. The examples are accepted, and the test suite can now include them."
+
+---
+
+## Register
+
+Changes to RL-187's rows. Owner `research_lead`.
+
+| Row | Change | Test added |
+|---|---|---|
+| 10 | A window mean is the integral over the window divided by its exact seconds; windows are [E − 40 s, E] and [E − 80 s, E − 40 s] (1). A null baseline carries one of three reasons in a fixed order (4) | V3's check is 1/20 W; the baseline window's own above-baseline energy is zero; V6 prints `recovery_incomplete`; a gap in the window prints `gap_over_u1` |
+| 11 | Every leave-one-out refit enters the range (5, A7) | None new; V5 |
+| 12 | Floor units are on above-baseline joules only; null reasons in the order of section 2 | V8's four rows; a null-baseline leg's floor units |
+| 9 | The burn order is strict, on absolute joules of other time, keyed by dose (3). A first step may start at the gate's end (5, A9) | V9a, V9b, V9c; the suite's burn-order row unchanged |
+
+**Amends.**
+- **RL-187 3.2, 3.4 and 3.5** (RLD:21714-21719, 21750, 21765) are read with sections 1, 2 and 4.
+- **RL-197's "the V2 suite's bytes stand"** now reads: its cases stand, and a v3 freeze may add to them.
+- **Stand unchanged:** RL-187 3.1, 3.3, 3.6 and 3.8; RL-197 sections 1, 2 and 4.
+
+**What comes back to me.** A frozen qualifier that is not strict or not on absolute joules. A frozen integrator that reproduces none of the vectors. A vector the builder cannot reproduce after the four edits. Nothing else here returns.
