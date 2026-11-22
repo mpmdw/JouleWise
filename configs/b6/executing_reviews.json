@@ -1401,5 +1401,103 @@
         "paper": "docs/align/reviews/2026-11-11-a01-5bb152acc-executing-review-citation.md"
       }
     ]
+  },
+  {
+    "commit": "3ae356e818e1b8bd9cec88597f9ba36d62bddd1a",
+    "number_bearing_paths": [
+      "joulewise/b5/chain.py",
+      "joulewise/calibration_ledger.py",
+      "scripts/run_campaign.py"
+    ],
+    "change": "Rebuild C1 closure from the execution tree and declared attempt outputs",
+    "executing_reviews": [
+      {
+        "reviewer": "Opus 5.5 cold executing review (non-author; separate session from the Opus 5.5 builder of 765c4a126), ADMIT-WITH-FIXES; fix-round delta 765c4a126..6355ffda5 ADMIT-WITH-FIXES",
+        "covered": "3ae356e818e1b8bd9cec88597f9ba36d62bddd1a: joulewise/b5/chain.py blob 03a2eaf3c2ac83c49fc2fa24dc430469945ac398; joulewise/calibration_ledger.py blob e1ef407f57da4613aa72ee0976878c3ebc0a144c; scripts/run_campaign.py blob 829c88cf33f350fe6963057dc11801ca8091e4d2; no HIGH; non-C1 render byte-identical in 90/90; run_campaign.py equals the base blob from 949298c7c; 7/7 chain.py and A3-site mutants killed; MED-1 (consumer input gates skipped) repaired in 6355ffda5; D-MED-1 open for the lead's structural rule; paper sha256 f4503b6fe72138e145e85f9e46ddfbda3549fb6fad6f5bea0d8c034fb0f2213a",
+        "paper": "docs/align/reviews/2026-11-22-c1-r11-opus-executing-review.md"
+      },
+      {
+        "reviewer": "Fable 5.2 cold executing review (non-author), replacing the Sol 6.1 seat whose command sandbox could not initialize on this machine, ADMIT-WITH-FIXES",
+        "covered": "3ae356e818e1b8bd9cec88597f9ba36d62bddd1a: joulewise/b5/chain.py blob 03a2eaf3c2ac83c49fc2fa24dc430469945ac398; joulewise/calibration_ledger.py blob e1ef407f57da4613aa72ee0976878c3ebc0a144c; scripts/run_campaign.py blob 829c88cf33f350fe6963057dc11801ca8091e4d2; no HIGH; non-C1 render byte-identical in 60/60; run_campaign.py equals the base blob from 949298c7c; 18 mutants; F1 repaired in 6355ffda5; F2 open for the lead's structural rule; paper sha256 b8c0620b655ad15d9bec24145d24f1a68696fda8f0916c92e68555d01c3815f7",
+        "paper": "docs/align/reviews/2026-11-22-c1-r11-fable-executing-review.md"
+      }
+    ]
+  },
+  {
+    "commit": "949298c7c1eb52f10223b6d7fe2237e30bf2d590",
+    "number_bearing_paths": [
+      "joulewise/b5/chain.py",
+      "scripts/run_campaign.py"
+    ],
+    "change": "Keep the pinned runner and bound C1 lookup through staged dispatch placement",
+    "executing_reviews": [
+      {
+        "reviewer": "Opus 5.5 cold executing review (non-author; separate session from the Opus 5.5 builder of 765c4a126), ADMIT-WITH-FIXES; fix-round delta 765c4a126..6355ffda5 ADMIT-WITH-FIXES",
+        "covered": "949298c7c1eb52f10223b6d7fe2237e30bf2d590: joulewise/b5/chain.py blob 5b7143ee3c18f47c5b4452046cab72ed18e866c1; scripts/run_campaign.py blob 2181546feaf0d0db659142533029918c5e9b747c; no HIGH; non-C1 render byte-identical in 90/90; run_campaign.py equals the base blob from 949298c7c; 7/7 chain.py and A3-site mutants killed; MED-1 (consumer input gates skipped) repaired in 6355ffda5; D-MED-1 open for the lead's structural rule; paper sha256 f4503b6fe72138e145e85f9e46ddfbda3549fb6fad6f5bea0d8c034fb0f2213a",
+        "paper": "docs/align/reviews/2026-11-22-c1-r11-opus-executing-review.md"
+      },
+      {
+        "reviewer": "Fable 5.2 cold executing review (non-author), replacing the Sol 6.1 seat whose command sandbox could not initialize on this machine, ADMIT-WITH-FIXES",
+        "covered": "949298c7c1eb52f10223b6d7fe2237e30bf2d590: joulewise/b5/chain.py blob 5b7143ee3c18f47c5b4452046cab72ed18e866c1; scripts/run_campaign.py blob 2181546feaf0d0db659142533029918c5e9b747c; no HIGH; non-C1 render byte-identical in 60/60; run_campaign.py equals the base blob from 949298c7c; 18 mutants; F1 repaired in 6355ffda5; F2 open for the lead's structural rule; paper sha256 b8c0620b655ad15d9bec24145d24f1a68696fda8f0916c92e68555d01c3815f7",
+        "paper": "docs/align/reviews/2026-11-22-c1-r11-fable-executing-review.md"
+      }
+    ]
+  },
+  {
+    "commit": "e6da6a0be00aec2fc7ad44948e8d925252defd26",
+    "number_bearing_paths": [
+      "joulewise/b5/chain.py"
+    ],
+    "change": "Match C1 preflight to campaign selection and reservation defaults",
+    "executing_reviews": [
+      {
+        "reviewer": "Opus 5.5 cold executing review (non-author; separate session from the Opus 5.5 builder of 765c4a126), ADMIT-WITH-FIXES; fix-round delta 765c4a126..6355ffda5 ADMIT-WITH-FIXES",
+        "covered": "e6da6a0be00aec2fc7ad44948e8d925252defd26: joulewise/b5/chain.py blob 5ab4e51f1a91e005499f414c7906650351db7306; no HIGH; non-C1 render byte-identical in 90/90; run_campaign.py equals the base blob from 949298c7c; 7/7 chain.py and A3-site mutants killed; MED-1 (consumer input gates skipped) repaired in 6355ffda5; D-MED-1 open for the lead's structural rule; paper sha256 f4503b6fe72138e145e85f9e46ddfbda3549fb6fad6f5bea0d8c034fb0f2213a",
+        "paper": "docs/align/reviews/2026-11-22-c1-r11-opus-executing-review.md"
+      },
+      {
+        "reviewer": "Fable 5.2 cold executing review (non-author), replacing the Sol 6.1 seat whose command sandbox could not initialize on this machine, ADMIT-WITH-FIXES",
+        "covered": "e6da6a0be00aec2fc7ad44948e8d925252defd26: joulewise/b5/chain.py blob 5ab4e51f1a91e005499f414c7906650351db7306; no HIGH; non-C1 render byte-identical in 60/60; run_campaign.py equals the base blob from 949298c7c; 18 mutants; F1 repaired in 6355ffda5; F2 open for the lead's structural rule; paper sha256 b8c0620b655ad15d9bec24145d24f1a68696fda8f0916c92e68555d01c3815f7",
+        "paper": "docs/align/reviews/2026-11-22-c1-r11-fable-executing-review.md"
+      }
+    ]
+  },
+  {
+    "commit": "88139ebffa4289eb79a87892df585a7accbad4c0",
+    "number_bearing_paths": [
+      "joulewise/b5/chain.py"
+    ],
+    "change": "Parse C1 launch commands through the consumers and refuse repeated options",
+    "executing_reviews": [
+      {
+        "reviewer": "Opus 5.5 cold executing review (non-author; separate session from the Opus 5.5 builder of 765c4a126), ADMIT-WITH-FIXES; fix-round delta 765c4a126..6355ffda5 ADMIT-WITH-FIXES",
+        "covered": "88139ebffa4289eb79a87892df585a7accbad4c0: joulewise/b5/chain.py blob 5fe788036f359f864c4decb2a862c1a2908a47c4; no HIGH; non-C1 render byte-identical in 90/90; run_campaign.py equals the base blob from 949298c7c; 7/7 chain.py and A3-site mutants killed; MED-1 (consumer input gates skipped) repaired in 6355ffda5; D-MED-1 open for the lead's structural rule; paper sha256 f4503b6fe72138e145e85f9e46ddfbda3549fb6fad6f5bea0d8c034fb0f2213a",
+        "paper": "docs/align/reviews/2026-11-22-c1-r11-opus-executing-review.md"
+      },
+      {
+        "reviewer": "Fable 5.2 cold executing review (non-author), replacing the Sol 6.1 seat whose command sandbox could not initialize on this machine, ADMIT-WITH-FIXES",
+        "covered": "88139ebffa4289eb79a87892df585a7accbad4c0: joulewise/b5/chain.py blob 5fe788036f359f864c4decb2a862c1a2908a47c4; no HIGH; non-C1 render byte-identical in 60/60; run_campaign.py equals the base blob from 949298c7c; 18 mutants; F1 repaired in 6355ffda5; F2 open for the lead's structural rule; paper sha256 b8c0620b655ad15d9bec24145d24f1a68696fda8f0916c92e68555d01c3815f7",
+        "paper": "docs/align/reviews/2026-11-22-c1-r11-fable-executing-review.md"
+      }
+    ]
+  },
+  {
+    "commit": "765c4a1262fbf701d29d860ff6defad81a723d4a",
+    "number_bearing_paths": [
+      "joulewise/b5/chain.py"
+    ],
+    "change": "Close the C1 chain environment and run each consumer's own pre-host checks",
+    "executing_reviews": [
+      {
+        "reviewer": "Opus 5.5 cold executing review (non-author; separate session from the Opus 5.5 builder of 765c4a126), ADMIT-WITH-FIXES; fix-round delta 765c4a126..6355ffda5 ADMIT-WITH-FIXES",
+        "covered": "765c4a1262fbf701d29d860ff6defad81a723d4a: joulewise/b5/chain.py blob a1ec520cc2c9d045a83d77c9a2c644170dcdea88; no HIGH; non-C1 render byte-identical in 90/90; run_campaign.py equals the base blob from 949298c7c; 7/7 chain.py and A3-site mutants killed; MED-1 (consumer input gates skipped) repaired in 6355ffda5; D-MED-1 open for the lead's structural rule; paper sha256 f4503b6fe72138e145e85f9e46ddfbda3549fb6fad6f5bea0d8c034fb0f2213a",
+        "paper": "docs/align/reviews/2026-11-22-c1-r11-opus-executing-review.md"
+      },
+      {
+        "reviewer": "Fable 5.2 cold executing review (non-author), replacing the Sol 6.1 seat whose command sandbox could not initialize on this machine, ADMIT-WITH-FIXES",
+        "covered": "765c4a1262fbf701d29d860ff6defad81a723d4a: joulewise/b5/chain.py blob a1ec520cc2c9d045a83d77c9a2c644170dcdea88; no HIGH; non-C1 render byte-identical in 60/60; run_campaign.py equals the base blob from 949298c7c; 18 mutants; F1 repaired in 6355ffda5; F2 open for the lead's structural rule; paper sha256 b8c0620b655ad15d9bec24145d24f1a68696fda8f0916c92e68555d01c3815f7",
+        "paper": "docs/align/reviews/2026-11-22-c1-r11-fable-executing-review.md"
+      }
+    ]
   }
 ]

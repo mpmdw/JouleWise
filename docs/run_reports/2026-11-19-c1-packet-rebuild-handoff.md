@@ -1007,3 +1007,216 @@ The PR evidence ledger and seat handoff record the final published tree
 and exact-head checks. Integration-owner and Opus acceptance, W1 signing
 and the post-close packet stay with their assigned owners.
 `NEEDS_SPEC: none`.
+
+## Round 11 · SPEC-LITE round 4, one validator and a closed environment
+
+Audit 3 of `40b8a66a623cedf72abd4050054c0332280a1662` verified two HIGH
+cases. Preflight admitted a reservation plan digest computed without the
+plan's trailing newline, and it judged a stale `XDG_CACHE_HOME` instead of
+the cache the chain exports. An independent Gemini audit of the same head
+added two more of that kind. Gemini 6.1 found the same precedence inversion
+and no `unset` when `cache_home` is absent. Gemini 6.2 found that
+`JOULEWISE_G2A_PRE_BRACKET_PLAN` was checked only if present at preflight
+and then read by `joulewise/controller.py:335` from the launch environment.
+The lead issued A3 (one validator), A4 (CI 21/21) and A5 (closed
+environment). The GPT Sol builder stopped mid-round; this round continued
+from its uncommitted regressions in the original worktree.
+
+| Finding | Regression | Fix |
+| --- | --- | --- |
+| Audit 3 #1: plan digest of non-exact bytes | `test_reservation_plan_digest_covers_the_trailing_newline` | `765c4a126` calls the reservation's own `verify_frozen_plan` |
+| Audit 3 #2: stale `XDG_CACHE_HOME` judged | `test_shade_uses_the_rendered_cache_instead_of_stale_xdg_cache_home` | `765c4a126` runs the SHADE task's resolver under the exported cache |
+| Gemini 6.1(1): ambient value outranks `cache_home` | `test_gemini_6_1_shade_check_uses_the_rendered_cache_home` | `765c4a126` |
+| Gemini 6.1(2): no `unset` without `cache_home` | `test_gemini_6_1_absent_cache_home_is_unset_and_shade_refuses` | `765c4a126` |
+| Gemini 6.2: G2-a plan reaches the controller | `test_gemini_6_2_g2a_pre_bracket_plan_never_reaches_a_consumer` | `765c4a126` |
+
+The regressions were committed first in `bf3187d27`, with the adapter
+changes below. On that commit's unchanged production code, audit 3 #1 and
+#2 admit with one host checkpoint per route where each must refuse.
+Gemini 6.1(2) refuses only for the stale chain, not for the missing cache
+binding. Gemini 6.1(1), 6.2 and the closed-environment class error because
+the functions they observe do not exist yet. One-site mutants of
+`765c4a126` therefore show that those tests catch the defect. At
+`765c4a126`, tree `cfc1d5cc5a728e49889b1a56c217c5db53b60ea7`, all five pass.
+
+| One-site mutant of `765c4a126` | Tests that fail |
+| --- | --- |
+| `apply_c1_environment` lets the caller's value outrank the rendered one | Gemini 6.1(1) and audit 3 #2, each admitting with one host checkpoint per route |
+| The block omits `unset -m 'JOULEWISE_*' 'PYTHON*'` | Gemini 6.2 and the A5 sweep (a stale `PYTHONHOME` reaches the consumer interpreter) |
+
+### A5 · the closed C1 environment
+
+The renderer emits one block right after the `NIGHT_DIR` requirement,
+before any stage. It runs `unset -m 'JOULEWISE_*' 'PYTHON*'` and unsets
+the listed names. Then it exports `CALIBRATION_LEDGER` and `LEDGER_HEAD_PIN`
+as the reservation's parser selected them, along with
+`JOULEWISE_C1_INPUTS`, `JOULEWISE_NIGHT_PLAN_ID` (the night plan ID) and
+`XDG_CACHE_HOME` from `cache_home`. Without `cache_home`, `XDG_CACHE_HOME`
+stays unset. `NIGHT_DIR` is the driver's output directory and the only
+launch variable kept. One function, `chain.c1_chain_environment`, produces
+the mapping for both the renderer and preflight.
+
+`test_closed_environment_covers_every_consumer_read` derives the reads from
+code. It starts from the programs that the rendered chain runs and the
+chain's inline helpers, then follows every import, including
+function-level ones and `module:callable` factory strings. In that closure
+it parses every `os.environ`/`os.getenv` read and resolves constant
+names. It found 40 variables read across 252 modules, and each is exported,
+unset, or matched by a pattern. The only reads with computed names are
+`joulewise/arm_readiness_evidence.py`, an arm-time evidence writer, and an
+endpoint credential that no module or config names. The test lists both, so
+any new computed read fails CI. The chain's own unassigned shell reads are
+`NIGHT_DIR` and the two inspection switches, which it refuses before the block.
+
+`test_ambient_stale_values_never_change_what_is_consumed` sets a stale
+launch value for each of 47 variables: the code-derived reads, the
+exported names, an unlisted `JOULEWISE_` switch and six interpreter
+switches. For each one it runs the exact rendered block under `/bin/zsh -f`.
+A fresh interpreter then reports, through the consumers' own code, the
+environment, the interpreter flags, the SHADE cache that `PinnedUpstream`
+selects, the C1 input context and the controller's G2-a plan. Every report
+equals the clean report. The same variable is then set in the preflight
+process. The environment that preflight judges and the inputs it selects
+stay identical. A stale `CALIBRATION_LEDGER` naming another file refuses
+(`outside R/S`, see O2a below).
+
+### A3 · the consumers' own pre-host checks
+
+Preflight now runs each consumer check below by calling the consumer's own
+function. It runs them under the rendered environment, with the working
+directory set to the launch view as the chain's `cd "$REPO"` does.
+
+| Consumer | Checks called at preflight | Checks after launch |
+| --- | --- | --- |
+| Reservation | Parser (A1), `--execute` required, `runtime_ledger(..., starting=True)`, `CustodyDeadline`, `verify_frozen_plan` (moved unchanged from `main`), `reservation_inputs` (declared slots and `validate_bracket_session_reservation_inputs`, with a stand-in for each host-measured identity field) | HAZARD measured identity vectors, readiness under the writer lease |
+| Capture writer | Parser (A1), `runtime_ledger`, `_capture_fixture_error`, `CustodyDeadline`, `_capture_mode_refusal` (bracket arguments, replay conflicts, frozen protocol), `_live_capture_refusal` (`--allow-live`, power policy, test-only bounds) | Launch-lineage authentication, reserved-session snapshot, `sysctl` identity and acceptance screen |
+| Campaign runner (protected, unchanged) | Parser (A1), unsupported modes including `--shakedown-gate`, `_require_external_campaign_log`, `load_campaign_policy`, `load_neg8_drift_bound_artifact` for a non-generated bound, `load_analysis_manifest` and its validity, `resolve_prospective_analysis_manifest_v3`, order loading and selection, `config_warning_gate`, `read_config_infos`, `load_waivers`, `duplicate_run_id_error` | Writer launch authentication and block limit. The failure limit is the renderer's literal. |
+| SHADE task | `pilot.offline_shade_task(**task_kwargs).upstream.prepare()`, the R/S fence and export manifest in its C1 branch | None |
+| Derivation, verdict and session status | Parsers (A1), derivation manifest descriptors | Same-attempt products only |
+
+The extraction keeps `main`'s refusal order and codes. The census moves
+the reservation's two plan rows to `verify_frozen_plan`.
+`test_listed_consumer_checks_refuse_digests_of_non_exact_bytes` feeds 14
+near-miss digests to the reservation plan gate, the starting-ledger gate,
+the SHADE export manifest and the staged config descriptors. The variants
+are a stripped or added newline, CRLF and canonical re-serialization. All
+14 refuse. The stale-variable half of that sweep is the A5 sweep, because
+every listed check runs inside the one closed environment.
+
+Calling the consumers' own gates exposed gaps in the invented adapter
+template, which is not part of the frozen suite. Its capture template
+carried only `--slot`, so the real writer refuses it with
+`calibration_writer_bracket_arguments`. Its placeholder campaign policy
+fails the runner's policy loader. Its invented spare config fails the
+runner's config gate. The adapter now completes the capture template as
+`configs/campaigns/align_v4/plan_tree.json` does. It uses the committed
+default policy and derives the spare from a valid dispatched config. The
+nine frozen files and their manifest are unchanged.
+
+### O2a and the caller's ledger pointer
+
+Frozen row `outside-env-ledger/normal` requires a refusal when the install
+or arm shell carries a `CALIBRATION_LEDGER` that names another file. The
+chain never consumes that value. Preflight keeps one refusal-only O2a
+check: a caller's ledger pointer must locate inside the view and resolve to
+the canonical ledger. It never selects or admits a value. Every other
+caller variable is ignored.
+
+### Executing-review fix round
+
+The Opus 5.5 executing review of `765c4a126` found no HIGH and one MED.
+Preflight still skipped four consumer refusals that the consumers apply to
+their prepared arguments before host work:
+
+- the reservation's session and slot validator, which refuses a custody
+  locator outside `<runs_root>/instrument_validation`;
+- the reservation's `--execute`, without which it exits 0 without
+  reserving and the capture then finds no session;
+- the capture writer's custody deadline;
+- the runner's `--shakedown-gate`, which needs the `--backup` that C1
+  refuses.
+
+`6355ffda5` moves the reservation's slot construction and validation into
+`reservation_inputs`, which `main` and preflight share. Identity fields
+measured on the host at launch get a stand-in, so the validator judges
+every prepared input. Preflight now requires `--execute`, constructs each
+writer's `CustodyDeadline` from the rendered arguments and refuses a
+shakedown gate. The adapter places the calibration directories under the
+claim runs root, as `joulewise/b5/plan.py:913` does, and passes `--execute`
+as the committed reservation templates do.
+`test_opus_med_1_consumer_input_gates_refuse_before_host` covers each case.
+The builder exits 2 with that consumer's own refusal. On `90ee255f9`'s
+production code, all four cases build with exit 0. At `6355ffda5`, the
+five named regressions, this one, the duplicate-option sweep (now 137
+cases across 11 command variants, because the completed templates carry
+more options), the spare dispatch case and the four closed-environment
+tests pass: 12 tests. The census moves the
+two plan refusals from `BASELINE` into `NUMBER_INTEGRITY` (`90ee255f9`),
+because the census freezes `BASELINE` rows at their original site.
+
+### Frozen suite
+
+The nine frozen files and `SUITE.sha256` are byte-identical to the
+supplied freeze (manifest SHA-256 `20b8dbc7…`). The adapter matched the
+tape **94/94** byte for byte at `765c4a126` and again at `6355ffda5`, after
+the adapter gained the calibration-directory bindings and `--execute`.
+
+### A4 · executing reviews and the review ledger
+
+Shard 12's `test_review_rows_are_append_only_and_load_in_the_code_check`
+requires a row in `configs/b6/executing_reviews.json` for every commit that
+touches a registered number-bearing path or the F8 list. Five commits
+touch one: `3ae356e81`, `949298c7c`, `e6da6a0be`, `88139ebff`
+(`joulewise/b5/chain.py`, and in `3ae356e81` also
+`joulewise/calibration_ledger.py` and `scripts/run_campaign.py`), and
+`765c4a126` (`joulewise/b5/chain.py`). The later commits `90ee255f9`,
+`6355ffda5` and `e005aee26` touch none.
+
+Gate policy rule 3 asks for two executing reviews from different model
+families, launched together. The Sol 6.1 seat ran through
+`scripts/codex-bridge new` at xhigh. Its command sandbox could not
+initialize on this machine (`sandbox_apply: Operation not permitted`,
+exit 71), so it ran no command and returned `NEEDS_RULING`. Approval and
+sandbox bypasses are forbidden. Under rule 3 a Fable seat replaces an
+unavailable one, so both seats were Anthropic models.
+
+| Seat | Commits | Verdict | Paper (SHA-256) |
+| --- | --- | --- | --- |
+| Opus 5.5, cold session; not the builder session | All five; fix-round delta `765c4a126..6355ffda5` | ADMIT-WITH-FIXES; delta ADMIT-WITH-FIXES | `docs/align/reviews/2026-11-22-c1-r11-opus-executing-review.md` (`f4503b6f…`) |
+| Fable 5.2, replacing Sol | All five | ADMIT-WITH-FIXES | `docs/align/reviews/2026-11-22-c1-r11-fable-executing-review.md` (`b8c0620b…`) |
+
+Neither seat found a HIGH. Both found the non-C1 render byte-identical
+to the base (90/90 and 60/60 renders). Both found `run_campaign.py` equal
+to the base blob from `949298c7c` onward. Their MED-1 and F1 are the same
+gap, repaired in `6355ffda5` and confirmed by both. The Opus seat shares a
+model with the builder of `765c4a126` but not a session; the papers record
+this. The five rows cite both papers. The shard 12 test body passes
+against them locally. The full module imports a fixture that reads the
+operator archive, so it was not run here.
+
+### Open after this round
+
+- **Structural rule needed (gate policy rule 4).** The Opus delta's
+  D-MED-1 and Fable's F2 are a second appearance of one class: preflight
+  admits a prepared value that a later consumer refuses before host
+  measurement. In D-MED-1, a capture's `--power-policy` or
+  `--sampler-binary` disagrees with what the reservation records. In F2,
+  a stale `--head-pin` fails the reservation's lease-held readiness. Both
+  fail closed (MED). Rule 4 hands this class to the lead.
+- **A5 and frozen row `outside-env-ledger/normal`.** Preflight keeps one
+  refusal-only check on a caller's `CALIBRATION_LEDGER`, because the frozen
+  row requires that refusal. A5 says preflight never validates the caller's
+  ambient environment. Both seats flagged this. The lead should reconcile
+  the two.
+- Follow-ups, all LOW:
+  - The non-C1 ledger readers react to a stale `JOULEWISE_C1_INPUTS`.
+  - The A2 duplicate guard depends on argparse's private return shape
+    (3.11/3.12 untested).
+  - Indirect environment reads (`HOME`, `TMPDIR`, `PATH`, `GIT_*`,
+    third-party libraries) are outside the code-read inventory.
+    `JOULEWISE_CUSTODY_PARENT` is now unset for C1 campaign registry
+    publication; no repository code sets it.
+  - Three `calibration_ledger.py` C1 hooks and three C1 render branches
+    have no killing repository test.
+  - Unsupported campaign modes `--max-blocks` and `--dry-run`, and the
+    capture's test-only flags, are still admitted.

@@ -208,10 +208,12 @@ state at `--series-commit`, with:
   driver's output directory and the only launch variable kept. Preflight
   derives that environment from the renderer's own function. It runs each
   consumer's pre-host checks under that environment and in the launch view.
-  Those checks are the reservation's ledger, frozen-plan and slot gates, the
-  capture writer's argument gates and ledger gate, the runner's policy, log,
-  waiver, analysis-manifest, order, config and duplicate-ID gates, and the
-  SHADE task's own offline resolver. A SHADE workload without a cache binding
+  Those checks are the reservation's ledger, custody-deadline, frozen-plan and
+  session-input gates (host-measured identity fields get a stand-in), the
+  capture writer's argument, custody-deadline and ledger gates, the runner's
+  policy, log, waiver, analysis-manifest, order, config and duplicate-ID
+  gates, and the SHADE task's own offline resolver. The reservation must
+  carry `--execute`. A SHADE workload without a cache binding
   refuses. A `CALIBRATION_LEDGER` in the caller's shell must name the
   canonical ledger; the chain never consumes it.
 * The window records are **hash-chained**: each record names its predecessor
