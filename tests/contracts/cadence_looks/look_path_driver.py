@@ -422,4 +422,13 @@ def observe_kernel(reader, bench, *, force_zero):
 
 if __name__ == "__main__":
     command, source, destination, injected = sys.argv[1:]
-    raise SystemExit(run(command, Path(source), Path(destination), injected))
+    try:
+        raise SystemExit(run(command, Path(source), Path(destination), injected))
+    except Exception as error:
+        if "CTL_PAIR_MOUNT" in os.environ:
+            diagnostic = Path(os.environ["CTL_PAIR_MOUNT"]).parent / "pair-failure.txt"
+            with diagnostic.open("a") as stream:
+                print_exc(file=stream)
+                if isinstance(error, subprocess.CalledProcessError):
+                    print(error.stdout, error.stderr, file=stream)
+        raise

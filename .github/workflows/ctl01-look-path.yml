@@ -92,5 +92,10 @@ jobs:
           trap finish_pair EXIT
           sudo -n mount -o nosuid,nodev "${CTL_PAIR_LOOP}" "${CTL_PAIR_MOUNT}"
           sudo -n chown "$(id -u):$(id -g)" "${CTL_PAIR_MOUNT}"
-          TMPDIR="${CTL_PAIR_MOUNT}" python3 -B tests/contracts/cadence_looks/look_path/suite-v3/run_cases.py \
-            --driver tests/contracts/cadence_looks/look_path_driver.py --case h_byte_identity
+          if ! TMPDIR="${CTL_PAIR_MOUNT}" python3 -B tests/contracts/cadence_looks/look_path/suite-v3/run_cases.py \
+            --driver tests/contracts/cadence_looks/look_path_driver.py --case h_byte_identity; then
+            if [ -f "${ctl_pair_dir}/pair-failure.txt" ]; then
+              cat "${ctl_pair_dir}/pair-failure.txt"
+            fi
+            exit 1
+          fi
