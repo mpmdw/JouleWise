@@ -216,6 +216,16 @@ def _has_gap(trace, mapping, start, end, limit):
                for a, b in zip(trace.t_ns, trace.t_ns[1:]))
 
 
+def registered_u1_ns(trace, channel):
+    """Apply the registered U1 rule to the authenticated trace cadence."""
+    if channel == "dc_in":
+        return 2 * NS
+    period = trace.nominal_interval_ns
+    if type(period) is not int or period <= 0:
+        raise ValueError("controls_cadence")
+    return max(NS, 5 * period)
+
+
 def _energy(kernel, trace, mapping, start, end):
     estimate = kernel.trace_energy(trace, start, end, mapping=mapping)
     if "trace.partial_coverage" in estimate.flags or not _finite(estimate.joules):
@@ -254,6 +264,8 @@ def _channel_values(kernel, view, episode, name, attrs, parts, gap_limit):
     if trace is None:
         return {"reason": "trace_or_clock_unavailable", "baseline_w": None,
                 "baseline_reason": "trace_or_clock_unavailable"}
+    if gap_limit is None:
+        gap_limit = registered_u1_ns(trace, name)
     if name == "dc_in" and _has_gap(trace, mapping, episode.start_ns, episode.end_ns, gap_limit):
         baseline, reason, _, _ = _baseline(kernel, trace, mapping, view.steps[-1], gap_limit)
         return {"reason": "gap_over_u1", "baseline_w": baseline, "baseline_reason": reason}
@@ -457,7 +469,7 @@ def withheld_reason(gpu_token_floors, dc_token_floors, qualified_prefills):
     return None
 
 
-def print_controls(positions, *, kernel, gap_limits_ns, pooled, instrument_manifest_sha256):
+def print_controls(positions, *, kernel, pooled, instrument_manifest_sha256, gap_limits_ns=None):
     """Produce the private calculations for all twelve bound positions."""
     positions = tuple(positions)
     if tuple(leg.leg_id for leg in positions) != PILOT + REMAINDER:
@@ -491,7 +503,8 @@ def print_controls(positions, *, kernel, gap_limits_ns, pooled, instrument_manif
                    delivery="short" if view.short else "as_requested", calls=_project_steps(view.steps),
                    envelope=envelope, channels={})
         for name in CHANNELS:
-            channel = _channel_values(kernel, view, episode, name, attrs[name], parts, gap_limits_ns[name])
+            limit = None if gap_limits_ns is None else gap_limits_ns[name]
+            channel = _channel_values(kernel, view, episode, name, attrs[name], parts, limit)
             row["channels"][name] = channel
             if "absolute" not in channel:
                 continue

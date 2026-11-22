@@ -8,7 +8,7 @@ import re
 
 from . import controls_analysis as analysis
 from .controls_print import (
-    KIT_ID, LOOK_ID, PILOT, REMAINDER, ControlsRefusal, LegBinding, LookIdentity, Refusal,
+    KIT_ID, LOOK_ID, PILOT, REMAINDER, SCRIPT_STEPS, ControlsRefusal, LegBinding, LookIdentity, Refusal,
     _hex_pin, validate_roster,
 )
 from .qualification_manifest import _decode
@@ -117,9 +117,20 @@ class VerifiedFreeze:
 
 
 @dataclass(frozen=True)
+class Stage1Leg:
+    binding: LegBinding
+    kind: str
+    admitted: bool
+    g0_released: bool
+    script_sha256: str | None
+    episode_id: str | None
+    episode_sha256: str | None
+
+
+@dataclass(frozen=True)
 class VerifiedStage1:
     public: dict
-    legs: tuple[tuple[LegBinding, str | None], ...]
+    legs: tuple[Stage1Leg, ...]
 
 
 def verify_stage1(freeze, committed, candidate):
@@ -147,18 +158,33 @@ def verify_stage1(freeze, committed, candidate):
     legs = []
     for leg_id in ids:
         row = roster["legs"][leg_id]
-        if (type(row) is not dict or row.keys() != {"identity", "role", "reference", "script_sha"}
+        if (type(row) is not dict
+                or row.keys() != {"identity", "role", "reference", "script_sha", "kind", "admitted",
+                                  "g0_released", "episode_id", "episode_sha256"}
                 or type(row["identity"]) is not list or len(row["identity"]) != 6
-                or (row["script_sha"] is not None and not _hex_pin(row["script_sha"], 64))):
+                or type(row["kind"]) is not str or row["kind"] not in SCRIPT_STEPS
+                or type(row["admitted"]) is not bool or type(row["g0_released"]) is not bool
+                or (row["script_sha"] is not None and not _hex_pin(row["script_sha"], 64))
+                or (row["episode_id"] is None) != (row["episode_sha256"] is None)
+                or (row["episode_id"] is not None
+                    and (type(row["episode_id"]) is not str or not row["episode_id"]
+                         or not _hex_pin(row["episode_sha256"], 64)))
+                or (row["admitted"] and not row["g0_released"])):
             raise ValueError("stage1_roster")
-        legs.append((LegBinding(*row["identity"], row["role"], row["reference"]), row["script_sha"]))
+        legs.append(Stage1Leg(
+            LegBinding(*row["identity"], row["role"], row["reference"]),
+            row["kind"], row["admitted"], row["g0_released"], row["script_sha"],
+            row["episode_id"], row["episode_sha256"],
+        ))
 
-    first = legs[0][0]
+    first = legs[0].binding
     if not _hex_pin(first.kit_sha256, 64) or not _hex_pin(first.runner_commit, 40):
         raise ValueError("stage1_roster")
     identity = LookIdentity(LOOK_ID, KIT_ID, first.kit_sha256, first.runner_commit)
-    bindings = tuple((binding.leg_id, binding) for binding, _ in legs)
+    bindings = tuple((leg.binding.leg_id, leg.binding) for leg in legs)
     validate_roster(identity, bindings, dict(bindings))
+    if sum(leg.admitted for leg in legs) != count:
+        raise ValueError("stage1_roster")
     public = dict(look_id=LOOK_ID, manifest_sha256=freeze.manifest_sha256, commit=revision,
                   stage1_sha256=digest, n_legs=count)
     return VerifiedStage1(public, tuple(legs))

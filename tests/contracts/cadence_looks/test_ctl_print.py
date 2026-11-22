@@ -16,13 +16,20 @@ import unittest
 from unittest.mock import patch
 
 from joulewise.cadence_looks import controls_print as controls
-from joulewise.cadence_looks import controls_analysis as analysis, controls_manifest as manifest
+from joulewise.cadence_looks import controls_manifest as manifest
 from joulewise.cadence_looks import controls_release as release
 
 from . import ctl_v2_adapter as adapter
 from . import synthetic_acceptance as vectors
 from .ctl_print_adapter import check_fixture
 from .frozen_v3.test_ctl01_hand_vectors import frozen_kernel
+
+
+def load_tests(loader, tests, pattern):
+    from .ctl_print_binding_acceptance import TestControlsBindingFreeze
+
+    tests.addTests(loader.loadTestsFromTestCase(TestControlsBindingFreeze))
+    return tests
 
 
 class TestFrozenControlsPrint(vectors.Contract):
@@ -129,7 +136,7 @@ def instrument_freeze_fixture(artifacts, mode):
     return dict(current_revision=revision, committed=commits, working=working, history=history)
 
 
-def worker_fixture(directory, mode, synthetic_path=False):
+def worker_fixture(directory, mode, synthetic_path=False, *, close_positions=None):
     """Drive the real worker in a child with invented commitments and records."""
     import joulewise.cadence_looks as looks
 
@@ -144,10 +151,10 @@ def worker_fixture(directory, mode, synthetic_path=False):
                 (source / name).write_bytes(subprocess.check_output(["git", "show", git_path], cwd=ROOT))
             looks.__path__.append(str(source))
         v2 = import_module("tests.contracts.cadence_looks.frozen_v3.test_ctl01_print_v2")
-        _run_worker_fixture(directory, mode, synthetic_path, v2, scope)
+        _run_worker_fixture(directory, mode, synthetic_path, v2, scope, close_positions)
 
 
-def _run_worker_fixture(directory, mode, synthetic_path, v2, scope):
+def _run_worker_fixture(directory, mode, synthetic_path, v2, scope, close_positions):
     private = directory / "private" / controls.LOOK_ID
     restricted = private / ("synthetic-output" if synthetic_path else "RESTRICTED")
     public = directory / "public" / controls.LOOK_ID / release.PUBLIC_NAME
@@ -156,9 +163,17 @@ def _run_worker_fixture(directory, mode, synthetic_path, v2, scope):
         scope.enter_context(patch.object(release, "reserve_outputs", release.reserve_directory))
 
     positions = v2.complete()
-    roster = {"n_legs": len(positions), "legs": vectors.example()[0]["legs"]}
-    for leg in positions:
-        roster["legs"][leg.leg_id]["script_sha"] = leg.work_sha256
+    if close_positions is not None:
+        positions = tuple(close_positions(positions))
+    count = sum(leg.admitted for leg in positions)
+    roster = {"n_legs": count, "legs": vectors.example()[0]["legs"]}
+    episode_payloads = [None if leg.episode is None else v2.rec.to_json(leg.episode).encode() for leg in positions]
+    for leg, episode_bytes in zip(positions, episode_payloads, strict=True):
+        roster["legs"][leg.leg_id].update(
+            script_sha=leg.work_sha256, kind=leg.kind, admitted=leg.admitted, g0_released=leg.g0_released,
+            episode_id=None if leg.episode is None else leg.episode.episode_id,
+            episode_sha256=None if episode_bytes is None else sha256(episode_bytes).hexdigest(),
+        )
     committed_stage1 = manifest.canonical(roster)
     selected = deepcopy(roster)
     if mode in ("stale_bytes_only", "prior_kit_self_digest"):
@@ -181,34 +196,35 @@ def _run_worker_fixture(directory, mode, synthetic_path, v2, scope):
     history = freeze_inputs["history"]
     if mode != "unregistered_stage1":
         history.append(dict(kind="stage1", look_id=controls.LOOK_ID, manifest_sha256=digest,
-                            revision=stage1_revision, stage1_sha256=stage1_sha, n_legs=len(positions)))
+                            revision=stage1_revision, stage1_sha256=stage1_sha, n_legs=count))
     if mode == "withheld":
         history.append({"kind": "ctl01_withheld", "reason": "no_dc_in_floor"})
 
     class SyntheticFailure(Exception):
         pass
 
-    def first_read(bindings):
+    def first_read(bound_legs):
         (directory / "first-read").touch(exist_ok=False)
-        for (binding, script_sha), leg in zip(bindings, positions, strict=True):
-            assert binding.leg_id == leg.leg_id and script_sha == leg.work_sha256
+        for bound, leg in zip(bound_legs, positions, strict=True):
+            assert bound.binding.leg_id == leg.leg_id and bound.script_sha256 == leg.work_sha256
         print("invented reader output", flush=True)
         subprocess.run([sys.executable, "-B", "-c", "import os; os.write(2, b'invented child output\\n')"], check=True)
         if mode == "builtin":
             raise ValueError("invented diagnostic")
         if mode == "custom":
             raise SyntheticFailure("invented diagnostic")
-        return positions
+        return tuple(release.LegRead(bound.binding, leg.kind, leg.admitted, leg.g0_released,
+                                     episode_bytes, leg.work_bytes)
+                     for bound, leg, episode_bytes in zip(bound_legs, positions, episode_payloads, strict=True))
 
     args = dict(
         freeze_inputs=freeze_inputs, stage1_bytes=stage1_bytes,
         blind=dict(look_id=controls.LOOK_ID,
                    manifest_sha256=sha256(b"wrong manifest").hexdigest() if mode == "wrong_manifest" else digest,
-                   commit=stage1_revision, n_legs=len(positions),
+                   commit=stage1_revision, n_legs=count,
                    stage1_sha256=stage1_sha if mode == "stale_bytes_only" else sha256(stage1_bytes).hexdigest()),
         execution_host="invented-host", local_host="wrong-host" if mode == "host" else "invented-host",
         restricted=restricted, public=public, first_read=first_read,
-        gap_limits_ns=dict.fromkeys(analysis.CHANNELS, 2 * v2.NS),
     )
     if mode == "other_integrator":
         def constant_level(trace, start, end, *, mapping):

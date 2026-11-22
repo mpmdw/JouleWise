@@ -1,7 +1,7 @@
 """Single-use controls output boundary with a blind public projection."""
 
 from contextlib import suppress
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from hashlib import sha256
 from importlib.util import find_spec
 import math
@@ -13,7 +13,7 @@ import traceback
 
 from . import controls_analysis as analysis
 from .controls_manifest import CODE_PATHS, canonical, verify_freeze, verify_stage1
-from .controls_print import LOOK_ID, encode_public_projection
+from .controls_print import LOOK_ID, LegBinding, encode_public_projection
 from .qualification_manifest import _decode
 
 
@@ -123,8 +123,8 @@ def write_outputs(restricted, public, private_bytes, public_bytes):
         pending.unlink()
 
 
-def calculate_private(positions, *, kernel, pooled, gap_limits_ns, instrument_manifest_sha256, schema_bytes,
-                      instrument_reasons=()):
+def calculate_private(positions, *, kernel, pooled, instrument_manifest_sha256, schema_bytes,
+                      instrument_reasons=(), gap_limits_ns=None):
     report = analysis.print_controls(positions, kernel=kernel, pooled=pooled, gap_limits_ns=gap_limits_ns,
                                      instrument_manifest_sha256=instrument_manifest_sha256)
     return prepare_private(report, schema_bytes, instrument_reasons=instrument_reasons)
@@ -151,8 +151,56 @@ def _verified_kernel(pins):
     return analysis.PhaseKernel.frozen()
 
 
+@dataclass(frozen=True)
+class LegRead:
+    """Exact member bytes and the reader's claimed committed identity."""
+
+    binding: LegBinding
+    kind: str
+    admitted: bool
+    g0_released: bool
+    episode_bytes: bytes | None
+    work_bytes: bytes | None
+
+
+def _verify_member_bytes(payload, expected_digest):
+    if expected_digest is None:
+        valid = payload is None
+    else:
+        valid = type(payload) is bytes and sha256(payload).hexdigest() == expected_digest
+    if not valid:
+        raise ValueError("controls_member_digest")
+
+
+def _bound_positions(expected, received):
+    from joulewise.align.records import Episode, from_json
+
+    positions = []
+    for committed, read in zip(expected, received, strict=True):
+        if (type(read) is not LegRead or type(read.binding) is not LegBinding
+                or type(read.binding.span) is not int or type(read.binding.attempt) is not int
+                or read.binding != committed.binding or type(read.kind) is not str or read.kind != committed.kind
+                or read.admitted is not committed.admitted or read.g0_released is not committed.g0_released):
+            raise ValueError("controls_member_binding")
+
+        _verify_member_bytes(read.episode_bytes, committed.episode_sha256)
+        _verify_member_bytes(read.work_bytes, committed.script_sha256)
+        episode = None
+        if read.episode_bytes is not None:
+            episode = from_json(Episode, read.episode_bytes)
+            if episode.episode_id != committed.episode_id:
+                raise ValueError("controls_episode_identity")
+            for trace in episode.power_traces:
+                if trace.source == "powermetrics":
+                    analysis.registered_u1_ns(trace, trace.channel)
+
+        positions.append(analysis.LegInput(committed.binding.leg_id, committed.kind, committed.admitted,
+                                           committed.g0_released, episode, read.work_bytes, committed.script_sha256))
+    return tuple(positions)
+
+
 def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, local_host, restricted: Path,
-                        public: Path, first_read, gap_limits_ns):
+                        public: Path, first_read):
     """Run once, with the first reader given the committed stage-1 bindings."""
     from .manifest_dispatch import PRE_READ_REFUSAL
     from .transfer_release import POST_READ_FAILURE, _failure_type, _redirect, _sync_directory
@@ -175,13 +223,10 @@ def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, l
         confined = True
         _sync_directory(restricted.parent)
         read_started = True
-        positions = tuple(first_read(stage1.legs))
-        if tuple(leg.leg_id for leg in positions) != tuple(binding.leg_id for binding, _ in stage1.legs):
-            raise ValueError("stage1_roster")
-        positions = tuple(replace(leg, work_sha256=digest)
-                          for leg, (_, digest) in zip(positions, stage1.legs, strict=True))
+        requests = tuple(replace(leg, binding=replace(leg.binding)) for leg in stage1.legs)
+        positions = _bound_positions(stage1.legs, first_read(requests))
         publish_reserved(restricted, public, public_bytes, positions, kernel=kernel, pooled=freeze.instrument_pool,
-                         gap_limits_ns=gap_limits_ns, instrument_manifest_sha256=freeze.instrument_manifest_sha256,
+                         instrument_manifest_sha256=freeze.instrument_manifest_sha256,
                          schema_bytes=freeze.restricted_schema, instrument_reasons=freeze.instrument_pool.reason_enum)
     except BaseException as error:
         if confined:
