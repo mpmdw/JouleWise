@@ -972,6 +972,12 @@
     "seam": "none"
   },
   {
+    "file": "scripts/init_attempt_ledger.py",
+    "locator": "initialize:348b9f2fb40c4b57",
+    "command": "python-isolated",
+    "seam": "none"
+  },
+  {
     "file": "scripts/joulewise-network-time.sudoers",
     "locator": "shell:3ba6f6bbbadb0e3d",
     "command": "systemsetup",
