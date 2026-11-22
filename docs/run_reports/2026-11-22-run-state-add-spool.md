@@ -46,7 +46,7 @@ Findings 1 and 3 reproduced on `b3da9918e` and are fixed in `3721cd6ee`.
 | Finding | Disposition | Regression |
 | --- | --- | --- |
 | G1 / finding 1 | Retry checkout-dependent spool validation on a fresh fetch before quarantine, even when the prior remote-head reply matched the fetched head. | `test_audit_round_2_refetches_before_quarantining_after_a_stale_reply` |
-| G2 / finding 3 | The resolved worktree root and origin URL scope the queue and its lock. A different clone, a fork, or a change to the checkout's origin URL selects a different queue. | `test_audit_round_2_spool_isolated_by_checkout_and_origin` |
+| G2 / finding 3 | The audit round 2 fix scoped the queue and its lock to the resolved worktree root and origin URL. K1 below replaces that key while retaining fork isolation. | `test_audit_round_2_spool_isolated_by_origin_across_forks` |
 
 The default spool location and `JW_RUN_STATE_SPOOL` act as parent directories
 for the identity-specific queues. Unkeyed request files in the parent form the
@@ -67,13 +67,29 @@ filename order before the keyed request. A later add lands after all three.
 The old writer's parent lock protects the unkeyed queue. A transient failure
 retains pending requests and stops replay before any later entry. The legacy
 format carries no repository identity, so run `flush-spool` from the original
-checkout during upgrade. New requests remain scoped to their checkout and
-origin.
+checkout during upgrade. New requests remain scoped by their target.
 
 Accepted MED limitation. If another writer changes the target after G1's
 second remote-head check, a currently valid `--set` can still be quarantined.
 Flush reports the reason and preserves the exact request bytes in `failed/`.
 Audit round 3 recovered the request and landed it from those bytes.
+
+## Independent audit round 4
+
+K1 and K2 reproduced on `ad5b34d87` and are fixed in `dcd943651`.
+
+| Finding | Disposition | Regression |
+| --- | --- | --- |
+| K1 / moved checkout | Key the spool and its lock by the selected remote's normalized destination URL. The queue follows a moved checkout and can be shared by clones with the same target. Forks with distinct target URLs keep separate queues. | `test_audit_round_4_moved_checkout_preserves_spool_order` |
+| K2 / named remote | Resolve the remote supplied to `add_git`. Replay that remote's queue with `flush-spool --remote NAME`. | `test_audit_round_4_named_remote_without_origin` |
+
+The URL key folds scheme and host case and strips the trailing slash and
+`.git` suffix. For a configured push URL, the key uses that destination.
+The flat legacy spool still drains first. Earlier draft path-keyed directories
+carry no recoverable target identity and stay in place.
+
+The accepted post-recheck MED is unchanged. Audit round 4 repeated the
+quarantine and recovered the exact request bytes.
 
 ## Verification
 
@@ -96,5 +112,8 @@ After the audit round 2 fixes, all 112 focused tests passed on each interpreter.
 Both CURRENT checks again exited 0 against `7eec25d6ab4cc8cf72b37532ad407cbb6ceefa13`.
 After U1, all 113 focused tests passed on each interpreter. Both CURRENT
 checks exited 0 against `1b834776d4d566b684536bedeff5935c12517f4c`.
+After K1 and K2, all 116 focused tests passed on each interpreter, including
+the two audit 4 regressions and the URL normalization cases. Both CURRENT
+checks passed again on the same main revision.
 The full suite runs in the draft PR's hosted CI. Tier 1 cross-family review
 remains a lead gate.
