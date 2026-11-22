@@ -5636,8 +5636,13 @@ def calibration_session_status(
     custody_deadline: CustodyDeadline | None = None,
     custody_mode: Literal["read_replay", "issuing"] | None = None,
     custody_state_scope: Literal["declared_slots", "next_slot"] = "declared_slots",
+    probe_live_writer: bool = True,
 ) -> dict[str, Any]:
     """Derive session progress solely from durable ledger/plan/custody state.
+
+    ``probe_live_writer=False`` skips the contention probe, which acquires a
+    writer lease and so creates the lock file beside the ledger; it reports
+    ``live_writer`` False. Only the read-only C1 arm preflight passes it.
 
     ``custody_state_scope`` chooses WHICH declared slots have their custody
     state read. ``declared_slots`` (the default) reads every slot the open
@@ -5720,7 +5725,7 @@ def calibration_session_status(
             "custody_state": custody_state,
             "finalized": slot in session.finalized_slots,
         }
-    live_writer = writer_lease_is_live(ledger_path)
+    live_writer = writer_lease_is_live(ledger_path) if probe_live_writer else False
     actionable: RefusalCode | None = None
     unexpected = set(snapshot.refusal_reasons) - {
         RefusalCode.LEDGER_BRACKET_SESSION_OPEN.value,
