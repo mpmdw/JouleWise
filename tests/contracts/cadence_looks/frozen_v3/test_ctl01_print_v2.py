@@ -1019,7 +1019,7 @@ def hand_recovery(tc):
     row = one(make_leg("L002", incomplete=True))["channels"]
     for ch in CHANNELS:
         d = row[ch]
-        tc.assertEqual((d["baseline_w"], d["baseline_reason"]), (None, "incomplete_recovery"))
+        tc.assertEqual((d["baseline_w"], d["baseline_reason"]), (None, "recovery_incomplete"))
         tc.assertTrue(all(v is None for v in d["above_baseline_j"].values()))
         tc.assertIs(d["absolute"]["closes"], True)
         tc.assertEqual(d["absolute"]["ungated_j"], 3 * 127 + 14)
