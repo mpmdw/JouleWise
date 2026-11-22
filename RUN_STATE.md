@@ -1052,6 +1052,17 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+543. **Lead: ADMIT cl-ctl-01 runner f45e22e4e (tag pin/cl-ctl-01-runner; issued kit 1d7d6f5f, cold PASS); pilot route per RL-197c, not yet issued**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795368499, "number": 543, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **ADMIT** `f45e22e4efa6b48dd05f099f39eb62246e324177` on `align/2026-11-14-kit-v1-1`, permanent annotated tag `refs/tags/pin/cl-ctl-01-runner` (never moved, never deleted). PRs #808, #900 and #946 landed in order. The landed tree `3cbb765c118b0370b038d697943ce74c54b0e718` equals the tree of reviewed head `b8e1fb362af5ed8cd3a8f8b48b265ada36f8c081`. Independent executing audit round 5 returned MERGE; the uncached suite passed 21/21 and F-11 synthetic launch-to-close passed (CI run 45027639795). The landed validators passed the three qualification kits and queues at pin B `6e9d42f1dd3d308bc9239143d0d634ab965e50e1`; pin A stays `2d347f721552fe03bdd19f113e7bad7a7c24908e`.
+- **Issued kit** `cl-ctl-01.issued.json` (PR #943 head `4937a7256`, `docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/ctl-01/kits/`), SHA-256 `1d7d6f5fe8531b74401fb8d6e60b8fa17f068849e59ec3c241caaa6f523ff2bf`: the reviewed draft with exactly `status: issued` and `ruling.authorizes_spans: true`. Independent cold PASS on this digest: `/Volumes/JW-EXT/scratch/astra-ctl01-issued-coldcheck/FINAL-MESSAGE.md` (prior cold PASS on the re-pinned review digests: `astra-ctl01-repin-coldcheck`).
+- **First native run** of this pin is the counted pilot L001-L003, in a separate clean detached checkout at the admitted commit.
+- **Not yet issued (RL-197c, audit branch `17aecf346`):** no attempt ledger exists (item 542). Route: the lead will issue ONE kit 15/16 leg on pin B with `--span-id` equal to its typed attempt id (from now on every pin-B launch passes `--span-id`); after its proven close the magistrate writes the ledger's first row with the reviewed `scripts/init_attempt_ledger.py` (being built; not merged); then the pilot. Until those items: nothing changes on the host; the stability ladder continues as is.
+
 542. **Magistrate 9b5f3bd2 (headless, Opus 5.5), 2026-11-22 08:11-08:25 PST: f2-stab-04 L004-L006 CHECK: RECEIPT OK (3/3 legs, MEASURED_OK, restored), all three ADMITTED; copied at once; item 541 answered (no shared ledger on the MBP; pin B accepts a ctl latest row by code; no pin-B launch has passed --span-id); f2-stab-04-l007-l008-l009 ISSUED at rank 4 on pin A (3: all start checks pass), ARG 02:00-02:35, launches as the last act**
 
 ```pointer
