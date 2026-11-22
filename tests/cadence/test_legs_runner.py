@@ -910,9 +910,11 @@ class RunnerWithLegRuntimeTests(unittest.TestCase):
 # --------------------------------------------------------------------------
 def launch_files(root, *, seconds, **extra):
     """launch_cadence_span.launch up to the (failing) bootstrap, as the smoke launcher tests do."""
-    repo = root / "repo"
-    (repo / "scripts").mkdir(parents=True, exist_ok=True)
-    (repo / "scripts" / "cadence_legs_runner.py").write_text("")
+    repo = extra.pop("repo", None)
+    if repo is None:
+        repo = root / "repo"
+        (repo / "scripts").mkdir(parents=True, exist_ok=True)
+        (repo / "scripts" / "cadence_legs_runner.py").write_text("")
     args = SimpleNamespace(repo=repo, output=root / "out", python_bin=Path(sys.executable),
                            magistrate_pid=1234, deadline=1000 + seconds, custody_root=root / "custody",
                            exit_wait_seconds=180, start_wait_seconds=30, disk_path=root, launchctl_bin="fake-launchctl",
@@ -923,6 +925,7 @@ def launch_files(root, *, seconds, **extra):
     with patch.object(cadence_launch.base, "pid_alive", return_value=True), \
          patch.object(cadence_launch.time, "time", return_value=1000), \
          patch.object(cadence_launch.uuid, "uuid4", return_value=SimpleNamespace(hex="fixed")), \
+         patch.object(cadence_launch, "subprocess", SimpleNamespace(**vars(subprocess))), \
          patch.object(cadence_launch.subprocess, "run", side_effect=[subprocess.CalledProcessError(19, []),
                                                                      subprocess.CompletedProcess([], 0, "", "")]):
         try:
@@ -957,11 +960,14 @@ class LauncherTests(unittest.TestCase):
             ledger = root / "attempts.json"
             previous = {"sequence": 3, "span_id": "prior", "close_receipt": str(receipt)}
             ledger.write_text(json.dumps({"attempts": [previous]}))
-            kit = self.kit_file(root)
+            repo = root / "measurement"
+            kit = root / "kit.json"
+            kit.write_text(json.dumps({**campaign_kit(), "frozen": make_runner_checkout(repo)}, indent=1))
             legs = "L001,L002,L003"
             plan = cadence_launch.cadence_plan(kit, legs, t0=local("2026-11-15T13:20"))
             with patch.object(cadence_launch, "cadence_plan", return_value=plan):
-                spec, _ = launch_files(root, seconds=cadence_launch.cadence_minimum_seconds(plan), kit=kit, legs=legs,
+                spec, _ = launch_files(root, seconds=cadence_launch.cadence_minimum_seconds(plan), kit=kit,
+                                       legs=legs, repo=repo,
                                        attempt_ledger=ledger, previous_close_receipt=str(receipt),
                                        span_id="qual-01-s01", t0_not_before_ns=100_125_000_000)
             attempts = json.loads(ledger.read_text())["attempts"]
