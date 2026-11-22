@@ -897,3 +897,47 @@ owes an executing-review record for those exact commits. No review row,
 issued registration or signer decision was entered by the builder. The
 draft remains held on this gate even though the frozen local tape and
 the focused regression checks passed.
+
+## Round 9 · audit 1 rebuild
+
+The independent audit of `dc83b3483630350049b69181d3799abbee881958`
+verified two HIGH integration defects. It reported zero MED and zero LOW
+findings. The executable acceptance freeze is
+`23098de753308f97698ab984449428bc319aab34`. Before the validator change,
+the three frozen tests produced four expected failing subtests and one
+passing control on the audit baseline (`unittest` exit 1).
+
+| Finding | Baseline on invented inputs | Fix and regression |
+| --- | --- | --- |
+| Supplemental config in the campaign directory | Main and spare both produced builder exit 0, install exit 0, direct arm admit, and one synthetic host checkpoint per route. The campaign's order selection rejected `old-config.json`. | `e6da6a0be` uses the pinned campaign runner's discovery, manifest loading and exact order selection for the logical dispatch directory. `test_declared_extra_json_refuses_in_main_and_spare_dispatch` verifies a digest-bound extra on both routes. Each now produces builder exit 2, install exit 2, direct arm refusal and zero host entries on both routes. `test_dispatch_ignores_declared_file_outside_runner_config_glob` passes with a declared text file. |
+| Retired head pin exported despite a later option | Both the split and attached last-option variants passed preflight and entered each synthetic checkpoint, but parsing the campaign with the chain export chose the missing retired pin. | `e6da6a0be` uses one reservation parser for preflight and the chain renderer, including the reservation values exported downstream. `test_reservation_head_pin_export_matches_last_parsed_option` checks that the actual campaign parser selects the validated current pin in both variants. Each produces builder exit 0, install exit 0, direct arm admission and one synthetic checkpoint per route. |
+
+The assessed code tree is `dd07176ec8427ba64d947840c6986fa549a9a2e5`
+at `e6da6a0be00aec2fc7ad44948e8d925252defd26`. The protected campaign
+runner Git blob remains `2181546feaf0d0db659142533029918c5e9b747c`.
+The adapter's wrong-order diagnostic now names the runner's earlier
+refusal. The frozen suite at `d7701aa716c18eff1b78c85bdb06b38dc34b4715`
+and its SHA-256 manifest are byte identical to the freeze. The renderer's
+parse refusal has a census row. Two host command inventory locators now
+name the parser function containing the existing command strings.
+
+```sh
+PYTHONPATH=tests:. python3.13 -B -m unittest \
+  align.test_c1_closure.C1ClosureTests.test_declared_extra_json_refuses_in_main_and_spare_dispatch \
+  align.test_c1_closure.C1ClosureTests.test_dispatch_ignores_declared_file_outside_runner_config_glob \
+  align.test_c1_closure.C1ClosureTests.test_reservation_head_pin_export_matches_last_parsed_option \
+  tests.test_host_command_sites.HostCommandSiteTests
+(cd tests/align/c1_closure_lite && shasum -a 256 -c SUITE.sha256)
+PYTHONPATH=tests:. python3.13 -B tests/align/c1_closure_lite/suite/run.py \
+  --adapter "$PWD/tests/align/c1_closure_lite/adapter.py" > .row23-seat/r9-audit1-observed.jsonl
+cmp tests/align/c1_closure_lite/suite/expected.jsonl .row23-seat/r9-audit1-observed.jsonl
+PYTHONPATH=tests:. python3.13 -B -m unittest align.test_v4_next_arm_packet.C1PacketRebuildTests
+git diff --check b2e01464d HEAD
+```
+
+The audit regression and host command inventory tests passed 5/5. The
+focused refusal census, legacy writer and stage-plan checks passed 16/16.
+The draft PR evidence ledger and seat handoff carry the final replay,
+published tree and exact-head canonical CI state. The authorized executing
+review, integration-owner and Opus acceptance, W1 signing, and final
+post-close packet remain with their assigned owners. `NEEDS_SPEC: none`.
