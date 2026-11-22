@@ -25082,3 +25082,57 @@ No execution packet now: it is written only if step 4 produces an above-bar fiel
 **Blind status.** Blind. Read: RL-198a (format), RL-201, the desk-item draft and its FINAL-MESSAGE, and source at `d7098081d` (`scripts/bytes_commitment.py`, the admission call sites of `scripts/bytes_analyze.py`, `scripts/bytes_twin.py` and `scripts/b6_release_subset.py`, `docs/design/bytes_commitment.md`). The journal itself was not opened. No custody, energy, withheld, key or prediction file was opened. No commit, push, comment, run, SSH or fetch. The only file written is this one.
 
 **RL-201 addendum (research lead, 2026-11-22, entered by the lead from `fable-pr950-signoff.md`).** "RL-201 §1.2 'Source, corrected in `fill_index.md`' and the register row 'P1-BY-KB source corrected' are discharged by the completed fill: the row is removed at regeneration and the corrected source with its digests prints in `paper1.md` §3.3. No completed-fill row is kept. (PR #950, 2026-11-22.)"
+
+# RL-201b. M1: ruled (b). The MoE no-answer row's flags are the codes on the passes of the models that have no point, as the bound `evaluate` prints them. A refused pass of a model that keeps a `one_pass` point is not listed there. RL-92 §3 (M1) and sentence (4) of BY-LABEL-1 are amended before the row is entered. No code changes in either CLI
+
+Research lead (Fable 5.2), Sun Nov 22 04:39:49 PST 2026 (from `date`). Amends RL-92 §3 (M1 paragraph) and RL-92 §5 sentence (4), and so the row RL-201 §2.4 enters. Answers the escalation in `pl-bytes-p1m1/resolve-2` and the M1 finding of audit 2 on PR #949.
+
+## 1. Ruling: (b)
+
+**The rule.** In a no-answer active-or-resident row, `flags` is the sorted union of the codes on every pass of every model that has no point in that row's group (selection, basis, boundary), MoE or not. A model with a point contributes nothing to that row, including a model whose point is `one_pass`. Its refused pass keeps its codes on its own cell row, and its point is labelled `one_pass` wherever it appears (§7 (a)).
+
+**Why (b).**
+
+- **RL-92's sentence was wider than its subject, and that was my wording.** RL-92 §3 opens "A held-out model with no computed pass", its title says the MoE answer stays "as the bound program prints", and M1 ends "rewritten to the analysis's behaviour". BY-LABEL-1 opens with the same scope. "Every non-computed pass" was written about those models. I did not consider a refused pass beside a computed one.
+- **The registration is silent.** §8 defines the answer and §15 puts flags on each pass's cell. Neither gives the no-answer row a flag list. Where the text is silent the bound program stands and the twin matches (RL-82's second ground, applied in RL-92 §2 N1).
+- **The pinned rule is the coherent one.** The row's flags say why there is no answer. A model with a `one_pass` point has an H1 result and is not a cause. When all three MoE models have points the row carries no flag list at all, so under (a) the same refused pass would be listed or not depending on some other model.
+- **(a) would have the analysis script rewrite a row of `evaluate`.** §13 names `evaluate` as the estimator for the active-or-resident row. The P1 relabel was required by §11 item 4 and §15. Nothing requires this one.
+- **The twin stays independent.** It builds the list from this text: the cells of the models without a point (`scripts/bytes_twin.py`, `no_points`). It shares no code with the library.
+
+Nothing is hidden. The refused pass is printed with its codes in its cell, and the point says `one_pass`.
+
+## 2. The amended texts
+
+**RL-92 §3, M1, now reads:**
+
+> **M1: reading A answers it.** The active-or-resident row's flags are the codes on every pass of every model that has no point at that boundary, refused passes included: session, run, exclusion and meter codes. A refused pass of a model whose other pass computed is flagged on its own cell and is not listed in that row. The twin's refused pass carries its cell's list. The test that pins the opposite is rewritten to the analysis's behaviour.
+
+**BY-LABEL-1, sentence (4), now reads** (the row is mine and not yet entered on `main`; the rest stays RL-92 §5 verbatim with RL-201 §2.4's date words):
+
+> (4) That row's flags are the codes on every pass of every model that has no point at that boundary; a refused pass of a model whose other pass computed is flagged on its own cell.
+
+## 3. What the build does, and the tests
+
+1. `joulewise/bytes_analysis.py` stays `18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71`. `scripts/bytes_analyze.py` and `scripts/bytes_twin.py` get **no M1 change**: at `54709c97a` both already print the ruled list.
+2. `docs/registrations/bytes_deviation_log.md`: sentence (4) replaced by the text above. `test_by_label_1_matches_ruled_text` pins the whole row to RL-92 §5 with the RL-201 §2.4 date words and this sentence (4), and fails on any other text.
+3. Audit 2's survivor case joins the agreement set as a named synthetic campaign (`no_point_labels` plus `member.target_phase_precheck_failed` on Qwen3-14B-4bit pass 1, runs 0 to 5). On rails, dc_input and rest, in both implementations, it asserts:
+   - the pass-1 cell is `unavailable` and its flags contain the code;
+   - the point's label is `one_pass`;
+   - the answer is `missing`, and the row's flags **equal** the union of the cell flags of the models without a point, computed by the test from the cell rows, and **do not contain** the code;
+   - zero fields above the bar, and both held-out exits 0.
+4. RL-92 §4 condition 4 as before: every registered campaign at zero above the bar, and the `--stage fit` re-run byte-identical to the committed predictions file.
+5. PR #949's body and the handoff cite RL-201b. Audit 2's M1 finding closes as "ruled, pinned behaviour confirmed"; its BY-LABEL-1 finding closes against the amended row.
+
+This ruling is committed to the audit branch before the first `heldout_rows` journal event, with the row entered in the same change as the build (RL-201 §2.4).
+
+## 4. Stage-1 commitment
+
+Not affected. The predictions file is written by `frozen_predictions` at the fit stage. This rule touches one list on a held-out row that prints only when there is no answer. The library, its digest and the committed file do not move, so there is no second commitment and no `bytes.module_changed_after_commitment` flag. No number, word, interval, family size or exclusion depends on the list.
+
+## 5. Date
+
+RL-7 (e) as made exact by RL-201 §5.1: the stage-2 release record is pushed by 2026-12-03 23:59:59 PST. This ruling removes the last spec hold on P1/M1 and adds no code change. It does not return to me unless test 3 fails or a call site differs from what I read.
+
+**Not checked.** That the survivor case behaves as audit 2 reports (I ran nothing). That a campaign exercises a no-point dense model together with a no-point MoE model. Test 3's equality assertion covers it if one does. That no paper text in RL-201 §2 beyond the lines I searched quotes sentence (4).
+
+**Blind status.** Blind. Read: RL-201a (format), RL-92 and the RL-201 lines on BY-LABEL-1 and the 3 December date from the audit branch as present locally (`dcee7e3cd`, no fetch), registration §§7, 8, 11 to 13 and 15 at `d7098081d`, the lane's build, audit and resolve reports, and source and synthetic tests at `54709c97a` (`joulewise/bytes_analysis.py`, `scripts/bytes_twin.py`, `tests/test_bytes_agreement.py`, the deviation-log row, audit 2's synthetic regression). A section search of the registration printed lines of §5's published contention table; no outcome value. No custody, energy, withheld, key or prediction file was opened. No commit, push, comment, run, SSH or fetch. The only file written is this one.
