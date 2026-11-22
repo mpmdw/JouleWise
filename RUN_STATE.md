@@ -19,8 +19,16 @@ a span whose Check does not bind is HELD (it keeps the manifest from being final
 roster); `correct-check` moves a `check_item` only to an item that binds. Audit 2 on `98fedf875` (five
 HIGH) is fixed by the lead's ruling: no look command takes a path (every file is a fixed name under
 the one root the manifest registers, checked for symlinks, its root and case collisions; staging is
-private), the manifest carries the only pin list, and a Check binds by span, exactly, with an 8-hex
-floor. [Audit 2 report](docs/run_reports/2026-11-21-pr795-audit-2.md).
+private), the manifest carries the only pin list, and a Check binds by span, exactly.
+[Audit 2 report](docs/run_reports/2026-11-21-pr795-audit-2.md). Audit 3 on `4eaa14016` (four HIGH,
+one MED) is fixed at its root, a caller-controlled name or copy taken as authority: paths are
+compared by physical identity (no symlink in any component, containment by `(st_dev, st_ino)`
+ancestry, so a case variant cannot overlap the repository); a Check binds only on an "Offload
+manifest" identification in full hex, and an abbreviation, a pending digest, another label or any
+contradiction holds the span; committed runs and the cold checker fetch origin's `main` and read
+RUN_STATE.md and LOOKS.json only from it. No public file carries a float; whether stage 1's private
+file is meant to be public is a NEEDS_SPEC for the research lead.
+[Audit 3 report](docs/run_reports/2026-11-21-pr795-audit-3.md).
 
 PR #795 audit 3 (2026-11-20) adopts the independent seat's frozen admission-closure
 suite and replaces stage 1's pre-pass with one validator built from the pinned

@@ -470,11 +470,17 @@ cold pass.
 | `<root>/lm-interim-01/input_level_r.json`, `input_level_e.json` | synthetic `--allow-draft` inputs (`--level-r`, `--level-e`) | `--input`, `--energy` |
 | `<root>/lm-interim-01/RESTRICTED/` | stage 2's reservation; the public report goes only to the ledger's registered public root | |
 
-The commands are `stage1 [--allow-draft] [--ledger-ref REF] [--ruled-exclusion ...] [--stage-archives] [--level-r]`,
-`stage2 --stage1-sha256 HEX [--allow-draft] [--ledger-ref REF] [--level-e]`, `post-no-maxima` and `host-id`.
-Every path is checked before use: absolute, its own realpath, no symlink component, inside its root, and no name
-beside it that differs only in case. The root lies outside the repository; an archive is expanded into a fresh
-private directory outside the root and the repository and removed when the stage ends. Stage 2 also refuses a file
+The commands are `stage1 [--allow-draft] [--ruled-exclusion ...] [--stage-archives] [--level-r]`,
+`stage2 --stage1-sha256 HEX [--allow-draft] [--level-e]`, `post-no-maxima` and `host-id`. No command takes a
+path, a git ref or a record source: a committed run fetches origin's `main` first and reads RUN_STATE.md and
+LOOKS.json only from it (`git show origin/main:<path>`; audit 3, rule P3), and a failed fetch refuses.
+Every path is checked before use: absolute and normalized, no symlink in any component (each one `lstat`ed),
+inside its root, and no name beside it that differs only in case. Containment is decided by physical identity,
+the `(st_dev, st_ino)` of each ancestor, never by the spelling (audit 3, rule P1): on a case-insensitive volume a
+case variant of the repository's path is the repository. The root lies physically outside the repository and does
+not hold it; an archive is expanded into a fresh private directory physically outside the root and the repository
+and removed when the stage ends. The ledger's custody root must be the manifest's root by `samefile`, and its
+custody and public directories may not share a physical directory. Stage 2 also refuses a file
 beside `RESTRICTED` or `PUBLIC.json` that differs from it only in case, and a ledger `custody_root` other than the
 manifest's root. The sections below that name a former option describe the same file at its fixed place.
 
@@ -516,18 +522,22 @@ stages, the twin's wrapper, the cold review and its checker) reads it from the m
   A mismatch there is inside the reservation and spends the look under RL-180's ordinary rule.
 - **An open of a roster path outside the pin list refuses,** and so does any open that bypasses the pinned
   reads. A committed run also requires each span's Check item on `origin/main` to name its offload manifest
-  (RL-194a §2; audit 2, lead ruling). The binding is keyed by span: the Check's digests for a span are those it
-  prints labelled `manifest` (or `manifest_sha256`, or the `SHA256SUMS` file's name) after a name of that span with
-  no other name between (a name is a span id, an offload directory such as `cq-<span>-a1`, another series' span or
-  a kit). A digest after another name belongs to it and never binds; a digest under another label binds nothing.
-  Equality is exact: the full digest, or an abbreviation of at least eight printed hex digits every one of which
-  matches. Every digest the item prints for the span must match; one mismatch holds it. Otherwise it is HELD. A digest with `outer` just before it (the close-time
-  `outer.sha256`) never binds; it is cited as a second record only (RL-195 §2.2).
+  (RL-194a §2; audit 2 and audit 3 rulings; RL-195 Q2). The binding is keyed by span: the Check's digests for a span
+  are those it prints after a name of that span with no other name between (a name is a span id, an offload
+  directory such as `cq-<span>-a1`, another series' span or a kit). A digest after another name belongs to it.
+  A span **binds** only on an explicit "Offload manifest" identification whose full 64-hex digest equals the pin:
+  the label's last manifest word is "offload manifest", with only punctuation, `sha256`, a file count or a
+  readback's word between it and the digest. Every digest the item prints for the span under any manifest label
+  or as a readback (offload, look, bare `manifest`, `SHA256SUMS`, "readback") must also agree with the pin, in
+  full or in every printed character; one disagreement holds the span. An abbreviation alone, a pending digest, a
+  digest under another label, or any mismatch is HELD, never bound. The eight-hex abbreviation is for text shown to a
+  person only. A digest with `outer` in its label (the close-time `outer.sha256`) never binds; it is cited as a
+  second record only (RL-195 §2.2).
 - **A HELD span (RL-195 §2).** It keeps the manifest from being final and stays on the roster and in the pins:
   every stage refuses while it is held, `check-inputs` exits 1 and lists, for each held span, the item numbers and
   labels under which a digest is printed after the span is named (never a digest), and `validate --final --repo`
-  and `row --roster` refuse. `correct-check` moves a span's `check_item` only to an item that names its offload
-  manifest under a manifest label with every printed character matching; `check_corrected_from` keeps the item
+  and `row --roster` refuse. `correct-check` moves a span's `check_item` only to an item that binds it (the full
+  hex under an "Offload manifest" identification, nothing contradicting it); `check_corrected_from` keeps the item
   the pin table cited.
 - **The journal's digest is public (RL-195 §1).** Stage 1's file carries the plain sha256 of each span's
   `events.jsonl`, which holds the idle baseline's mean. Three conditions bind it: no process converts, prints or
@@ -873,8 +883,9 @@ reader's four unsupported malformed shapes, and the registered cadence twin inte
 - **`--allow-draft`** refuses input that is not synthetic (stage 1: every receipt's `"synthetic": true`, or the level-R
   flag; stage 2: the stage-1 file's flag). `stage1 --level-r` and `stage2 --level-e` run only with it.
 - **Commit gate.** Without `--allow-draft`, stage 2 calls `manifest.require_stage1_committed(repo, look_id,
-  stage1_sha256, stage1_doc=..., ledger_ref=...)` on the committed ledger (`--ledger-ref`). With it, a scratch
-  LOOKS row naming the stage-1 hash at `stage1_committed` or later stands in.
+  stage1_sha256, stage1_doc=..., ledger_ref="origin/main")` on the committed ledger, after fetching origin's
+  `main` (audit 3, rule P3). With it, a scratch LOOKS row naming the stage-1 hash at `stage1_committed` or later
+  stands in.
 - **DC-in support (Sol N5).** Energy over a segment [a, b] needs a meter sample at or before a, one at or after b,
   and no two consecutive samples between them more than 2 s apart (RL-166 Q7's rule-4 gap, judged on the interval
   itself); otherwise stage 2 refuses. Nothing is interpolated across a longer gap or an empty stream. DC-in's

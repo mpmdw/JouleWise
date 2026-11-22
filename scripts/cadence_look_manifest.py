@@ -5,10 +5,9 @@
         [--repo DIR [--kit KIT.json ...]] [--span-ledger LEDGER.json [--roster-out ROSTER.json]] [--looks LOOKS.json]
     python3 -B scripts/cadence_look_manifest.py pin MANIFEST.json --repo DIR [--write]
     python3 -B scripts/cadence_look_manifest.py pin-inputs MANIFEST.json --repo DIR --plan PLAN.json [--write]
-    python3 -B scripts/cadence_look_manifest.py check-inputs MANIFEST.json --repo DIR
-        [--run-state RUN_STATE.md] [--roster ROSTER.json]
+    python3 -B scripts/cadence_look_manifest.py check-inputs MANIFEST.json --repo DIR [--roster ROSTER.json]
     python3 -B scripts/cadence_look_manifest.py correct-check MANIFEST.json --repo DIR --span SPAN_ID --item N
-        [--run-state RUN_STATE.md] [--write]
+        [--write]
     python3 -B scripts/cadence_look_manifest.py row --manifest MANIFEST.json --repo DIR
         (--roster ROSTER.json --verdicts VERDICTS.json | --stage1 STAGE1.json
          | --output | --error-type TYPE | --interrupted) [--write]
@@ -22,8 +21,8 @@ validate:
   not-desk-final spans, or a ledger that carries another manifest hash. The analyst seat runs this at
   the look before opening anything.
 * ``--final --repo``: the inputs are final too: the pin list is filled, no span is HELD against the public
-  RUN_STATE (``--run-state`` reads a file instead of origin/main) and, with ``--span-ledger``, the pinned spans
-  are exactly the roster's.
+  RUN_STATE (fetched, then read from origin/main) and, with ``--span-ledger``, the pinned spans are exactly the
+  roster's.
 
 pin (draft manifests only): set the sha256 of every pinned file that exists in the repository, then
 the manifest's row in LOOKS.json. Prints the changes; writes only with ``--write``. A committed manifest
@@ -39,7 +38,7 @@ entry. A span directory whose files are not exactly the offload manifest's, or t
 
 check-inputs (RL-194 condition 2) checks the pin list a manifest names: its shape, that each span's pins rebuild the
 offload manifest digest the span carries, and that each span's public RUN_STATE Check item names that digest
-(``--run-state`` reads a file; the default is RUN_STATE.md on origin/main). ``--roster`` also requires the pinned
+(RUN_STATE.md on origin/main, fetched first: no command reads another, audit 3 rule P3). ``--roster`` also requires the pinned
 spans to be exactly the roster's. Prints each span's state: ``bound`` (in full or abbreviated) or ``HELD``. A HELD
 span keeps the manifest from being final and stays on the roster (RL-195 section 2); for each one the command prints
 the item numbers and labels under which any digest is printed after the span is named, never a digest.
@@ -85,6 +84,17 @@ if __package__ in (None, ""):
 from joulewise.cadence_looks import interim_release as release, manifest as lm  # noqa: E402
 
 
+_FIXTURE_RUN_STATE = []      # tests only: set through main(..., run_state_text=...), never from a command line
+
+
+def _public_run_state(args):
+    """RUN_STATE.md fetched and read from origin/main (audit 3, rule P3). A test's fixture text stands in only when
+    ``main`` was called with one in code; no command-line option names a RUN_STATE."""
+    if _FIXTURE_RUN_STATE:
+        return _FIXTURE_RUN_STATE[0]
+    return lm.public_run_state(getattr(args, "repo", None) or ".")
+
+
 def validate(args):
     doc = lm.load_json(args.manifest)
     try:
@@ -106,8 +116,7 @@ def validate(args):
             raise lm.ManifestError(["--roster-out needs --span-ledger"])
         if args.final and args.repo and isinstance(doc.get("inputs"), dict):
             # RL-195 section 2.3: a HELD span keeps the manifest from being final; no span is dropped to finish it
-            text = (Path(args.run_state).read_text(encoding="utf-8") if args.run_state
-                    else lm.public_run_state(args.repo))
+            text = _public_run_state(args)
             problems = lm.inputs_final_problems(args.repo, doc, text,
                                                 [r["span_id"] for r in roster] if roster is not None else None)
             if problems:
@@ -238,7 +247,7 @@ def row(args):
             roster = lm.load_json(Path(args.roster))
             ids = [entry.get("span_id") for entry in roster] if isinstance(roster, list) else []
             try:
-                problems += lm.inputs_final_problems(repo, doc, lm.public_run_state(repo), ids)
+                problems += lm.inputs_final_problems(repo, doc, _public_run_state(args), ids)
             except lm.ManifestError as error:
                 problems += error.problems
         changes = {"roster_sha256": lm.sha256_file(args.roster), "verdicts_sha256": lm.sha256_file(args.verdicts)}
@@ -356,7 +365,7 @@ def check_inputs(args):
     try:
         doc = lm.load_json(Path(args.manifest))
         pin_list, sha = lm.input_pins(args.repo, doc, complete=True)
-        text = (Path(args.run_state).read_text(encoding="utf-8") if args.run_state else lm.public_run_state(args.repo))
+        text = _public_run_state(args)
     except lm.ManifestError as error:
         for problem in error.problems:
             print(f"REFUSE {problem}")
@@ -404,7 +413,7 @@ def correct_check(args):
         if doc.get("status") != "draft":
             raise lm.ManifestError(["a committed manifest's inputs are never re-pinned (RL-194 section 2)"])
         pin_list, _ = lm.input_pins(args.repo, doc, complete=True)
-        text = (Path(args.run_state).read_text(encoding="utf-8") if args.run_state else lm.public_run_state(args.repo))
+        text = _public_run_state(args)
         before = pins.check_states(pin_list, text).get(args.span)
         corrected = pins.correct_check(pin_list, args.span, args.item, text)
     except lm.ManifestError as error:
@@ -421,7 +430,17 @@ def correct_check(args):
     return _write_pins(args, doc, corrected)
 
 
-def main(argv=None):
+def main(argv=None, *, run_state_text=None):
+    """The command line. ``run_state_text`` is a test fixture's RUN_STATE: a keyword only code can pass, so no
+    committed use of this tool can be pointed at a RUN_STATE other than origin/main's."""
+    _FIXTURE_RUN_STATE[:] = [] if run_state_text is None else [run_state_text]
+    try:
+        return _main(argv)
+    finally:
+        _FIXTURE_RUN_STATE[:] = []
+
+
+def _main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
     auth = sub.add_parser("authorize-freeze2", help="verify the public mainline freeze commitment")
@@ -439,7 +458,6 @@ def main(argv=None):
     v.add_argument("--span-ledger")
     v.add_argument("--looks")
     v.add_argument("--roster-out", help="write the resolved roster (needs --span-ledger)")
-    v.add_argument("--run-state", help="with --final --repo: a RUN_STATE file in place of origin/main's")
     w = sub.add_parser("pin")
     w.add_argument("manifest")
     w.add_argument("--repo", required=True)
@@ -452,14 +470,12 @@ def main(argv=None):
     ci = sub.add_parser("check-inputs", help="RL-194: check the pin list and its chain to the public Check items")
     ci.add_argument("manifest")
     ci.add_argument("--repo", required=True)
-    ci.add_argument("--run-state")
     ci.add_argument("--roster")
     cc = sub.add_parser("correct-check", help="RL-195: move a span's check_item to the item that names its manifest")
     cc.add_argument("manifest")
     cc.add_argument("--repo", required=True)
     cc.add_argument("--span", required=True)
     cc.add_argument("--item", required=True, type=int)
-    cc.add_argument("--run-state")
     cc.add_argument("--write", action="store_true")
     rw = sub.add_parser("row", help="write the LOOKS.json row's hashes from the files (Mythos r5 N3)")
     rw.add_argument("--manifest", required=True)

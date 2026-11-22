@@ -78,7 +78,9 @@ def copy_missing_fixture_sources(root):
 
 
 def mini_repo(test):
-    root = Path(tempfile.mkdtemp(prefix="lm-mini-"))
+    # its own realpath: no path the look reads may pass through a link (audit 3, rule P1), and a system temporary
+    # directory may (macOS: /var -> /private/var)
+    root = Path(os.path.realpath(tempfile.mkdtemp(prefix="lm-mini-")))
     test.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
     doc = json.loads((REPO / MANIFEST).read_text(encoding="utf-8"))
     for rel in sorted(fixture_sources(doc)):
@@ -98,9 +100,20 @@ def mini_repo(test):
     run([sys.executable, "-B", str(root / "scripts/cadence_look_manifest.py"), "pin", str(root / MANIFEST),
          "--repo", str(root), "--write"], root, check=True)
     init_git_fixture(root, "-q", "-b", "main")          # the shared helper: no detached auto-maintenance
-    git(root, "remote", "add", "origin", str(root / ".no-such-remote"))   # the shared ref's remote (never fetched)
+    # the shared history: a local bare origin, which a committed run fetches before reading any public record
+    # (audit 3, rule P3); publishing a commit pushes it there
+    git(root, "remote", "add", "origin", str(bare_origin(test, root)))
     git_commit(root, "mini repo")
     return root
+
+
+def bare_origin(test, copy):
+    """A bare repository beside ``copy`` to stand for its origin, removed with it."""
+    made = Path(os.path.realpath(str(copy))).with_name(Path(copy).name + "-origin.git")
+    run(["git", "init", "-q", "--bare", "-b", "main", str(made)], made.parent, check=True)
+    if test is not None:
+        test.addCleanup(lambda: shutil.rmtree(made, ignore_errors=True))
+    return made
 
 
 def registered_root(test, copy):
@@ -119,10 +132,12 @@ def git(root, *args):
 
 
 def git_commit(root, message, *, publish=True):
-    """Commit every change; with ``publish``, move origin/main to HEAD (the shared history)."""
+    """Commit every change; with ``publish``, push it to origin's main and move origin/main to HEAD (the shared
+    history). A copy whose origin is not a repository (an older fixture) only moves the ref."""
     git(root, "add", "-A")
     git(root, "commit", "-q", "--allow-empty", "-m", message)
     if publish:
+        run(["git", "-C", str(root), "push", "-q", "--force", "origin", "HEAD:refs/heads/main"], root)
         git(root, "update-ref", "refs/remotes/origin/main", "HEAD")
 
 
@@ -247,7 +262,7 @@ def frozen_copy(test):
     applied to the copy's manifest and LOOKS.json (status committed, Q11's note disposed, the row's hash) and its
     inputs file filled (RL-194), so the look's tests can be run on the frozen state (Mythos round-4 N2). The edited
     files are real copies, so the edit never reaches the checkout."""
-    root = Path(tempfile.mkdtemp(prefix="lm-frozen-"))
+    root = Path(os.path.realpath(tempfile.mkdtemp(prefix="lm-frozen-")))
     test.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
     for tree in FROZEN_TREES:
         shutil.copytree(REPO / tree, root / tree, copy_function=_link_or_copy,

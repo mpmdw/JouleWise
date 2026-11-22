@@ -620,8 +620,6 @@ def main(argv=None):
     p.add_argument("--span-dir", action="append", default=[])
     p.add_argument("--manifest", required=True, help="the look manifest; every pin is verified before custody is opened")
     p.add_argument("--allow-draft", action="store_true", help="synthetic runs only: a draft manifest")
-    p.add_argument("--ledger-ref", help="the remote-tracking branch the committed LOOKS.json must be on (default: the "
-                                        "upstream, else origin/main; never HEAD or a local ref: manifest.shared_ref)")
     p.add_argument("--out", required=True)
     p.add_argument("--detail-out")
     a = p.parse_args(argv)
@@ -629,9 +627,13 @@ def main(argv=None):
         sys.path.insert(0, str(REPO))
     from joulewise.cadence_looks import manifest as lm
     try:
+        # a committed run reads the ledger from origin/main only, fetched now (audit 3, rule P3)
+        ledger_ref = None if a.allow_draft else "origin/main"
+        if not a.allow_draft:
+            lm.fetch_public(REPO)
         doc = lm.verify_pins(a.manifest, REPO, allow_draft=a.allow_draft,
-                             running=[Path(__file__).resolve(), REPO / RUNTIME_CONFIG], ledger_ref=a.ledger_ref)
-        gate = None if a.allow_draft else lm.ledger_gate(REPO, a.ledger_ref)
+                             running=[Path(__file__).resolve(), REPO / RUNTIME_CONFIG], ledger_ref=ledger_ref)
+        gate = None if a.allow_draft else lm.ledger_gate(REPO, ledger_ref)
         stale = lm.cached_bytecode(REPO)
         if stale:
             raise lm.ManifestError([f"a repository module may have run from cached bytecode: {', '.join(stale[:4])}"])

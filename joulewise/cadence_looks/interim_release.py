@@ -120,20 +120,67 @@ def write_public(path, restricted, record, schema, *, expected):
     os.rename(pending, path)
 
 
+# ------------------------------------------------------------------------- physical identity (audit 3, rule P1)
+# Paths are compared by what they are on disk, never by how they are spelt: on a case-insensitive volume two
+# spellings name one directory, so containment is decided by walking (st_dev, st_ino) ancestry, after refusing a
+# symlink in any component (each component is lstat'ed).
+def no_symlink_components(path, what):
+    """``path`` as an absolute, normalized Path, or ValueError if it is not one or any existing component of it is a
+    symlink. A component that does not exist ends the walk."""
+    text = os.fspath(path)
+    if not os.path.isabs(text) or os.path.normpath(text) != text:
+        raise ValueError(f"{what}: not an absolute, normalized path")
+    current = os.sep
+    for part in Path(text).parts[1:]:
+        current = os.path.join(current, part)
+        try:
+            mode = os.lstat(current).st_mode
+        except FileNotFoundError:
+            break
+        if (mode & 0o170000) == 0o120000:
+            raise ValueError(f"{what}: a component is a symlink")
+    return Path(text)
+
+
+def physical_ancestry(path):
+    """[(st_dev, st_ino)] of an existing path and each of its ancestors up to the filesystem root."""
+    current, out = os.path.abspath(os.fspath(path)), []
+    while True:
+        info = os.stat(current)
+        out.append((info.st_dev, info.st_ino))
+        parent = os.path.dirname(current)
+        if parent == current:
+            return out
+        current = parent
+
+
+def physically_within(inner, outer):
+    """Whether the existing directory ``outer`` is ``inner`` or one of its physical ancestors."""
+    info = os.stat(outer)
+    return (info.st_dev, info.st_ino) in physical_ancestry(inner)
+
+
 def destinations(repo, row):
-    """Resolve registered roots. Both look directories must already exist."""
-    private_root = Path(row["custody_root"])
-    public_root = Path(repo) / row["public_root"]
-    if not private_root.is_absolute() or private_root.resolve() != private_root:
-        raise ValueError("the registered custody root must be an absolute canonical directory")
-    if public_root.resolve() != public_root or not public_root.is_relative_to(repo):
+    """Resolve registered roots. Both look directories must already exist. The custody root lies physically outside
+    the repository and does not hold it, the public root lies physically inside it, and the two look directories
+    share no physical directory: decided by (st_dev, st_ino) after refusing a symlink in any component."""
+    repo = Path(os.path.realpath(repo))
+    relative = row["public_root"]
+    if (not isinstance(relative, str) or not relative or os.path.isabs(relative)
+            or os.path.normpath(relative) != relative or relative.startswith("..")):
         raise ValueError("the registered public root must be a canonical repository directory")
-    if private_root.is_relative_to(repo) or Path(repo).is_relative_to(private_root):
-        raise ValueError("the registered custody root must be separate from the repository")
+    private_root = no_symlink_components(Path(row["custody_root"]), "the registered custody root")
+    public_root = no_symlink_components(repo / relative, "the registered public root")
     private_parent = private_root / row["look_id"]
     public_parent = public_root / row["look_id"]
     if any(not path.is_dir() or path.is_symlink() for path in (private_parent, public_parent)):
         raise ValueError("the two registered look directories must already exist")
+    if physically_within(private_parent, repo) or physically_within(repo, private_root):
+        raise ValueError("the registered custody root must be separate from the repository")
+    if not physically_within(public_parent, repo):
+        raise ValueError("the registered public root must be a canonical repository directory")
+    if physically_within(private_parent, public_parent) or physically_within(public_parent, private_parent):
+        raise ValueError("custody and publication must not share a physical directory")
     restricted, public = private_parent / "RESTRICTED", public_parent / "PUBLIC.json"
     if os.path.lexists(restricted) or os.path.lexists(public):
         raise ValueError("the manifest id already has an execution reservation or public report")

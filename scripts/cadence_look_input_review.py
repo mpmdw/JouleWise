@@ -2,9 +2,8 @@
 """The one-time review record of a look's pinned inputs (RL-194 section 1, conditions 5 and 6).
 
     python3 -B scripts/cadence_look_input_review.py template --repo DIR
-    python3 -B scripts/cadence_look_input_review.py review --repo DIR [--run-state RUN_STATE.md]
-        --seat-model NAME --seat-family NAME
-    python3 -B scripts/cadence_look_input_review.py check --repo DIR [--run-state RUN_STATE.md]
+    python3 -B scripts/cadence_look_input_review.py review --repo DIR --seat-model NAME --seat-family NAME
+    python3 -B scripts/cadence_look_input_review.py check --repo DIR
 
 The manifest is DIR's docs/process/cadence/looks/lm-interim-01.json, and its pin list (``inputs.pins``) is the only
 one read: the record certifies "N of N" for the manifest's N spans (audit 2, lead ruling). Each span is read from
@@ -22,8 +21,8 @@ shape, and whether the shape is one the rule admits; the criteria are the rule's
 on seeing a file. The span's verdict is the pinned grammar validator's. The desk's verdict is the lead's to copy in
 from the row-7 desk record. For each span the record also carries how its public Check item names the offload
 manifest (RL-194a section 2): the full digest, the text exactly as the Check prints it, the item number, and a slot
-for any second record made at the time, which is cited when one exists and is not required. ``--run-state`` reads a
-file; the default is RUN_STATE.md on origin/main. ``check`` requires a filled record to carry the manifest's pins, every slot, and the same
+for any second record made at the time, which is cited when one exists and is not required. The Check evidence is
+RUN_STATE.md on origin/main, fetched first, and nothing else: no option names another (audit 3, rule P3). ``check`` requires a filled record to carry the manifest's pins, every slot, and the same
 verdict from the desk and the seat on every span; a disagreement or an inadmissible span goes to the research lead as
 a count and a shape before anything is changed. It reads the same RUN_STATE and requires each span's ``check`` to be
 what that Check item prints: a record cannot claim a digest, or a spelling of one, that the item does not carry.
@@ -251,9 +250,10 @@ def record_problems(record, pin_list, pin_list_sha256, manifest_sha256, run_stat
         binding = custody_pins.check_binding(span, run_state, ids)
         if check.get("item") != span["check_item"] or check.get("offload_manifest_sha256") != span["offload_manifest_sha256"]:
             problems.append(f"{sid}: check does not carry the manifest's Check item and full offload manifest digest")
-        elif binding["form"] not in ("full", "abbreviated"):
-            problems.append(f"{sid}: its Check item does not print a digest every character of which matches; the "
-                            "span is held and returns to the research lead")
+        elif binding["form"] != "full":                  # it binds only in full hex (audit 3, rule P2)
+            problems.append(f"{sid}: its Check item does not identify the span's offload manifest in full hex with "
+                            f"every character matching ({binding['form']}); the span is held and returns to the "
+                            "research lead")
         elif check.get("as_printed") != binding["as_printed"] or check.get("form") != binding["form"]:
             problems.append(f"{sid}: check.as_printed and check.form are not what Check item {span['check_item']} "
                             "prints for the span's manifest")
@@ -301,15 +301,15 @@ def dump(record):
     return (json.dumps(record, indent=1, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8")
 
 
-def main(argv=None):
+def main(argv=None, *, run_state_text=None):
+    """The command line. ``run_state_text`` is a test fixture's RUN_STATE, a keyword only code can pass: the
+    committed command reads RUN_STATE.md from origin/main after a fetch, and from nowhere else (audit 3, rule P3)."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
     for name in ("template", "review", "check"):
         command = sub.add_parser(name)
         command.add_argument("--repo", required=True)
     run = sub.choices["review"]
-    for command in (run, sub.choices["check"]):
-        command.add_argument("--run-state", help="a RUN_STATE file; the default is RUN_STATE.md on origin/main")
     run.add_argument("--seat-model", required=True)
     run.add_argument("--seat-family", required=True)
     args = parser.parse_args(argv)
@@ -319,8 +319,7 @@ def main(argv=None):
             sys.stdout.buffer.write(dump(template(pin_list, sha, manifest_sha)))
             return 0
         layout = lm.LookLayout(args.repo, doc)
-        run_state = (Path(args.run_state).read_text(encoding="utf-8") if args.run_state
-                     else lm.public_run_state(args.repo))
+        run_state = run_state_text if run_state_text is not None else lm.public_run_state(args.repo)
         if args.cmd == "check":
             raw = layout.read("input_review")
             problems = record_problems(json.loads(raw), pin_list, sha, manifest_sha, run_state)

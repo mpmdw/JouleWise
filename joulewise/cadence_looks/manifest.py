@@ -1199,8 +1199,9 @@ _LAYOUT_SPAN = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._-]*")
 
 
 def _plain_path(path, what):
-    """Refuse unless ``path`` is absolute, already canonical (its realpath is itself) and no component is a
-    symlink. A component that does not exist yet ends the walk: the parent's checks are what remain."""
+    """Refuse unless ``path`` is absolute and normalized and no component is a symlink (each is lstat'ed). A
+    component that does not exist yet ends the walk: the parent's checks are what remain. Containment is decided
+    elsewhere by physical identity (audit 3, rule P1), never by the spelling."""
     text = os.fspath(path)
     if not os.path.isabs(text) or os.path.normpath(text) != text:
         raise ManifestError([f"{what}: not an absolute, normalized path"])
@@ -1213,8 +1214,6 @@ def _plain_path(path, what):
             break
         if stat.S_ISLNK(mode):
             raise ManifestError([f"{what}: a component is a symlink"])
-    if os.path.lexists(text) and os.path.realpath(text) != text:
-        raise ManifestError([f"{what}: not its own realpath"])
     return Path(text)
 
 
@@ -1235,8 +1234,10 @@ def name_collision(directory, name):
 
 
 class LookLayout:
-    """The fixed places of one look under its registered root. Every path is checked before it is used: absolute,
-    its own realpath, no symlink component, inside its root, and no differently-cased name beside it."""
+    """The fixed places of one look under its registered root. Every path is checked before it is used: absolute
+    and normalized, no symlink component, inside its root, and no differently-cased name beside it. The root lies
+    physically outside the repository and does not hold it: decided by (st_dev, st_ino) ancestry, so a case
+    variant of the repository's path is the repository (audit 3, rule P1)."""
 
     def __init__(self, repo, doc):
         root = (doc.get("custody") or {}).get("root") if isinstance(doc, dict) else None
@@ -1248,7 +1249,9 @@ class LookLayout:
         if not self.root.is_dir():
             raise ManifestError(["custody.root: the registered root is not a directory"])
         repo = Path(os.path.realpath(repo))
-        if self.root == repo or self.root.is_relative_to(repo) or repo.is_relative_to(self.root):
+        # physical identity, never the spelling (audit 3, rule P1): on a case-insensitive volume a case variant of
+        # the repository's path is the repository
+        if release.physically_within(self.root, repo) or release.physically_within(repo, self.root):
             raise ManifestError(["custody.root: the registered root must lie outside the repository and not hold it"])
         self.repo = repo
         self.look = self._child(self.root, self.look_id, "the look's private directory")
@@ -1323,11 +1326,16 @@ class LookLayout:
     def private_temp(self, prefix):
         """A fresh private directory outside every registered root and outside the repository (where the public
         roots are): staging never writes where a look's files or its public report live."""
+        import shutil
         import tempfile
         made = Path(os.path.realpath(tempfile.mkdtemp(prefix=prefix)))
-        for other in (self.root, self.repo):
-            if made == other or made.is_relative_to(other) or other.is_relative_to(made):
-                import shutil
+        try:
+            release.no_symlink_components(made, "the private staging directory")
+        except ValueError as error:
+            shutil.rmtree(made, ignore_errors=True)
+            raise ManifestError([str(error)]) from None
+        for other in (self.root, self.repo):            # physical identity (audit 3, rule P1)
+            if release.physically_within(made, other) or release.physically_within(other, made):
                 shutil.rmtree(made, ignore_errors=True)
                 raise ManifestError(["the private staging directory falls inside a registered root or the repository"])
         return made
@@ -1336,9 +1344,21 @@ class LookLayout:
 PUBLIC_RUN_STATE_REF = "refs/remotes/origin/main"
 
 
-def public_run_state(repo):
+def fetch_public(repo):
+    """Bring origin/main up to date from the remote before any public record is read (audit 3, rule P3). A fetch
+    that fails refuses: public evidence is never read from a stale or a local copy."""
+    rc, _, err = _git(Path(repo).resolve(), "fetch", "--quiet", "--no-tags", "origin",
+                      f"+refs/heads/main:{PUBLIC_RUN_STATE_REF}")
+    if rc != 0:
+        raise ManifestError([f"origin/main cannot be fetched: public evidence is read only from it ({err.strip()[:120]})"])
+
+
+def public_run_state(repo, *, fetch=True):
     """RUN_STATE.md as it stands on the public main branch: where each roster span's Check item is (RL-194
-    condition 2). Read from the remote-tracking ref, never from the working tree."""
+    condition 2). Fetched first, then read from the remote-tracking ref (``git show origin/main:RUN_STATE.md``),
+    never from the working tree or a path a caller names (audit 3, rule P3)."""
+    if fetch:
+        fetch_public(repo)
     rc, raw, _ = _git(Path(repo).resolve(), "show", f"{PUBLIC_RUN_STATE_REF}:RUN_STATE.md")
     if rc != 0:
         raise ManifestError([f"RUN_STATE.md cannot be read from {PUBLIC_RUN_STATE_REF}: the pins' Check items "
@@ -1617,8 +1637,9 @@ def shared_ref(repo, ledger_ref=None):
     One resolver for every tool. Only a remote-tracking branch is accepted (refs/remotes/<remote>/<branch>): never
     HEAD, a local branch, a tag, a commit id or a revision expression, each of which can name the commit under test
     itself and so waive the check. Default: the branch's upstream, else origin/main. From a detached HEAD on a
-    campaign branch that is not yet on main, name that branch's remote-tracking ref (e.g. ``--ledger-ref
-    origin/<campaign-branch>``, the PR's base branch)."""
+    campaign branch that is not yet on main, a caller in code names that branch's remote-tracking ref (e.g.
+    ``ledger_ref="origin/<campaign-branch>"``, the PR's base branch). The look's committed CLIs take no ref: they
+    fetch origin's main and read from it (audit 3, rule P3)."""
     if ledger_ref is None:
         rc, up, _ = _git(repo, "rev-parse", "--verify", "--quiet", "--symbolic-full-name", "@{upstream}")
         full = up.decode().strip() if rc == 0 else ""
@@ -1684,6 +1705,12 @@ def committed_ledger(repo, *, ledger_ref=None):
     if rc != 0:
         raise ManifestError([f"HEAD {head[:12]} is not on {ref}: the ledger's commitment is not on the shared history"
                              + (f" ({err[:120]})" if err else "")])
+    # the public record is the shared ref's own LOOKS.json (audit 3, rule P3): an older commit on its history may
+    # show a look as committed that the shared ref has since spent
+    rc, public, _ = _git(repo, "show", f"{ref}:{LOOK_LEDGER_PATH}")
+    if rc != 0 or public != raw:
+        raise ManifestError([f"{LOOK_LEDGER_PATH} at HEAD {head[:12]} is not the one on {ref}: the public record is "
+                             f"read from {ref}"])
     try:
         ledger = json.loads(raw)
     except ValueError:
@@ -2247,7 +2274,14 @@ def verify_pins(manifest_path, repo, *, allow_draft=False, running=(), ledger_re
     and the two schemas exists and hashes to its pin; and every path in ``running`` (the caller's own files) is
     one of them. Opens the manifest, LOOKS.json and repository files only. Returns the manifest."""
     repo = Path(repo).resolve()
-    manifest_path = Path(manifest_path)
+    manifest_path = Path(os.path.abspath(manifest_path))
+    # the manifest is read where it is, never through a link, and a committed one inside the repository (audit 3)
+    try:
+        release.no_symlink_components(manifest_path, "the look manifest")
+    except ValueError as error:
+        raise ManifestError([str(error)]) from None
+    if not manifest_path.is_file() or (not allow_draft and not release.physically_within(manifest_path.parent, repo)):
+        raise ManifestError(["the look manifest: a regular file in the repository"])
     raw = manifest_path.read_bytes()
     doc = json.loads(raw)
     problems = []
@@ -2276,6 +2310,11 @@ def verify_pins(manifest_path, repo, *, allow_draft=False, running=(), ledger_re
         f = repo / path
         if where == "fit.twin" and f.resolve() != f:
             problems.append(f"{where}: {path} is not at its canonical repository path")
+            continue
+        try:
+            release.no_symlink_components(f, f"{where}: {path}")         # a pinned file is read where it is
+        except ValueError as error:
+            problems.append(str(error))
             continue
         if not (isinstance(sha, str) and SHA_RE.fullmatch(sha)):
             problems.append(f"{where}: {path} has no pin")

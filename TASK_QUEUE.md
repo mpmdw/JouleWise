@@ -1,16 +1,20 @@
 # JouleWise Task Queue
 
-PR #795 RL-194 and RL-194a (2026-11-20; audit 2 2026-11-21), [AGENT]. The lead registers the look's
-root (`custody.root`) and fills the manifest's pin list from the eleven offload manifests
-(`cadence_look_manifest.py pin-inputs`, then `pin --write`), places the roster and verdict file at
-their fixed names under `<root>/lm-interim-01/`, and runs
-`check-inputs`, which names each HELD span. Where an item prints a span's manifest with every
-character matching, the lead runs `correct-check` (RL-195 §2.1); every other span stays HELD and goes
-to the research lead as item numbers and labels (§2.4). The executing seat produces the review record
-(`cadence_look_input_review.py review`).
+PR #795 RL-194 and RL-194a (2026-11-20; audits 2 and 3 2026-11-21), [AGENT]. The lead registers the
+look's root (`custody.root`, physically outside the repository) and fills the manifest's pin list from
+the eleven offload manifests (`cadence_look_manifest.py pin-inputs`, then `pin --write`), places the
+roster and verdict file at their fixed names under `<root>/lm-interim-01/`, and runs `check-inputs`,
+which reads RUN_STATE.md from origin's `main` and names each HELD span. A span binds only on a Check
+item that identifies its "Offload manifest" in full hex (audit 3); where a later item does, the lead
+runs `correct-check` (RL-195 §2.1); every other span stays HELD and goes to the research lead as item
+numbers and labels (§2.4). The executing seat produces the review record
+(`cadence_look_input_review.py review`). Research lead: the audit 3 report's NEEDS_SPEC (is stage 1's
+file public?). Follow-up: six mutants in `tests/cadence/mutants_fit_interim.py` were already stale at
+`98fedf875`; that harness is not in CI.
 [Report](docs/run_reports/2026-11-20-pr795-rl194-content-address.md);
 [audit round 1](docs/run_reports/2026-11-20-pr795-rl194-audit-1.md);
-[audit 2](docs/run_reports/2026-11-21-pr795-audit-2.md).
+[audit 2](docs/run_reports/2026-11-21-pr795-audit-2.md);
+[audit 3](docs/run_reports/2026-11-21-pr795-audit-3.md).
 
 PR #795 audit 3 (2026-11-20), [AGENT]. Astra re-audits the grammar against the three
 writer pins and the accounting job's ledger (101,889 IDs once each: 101,886 original and

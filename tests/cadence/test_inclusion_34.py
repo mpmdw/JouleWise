@@ -500,8 +500,8 @@ class CustodyVerdictFile(Readers):
         self.assertNotIn("stage2_bracket", d["legs"]["dev-03-s01/L001"]["rule4"])     # RL-173 E.1: gone
         r = look_minirepo.py(mini, "joulewise/cadence_looks/inclusion_34.py", "--roster", roster, "--custody", root,
                              "--manifest", mini / look_minirepo.MANIFEST, "--ledger-ref", "HEAD", "--out", out)
-        self.assertEqual(r.returncode, 1)                                       # Sol round-3 NEW-2
-        self.assertIn("the shared ref is a remote-tracking branch", r.stdout)
+        self.assertEqual(r.returncode, 2)          # Sol round-3 NEW-2; audit 3 (P3): no ref is named, origin/main only
+        self.assertIn("unrecognized arguments: --ledger-ref", r.stderr)
         self.assertEqual(d["pins"]["runtime_config_sha256"],
                          i34_sha(mini / "configs/align/v4/r1_runtime.json"))
         self.assertNotIn(self.SENTINEL_HEX, out.read_text() + det.read_text())

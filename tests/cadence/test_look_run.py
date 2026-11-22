@@ -507,7 +507,7 @@ def spy_opens():
 
 REPO = Path(__file__).resolve().parents[2]
 MANIFEST = REPO / "docs/process/cadence/looks/lm-interim-01.json"
-_PIN_DIR = tempfile.mkdtemp(prefix="jw-look-pins-")
+_PIN_DIR = os.path.realpath(tempfile.mkdtemp(prefix="jw-look-pins-"))      # no link on the way (audit 3, P1)
 
 
 def _repin(node):
@@ -641,8 +641,9 @@ if opts.get("trap"):
 from scripts import cadence_look_run as R
 if opts.get("manifest"):                     # the test's manifest stands in for the repository's fixed one
     R.manifest_path = lambda: Path(opts["manifest"])
-if opts.get("run_state") is not None:
-    R.run_state_text = lambda allow_draft: opts["run_state"]
+if opts.get("run_state") is not None:          # the harness's fixture RUN_STATE (no CLI option takes one): a
+    R.run_state_text = lambda allow_draft: opts["run_state"]       # run in the repository fetches nothing
+    R.M.fetch_public = lambda repo: None
 if opts.get("ledger"):
     R.ledger_path = lambda: Path(opts["ledger"])
 if "host_probe" in opts:

@@ -795,11 +795,15 @@ class FreezeCommit(Base):
         man = json.loads((root / mr.MANIFEST).read_text(encoding="utf-8"))
         self.assertEqual(man["status"], "committed")
         lm.validate_manifest(man, final=True)
-        # the copy has no git: its RUN_STATE (written with its pins, RL-194) stands in for origin/main's
-        r = subprocess.run([sys.executable, "-B", str(root / "scripts/cadence_look_manifest.py"), "validate",
-                            str(root / mr.MANIFEST), "--final", "--repo", str(root),
-                            "--run-state", str(root / "RUN_STATE.md")],
-                           capture_output=True, text=True, timeout=300)
+        # the copy has no git: its RUN_STATE (written with its pins, RL-194) stands in for origin/main's, through the
+        # tool's fixture keyword (no command takes a RUN_STATE path: audit 3, rule P3)
+        r = subprocess.run([sys.executable, "-B", "-c",
+                            "import pathlib, sys; sys.path.insert(0, sys.argv[1]); "
+                            "from scripts import cadence_look_manifest as tool; "
+                            "sys.exit(tool.main(sys.argv[2:], "
+                            "run_state_text=pathlib.Path(sys.argv[1], 'RUN_STATE.md').read_text(encoding='utf-8')))",
+                            str(root), "validate", str(root / mr.MANIFEST), "--final", "--repo", str(root)],
+                           cwd=str(root), capture_output=True, text=True, timeout=300)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         # the host-command guard's sitecustomize (tests/_host_guard_site) imports the tests package from its own
         # tree, so the child takes the copy's guard, not this checkout's

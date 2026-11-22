@@ -146,11 +146,16 @@ class PinList(unittest.TestCase):
 
 class CheckChain(unittest.TestCase):
     def test_each_span_s_check_item_names_its_offload_manifest(self):
+        """Audit 3, rule P2: a Check binds only in full hex. The same item printing the digest abbreviated holds
+        every span."""
         doc = pins(("dev-01-s01", "dev-01-s03"))
-        for abbreviated in (False, True):
-            text = run_state(doc, abbreviated)
-            self.assertEqual(P.check_chain_problems(doc, text), [])
-            self.assertEqual(set(P.chain_link(doc, text).values()), {"abbreviated" if abbreviated else "full"})
+        text = run_state(doc)
+        self.assertEqual(P.check_chain_problems(doc, text), [])
+        self.assertEqual(set(P.chain_link(doc, text).values()), {"full"})
+        text = run_state(doc, abbreviated=True)
+        self.assertEqual(set(P.chain_link(doc, text).values()), {"abbreviated"})
+        self.assertEqual(P.held_spans(doc, text), ["dev-01-s01", "dev-01-s03"])
+        self.assertTrue(all("only abbreviated" in problem for problem in P.check_chain_problems(doc, text)))
 
     def test_a_pin_not_chained_to_its_check_is_found(self):
         doc = pins(("dev-01-s01", "dev-01-s03"))
@@ -171,37 +176,37 @@ class CheckChain(unittest.TestCase):
         moved["spans"][0]["check_item"] = doc["spans"][1]["check_item"]        # points at the other span's Check
         self.assertTrue(P.check_chain_problems(moved, text))
 
-    def test_an_abbreviation_binds_when_every_printed_character_matches(self):
-        """RL-194a section 2: prefix and suffix exactly as the Check prints them. Audit 2's lead ruling sets the floor:
-        an abbreviation binds with at least eight printed hex digits; fewer is ``short`` and holds the span."""
+    def test_only_the_full_hex_binds_and_an_abbreviation_holds_the_span(self):
+        """Audit 3, rule P2 (RL-195 Q2, already ruled): a Check binds only on an "Offload manifest" identification
+        whose full hex equals the pin. An abbreviation that matches in every printed character is reported as
+        ``abbreviated`` and holds the span, at any length: the eight-hex floor is for text shown to a person."""
         doc = pins()
         span = doc["spans"][0]
         digest, number, sid = span["offload_manifest_sha256"], span["check_item"], span["span_id"]
-        item = lambda printed: (f"{number}. **Check of {sid}.** enc sha256 `00000000…000`, "
-                                f"manifest `{printed}` (5 files)\n")
+        item = lambda printed: (f"{number}. **Check of {sid}.** enc sha256 `00000000…000`; "
+                                f"offload manifest `{printed}` (5 files)\n")
         other = "0" if digest[-1] != "0" else "1"
         for printed, form in ((digest, "full"), (f"{digest[:8]}…{digest[-3:]}", "abbreviated"),
                               (f"{digest[:8]}...{digest[-7:]}", "abbreviated"), (f"{digest[:8]}…", "abbreviated"),
-                              (f"{digest[:5]}…{digest[-3:]}", "abbreviated"),
-                              (f"{digest[:7]}…", "short"),                        # seven digits: under the floor
-                              (f"{digest[:4]}…{digest[-3:]}", "short"),
-                              (f"{digest[:4]}…{digest[-4:]}", "abbreviated"),       # eight, split
+                              (f"{digest[:32]}…{digest[-31:]}", "abbreviated"),   # 63 of 64 printed: still held
+                              (f"{digest[:7]}…", "abbreviated"), (f"{digest[:4]}…{digest[-3:]}", "abbreviated"),
                               (f"{digest[:7]}{other if digest[7] != other else 'f'}…{digest[-3:]}", "mismatch"),
                               (f"{digest[:8]}…{digest[-3:-1]}{other}", "mismatch"),
                               (f"{digest[:40]}…{digest[-40:]}", "mismatch"),      # more than a digest's characters
+                              (digest[:-1] + other if digest[-1] != other else digest[:-1] + "f", "mismatch"),
                               (digest[:20], "absent")):                           # a bare prefix is not an abbreviation
             with self.subTest(printed=printed):
                 got = P.check_binding(span, item(printed))
                 self.assertEqual(got["form"], form)
                 self.assertEqual(got["as_printed"], printed if form != "absent" else None)
                 self.assertEqual(got["check_item"], number)
-                self.assertEqual(bool(P.check_chain_problems(doc, item(printed))),
-                                 form in ("absent", "mismatch", "short"))
+                self.assertEqual(P.check_states(doc, item(printed))[sid]["state"], P.BOUND if form == "full" else P.HELD)
+                self.assertEqual(bool(P.check_chain_problems(doc, item(printed))), form != "full")
 
     def test_only_a_digest_labelled_as_the_manifest_s_binds(self):
         """Audit 1 on 2082c1a51: the Check printed a wrong offload manifest digest and, under the archive's label, an
         abbreviation that matched the pinned one. Any matching token bound the span. A digest binds only where the
-        item prints it as the span's manifest."""
+        item identifies it as the span's offload manifest (audit 3: a bare "manifest" is not that)."""
         doc = pins(("dev-01-s01", "dev-01-s03"))
         ids = [span["span_id"] for span in doc["spans"]]
         for span in doc["spans"]:
@@ -217,6 +222,8 @@ class CheckChain(unittest.TestCase):
                 "a digest after another sentence": (f"It has a manifest. The archive is `{digest}`.", "absent", None),
                 "the right digest, then a wrong one under the label": (
                     f"Archive `{digest}`, manifest `{wrong[:8]}…`.", "mismatch", f"{wrong[:8]}…"),
+                "the right digest under a bare manifest label": (f"manifest `{digest}`.", "absent", None),
+                "the right digest under the sums file's name": (f"SHA256SUMS `{digest}`.", "absent", None),
             }
             for label, (body, form, printed) in texts.items():
                 text = f"{number}. **Check of {sid}.** {body}\n"
@@ -226,8 +233,10 @@ class CheckChain(unittest.TestCase):
                     self.assertTrue(any(problem.startswith(sid) and "held" in problem
                                         for problem in P.check_chain_problems(doc, text)))
 
-    def test_the_phrasings_public_check_items_use_bind(self):
-        """The ways the public RUN_STATE prints a span's manifest digest, with generated digests in their place."""
+    def test_the_phrasings_public_check_items_use_hold_unless_they_identify_the_offload_manifest_in_full(self):
+        """The ways the public RUN_STATE prints a span's manifest digest, with generated digests in their place.
+        Audit 3, rule P2: none of the historical phrasings is an explicit "Offload manifest" identification in full
+        hex, so each holds the span (a contradicting one as a mismatch); the phrasing a binding Check uses binds."""
         doc = pins(("dev-01-s01",))
         span = doc["spans"][0]
         digest, number = span["offload_manifest_sha256"], span["check_item"]
@@ -236,36 +245,91 @@ class CheckChain(unittest.TestCase):
         phrasings = {
             "manifest, then the count": (
                 f"iCloud Drive `JouleWise-offload/cq-dev-01-s01-a1`, round trip 302 entries, enc sha256 "
-                f"`05cb21ec…2172c88`, manifest `{short}` (224 files); caught up", "abbreviated", short),
+                f"`05cb21ec…2172c88`, manifest `{short}` (224 files); caught up", "absent", None),
             "manifest, the count, the digest": (
                 f"iCloud `JouleWise-offload/cq-dev-01-s01-a1/`, enc sha256 `1756d499…b3d`, manifest 256 files "
-                f"`{short}`, cloud hash OK", "abbreviated", short),
+                f"`{short}`, cloud hash OK", "absent", None),
             "manifest, the count, sha256": (
                 f"`cq-dev-01-s01-a1/`. Encrypted archive 110,295,072 bytes, sha256 `bf34a938…01ae3`; manifest 226 "
-                f"files, sha256 `{short}`; cloud copy hash check OK", "abbreviated", short),
+                f"files, sha256 `{short}`; cloud copy hash check OK", "absent", None),
             "manifest_sha256=": (
-                f"`cq-dev-01-s01-a1-20261114T224427Z` (files=122 manifest_sha256={digest})", "full", digest),
+                f"`cq-dev-01-s01-a1-20261114T224427Z` (files=122 manifest_sha256={digest})", "absent", None),
             "the span's, then another directory's": (
                 f"`dev-01-s01` OUT (226 files, manifest sha256 `{digest}`) and a second OUT `r1-partc-f0` (133 "
-                f"files, manifest sha256 `{other}`) copied", "full", digest),
+                f"files, manifest sha256 `{other}`) copied", "absent", None),
             "a prefix alone": (
-                f"dev-01-s01 copy done (`copy_span.sh --go`, 222 files manifest `{digest[:8]}…`)", "abbreviated",
-                f"{digest[:8]}…"),
+                f"dev-01-s01 copy done (`copy_span.sh --go`, 222 files manifest `{digest[:8]}…`)", "absent", None),
             # a second manifest printed with no other name between belongs to the span too: it must match as well
             "a second manifest under the same name": (
                 f"dev-01-s01 copy done (`copy_span.sh --go`, 222 files manifest `{digest[:8]}…`, second Part C "
                 f"131 files manifest `{other[:8]}…`)", "mismatch", f"{other[:8]}…"),
             "another directory named between": (
                 f"dev-01-s01 copy done, 222 files manifest `{digest[:8]}…`; OUT `r1-partc-f0-20261115T211611Z` "
-                f"131 files manifest `{other[:8]}…`)", "abbreviated", f"{digest[:8]}…"),
+                f"131 files manifest `{other[:8]}…`)", "absent", None),
             "the sums file by name": (
-                f"`cq-dev-01-s01-a1-20261117T080153Z.mbp.SHA256SUMS` (255 files, sha256 `{digest}`)", "full", digest),
-            "Manifest SHA-256": (f"dev-01-s01. Manifest SHA-256 `{digest}`.", "full", digest),
+                f"`cq-dev-01-s01-a1-20261117T080153Z.mbp.SHA256SUMS` (255 files, sha256 `{digest}`)", "absent", None),
+            "Manifest SHA-256": (f"dev-01-s01. Manifest SHA-256 `{digest}`.", "absent", None),
+            "Offload manifest, in full": (f"dev-01-s01. Offload manifest `{digest}`.", "full", digest),
+            "offload manifest, the count, sha256": (
+                f"`cq-dev-01-s01-a1/` offload manifest (226 files) sha256 `{digest}`; cloud copy hash check OK",
+                "full", digest),
+            "offload_manifest_sha256=": (f"dev-01-s01 offload_manifest_sha256={digest}", "full", digest),
+            "Offload manifest, abbreviated": (f"dev-01-s01. Offload manifest `{short}`.", "abbreviated", short),
         }
         for label, (body, form, printed) in phrasings.items():
             with self.subTest(label):
                 got = P.check_binding(span, f"{number}. **Lead.** {body}\n")
                 self.assertEqual((got["form"], got["as_printed"]), (form, printed))
+
+    def test_audit_3_a_contradicting_readback_holds_the_span_in_either_word_order(self):
+        """Audit 3 (HIGH, check_contract.py): "Offload manifest readback" one hex off passed, because the readback's
+        nearest word was not "manifest". Every manifest digest the item prints for the span must agree."""
+        doc = pins()
+        span = doc["spans"][0]
+        digest, number, sid = span["offload_manifest_sha256"], span["check_item"], span["span_id"]
+        off = digest[:-1] + ("0" if digest[-1] != "0" else "1")
+        head = f"{number}. **Check of {sid}.** "
+        self.assertEqual(P.check_binding(span, head + f"Offload manifest `{digest}`.\n")["form"], "full")
+        for label, body in {
+                "readback first": f"Offload manifest `{digest}`. Readback of the same offload manifest: `{off}`.",
+                "readback last": f"Offload manifest `{digest}`. Offload manifest readback: `{off}`.",
+                "readback before the binding print": f"Offload manifest readback: `{off}`. Offload manifest `{digest}`.",
+                "a readback of the bare manifest": f"Offload manifest `{digest}`. Readback of the same manifest: `{off}`.",
+                "an offload readback": f"Offload manifest `{digest}`; offload readback `{off}`.",
+                "a bare readback": f"Offload manifest `{digest}`; readback `{off}`.",
+                "a one-hex-off abbreviation": f"Offload manifest `{digest}`; read back `{off[:8]}…{off[-4:]}`.",
+                }.items():
+            text = head + body + "\n"
+            printed = f"{off[:8]}…{off[-4:]}" if label == "a one-hex-off abbreviation" else off
+            with self.subTest(label):
+                self.assertEqual(P.check_binding(span, text), {"check_item": number, "as_printed": printed,
+                                                               "form": "mismatch"})
+                self.assertEqual(P.held_spans(doc, text), [sid])
+                with self.assertRaisesRegex(P.PinRefusal, "stays HELD"):      # nor is it a correction's target
+                    P.correct_check(doc, sid, number + 1, f"{number + 1}. **Check of {sid}.** {body}\n")
+
+    def test_audit_3_a_pending_or_mislabelled_digest_holds_the_span(self):
+        """Audit 3 (HIGH, check_wording.py): "Offload manifest pending. Look manifest: <the pin>" passed. A digest
+        binds only under an explicit "Offload manifest" identification; a pending one identifies nothing."""
+        doc = pins()
+        span = doc["spans"][0]
+        digest, number, sid = span["offload_manifest_sha256"], span["check_item"], span["span_id"]
+        head = f"{number}. **Check of {sid}.** "
+        for label, body in {
+                "the audit's item": f"Offload manifest pending. Look manifest: `{digest}`.",
+                "no boundary between": f"Offload manifest (pending) and look manifest `{digest}`.",
+                "pending, then the digest": f"Offload manifest pending `{digest}`.",
+                "a pending note in brackets": f"Offload manifest (pending): `{digest}`.",
+                "the archive's label": f"Offload manifest pending; archive `{digest}`.",
+                "a bare manifest": f"Manifest `{digest}`.",
+                "the look manifest alone": f"Look manifest `{digest}`.",
+                "an outer.sha256 labelled offload": f"Offload manifest outer.sha256 `{digest}`.",
+                }.items():
+            text = head + body + "\n"
+            with self.subTest(label):
+                self.assertEqual(P.check_binding(span, text)["form"], "absent")
+                self.assertEqual(P.check_states(doc, text)[sid]["state"], P.HELD)
+                self.assertTrue(P.check_chain_problems(doc, text))
 
     def test_a_digest_printed_for_another_span_binds_nothing(self):
         """Audit 1 on 2082c1a51: one Check item named two spans and their two digests. Exchanging the two spans'
@@ -303,7 +367,7 @@ class CheckChain(unittest.TestCase):
         doc = pins()
         span = doc["spans"][0]
         digest, number, sid = span["offload_manifest_sha256"], span["check_item"], span["span_id"]
-        both = (f"{number}. **Check of {sid}.** Offload manifest `{digest}`. Read back: {sid} manifest "
+        both = (f"{number}. **Check of {sid}.** Offload manifest `{digest}`. Read back: {sid} offload manifest "
                 f"`{digest[:8]}…{digest[-4:]}`.\n")
         self.assertEqual(P.check_binding(span, both)["form"], "full")
         wrong = both.replace(f"{digest[:8]}…", f"{digest[:7]}{'0' if digest[7] != '0' else '1'}…")
@@ -382,13 +446,17 @@ class HeldAndCorrected(unittest.TestCase):
         wrong = ("0" if self.digest[9] != "0" else "1").join((self.digest[:9], self.digest[10:]))
         text = self.state(
             (cited, "Check of dev-01-s01: copied."),
-            (good, f"Copied at once: `cq-dev-01-s01-a1`, enc sha256 `00000000…0000`, manifest `{short}` (6 files)."),
-            (later, f"dev-01-s01 read back: manifest sha256 `{self.digest}`."),
+            (good, f"Copied at once: `cq-dev-01-s01-a1`, enc sha256 `00000000…0000`; offload manifest (6 files) "
+                   f"`{self.digest}`."),
+            (later, f"dev-01-s01 read back: offload manifest sha256 `{self.digest}`."),
             (cited + 1, f"dev-01-s01: Encrypted archive 1,024 bytes, sha256 `{self.digest}`."),
             (cited + 3, f"dev-01-s01 offload manifest `{wrong}`."),
             (cited + 4, f"dev-01-s03 offload manifest `{self.digest}`."),
             (cited + 6, f"dev-01-s01 outer.sha256 `{self.digest}`."),
-            (cited + 7, f"dev-01-s01 manifest `{self.digest[:7]}{'f' if self.digest[7] != 'f' else 'e'}…`."))
+            (cited + 7, f"dev-01-s01 manifest `{self.digest[:7]}{'f' if self.digest[7] != 'f' else 'e'}…`."),
+            (cited + 8, f"dev-01-s01 offload manifest `{short}`."),                  # abbreviated: never binds
+            (cited + 9, f"dev-01-s01 manifest `{self.digest}`."),                    # a bare manifest label
+            (cited + 10, f"dev-01-s01 offload manifest pending; look manifest `{self.digest}`."))
         self.assertEqual(P.held_spans(self.doc, text), ["dev-01-s01", "dev-01-s03"])
         before = json.dumps(self.doc)
         corrected = P.correct_check(self.doc, "dev-01-s01", good, text)
@@ -397,14 +465,15 @@ class HeldAndCorrected(unittest.TestCase):
         self.assertEqual((span["check_item"], span["check_corrected_from"]), (good, cited))
         self.assertEqual(P.pin_list_problems(corrected, complete=True), [])
         self.assertEqual(P.check_states(corrected, text)["dev-01-s01"],
-                         {"state": P.BOUND, "form": "abbreviated", "check_item": good, "as_printed": short,
+                         {"state": P.BOUND, "form": "full", "check_item": good, "as_printed": self.digest,
                           "corrected_from": cited})
         again = P.correct_check(corrected, "dev-01-s01", later, text)          # the item the table cited is kept
         self.assertEqual((again["spans"][0]["check_item"], again["spans"][0]["check_corrected_from"]), (later, cited))
         refusals = {"the archive's digest": cited + 1, "one character wrong": cited + 3,
                     "another span's item": cited + 4, "an outer.sha256": cited + 6,
                     "an abbreviation with a wrong character": cited + 7, "no such item": cited + 50,
-                    "the item it already has": good}
+                    "the item it already has": good, "a matching abbreviation (audit 3)": cited + 8,
+                    "a bare manifest label (audit 3)": cited + 9, "a pending digest beside a look manifest": cited + 10}
         for label, item in refusals.items():
             with self.subTest(label), self.assertRaisesRegex(P.PinRefusal, "dev-01-s01"):
                 P.correct_check(corrected, "dev-01-s01", item, text)
@@ -886,9 +955,16 @@ class ManifestInputs(unittest.TestCase):
         self.plan.write_text(json.dumps(rows))
 
     def run_cli(self, *argv):
+        """The tool in-process. No command takes a RUN_STATE path (audit 3, rule P3: it is read from origin/main
+        after a fetch); a test's ``--run-state FILE`` is handed to the fixture keyword, which the CLI cannot reach."""
+        argv, run_state = [str(a) for a in argv], None
+        if "--run-state" in argv:
+            index = argv.index("--run-state")
+            run_state = Path(argv[index + 1]).read_text(encoding="utf-8")
+            del argv[index:index + 2]
         buffer = io.StringIO()
         with unittest.mock.patch("sys.stdout", buffer):
-            code = self.cli.main([str(a) for a in argv])
+            code = self.cli.main(argv, run_state_text=run_state)
         return code, buffer.getvalue()
 
     def pins_now(self):
@@ -934,8 +1010,8 @@ class ManifestInputs(unittest.TestCase):
         state = Path(self.tmp.name) / "RUN_STATE.md"
         later = first["check_item"] + 20
         state.write_text(
-            f"{later}. **Copied at once.** `cq-{first['span_id']}-a1`, enc sha256 `00000000…0000`, manifest "
-            f"`{first['offload_manifest_sha256'][:8]}…{first['offload_manifest_sha256'][-4:]}`.\n\n"
+            f"{later}. **Copied at once.** `cq-{first['span_id']}-a1`, enc sha256 `00000000…0000`; offload manifest "
+            f"`{first['offload_manifest_sha256']}`.\n\n"
             f"{first['check_item']}. **Check of {first['span_id']}.** Copied; outer.sha256 "
             f"`{first['offload_manifest_sha256']}`.\n\n"
             f"{second['check_item']}. **Check of {second['span_id']}.** Offload manifest "
@@ -965,7 +1041,7 @@ class ManifestInputs(unittest.TestCase):
         self.assertEqual(self.manifest.read_bytes(), before)
         code, out = correct("--item", later, "--write")
         self.assertEqual(code, 0, out)
-        self.assertIn(f"Check item {first['check_item']} (held) -> {later} (abbreviated; bound)", out)
+        self.assertIn(f"Check item {first['check_item']} (held) -> {later} (full; bound)", out)
         fixed = self.pins_now()
         self.assertEqual((fixed["spans"][0]["check_item"], fixed["spans"][0]["check_corrected_from"]),
                          (later, first["check_item"]))
@@ -974,7 +1050,7 @@ class ManifestInputs(unittest.TestCase):
         doc = json.loads(self.manifest.read_text())
         code, out = self.run_cli("check-inputs", self.manifest, "--repo", self.repo, "--run-state", state)
         self.assertEqual(code, 0, out)
-        self.assertIn(f"(corrected from item {first['check_item']}, RL-195 section 2.1) names it: abbreviated; bound", out)
+        self.assertIn(f"(corrected from item {first['check_item']}, RL-195 section 2.1) names it: full; bound", out)
         self.assertEqual(self.M.inputs_final_problems(self.repo, doc, state.read_text(),
                                                       [first["span_id"], second["span_id"]]), [])
         self.assertTrue(any("not exactly the roster's" in problem for problem in self.M.inputs_final_problems(
@@ -1051,10 +1127,11 @@ class ManifestInputs(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertIn("names it: full", out)
         self.assertIn("2 spans", out)
-        state.write_text(run_state(pins, abbreviated=True))
+        state.write_text(run_state(pins, abbreviated=True))         # audit 3, rule P2: only full hex binds
         code, out = check()
-        self.assertEqual(code, 0, out)
-        self.assertIn("names it: abbreviated", out)
+        self.assertEqual(code, 1, out)
+        self.assertIn("names it: abbreviated; HELD", out)
+        self.assertIn("2 span(s) HELD: the manifest cannot be final", out)
         state.write_text(run_state(pins).replace(pins["spans"][1]["offload_manifest_sha256"], "0" * 64))
         code, out = check()
         self.assertEqual(code, 1, out)

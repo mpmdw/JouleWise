@@ -13,7 +13,8 @@ import unittest
 
 from joulewise.cadence_looks import admission, custody_pins, manifest as M
 from scripts import cadence_look_input_review as RV
-from tests.cadence import custody_pin_fixture as PF
+from tests.cadence import custody_pin_fixture as PF, look_minirepo as MR
+from tests.git_fixture import init_git_fixture
 
 try:
     from tests.cadence import test_interim_admission_closure as T
@@ -152,7 +153,8 @@ class ReviewRecord(unittest.TestCase):
                          "inadmissible")                         # revision B never wrote the member
 
     def test_the_record_carries_the_check_s_digest_as_printed_and_holds_a_span_that_does_not_bind(self):
-        """RL-194a section 2: the full digest, the abbreviation exactly as printed, and the Check item number."""
+        """RL-194a section 2: the full digest, the abbreviation exactly as printed, and the Check item number. Audit 3,
+        rule P2: an abbreviation is recorded as printed and holds the span; only the full hex binds."""
         first = self.pins["spans"][0]
         digest = first["offload_manifest_sha256"]
         printed = f"{digest[:8]}…{digest[-3:]}"
@@ -164,9 +166,15 @@ class ReviewRecord(unittest.TestCase):
         self.assertEqual(record["spans"][1]["check"]["form"], "full")
         for row in record["spans"]:
             row["verdicts"]["desk"] = "admissible"
-        self.assertEqual(self.problems(record, abbreviated), [])
+        self.assertEqual(self.problems(record, abbreviated), [
+            "dev-01-s01: its Check item does not identify the span's offload manifest in full hex with every character "
+            "matching (abbreviated); the span is held and returns to the research lead"])
+        bound = self.review()
+        for row in bound["spans"]:
+            row["verdicts"]["desk"] = "admissible"
+        self.assertEqual(self.problems(bound), [])
         record["spans"][0]["check"]["second_record"] = "the MBP-side sums file, RUN_STATE item 318"
-        self.assertEqual(self.problems(record, abbreviated), [])
+        self.assertEqual(len(self.problems(record, abbreviated)), 1)
         wrong = "0" if digest[7] != "0" else "1"
         for label, change in {
                 "one printed character differs": lambda c: c.update(as_printed=f"{digest[:7]}{wrong}…{digest[-3:]}"),
@@ -222,7 +230,9 @@ class ReviewRecord(unittest.TestCase):
         self.assertTrue(any("held" in problem for problem in self.problems(record, self.run_state.replace(digest, "0" * 64))))
 
     def checkout(self, pins):
-        """A checkout whose manifest carries ``pins`` and registers the generated custody's root (audit 2)."""
+        """A checkout whose manifest carries ``pins`` and registers the generated custody's root (audit 2), committed
+        and published to a local bare origin with its RUN_STATE: the review and its checker read the Check items only
+        from origin/main after a fetch (audit 3, rule P3)."""
         repo = Path(os.path.realpath(self.root)).with_name(self.root.name + "-repo")
         self.addCleanup(lambda: __import__("shutil").rmtree(repo, ignore_errors=True))
         manifest = repo / M.INTERIM_MANIFEST_PATH
@@ -234,6 +244,9 @@ class ReviewRecord(unittest.TestCase):
         (self.root / M.INTERIM_LOOK_ID).mkdir(exist_ok=True)
         state = repo / "RUN_STATE.md"
         state.write_text(PF.run_state(pins), encoding="utf-8")
+        init_git_fixture(repo, "-q", "-b", "main")
+        MR.git(repo, "remote", "add", "origin", str(MR.bare_origin(self, repo)))
+        MR.git_commit(repo, "a generated checkout")
         return repo, manifest, state
 
     def cli(self, *argv):
@@ -244,7 +257,7 @@ class ReviewRecord(unittest.TestCase):
             code = RV.main([str(word) for word in argv])
         return code, printed.getvalue()
 
-    def test_the_check_command_reads_the_run_state_it_is_given(self):
+    def test_the_check_command_judges_the_record_against_the_public_run_state(self):
         repo, manifest, state = self.checkout(self.pins)
         record = self.review()
         for row in record["spans"]:
@@ -253,7 +266,7 @@ class ReviewRecord(unittest.TestCase):
         check = record["spans"][0]["check"]
         check.update(as_printed=f"{check['as_printed'][:8]}…{check['as_printed'][-4:]}", form="abbreviated")
         (self.root / M.INTERIM_LOOK_ID / "input_review.json").write_bytes(RV.dump(record))
-        code, out = self.cli("check", "--repo", repo, "--run-state", state)
+        code, out = self.cli("check", "--repo", repo)
         self.assertEqual(code, 1, out)
         self.assertIn("REFUSE dev-01-s01: check.as_printed and check.form are not what Check item", out)
 
@@ -264,7 +277,7 @@ class ReviewRecord(unittest.TestCase):
         repo, manifest, state = self.checkout(self.pins)
         stale = repo / "docs/process/cadence/looks/lm-interim-01.inputs.json"
         stale.write_bytes(PF.dump(dict(self.pins, spans=self.pins["spans"][:2])))
-        code, out = self.cli("review", "--repo", repo, "--run-state", state, "--seat-model", "seat", "--seat-family",
+        code, out = self.cli("review", "--repo", repo, "--seat-model", "seat", "--seat-family",
                              "family")
         self.assertEqual(code, 0, out)
         self.assertIn("3 admissible", out)
@@ -275,7 +288,7 @@ class ReviewRecord(unittest.TestCase):
         for row in record["spans"]:
             row["verdicts"]["desk"] = "admissible"
         path.write_bytes(RV.dump(record))
-        code, out = self.cli("check", "--repo", repo, "--run-state", state)
+        code, out = self.cli("check", "--repo", repo)
         self.assertEqual(code, 0, out)
         self.assertIn("ok 3 of 3 spans admissible", out)
         # a record made against a two-span list is not a record of the manifest's three
@@ -283,15 +296,60 @@ class ReviewRecord(unittest.TestCase):
         two["header"] = dict(record["header"], pin_list_sha256=custody_pins.pin_list_sha256(
             custody_pins.pin_list_bytes(dict(self.pins, spans=self.pins["spans"][:2]))))
         path.write_bytes(RV.dump(two))
-        code, out = self.cli("check", "--repo", repo, "--run-state", state)
+        code, out = self.cli("check", "--repo", repo)
         self.assertEqual(code, 1, out)
         self.assertIn("pin_list_sha256 is not the manifest's", out)
         self.assertIn("not the manifest's pinned spans", out)
         # and the review writes its record once: it never replaces one
-        code, out = self.cli("review", "--repo", repo, "--run-state", state, "--seat-model", "seat", "--seat-family",
+        code, out = self.cli("review", "--repo", repo, "--seat-model", "seat", "--seat-family",
                              "family")
         self.assertEqual(code, 1, out)
         self.assertIn("never replaced", out)
+
+    def test_audit_3_the_checker_reads_the_check_items_only_from_origin_main_after_a_fetch(self):
+        """Audit 3 (HIGH, review_evidence_source.py): the checker certified "3 of 3" from a RUN_STATE path its caller
+        named, while origin/main carried none. No command takes a RUN_STATE now. The review and its checker fetch
+        origin's main and read RUN_STATE.md from it (``git show origin/main:RUN_STATE.md``): a working tree, a local
+        commit and a stale local ref are never the evidence, and a failed fetch certifies nothing."""
+        import contextlib
+        import io
+        repo, manifest, state = self.checkout(self.pins)
+        record = self.review()
+        for row in record["spans"]:
+            row["verdicts"]["desk"] = "admissible"
+        record["header"]["manifest_sha256"] = M.sha256_file(manifest)
+        (self.root / M.INTERIM_LOOK_ID / "input_review.json").write_bytes(RV.dump(record))
+        code, out = self.cli("check", "--repo", repo)
+        self.assertEqual(code, 0, out)
+        self.assertIn("ok 3 of 3 spans admissible", out)
+        for command in (["check"], ["review", "--seat-model", "seat", "--seat-family", "family"]):
+            with self.subTest(command=command[0]):
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as raised:
+                    RV.main([command[0], "--repo", str(repo), "--run-state", str(state), *command[1:]])
+                self.assertEqual(raised.exception.code, 2)
+                self.assertIn("unrecognized arguments: --run-state", err.getvalue())
+        # origin's main now prints every span's digest abbreviated (each span held); this checkout keeps the full
+        # items in its working tree, at HEAD and in a local origin/main that has not been fetched
+        full = state.read_text(encoding="utf-8")
+        held = full
+        for span in self.pins["spans"]:
+            digest = span["offload_manifest_sha256"]
+            held = held.replace(digest, f"{digest[:8]}…{digest[-4:]}")
+        state.write_text(held, encoding="utf-8")
+        MR.git_commit(repo, "the public Check items, abbreviated")
+        MR.git(repo, "reset", "-q", "--hard", "HEAD~1")
+        MR.git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        self.assertEqual(state.read_text(encoding="utf-8"), full)
+        code, out = self.cli("check", "--repo", repo)
+        self.assertEqual(code, 1, out)
+        self.assertEqual(out.count("(abbreviated); the span is held"), 3, out)
+        self.assertNotIn("3 of 3", out)
+        # with no origin to fetch from, nothing is certified
+        MR.git(repo, "remote", "set-url", "origin", str(repo.with_name(repo.name + "-no-such-origin.git")))
+        code, out = self.cli("check", "--repo", repo)
+        self.assertEqual(code, 1, out)
+        self.assertIn("origin/main cannot be fetched", out)
 
     def test_the_record_cites_the_writer_of_the_span_s_pinned_runner_commit(self):
         """Audit 2 (MED): with the span's runner commit changed to one no writer is pinned at, the review still cited

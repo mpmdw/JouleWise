@@ -3,11 +3,12 @@
 
     host-id
     post-no-maxima
-    stage1 [--allow-draft] [--ledger-ref REF] [--ruled-exclusion LEG_KEY=RULE=RL-n ...] [--stage-archives]
-           [--level-r]
-    stage2 --stage1-sha256 HEX [--allow-draft] [--ledger-ref REF] [--level-e]
+    stage1 [--allow-draft] [--ruled-exclusion LEG_KEY=RULE=RL-n ...] [--stage-archives] [--level-r]
+    stage2 --stage1-sha256 HEX [--allow-draft] [--level-e]
 
-No command takes a path (audit 2, lead ruling). The manifest is the repository's
+No command takes a path (audit 2, lead ruling), and a committed run reads every public record (the ledger, the
+RUN_STATE the pins chain to) from origin/main after a fetch, never from a ref or a file a caller names (audit 3,
+rule P3). The manifest is the repository's
 docs/process/cadence/looks/lm-interim-01.json; it registers the look's root (``custody.root``) and carries the pin
 list. Every other path is that root and the look id (``manifest.LookLayout``):
 
@@ -180,11 +181,11 @@ def ledger_path():
 
 
 def run_state_text(allow_draft):
-    """The RUN_STATE the pins chain to: RUN_STATE.md on origin/main; a synthetic --allow-draft run, which may
-    never touch a real look's custody, reads this checkout's own RUN_STATE.md."""
+    """The RUN_STATE the pins chain to: RUN_STATE.md on origin/main (already fetched by ``main``); a synthetic
+    --allow-draft run, which may never touch a real look's custody, reads this checkout's own RUN_STATE.md."""
     if allow_draft:
         return (ROOT / "RUN_STATE.md").read_text(encoding="utf-8")
-    return M.public_run_state(ROOT)
+    return M.public_run_state(ROOT, fetch=False)
 
 
 def layout_of(doc):
@@ -1207,7 +1208,11 @@ def validate_execution_row(row, stage1, layout):
         raise F.LookInputError("stage 2: execution_host does not match this host")
     if not row.get("custody_root") or not row.get("public_root"):
         raise F.LookInputError("stage 2: register both look roots in the ledger")
-    if Path(row["custody_root"]) != layout.root:
+    try:                                # physical identity, never the spelling (audit 3, rule P1)
+        same = os.path.samefile(row["custody_root"], layout.root)
+    except (OSError, TypeError):
+        same = False
+    if not same:
         raise F.LookInputError("stage 2: the ledger's custody_root is not the root the manifest registers")
     # the reservation's two names, compared case-insensitively: a differently-cased file is the same file on a
     # case-insensitive volume, and may stand for it on any other (audit 2, lead ruling)
@@ -1408,7 +1413,6 @@ def main(argv=None, *, keep_redirected=False):
     p2.add_argument("--level-e", action="store_true",
                     help="with --allow-draft only: read input_level_e.json in place of custody")
     for p in (p1, p2):
-        p.add_argument("--ledger-ref", help="the ref HEAD must be an ancestor of (default: upstream, else origin/main)")
         p.add_argument("--allow-draft", action="store_true", help="synthetic runs: accept a draft manifest")
     a = ap.parse_args(argv)
     if a.cmd == "stage1" and a.stage_archives and a.level_r:
@@ -1432,10 +1436,13 @@ def main(argv=None, *, keep_redirected=False):
                 raise F.LookInputError("post-no: both private maxima must be evaluable")
             sys.stdout.buffer.write(release.dump(maxima))
             return 0
+        # A committed run reads its public records from origin/main only, fetched now (audit 3, rule P3)
+        a.ledger_ref = None if a.allow_draft else "origin/main"
+        if not a.allow_draft:
+            M.fetch_public(ROOT)
         # FIRST, before any input is opened: the running code must be the pinned code (Mythos cold seat 3; Sol 9)
         a.manifest = str(manifest_path())
-        doc = M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING,
-                            ledger_ref=getattr(a, "ledger_ref", None))
+        doc = M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING, ledger_ref=a.ledger_ref)
         if doc["look_id"] != F.LOOK_ID:
             raise F.LookInputError(f"this look runner executes only {F.LOOK_ID}")
         _VERIFIED[:] = [(doc, a.manifest)]

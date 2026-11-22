@@ -192,7 +192,9 @@ The rows are the first draft's, corrected by RL-166 where it amends them.
 **The committed ledger** (`manifest.committed_ledger`, Sol N1). Every gate that asks "is this committed?" reads
 LOOKS.json from git, never from a path the caller names: the bytes at `HEAD` (`git show HEAD:...`), which must
 equal the working file with no uncommitted change, at a `HEAD` that is an ancestor of the shared ref (the
-branch's upstream, else `origin/main`; `--ledger-ref` names another). The ledger must validate. `verify_pins`
+branch's upstream, else `origin/main`; a caller in code may name another remote-tracking ref), and equal to the
+shared ref's own LOOKS.json, which is the public record (audit 3, rule P3). The look's committed CLIs take no ref:
+they fetch origin's `main` and gate on it. The ledger must validate. `verify_pins`
 then requires the row for this look to name the manifest's sha256 at status `committed`, `stage1_committed`,
 `run` or `frozen` (Mythos N5). `require_stage1_committed(repo, look_id, stage1_sha256, stage1_doc=...)` requires
 `stage1_committed`, `run` or `frozen`, the row's `stage1_sha256` equal to the file's, the manifest at `HEAD` equal

@@ -27,7 +27,10 @@ LOOK = lm.INTERIM_LOOK_ID
 VALUE_OPTIONS = {"--manifest", "--out", "--input", "--roster", "--custody", "--rules-3-4", "--span-dir",
                  "--write-input", "--stage-archives", "--staging-root", "--superseded-stage1", "--superseded-input",
                  "--custody-pins", "--run-state", "--stage1", "--energy", "--looks"}
-KEPT_VALUE_OPTIONS = {"--ledger-ref", "--ruled-exclusion", "--stage1-sha256"}
+# former options that named a record source: a committed run reads public records only from origin/main after a
+# fetch (audit 3, rule P3), so the option is dropped
+DROPPED_VALUE_OPTIONS = {"--ledger-ref"}
+KEPT_VALUE_OPTIONS = {"--ruled-exclusion", "--stage1-sha256"}
 INPUT_FILES = {"--roster": "roster", "--rules-3-4": "rules_3_4", "--stage1": "stage1", "--input": "input_level_r",
                "--energy": "input_level_e", "--superseded-stage1": "superseded_stage1",
                "--superseded-input": "superseded_level_r"}
@@ -46,6 +49,8 @@ def parse(argv):
         word = argv[index]
         if word in VALUE_OPTIONS and index + 1 < len(argv):
             values.setdefault(word, []).append(argv[index + 1])
+            index += 2
+        elif word in DROPPED_VALUE_OPTIONS and index + 1 < len(argv):
             index += 2
         elif word in KEPT_VALUE_OPTIONS and index + 1 < len(argv):
             kept += [word, argv[index + 1]]

@@ -47,9 +47,7 @@ _PRINTED = re.compile(r"(?<![0-9a-f])(?:([0-9a-f]{64})|([0-9a-f]{1,63})(?:…|\.
 # What may stand between a digest and the word that labels it: punctuation, "sha256" and a file count.
 _BETWEEN = frozenset(" \t\r\n`'\"()[]*,;:=")
 _FILLER = re.compile(r"sha-?256|files?|[0-9][0-9.,]*", re.I)
-_MANIFEST_LABEL = re.compile(r"manifest(?:[_-]sha-?256)?|sha256sums", re.I)      # the sums file by its own name
 _LABEL_REACH = 200          # characters before a digest in which its label is looked for
-_OUTER_REACH = 40           # a digest with "outer" this close before it is never the binding manifest digest
 SPAN_KEYS = ("span_id", "runner_commit", "close_item", "check_item", "check_corrected_from",
              "offload_manifest_sha256", "files")
 FILE_KEYS = ("path", "sha256", "size")
@@ -218,24 +216,55 @@ def _label_words(item, at, count=2):
     return words
 
 
-def _manifest_labelled(item, at):
-    """Whether the digest printed at ``at`` is labelled as a manifest's: the nearest word before it, past
-    punctuation, ``sha256`` and a file count, is ``manifest`` (or ``manifest_sha256``, or the sums file's own name,
-    ``SHA256SUMS``). A digest under any other label (an archive's, a marker's, a commit's) is not the offload
-    manifest's, whatever its characters. Nor is an ``outer`` one: the close-time ``outer.sha256`` file is a
-    custody-side record with no public, dated witness, so it is cited as a second record and never binds (RL-195
-    section 2.2)."""
-    words = _label_words(item, at)
-    if not words or _MANIFEST_LABEL.fullmatch(words[0]) is None:
+_BOUNDARY = re.compile(r"[;\n]|[.,](?![0-9])")         # a sentence or clause end; not a digit group's comma
+_MANIFEST_WORD = re.compile(r"(?<![a-z])(?:manifest|sha256sums)(?![a-z])", re.I)
+_OFFLOAD_BEFORE = re.compile(r"(?<![a-z])offload[\s_-]+$", re.I)
+# what may stand between "offload manifest" and the digest it identifies: punctuation, "sha256", a file count and a
+# readback's own word; anything else (a "pending", another noun) leaves the digest unidentified
+_IDENTIFIER_FILLER = re.compile(r"sha-?256|files?|[0-9][0-9.,]*|readback|read-?back|digest|hash", re.I)
+_IDENTIFIER_SPLIT = re.compile(r"[\s`'\"()\[\]*,;:=_]+")
+
+
+def _label(item, at, floor=0):
+    """The text that labels the digest printed at ``at``: since the previous digest (``floor``) or the last ``.``,
+    ``;``, ``,`` or line end, within ``_LABEL_REACH`` characters."""
+    label = item[max(floor, at - _LABEL_REACH):at]
+    return label[max((match.end() for match in _BOUNDARY.finditer(label)), default=0):]
+
+
+def _offload_identified(label):
+    """Whether a digest under ``label`` is identified as the span's offload manifest (audit 3, rule P2; RL-195
+    Q2): the label's last manifest word is "offload manifest", and only punctuation, "sha256", a file count or a
+    readback's word stand between it and the digest. A look manifest, a bare "manifest", the SHA256SUMS file by
+    name, an archive, a marker or an ``outer.sha256`` is not; nor is "offload manifest pending, look manifest"."""
+    if "outer" in label.lower():
         return False
-    return "outer" not in item[max(0, at - _OUTER_REACH):at].lower()     # "outer manifest", "outer.sha256 (manifest)"
+    found = list(_MANIFEST_WORD.finditer(label))
+    if not found:
+        return False
+    last = found[-1]
+    if last.group(0).lower() != "manifest" or _OFFLOAD_BEFORE.search(label[:last.start()]) is None:
+        return False
+    return all(_IDENTIFIER_FILLER.fullmatch(word) for word in _IDENTIFIER_SPLIT.split(label[last.end():]) if word)
+
+
+_READBACK = re.compile(r"read[\s-]?back|re-?read", re.I)
+
+
+def _manifest_mentioned(label):
+    """Whether a digest under ``label`` is printed as any manifest's or as a readback (an offload one, a look
+    manifest, a bare "manifest", the sums file, a "readback"): every such digest the item prints for the span must
+    agree with the pin, or the span is held. An ``outer.sha256`` is a second record only and is never read (RL-195
+    section 2.2)."""
+    low = label.lower()
+    return "outer" not in low and ("offload" in low or _MANIFEST_WORD.search(label) is not None
+                                   or _READBACK.search(label) is not None)
 
 
 # A name in a RUN_STATE item that a digest after it belongs to: a span, an attempt's offload directory, a filler
 # series' span, a kit. Three or more hyphen-separated parts with a letter and a digit (``dev-01-s01``,
 # ``cq-dev-05-s02-a1``, ``f2-inst-01-s01``); a date, a ruling (``RL-194a``) or a digest is not one.
 _NAME = re.compile(r"(?<![A-Za-z0-9_.-])[A-Za-z0-9]+(?:-[A-Za-z0-9]+){2,}(?![A-Za-z0-9-])")
-ABBREVIATION_FLOOR = 8      # an abbreviated print binds with at least this many printed hex digits (lead ruling)
 
 
 def _names(item):
@@ -264,17 +293,16 @@ def _owner(names, at, span_ids):
 
 
 def check_binding(span, run_state_text, span_ids=()):
-    """How a span's public Check item names its offload manifest (RL-194a section 2; audit 2, lead ruling). The
-    binding is keyed by span: the Check's digests for the span are the ones the item prints under a manifest label
-    after a name of that span, with no other name between. A digest after another span's or another thing's name
-    belongs to it and never binds this span.
+    """How a span's public Check item names its offload manifest (RL-194a section 2; audit 2 and audit 3 rulings;
+    RL-195 Q2). The binding is keyed by span: the Check's digests for the span are the ones the item prints under an
+    explicit "Offload manifest" label after a name of that span, with no other name between. A digest after another
+    name belongs to it, and a digest under any other label is not an identification at all.
 
-    Equality is exact. A full print is the 64 hex digits; an abbreviation's prefix and suffix must match the digest
-    character for character. Every digest the item prints for the span must match: one mismatch holds the span. An
-    abbreviation binds only with at least ``ABBREVIATION_FLOOR`` printed hex digits. Returns the item number, the
-    text as printed and the form: ``full``, ``abbreviated``, ``mismatch`` (``as_printed`` is the digest that does
-    not match), ``short`` (only abbreviations under the floor) or ``absent``. Only ``full`` and ``abbreviated``
-    bind."""
+    Equality is exact. Every identification the item prints for the span must match the pin character for
+    character (an abbreviation's prefix and suffix included), and the span binds only on one printed in full hex.
+    Returns the item number, the text as printed and the form: ``full`` (bound), ``mismatch`` (``as_printed`` is
+    the identification that does not match), ``abbreviated`` (only abbreviations: never bound) or ``absent`` (none,
+    for a pending digest or another label). Every form but ``full`` holds the span."""
     digest, number, sid = span["offload_manifest_sha256"], span["check_item"], span["span_id"]
     ids = set(span_ids) | {sid}
     out = {"check_item": number, "as_printed": None, "form": "absent"}
@@ -282,8 +310,16 @@ def check_binding(span, run_state_text, span_ids=()):
     if item is None:
         return out
     names = _names(item)
-    owned = [match for match in _PRINTED.finditer(item)
-             if _manifest_labelled(item, match.start()) and _owner(names, match.start(), ids) == sid]
+    printed = list(_PRINTED.finditer(item))
+    owned, identified = [], []           # the span's manifest-labelled digests; those identified as its offload one
+    for index, match in enumerate(printed):
+        if _owner(names, match.start(), ids) != sid:
+            continue
+        label = _label(item, match.start(), printed[index - 1].end() if index else 0)
+        if _manifest_mentioned(label):
+            owned.append(match)
+        if _offload_identified(label):
+            identified.append(match)
     if not owned:
         return out
 
@@ -292,16 +328,14 @@ def check_binding(span, run_state_text, span_ids=()):
         if whole is not None:
             return whole == digest
         return len(prefix) + len(suffix) < 64 and digest.startswith(prefix) and digest.endswith(suffix)
-    for match in owned:
+    for match in owned:                 # one contradiction under any manifest label holds the span
         if not matches(match):
             return dict(out, as_printed=match.group(0), form="mismatch")
-    if any(match.group(1) for match in owned):
+    if any(match.group(1) for match in identified):
         return dict(out, as_printed=digest, form="full")
-    long_enough = [match for match in owned if len(match.group(2)) + len(match.group(3)) >= ABBREVIATION_FLOOR]
-    if not long_enough:
-        return dict(out, as_printed=owned[0].group(0), form="short")
-    longest = max(long_enough, key=lambda match: len(match.group(2)) + len(match.group(3)))
-    return dict(out, as_printed=longest.group(0), form="abbreviated")
+    if identified:
+        return dict(out, as_printed=identified[0].group(0), form="abbreviated")
+    return out                          # agreeing digests under other labels identify nothing
 
 
 def check_chain_problems(doc, run_state_text):
@@ -317,9 +351,9 @@ def check_chain_problems(doc, run_state_text):
         if form == "mismatch":
             problems.append(f"{span['span_id']}: Check item {span['check_item']} prints a manifest digest for the "
                             "span that is not its offload manifest's sha256; the span is held")
-        elif form == "short":
-            problems.append(f"{span['span_id']}: Check item {span['check_item']} prints the span's manifest digest "
-                            f"with fewer than {ABBREVIATION_FLOOR} hex digits; the span is held")
+        elif form == "abbreviated":
+            problems.append(f"{span['span_id']}: Check item {span['check_item']} prints the span's offload manifest "
+                            "only abbreviated; it binds only in full hex, and the span is held")
         elif form == "absent":
             problems.append(f"{span['span_id']}: Check item {span['check_item']} does not name its offload "
                             "manifest's sha256; the span is held")
@@ -346,7 +380,7 @@ def check_states(doc, run_state_text):
     out = {}
     for span in doc["spans"]:
         binding = check_binding(span, run_state_text, ids)
-        out[span["span_id"]] = {"state": BOUND if binding["form"] in ("full", "abbreviated") else HELD,
+        out[span["span_id"]] = {"state": BOUND if binding["form"] == "full" else HELD,
                                 "form": binding["form"], "check_item": span["check_item"],
                                 "as_printed": binding["as_printed"],
                                 "corrected_from": span["check_corrected_from"]}
@@ -378,7 +412,7 @@ def correct_check(doc, span_id, item, run_state_text):
     if run_state_item(run_state_text, item) is None:
         raise PinRefusal(f"{span_id}: RUN_STATE has no single item {item}; the span stays HELD")
     binding = check_binding(trial, run_state_text, ids)
-    if binding["form"] not in ("full", "abbreviated"):
+    if binding["form"] != "full":
         raise PinRefusal(f"{span_id}: item {item} does not name the span's offload manifest with every printed "
                          f"character matching ({binding['form']}); the span stays HELD")
     first = span["check_corrected_from"] if span["check_corrected_from"] is not None else span["check_item"]
