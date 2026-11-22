@@ -42,18 +42,10 @@ def actor(repo):
     # Isolated child. Its only repository on sys.path is the pinned disposable mini-repo.
     sys.path.insert(0, str(repo))
     from scripts import cadence_look_run as cli
-    # Only the immutable code/manifest/input-commit checks are memoized in the large matrix.
-    # Every cache entry comes from the real function; audit-3 and the full positive controls run uncached.
+    # SHIM (RL-194): the manifest carries the custody's pin list, re-pinned and committed for every case, so no
+    # committed check repeats across cases and none is memoized: verify_pins, require_inputs_committed and
+    # ledger_gate run for real on every case. Only the immutable code inventory below is memoized.
     if "--fixed-auth" in sys.argv:
-        def memo(fn):
-            saved={}
-            def checked(*args, **kwargs):
-                key=repr((args, sorted(kwargs.items())))
-                if key not in saved: saved[key]=fn(*args, **kwargs)
-                return saved[key]
-            return checked
-        for name in ("verify_pins","require_inputs_committed","ledger_gate"):
-            setattr(cli.M,name,memo(getattr(cli.M,name)))
         # The copied Python sources are immutable. Refresh their real digest inventory
         # whenever an import changes the module/file list, including lazy CLI imports.
         real_hashes = cli.code_hashes
@@ -108,7 +100,10 @@ def actor(repo):
             meter = "/hazards/meter/stream-" in path
             if meter or base == "power_trace.csv":
                 frame = sys._getframe(1)
-                while frame and not frame.f_code.co_filename.startswith(str(repo) + os.sep):
+                # SHIM (RL-194): the pin guard opens a pinned stream for the reader that asked; that reader is the caller
+                guard = os.path.join(str(repo), "joulewise", "cadence_looks", "custody_pins.py")
+                while frame and (not frame.f_code.co_filename.startswith(str(repo) + os.sep)
+                                 or frame.f_code.co_filename == guard):
                     frame = frame.f_back
                 caller = os.path.relpath(frame.f_code.co_filename, repo) if frame else "unknown"
                 source = "meter" if meter else "power"
@@ -490,10 +485,13 @@ class Arena:
         else:
             self.mini=mr.mini_repo(owner)
         self.root=Path(owner.enterContext(tempfile.TemporaryDirectory(prefix="admission-"))).resolve()
-        self.source=original.source if audit else self.root/"generated"
+        # SHIM (lead, PR #795 round 5): the executor takes no path (audit 2). Custody is written at the copy's
+        # registered root, <root>/<span id>; the roster, the verdicts and stage 1's output are fixed names in
+        # <root>/lm-interim-01/.
+        self.source=original.source if audit else Path(json.loads((self.mini/mr.MANIFEST).read_bytes())["custody"]["root"])
         self.pub=self.mini/"public"/LOOK/"PUBLIC.json"
         self.reservation=self.source/LOOK/"RESTRICTED"
-        self.out=self.root/"stage1.json"
+        self.out=self.source/LOOK/"stage1.json"
         self.corpus=load_corpus()
         tokens={}
         level,energy,_=synth.build("exact",tokens=tokens)
@@ -521,6 +519,12 @@ class Arena:
                 for lid in branches["normal"][RECEIPT]["roster"]:
                     verdicts[self.span.name+"/"+lid]=dict(sidecar_coverage=False,km003c_clean=False)
             rules.write_bytes(wire(verdicts))
+        # SHIM: the two inputs at their fixed names (the executor reads nothing else); a stage-1 file left by a
+        # setup run is removed, as each invocation below removes its own
+        for name, made in (("roster.json", roster), ("rules_3_4.json", rules)):
+            if made != self.source/LOOK/name: (self.source/LOOK/name).write_bytes(made.read_bytes())
+        self.out.unlink(missing_ok=True)
+        self.inputs=(self.source/LOOK/"roster.json", self.source/LOOK/"rules_3_4.json")
         manifest=self.mini/mr.MANIFEST
         # Preserve the executable twin pinned at the revision under test. The shared helper's generic
         # stub is suitable for manifest tests; these trials mimic the audit's committed input row.
@@ -532,13 +536,15 @@ class Arena:
         self.ledger=self.mini/mr.lm.LOOK_LEDGER_PATH
         shared=json.loads(self.ledger.read_bytes())
         row=next(row for row in shared["looks"] if row["look_id"]==LOOK)
-        row.update(status="committed",sha256=mr.lm.sha256_file(manifest),roster_sha256=mr.lm.sha256_file(roster),
-                   verdicts_sha256=mr.lm.sha256_file(rules))
+        row.update(status="committed",sha256=mr.lm.sha256_file(manifest),roster_sha256=mr.lm.sha256_file(self.inputs[0]),
+                   verdicts_sha256=mr.lm.sha256_file(self.inputs[1]))
         self.ledger.write_bytes(release.dump(dict(schema=mr.lm.LOOK_LEDGER_SCHEMA,looks=[row])) if audit else wire(shared))
         mr.git_commit(self.mini,"Register generated stage-one inputs")
         self.ledger_bytes=self.ledger.read_bytes()
-        self.args=list(map(str,["stage1","--manifest",manifest,"--roster",roster,"--rules-3-4",rules,
-                               "--custody",self.source,"--out",self.out,"--ledger-ref","origin/main"]))
+        self.manifest,self.audit=manifest,audit
+        # SHIM: a committed stage 1 with no path option; the manifest, the roster and the custody are found at
+        # their registered places, and public records are read from origin/main after a fetch (audit 3)
+        self.args=["stage1"]
         self.proc=subprocess.Popen([sys.executable,"-I","-B",str(HERE),"--actor",str(self.mini),
                                     *(["--fixed-auth"] if negative else [])],
                                    stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True,bufsize=1)
@@ -565,8 +571,29 @@ class Arena:
                 stream.parent.mkdir(exist_ok=True,parents=True)
                 stream.write_bytes(b'{"k":"h","status":"streaming"}\n{"k":"t","bad":0,"polls":0,"usb_errors":0,"elapsed_s":0.0}\n' )
         self.key=(c.writer,c.branch)
+    def pin(self):
+        """SHIM (RL-194): the lead's pin fill for custody as it now is. The manifest's one pin list is made from the
+        rostered spans' bytes, RUN_STATE carries a Check item naming each span's offload manifest in full hex, the
+        LOOKS row names the manifest's new sha256, and the copy commits and publishes all three."""
+        from tests.cadence import custody_pin_fixture as fixture, look_minirepo as mr
+        from joulewise.cadence_looks import interim_release as release
+        ids=[span["span_id"] for span in json.loads(self.inputs[0].read_bytes())]
+        pins=fixture.synthetic_pins({sid: self.source/sid for sid in ids})
+        doc=json.loads(self.manifest.read_bytes())
+        doc["inputs"]["pins"]=pins
+        self.manifest.write_bytes(release.dump(doc) if self.audit else wire(doc))
+        state=self.mini/"RUN_STATE.md"
+        state.unlink(missing_ok=True)
+        state.write_text(fixture.run_state(pins), encoding="utf-8")
+        shared=json.loads(self.ledger.read_bytes())
+        next(row for row in shared["looks"] if row["look_id"]==LOOK)["sha256"]=mr.lm.sha256_file(self.manifest)
+        self.ledger.write_bytes(release.dump(shared) if self.audit else wire(shared))
+        mr.git_commit(self.mini,"Pin the generated custody as it now is")
+        self.ledger_bytes=self.ledger.read_bytes()
     def invoke(self,path):
         self.out.unlink(missing_ok=True)
+        (self.source/LOOK/"level_r.json").unlink(missing_ok=True)   # SHIM: stage 1's second fixed output
+        self.pin()
         wanted=[str(self.span/name) for name in self.docs if (self.span/name).is_file()]
         req=dict(args=self.args,target=str(path),expected=wanted)
         self.proc.stdin.write(json.dumps(req)+"\n")

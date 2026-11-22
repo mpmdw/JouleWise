@@ -568,7 +568,10 @@ revisions (`b4b6aeb19`, `2d347f721`, `6e9d42f1d`) issues it; the grammar mirrors
 the source lines cited in the modules. The controller's rows are mirrored from
 `joulewise/controller.py` and `timing_receipts.py` (byte-identical at the three
 revisions): stage rows with their metadata, the sampling markers, the failure
-path and timing boundaries. The frozen 101,889-case matrix no longer gates.
+path and timing boundaries. The frozen 101,889-case matrix is the acceptance (lead, PR #795 round 5). Only its
+driver is adapted (`tests/cadence/interim_admission_shim.json`): each case's custody is pinned in the manifest,
+committed and published before a committed `stage1` with no option runs. It runs in its own 32-shard CI job,
+and an accounting job requires every case ID in exactly one shard ledger, each passing.
 
 - **Strict decoding.** Every operational file is UTF-8 JSON with no duplicate
   member, no nonfinite number and no second document. A journal is one object

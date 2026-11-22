@@ -2,8 +2,10 @@
 reads custody, and no energy-bearing file exists.
 
 Under RL-194 stage 1 admits by content address (``custody_pins``) and this grammar validator runs behind the pins
-as defense in depth. The frozen packet's black-box matrix (``test_interim_admission_closure``) no longer gates; these
-tests run the validator in-process over the packet's writer productions and a sample of its cases, without numpy.
+as defense in depth. The frozen packet's black-box matrix (``test_interim_admission_closure``) is the acceptance and
+runs in its own CI job through a driver shim the lead allowed (PR #795 round 5); these tests run the validator
+in-process over the packet's writer productions and a sample of its cases, without numpy, and keep the packet's
+identity, the shim's scope and the shard accounting honest.
 """
 from __future__ import annotations
 
@@ -13,6 +15,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -335,11 +338,95 @@ class Accounting(unittest.TestCase):
 
     @unittest.skipIf(T is None, "the frozen admission packet is absent")
     def test_the_committed_manifest_is_the_suites_own_test_side_lines(self):
+        """The 25 lines stay the packet's own: the suite's line names the adopted bytes, which the shim record
+        names as its original (round 5)."""
         lines = ACC.FROZEN.read_text().splitlines()
         self.assertEqual(len(lines), 25)
         self.assertTrue(all(line.partition("  ")[2].startswith("tests/cadence/") for line in lines))
-        self.assertIn(f"{hashlib.sha256((REPO / 'tests/cadence/test_interim_admission_closure.py').read_bytes()).hexdigest()}"
-                      "  tests/cadence/test_interim_admission_closure.py", lines)
+        self.assertIn(f"{ACC.load_shim()['original_sha256']}  {ACC.SUITE}", lines)
+        self.assertIn("6934236b3b5e67bc4232f6489fd5246a5d11aab65ef56723da6e958f2f30b35a  " + ACC.SUITE, lines)
+
+    @unittest.skipIf(T is None, "the frozen admission packet is absent")
+    def test_the_suite_is_the_adopted_module_with_only_its_driver_changed(self):
+        """Lead decision N2 (PR #795 round 5): only the driver and invocation shim (``actor`` and ``Arena``) may
+        change. The module is the adapted one the shim record names, and every line outside the driver hashes as in
+        the module adopted at e6ec842bb, recomputed from that commit when the checkout has it."""
+        shim = ACC.load_shim()
+        data = (REPO / ACC.SUITE).read_bytes()
+        self.assertEqual(hashlib.sha256(data).hexdigest(), shim["adapted_sha256"])
+        self.assertEqual(ACC.case_source_sha256(data), shim["case_source_sha256"])
+        shown = subprocess.run(["git", "-C", str(REPO), "show", f"e6ec842bb:{ACC.SUITE}"], capture_output=True)
+        if shown.returncode != 0:
+            self.skipTest("the adoption commit is not in this checkout's history")
+        self.assertEqual(hashlib.sha256(shown.stdout).hexdigest(), shim["original_sha256"])
+        self.assertEqual(ACC.case_source_sha256(shown.stdout), shim["case_source_sha256"])
+
+    @unittest.skipIf(T is None, "the frozen admission packet is absent")
+    def test_an_edit_outside_the_driver_is_found(self):
+        data = (REPO / ACC.SUITE).read_bytes()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "corpus").mkdir()
+            suite = root / ACC.SUITE
+            suite.parent.mkdir(parents=True)
+            manifest = root / "frozen.sha256"
+            manifest.write_text(f"{ACC.load_shim()['original_sha256']}  {ACC.SUITE}\n")
+            with unittest.mock.patch.multiple(ACC, ROOT=root, FROZEN=manifest, CORPUS=root / "corpus"):
+                suite.write_bytes(data)
+                self.assertEqual(ACC.verify_frozen(), [])
+                # a case's expectation changed: outside the driver
+                suite.write_bytes(data.replace(b'return (c.family in {"admit", "F1", "F3"}',
+                                               b'return (c.family in {"admit", "F1", "F3", "enum"}', 1))
+                self.assertEqual(ACC.verify_frozen(), [f"{ACC.SUITE}: not the adapted module the shim record names",
+                                                       f"{ACC.SUITE}: changed outside its driver (actor, Arena)"])
+                # a change inside the driver is still not the adapted module
+                suite.write_bytes(data.replace(b'self.args=["stage1"]', b'self.args=["stage1", "--allow-draft"]', 1))
+                self.assertEqual(ACC.verify_frozen(), [f"{ACC.SUITE}: not the adapted module the shim record names"])
+
+    def case(self, name, family="x"):
+        return type("Case", (), {"name": name, "family": family})()
+
+    def ledgers(self, names, total=2, corrected=frozenset()):
+        out = [{"index": i, "total": total, "rows": []} for i in range(total)]
+        for position, name in enumerate(names):
+            basis = "corrected" if name in corrected else "original"
+            out[position % total]["rows"].append([name, basis, True])
+        return out
+
+    def test_a_complete_set_of_ledgers_is_accounted_for(self):
+        names = [f"case-{i}" for i in range(7)]
+        cases = [self.case(n) for n in names]
+        problems, counts = ACC.account(self.ledgers(names, corrected={"case-3"}), cases, 2, frozenset({"case-3"}))
+        self.assertEqual((problems, counts), ([], {"original": 6, "corrected": 1, "failed": 0}))
+
+    def test_a_missing_duplicate_failed_or_misjudged_case_is_found(self):
+        names = [f"case-{i}" for i in range(7)]
+        cases = [self.case(n) for n in names]
+        corrected = frozenset({"case-3"})
+
+        def problems_of(mutate):
+            ledgers = self.ledgers(names, corrected=corrected)
+            mutate(ledgers)
+            return ACC.account(ledgers, cases, 2, corrected)[0]
+
+        self.assertTrue(any("in no shard ledger" in p for p in problems_of(lambda l: l[0]["rows"].pop())))
+        self.assertTrue(any("in shard" in p for p in problems_of(lambda l: l[1]["rows"].append(l[0]["rows"][0]))))
+        self.assertTrue(any("failed its original" in p for p in problems_of(lambda l: l[0]["rows"][0].__setitem__(2, False))))
+        self.assertTrue(any("judged on the" in p for p in problems_of(lambda l: l[0]["rows"][0].__setitem__(1, "corrected"))))
+        self.assertTrue(any("judged on the" in p for p in problems_of(
+            lambda l: [r.__setitem__(1, "original") for led in l for r in led["rows"] if r[0] == "case-3"])))
+        self.assertTrue(any("not 0 to 1" in p for p in problems_of(lambda l: l.pop())))
+        self.assertTrue(any("not in the suite" in p for p in problems_of(lambda l: l[0]["rows"].append(["extra", "original", True]))))
+        self.assertTrue(any("not of 2" in p for p in problems_of(lambda l: l[0].update(total=3))))
+        self.assertTrue(any("failed its corrected" in p for p in problems_of(
+            lambda l: [r.__setitem__(2, False) for led in l for r in led["rows"] if r[0] == "case-3"])))
+
+    @unittest.skipIf(T is None, "the frozen admission packet is absent")
+    def test_the_shards_own_every_case_exactly_once(self):
+        cases = T.cases()
+        owned = [name for index in range(32) for name in ACC.expected_ids(cases, index, 32)]
+        self.assertEqual(sorted(owned), sorted(case.name for case in cases))
+        self.assertEqual(len(set(owned)), len(cases))
 
     @unittest.skipIf(T is None, "the frozen admission packet is absent")
     def test_a_changed_case_list_or_a_stale_correction_is_found(self):
@@ -721,6 +808,36 @@ class RealControllerRows(unittest.TestCase):
             with self.subTest(neighbour=token[:5]):
                 self.assertIsNotNone(verdict(with_token(b"duration_s", token)))
         self.assertIsNone(verdict(with_token(b"duration_s", b"2.5")))
+
+
+class JournalStampCitation(unittest.TestCase):
+    """RL-195 condition 1.2 (still owed under RL-199 section 3, because the journal digest is public through the pin
+    list): every journal holds unpublished sub-second stamps of its own, cited from the pinned controller's source.
+    This test reads each cited range at each of the three pinned writer revisions (git, never a journal) and requires
+    what the citation says is there. The citation is in docs/run_reports/2026-11-20-pr795-rl194-audit-1.md."""
+    PINS = ("b4b6aeb19", "2d347f721", "6e9d42f1d")
+    CITED = (                         # (path, first line, last line, what the range must hold)
+        ("joulewise/controller.py", 3839, 3854, ("def _buffer_event(", "timestamp_s=self._clock.now()")),
+        ("joulewise/controller.py", 1662, 1667, ('"run_started"',)),
+        ("joulewise/controller.py", 1742, 1751, ("def _stage_validate(self)", 'self._begin_stage("validate")')),
+        ("joulewise/bundle.py", 1193, 1205, ("def finalize(self)", "timestamp_s=self._clock.now()",
+                                              'event_type="run_finalized"')),
+        ("joulewise/controller.py", 3962, 3971, ("def _finish(self)", "self._writer.finalize()")),
+        ("joulewise/align/apple/r1_runtime.py", 1458, 1464, ("SystemClock()",)),
+        ("joulewise/align/apple/r1_runtime.py", 1537, 1546, ("run_benchmark(", "self.clock")),
+        ("joulewise/clock.py", 55, 56, ("def now(self) -> float:", "return time.time()")),
+    )
+
+    def test_each_cited_stamp_is_in_the_pinned_controller_at_every_writer_pin(self):
+        for pin in self.PINS:
+            for path, first, last, needles in self.CITED:
+                shown = subprocess.run(["git", "-C", str(REPO), "show", f"{pin}:{path}"], capture_output=True)
+                if shown.returncode != 0:
+                    self.skipTest(f"writer revision {pin} is not in this checkout's history")
+                cited = "".join(shown.stdout.decode("utf-8").splitlines(keepends=True)[first - 1:last])
+                for needle in needles:
+                    with self.subTest(pin=pin, path=path, lines=f"{first}-{last}", needle=needle):
+                        self.assertIn(needle, cited)
 
 
 class KitTable(unittest.TestCase):
