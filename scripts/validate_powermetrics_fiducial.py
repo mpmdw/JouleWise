@@ -2020,7 +2020,7 @@ class _CaptureLedgerLifecycle:
             self._release_writer_lease()
 
 
-def main(argv: list[str] | None = None) -> int:
+def _capture_parser(*, ledger_default=DEFAULT_LEDGER_PATH, head_pin_default=DEFAULT_HEAD_PIN_PATH):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--allow-live",
@@ -2045,8 +2045,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--custody-budget-s", type=float, default=120.0)
     parser.add_argument("--custody-deadline-epoch-s", type=float)
-    parser.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER_PATH)
-    parser.add_argument("--head-pin", type=Path, default=DEFAULT_HEAD_PIN_PATH)
+    parser.add_argument("--ledger", type=Path, default=ledger_default)
+    parser.add_argument("--head-pin", type=Path, default=head_pin_default)
     parser.add_argument(
         "--sampler-binary",
         type=Path,
@@ -2113,7 +2113,23 @@ def main(argv: list[str] | None = None) -> int:
             "derivation-kind session slot, and licenses no measurement"
         ),
     )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    from joulewise.align.apple.v4_registration import runtime_input_context, runtime_ledger
+
+    context = runtime_input_context()
+    parser = (_capture_parser(ledger_default=Path(os.environ["CALIBRATION_LEDGER"]),
+                              head_pin_default=Path(os.environ["LEDGER_HEAD_PIN"]))
+              if context else _capture_parser())
     args = parser.parse_args(argv)
+    if context:
+        try:
+            args.ledger = runtime_ledger(args.ledger)
+        except (OSError, ValueError) as exc:
+            print(f"C1 capture refused: {exc}", file=sys.stderr)
+            return 2
     if args.identity_epoch_json_for_test is not None and not args.sampler_direct_for_test:
         parser.error("identity epoch fixture requires --sampler-direct-for-test")
     if args.battery_probe_fixture_for_test is not None and (

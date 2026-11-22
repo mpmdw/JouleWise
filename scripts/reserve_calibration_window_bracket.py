@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import platform
 import sys
 from pathlib import Path
@@ -172,10 +173,10 @@ def _json_object(path: Path) -> Mapping[str, Any]:
     return value
 
 
-def _parser() -> argparse.ArgumentParser:
+def _parser(*, ledger_default=DEFAULT_LEDGER_PATH, head_pin_default=DEFAULT_HEAD_PIN_PATH) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER_PATH)
-    parser.add_argument("--head-pin", type=Path, default=DEFAULT_HEAD_PIN_PATH)
+    parser.add_argument("--ledger", type=Path, default=ledger_default)
+    parser.add_argument("--head-pin", type=Path, default=head_pin_default)
     parser.add_argument("--session-id", required=True)
     parser.add_argument("--window-id", required=True)
     parser.add_argument("--plan-id", required=True)
@@ -303,7 +304,19 @@ def _declared_slot_sources(
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
+    from joulewise.align.apple.v4_registration import runtime_input_context, runtime_ledger
+
+    context = runtime_input_context()
+    if context:
+        args = _parser(ledger_default=Path(os.environ["CALIBRATION_LEDGER"]),
+                       head_pin_default=Path(os.environ["LEDGER_HEAD_PIN"])).parse_args(argv)
+        try:
+            args.ledger = runtime_ledger(args.ledger, starting=True)
+        except (OSError, ValueError) as exc:
+            print(f"C1 reservation refused: {exc}", file=sys.stderr)
+            return 2
+    else:
+        args = _parser().parse_args(argv)
     pre_reserve_strict = args.pre_reserve_strict or args.verify_only
     from scripts.validate_powermetrics_fiducial import (  # noqa: PLC0415
         _configure_writer_crash_authorization,
@@ -432,6 +445,8 @@ def main(argv: list[str] | None = None) -> int:
 
             _writer_stage(WriterStage.BEFORE_PRE_RESERVE_READINESS)
             with CalibrationWriterLease(args.ledger):
+                if context:
+                    runtime_ledger(args.ledger, starting=True)
                 readiness = calibration_readiness(
                     args.ledger,
                     args.head_pin,

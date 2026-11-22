@@ -62,24 +62,39 @@ def localize_c1_artifacts(root, paths=None):
                     path.write_bytes(raw)
 
 
-def fixture_c1_binding(root):
-    """Synthetic packet producer for witnesses that substitute Git and desk evidence."""
+def fixture_c1_preflight(state, supplied, packet_builder):
+    """Stand in for Git authority in the pre-existing cadence and runtime witnesses.
+
+    The checkout mirrors in those witnesses are intentionally not attempt
+    exports. test_c1_closure exercises the committed C1 authentication boundary.
+    """
+    from types import SimpleNamespace
     from scripts import align_v4_series as series
 
-    root = Path(root)
-    kit, _ = series.read_c1_kit(root)
+    root, view = (Path(state[name]) for name in ('source_measurement_root', 'measurement_root'))
+    plan = json.loads((root / series.kit_path('C1') / series.C1_PLAN).read_bytes())
+    current = reg.artifact_set_digest(root)
 
-    def read(path):
-        return (root / path).read_bytes()
+    def preflight(handoff, *, now_epoch_s, **_):
+        packet, matches = packet_builder(root, supplied, now_epoch_s=now_epoch_s,
+                                        current_artifact_set_sha256=current)
+        if not matches:
+            raise AssertionError('the cadence fixture builder did not match')
+        return {'authority': root, 'state': state, 'plan': plan, 'packet': packet, 'packet_sha256': None,
+                'current_digest': current, 'kit': {'ok': True},
+                'view': SimpleNamespace(root=view, roots=SimpleNamespace(repo=root))}
 
-    def optional(path):
-        return read(path) if (root / path).is_file() else None
+    return preflight
 
-    artifacts = {path: reg.digest(read(path)) if (root / path).is_file() else None
-                 for path in reg.ARTIFACTS}
-    binding = series.c1_staged_inventory(kit, read, optional, artifacts)
-    localize_c1_artifacts(root, binding['staged_inventory'])
-    return binding
+
+def projection_arm_checks(arm):
+    """Keep the independent Git/triage deltas on the packet projection path."""
+    def run(root, plan, **kwargs):
+        # These witnesses deliberately have no prepared attempt or O1 commit.
+        # C1 admission and its host checkpoint are covered by the frozen tape.
+        return arm(root, {key: value for key, value in plan.items() if key != 'window_id'}, **kwargs)
+
+    return run
 
 
 def export():

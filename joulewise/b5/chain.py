@@ -1059,7 +1059,7 @@ horizon_skip() {
 def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[Stage],
                  bindings: Mapping[str, Any], measurement_root: Path, pack_root: Path,
                  plan_id: str, runbook_text: str, settle_s: int | float = SETTLE_S,
-                 horizon_s: int = CALIBRATION_HORIZON_S) -> bytes:
+                 horizon_s: int = CALIBRATION_HORIZON_S, c1_inputs=None) -> bytes:
     """Return the chain bytes. Every value is a literal; nothing is written.
 
     ``runbook_text`` is the measurement checkout's ``docs/phase_2/window_runbook.md``;
@@ -1102,6 +1102,9 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
 
     frozen_plan = value_after(reservation_argv, "--plan")
     head_pin = value_after(reservation_argv, "--head-pin")
+    if head_pin is None and c1_inputs is not None:
+        from joulewise.b5.plan import HEAD_PIN_RELATIVE
+        head_pin = str(root / HEAD_PIN_RELATIVE)
     # The NEG-8 corpus stage (row 13): the last collection before the bound
     # derivation that collects into the derivation's --runs-dir.
     derivation = next((stage for stage in chain if stage.kind == "bound_derivation"), None)
@@ -1157,6 +1160,13 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
         f"export REPO={_literal(str(root))}",
         f"export PY={_literal(python)}",
         'export PYTHONPATH="$REPO"',
+        *(["export JOULEWISE_C1_INPUTS=" + _literal(json.dumps(c1_inputs, sort_keys=True)),
+           "export JOULEWISE_C1_INPUT_ROOTS=" + _literal(json.dumps([c1_inputs["repo"], c1_inputs["stage"]])),
+           "export CALIBRATION_LEDGER=" + _literal(bindings["ledger_path"]),
+           "export LEDGER_HEAD_PIN=" + _literal(head_pin)]
+          if c1_inputs is not None else []),
+        *(["export XDG_CACHE_HOME=" + _literal(c1_inputs["cache_home"])]
+          if c1_inputs is not None and c1_inputs.get("cache_home") else []),
         "export PYTHONDONTWRITEBYTECODE=1 GIT_OPTIONAL_LOCKS=0",
         f"export SETTLE_S={settle_text}",
         f"OPERATOR_LOG_ROOT={_literal(bindings['operator_log_root'])}",

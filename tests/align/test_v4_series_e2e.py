@@ -26,11 +26,10 @@ from unittest.mock import patch
 
 from joulewise.align.apple import v4_cadence as cad, v4_registration
 from joulewise.b5.chain import stage_plan
-from joulewise.b5.plan import resolve_stage_dispatches
 from scripts import align_pilot_session as pilot, align_v4_kit as kit, align_v4_series as s
 from scripts import align_v4_session as session, bytes_h_session as h
 from tests.align.test_v4_cadence import arm_seams, write_battery_log
-from tests.align.v4_registration_fixtures import fixture_c1_binding, localize_c1_artifacts, session_plan
+from tests.align.v4_registration_fixtures import fixture_c1_preflight, localize_c1_artifacts, session_plan
 from tests.align.test_v4_kit import FakeArmHost, ready_inputs
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -212,8 +211,6 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
                                self.checks(first=window == 'W1', **checks), record_commit=COMMIT,
                                last_desk_passed_artifact_set_sha256=v4_registration.artifact_set_digest(self.measurement),
                                valid_until_epoch_s=1000.0, now_epoch_s=500.0, commit_check=lambda root, commit: True)
-        if window == 'C1':
-            packet['c1_kit'] = fixture_c1_binding(self.measurement)
         return packet
 
     def next_window(self):
@@ -239,15 +236,19 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
         host = FakeArmHost(mode=0)
         log = write_battery_log(self.tmp / f'battery-{window}-{n}.jsonl', time.time())
         before = len(self.installed)
-        try:
-            session.install(root, runner=host, volume_runner=host, obc_off_attested_by='synthetic',
-                            battery_log=log, next_arm_triage=packet if is_c1 else path,
-                            w1_disk_config=self.disk_config,
-                            **arm_seams(),
-                            disk_gate=lambda config: {'status': 'pass', 'offloads': []})
-            error = None
-        except ValueError as exc:
-            error = str(exc)
+        with ExitStack() as stack:
+            seams = arm_seams()
+            if is_c1:
+                stack.enter_context(patch.object(session, 'c1_arm_preflight',
+                                                 side_effect=fixture_c1_preflight(state, packet, seams['packet_builder'])))
+                seams['c1_handoff'] = {'window': 'C1'}
+            try:
+                session.install(root, runner=host, volume_runner=host, obc_off_attested_by='synthetic',
+                                battery_log=log, next_arm_triage=path, w1_disk_config=self.disk_config,
+                                **seams, disk_gate=lambda config: {'status': 'pass', 'offloads': []})
+                error = None
+            except ValueError as exc:
+                error = str(exc)
         records = sorted((root / 'staging').glob('v4-arm-*.json'))
         self.assertTrue(records, error or 'install produced no arm record')
         record = json.loads(records[-1].read_text())
@@ -324,46 +325,6 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
         self.assertFalse(record['admitted'])
         self.assertEqual(calls, 0)
         self.assertTrue(any(r.startswith('series_binding: C4') for r in record['reasons']))
-
-    def test_c1_refuses_swapped_staged_config_even_with_matching_source_kit(self):
-        self.outcome('W1', captured=18)
-        packet = self.packet('C1')
-        root = self.tmp / 'swapped-stage-session'
-        session.prepare(self.measurement, root, window_id='C1')
-        view, pack = self.views[s.pack_id('C1')]
-        tree = json.loads((pack / 'plan_tree.json').read_bytes())
-        config = view / tree['science'][0]['config_path']
-        config.write_bytes(config.read_bytes() + b' ')
-        with patch('joulewise.align.apple.powermode.host_marker_path') as host:
-            with self.assertRaisesRegex(ValueError, 'packet_kit_mismatch: staged input SHA-256 mismatch'):
-                session.install(root, next_arm_triage=packet, **arm_seams())
-        host.assert_not_called()
-        self.assertEqual(self.installed, [])
-
-    def test_c1_refuses_each_order_manifest_swap_including_scaffold(self):
-        self.outcome('W1', captured=18)
-        packet = self.packet('C1')
-        root = self.tmp / 'swapped-order-session'
-        session.prepare(self.measurement, root, window_id='C1')
-        view, pack = self.views[s.pack_id('C1')]
-        dispatches = resolve_stage_dispatches(json.loads((pack / 'plan_tree.json').read_bytes()), view)
-        self.assertTrue(any('reference' in stage.stage_id for stage in dispatches))
-        paths = [view / stage.config_dir / 'order_manifest.json' for stage in dispatches]
-        originals = [path.read_bytes() for path in paths]
-        for i, (stage, path, original) in enumerate(zip(dispatches, paths, originals, strict=True)):
-            alternate = originals[(i + 1) % len(originals)]
-            self.assertNotEqual(original, alternate)
-            for mutation, raw in (('another stage', alternate), ('same order, edited bytes', original + b' ')):
-                with self.subTest(stage=stage.stage_id, mutation=mutation):
-                    path.write_bytes(raw)
-                    try:
-                        with patch('joulewise.align.apple.powermode.host_marker_path') as host:
-                            with self.assertRaisesRegex(ValueError, 'packet_kit_mismatch'):
-                                session.install(root, next_arm_triage=packet, **arm_seams())
-                        host.assert_not_called()
-                    finally:
-                        path.write_bytes(original)
-        self.assertEqual(self.installed, [])
 
     def test_c1_refuses_an_unlisted_staged_path_in_an_offload_receipt(self):
         self.outcome('W1', captured=18)

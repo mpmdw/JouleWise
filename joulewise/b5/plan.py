@@ -146,26 +146,6 @@ def _require(condition: bool, detail: str) -> None:
 
 DISPATCH_SCHEMA = "joulewise.b5_stage_dispatch.v1"
 
-# These operands are identifiers, policies by name, or numeric controls. A
-# remaining literal operand is relative to the command's repository cwd.
-_STAGE_SCALAR_OPTIONS = frozenset({
-    "--session-id", "--window-id", "--plan-id", "--plan-sha256", "--evidence-root-id",
-    "--pre-attempt-id", "--post-attempt-id", "--attempt-id", "--slot", "--power-policy",
-    "--instrument-power-policy", "--max-failures", "--max-blocks", "--arm-countdown-s",
-    "--shakedown-gate",
-})
-_STAGE_FILE_OPTIONS = frozenset({
-    "--plan", "--head-pin", "--campaign-policy", "--derive-neg8-drift-bound", "--waivers",
-})
-_STAGE_RUNTIME_OPTIONS = frozenset({
-    "--ledger", "--calibration-ledger", "--identity-epoch-json", "--t1-bindings-json",
-    "--pre-custody-locator", "--post-custody-locator", "--runs-root", "--runs-dir", "--output-root", "--log",
-    "--instrument-calibration-dir", "--neg8-drift-bound-output", "--neg8-drift-bound",
-})
-_BACKUP_BINDINGS = ({"claim_runs_root", "bound_runs_root"},
-                    {"claim_backup_destination", "bound_backup_destination"})
-
-
 def canonical_repo_path(value: str) -> Path:
     """A portable key in the staged repository namespace, with no filesystem access."""
     path = Path(value)
@@ -176,62 +156,6 @@ def canonical_repo_path(value: str) -> Path:
     _require(not any(part in forbidden or part.startswith("jw-b5-") for part in path.parts),
              f"staged input names a restricted path: {value!r}")
     return path
-
-
-def _portable_argument(argument: Mapping[str, Any], tree: Mapping[str, Any]) -> str | None:
-    kind, name = argument["kind"], argument["value"]
-    _require(kind in b5_chain.ARGUMENT_KINDS and isinstance(name, str),
-             f"unknown stage argument kind or invalid value: {argument!r}")
-    if kind in {"binding", "binding_path"} and name != "repo_root":
-        _require(name in _BINDING_TYPES, f"unknown launch binding: {name!r}")
-        if kind == "binding_path":
-            _require(not _BINDING_TYPES[name] & {"nonempty_string", "non_path_string"},
-                     f"binding_path needs a directory or path binding: {name!r}")
-            b5_chain.bind_argument(argument, {name: "/"}, tree, Path("."))
-        return None  # resolved at prepare as a named runtime control, never a frozen input
-    return b5_chain.bind_argument(argument, {"repo_root": "."}, tree, Path("."))
-
-
-def portable_stage_arguments(arguments: Sequence[Mapping[str, Any]], tree: Mapping[str, Any]) -> list[str | None]:
-    """Resolve static argv with the repository as cwd and runtime controls deferred."""
-    return [_portable_argument(argument, tree) for argument in arguments]
-
-
-def _repository_operand(argument: Mapping[str, Any], value: str | None, *,
-                        option: str | None = None, required: bool = False) -> Path | None:
-    required = required or option in _STAGE_FILE_OPTIONS
-    if value is None:
-        _require(not required, f"{option or 'collection command'} needs a repository-relative file or directory")
-        return None
-    if argument["kind"] in {"literal", "tree_pointer"}:
-        if value.startswith("-") and not required:
-            option, separator, value = value.partition("=")
-            if not separator:
-                return None
-        if option in _STAGE_SCALAR_OPTIONS and not required:
-            return None
-    return canonical_repo_path(value)
-
-
-def stage_repository_paths(tree: Mapping[str, Any]) -> set[Path]:
-    """Canonical file operands of the same argv bindings used by the runner."""
-    paths = set()
-    for stage in b5_chain.stage_plan(tree):
-        for command in stage.commands:
-            values = portable_stage_arguments(command.arguments, tree)
-            for index, (argument, value) in enumerate(zip(command.arguments, values, strict=True)):
-                if stage.kind == "campaign_collection" and index == 0:
-                    continue  # the dispatch resolver expands this directory into its manifest and configs
-                option = values[index - 1] if index else None
-                if value is None:
-                    backup = (stage.kind == "backup" and index < len(_BACKUP_BINDINGS)
-                              and argument["value"] in _BACKUP_BINDINGS[index])
-                    _require(backup or option in _STAGE_RUNTIME_OPTIONS | _STAGE_SCALAR_OPTIONS,
-                             f"{stage.stage_id}: unsupported runtime binding for {option!r}")
-                path = _repository_operand(argument, value, option=option)
-                if path is not None:
-                    paths.add(path)
-    return paths
 
 
 @dataclasses.dataclass(frozen=True)
@@ -273,12 +197,12 @@ def _dispatch_of(row: Any, tree: Mapping[str, Any], repo_root: Path, bindings: M
     except (KeyError, IndexError, TypeError, WindowPlanError):
         return failed("the collection stage has no single campaign command")
     try:
-        values = portable_stage_arguments(arguments, tree)
-        config = _repository_operand(arguments[0], values[0], required=True).as_posix()
+        selected = b5_chain.bind_argument(arguments[0], {"repo_root": "."}, tree, Path("."))
+        config = canonical_repo_path(selected).as_posix()
     except (IndexError, KeyError, TypeError, ValueError) as exc:
         return failed(f"the campaign command's first argument is not a repository-relative config directory: {exc}")
-    for flag, value in zip(values, arguments[1:]):
-        if flag == "--runs-dir" and value.get("kind") == "binding":
+    for flag, value in zip(arguments, arguments[1:]):
+        if flag == {"kind": "literal", "value": "--runs-dir"} and value.get("kind") == "binding":
             if binding is not None:
                 return failed("--runs-dir appears more than once")
             binding = value["value"]
@@ -677,7 +601,7 @@ def _refusal_text(exc: Exception) -> str:
     return str(getattr(code, "value", None) or exc)
 
 
-def ledger_head_status(measurement: Path) -> dict[str, Any]:
+def ledger_head_status(measurement: Path, *, c1_inputs=None) -> dict[str, Any]:
     """Read-only: the measurement checkout's calibration ledger head against its committed pin.
 
     The same snapshot the reservation authenticates
@@ -692,7 +616,7 @@ def ledger_head_status(measurement: Path) -> dict[str, Any]:
     try:
         snapshot = load_calibration_ledger_snapshot(
             ledger, pin, require_committed_pin=True, verify_custody=False, mode="read_replay",
-            repo_root=Path(measurement))
+            repo_root=Path(measurement), **({"c1_inputs": c1_inputs} if c1_inputs else {}))
     except Exception as exc:  # noqa: BLE001 - a ledger the snapshot cannot read is not reservable
         return {"physical": None, "pinned": None, "open_sessions": [],
                 "reasons": [f"snapshot_failed:{type(exc).__name__}"],
@@ -864,7 +788,8 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
                       now: Callable[[], float] = time.time,
                       pack_digest: Callable[[Path], str] | None = None,
                       threshold_defaults: Callable[[], Mapping[str, Any]] | None = None,
-                      horizon_s: int = b5_chain.CALIBRATION_HORIZON_S) -> dict[str, Any]:
+                      horizon_s: int = b5_chain.CALIBRATION_HORIZON_S,
+                      controls_root: Path | None = None, c1_inputs=None) -> dict[str, Any]:
     """Validate everything, then create the window's custody once; return the record.
 
     ``settle_s`` and ``horizon_s`` are keywords for the mock-runtime render
@@ -946,7 +871,7 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
     # reservation refuses unless the ledger's physical head equals the
     # committed pin (calibration_ledger.append_bracket_session_receipt): a
     # stale pin would stop the chain at exit 10 after the whole arm.
-    ledger_status = ledger_head_status(measurement)
+    ledger_status = ledger_head_status(measurement, **({"c1_inputs": c1_inputs} if c1_inputs else {}))
     _require(not ledger_status["blocking"], ledger_head_refusal(ledger_status, measurement))
     identity_path, _ = _locator(inputs["identity_epoch_json"], "identity_epoch_json")
     t1_path, _ = _locator(inputs["t1_bindings_json"], "t1_bindings_json")
@@ -987,7 +912,8 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
     for key in ("capture_screen", "spare_retries"):
         if key in inputs:
             bindings[key] = inputs[key]
-    chain_path = custody / CHAIN_BASENAME
+    controls = controls_root or custody
+    chain_path = controls / CHAIN_BASENAME
     try:
         runbook_text = (measurement / b5_chain.RUNBOOK_RELATIVE).read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
@@ -996,7 +922,7 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
         chain_raw = b5_chain.render_chain(
             tree=tree, tree_sha256=tree_sha256, stages=stages, bindings=bindings,
             measurement_root=measurement, pack_root=pack_root, plan_id=inputs["plan_id"],
-            runbook_text=runbook_text, settle_s=settle_s, horizon_s=horizon_s)
+            runbook_text=runbook_text, settle_s=settle_s, horizon_s=horizon_s, c1_inputs=c1_inputs)
     except b5_chain.ChainRenderError as exc:
         raise WindowPlanError(f"chain: {exc}") from exc
     env_values = {
@@ -1044,7 +970,7 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
         "programmed_span_s": programmed_span_s,
         "t0_stage_cap_s": T0_STAGE_CAP_S,
         "settle_s": settle_s,
-        "window_env": {"path": str(custody / WINDOW_ENV_BASENAME), "sha256": _sha256(env_raw)},
+        "window_env": {"path": str(controls / WINDOW_ENV_BASENAME), "sha256": _sha256(env_raw)},
         "registration": registration,
         "chain_deviations": list(b5_chain.DEVIATIONS),
         "disk_volumes": [str(claim_root), str(bound_root), str(custody),
@@ -1083,10 +1009,11 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
         os.mkdir(root, 0o755)  # exclusive: FileExistsError if a root appeared meanwhile
     _fsync_directory(runs_parent)
     (custody / "operator-logs").mkdir()
-    window_env = _create_once(custody / WINDOW_ENV_BASENAME, env_raw)
+    controls.mkdir(parents=True, exist_ok=True)
+    window_env = _create_once(controls / WINDOW_ENV_BASENAME, env_raw)
     chain = _create_once(chain_path, chain_raw)
     sidecar = _create_once(Path(str(chain_path) + ".sha256"), b5_chain.sidecar_bytes(chain_raw, chain_path.name))
-    plan = _create_once(custody / PLAN_BASENAME, plan_raw)
+    plan = _create_once(controls / PLAN_BASENAME, plan_raw)
     record = {
         "schema": RECORD_SCHEMA, "status": "STAGED", "plan": plan, "chain": chain, "sidecar": sidecar,
         "window_env": window_env, "runs_roots": {"claim": str(claim_root), "bound": str(bound_root)},

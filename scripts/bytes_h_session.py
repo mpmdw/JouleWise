@@ -113,6 +113,70 @@ def disk_bytes(root, *, excluded=(), seen=None):
     return total
 
 
+def c1_measurement_view(source, session, *, kit, public_inputs=None):
+    """Prepare the two immutable input namespaces and their launch aliases."""
+    from joulewise.align.apple import v4_registration as c1_closure
+    from scripts import align_v4_series
+
+    repo, stage, view = (session / name for name in ('repo-export', 'attempt-inputs', 'measurement'))
+    execution = c1_closure.git(source, 'rev-parse', 'HEAD').decode().strip()
+    c1_closure.export_repo(source, execution, repo)
+    stage.mkdir()
+    roots = c1_closure.Roots(repo, stage)
+
+    def source_file(relative):
+        return roots.regular(repo / relative).read_bytes()
+
+    def optional_file(relative):
+        try:
+            return source_file(relative)
+        except FileNotFoundError:
+            return None
+
+    files, _ = render_measurement_files(kit, 'align-v4-c1', source_file, optional_file)
+    for name, mode, _ in roots.walk(repo / kit):
+        path = Path(name)
+        if mode != '040000' and align_v4_series.c1_kit_file(path) and path.name != 'plan_tree.json':
+            files[c1_closure.PACK / path] = source_file(kit / path)
+    if public_inputs is not None:
+        manifest = Path(public_inputs).absolute()
+        read_input = c1_closure.confined_reader(manifest.parent)
+        declared = c1_closure.decode(read_input(manifest.name))
+        for name, descriptor in declared.items():
+            name = Path(c1_closure.key(name))
+            if (name in files or name.as_posix() in {c1_closure.LEDGER, c1_closure.PACKET,
+                                                    c1_closure.OUTPUTS, 'session.json'}
+                    or name.parts[0] == 'inputs' or name in {Path('controls') / n for n in (
+                        plan.PLAN_BASENAME, plan.CHAIN_BASENAME, plan.CHAIN_BASENAME + '.sha256',
+                        plan.WINDOW_ENV_BASENAME)}):
+                raise ValueError(f'C1 public input overlaps a prepare output: {name}')
+            raw = read_input(c1_closure.key(descriptor['source']))
+            if c1_closure.digest(raw) != descriptor['sha256']:
+                raise ValueError(f'C1 public input digest differs: {name}')
+            files[name] = raw
+    for name, raw in files.items():
+        path = stage / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(raw)
+
+    # Keep the single existing ledger inode. No copied prefix and no ledger
+    # outside S can become an input under the prepared launch names.
+    live = source / c1_closure.LEDGER
+    ledger = stage / c1_closure.LEDGER
+    ledger.parent.mkdir(exist_ok=True)
+    os.link(live, ledger, follow_symlinks=False)
+    ledger = roots.regular(ledger)
+    (stage / c1_closure.PACKET).parent.mkdir(exist_ok=True)
+    runtime, git_link = source / '.venv', source / '.git'
+    c1_closure.link_launch_view(roots, view, runtime=runtime, git_link=git_link)
+    handoff = {'window': 'C1', 'git': str(source), 'repo': str(repo), 'stage': str(stage),
+               'view': str(view), 'execution_commit': execution, 'runtime': str(runtime), 'git_link': str(git_link),
+               'cache_home': str(stage / 'cache')}
+    runtime_inputs = c1_closure.execution_inputs(
+        handoff, {'path': str(ledger), 'sha256': c1_closure.digest(ledger.read_bytes())})
+    return view, view / c1_closure.PACK, handoff, runtime_inputs, [*files, Path(c1_closure.LEDGER)]
+
+
 def measurement_view(source, session, *, kit=KIT, pack_id=PACK_ID):
     """Disposable launch attachment over the measurement checkout.
 
@@ -281,17 +345,21 @@ def render_measurement_files(kit, pack_id, read_file, optional_file):
     # the actual --plan bytes to this tree's plan hash and FROZEN_PLAN instead.
     reservation = next(s for s in tree['stage_graph'] if s['kind'] == 'bracket_reservation')
     arguments = reservation['launch']['commands'][0]['argv_template']['arguments']
-    plan_index = plan.portable_stage_arguments(arguments, tree).index('--plan') + 1
+    plan_index = arguments.index({'kind': 'literal', 'value': '--plan'}) + 1
     arguments[plan_index] = {'kind': 'repo_path', 'value': (pack / tree['plan']['path']).as_posix()}
-    # Harvest re-derives NEG-8 only from the pinned settled-corpus bytes named
-    # by the real derivation argv. Include other dispatched file inputs too.
+    # Harvest uses the derivation artifact to replay the bound calculation.
     artifacts = []
-    for path in sorted(plan.stage_repository_paths(tree), key=Path.as_posix):
-        raw = files.get(path)
-        if raw is None:
-            raw = optional_file(kit / path.relative_to(pack) if path.is_relative_to(pack) else path)
-        if raw is not None:
-            artifacts.append({'path': path.as_posix(), 'sha256': hashlib.sha256(raw).hexdigest()})
+    for stage in tree['stage_graph']:
+        if stage['kind'] != 'bound_derivation':
+            continue
+        arguments = stage['launch']['commands'][0]['argv_template']['arguments']
+        flag = {'kind': 'literal', 'value': '--derive-neg8-drift-bound'}
+        if flag in arguments:
+            operand = arguments[arguments.index(flag) + 1]
+            from joulewise.b5.chain import bind_argument
+            path = plan.canonical_repo_path(bind_argument(operand, {'repo_root': '.'}, tree, Path('.')))
+            if (raw := optional_file(path)) is not None:
+                artifacts.append({'path': path.as_posix(), 'sha256': hashlib.sha256(raw).hexdigest()})
     tree['external_inputs'] = {'manifests': manifests, 'artifacts': artifacts}
     tree_path = pack / 'plan_tree.json'
     files[tree_path] = encoded_json(tree)
@@ -325,7 +393,8 @@ def disk_snapshot(root, *, statvfs=os.statvfs, capacity=important_capacity):
 
 def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time,
             statvfs=os.statvfs, capacity=important_capacity, kit=KIT, pack_id=PACK_ID,
-            session_prefix='bytes-h-', ac_powermode=None):
+            session_prefix='bytes-h-', ac_powermode=None, attempt_c1=False,
+            c1_public_inputs=None):
     measurement, session = Path(measurement_root).resolve(), Path(session_root).resolve()
     reg = measurement / kit / 'registration'
     sized = registration.load_sizing(reg)['packs'][pack_id]
@@ -374,15 +443,18 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
         raise PhysicalHazard('not enough disk for the planned physical allocation P')
     for name in ('runs-parent', 'staging'):
         (session / name).mkdir()
-    identities, notes = desk_identity.collect(measurement, session / 'staging/inputs', run=run)
-    # Existing builder already exposes registration_dir. Only this caller's
-    # kit path, bytes and registration locator differ from DriverLane inputs.
+    c1 = attempt_c1
+    if c1:
+        view, pack, handoff, runtime_inputs, outputs = c1_measurement_view(measurement, session, kit=kit, public_inputs=c1_public_inputs)
+        stage = Path(handoff['stage'])
+    identities, notes = desk_identity.collect(measurement, stage / 'inputs' if c1 else session / 'staging/inputs',
+                                               run=run)
     inputs = plan_inputs.build(measurement, reg, pack_id, session_id, identities,
         custody_root=session / 'custody', runs_parent=session / 'runs-parent',
         claim_backup=session / 'backup-claim', bound_backup=session / 'backup-bound', run=run)
-    view, pack = measurement_view(measurement, session, kit=kit, pack_id=pack_id)
-    inputs.update(measurement_root=str(view), pack_root=str(pack),
-                  bytes_per_member=per_member)
+    if not c1:
+        view, pack = measurement_view(measurement, session, kit=kit, pack_id=pack_id)
+    inputs.update(measurement_root=str(view), pack_root=str(pack), bytes_per_member=per_member)
     inputs['thresholds']['disk']['headroom_bytes'] = native_budget['headroom_bytes']
     inputs['t0_epoch_s'] = t0
     if ac_powermode is not None:
@@ -391,7 +463,8 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
         inputs['ac_powermode'] = ac_powermode
     record = None
     try:
-        record = plan.write_window_plan(inputs, now=now)
+        options = {'controls_root': stage / 'controls', 'c1_inputs': runtime_inputs} if c1 else {}
+        record = plan.write_window_plan(inputs, now=now, **options)
     except plan.WindowPlanError as exc:
         # A missing/stale calibration ledger or another record condition is a
         # printed preparation flag, not a new physical collection refusal. The
@@ -415,6 +488,11 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
         'plan_sha256': record['plan']['sha256'] if record else None, 'inputs': inputs, 'disk': disk, 'flags': notes,
         'runs_roots': record['runs_roots'] if record else {}, 't0_epoch_s': t0,
         'window_max_s': expected_max}
+    if c1 and record:
+        outputs.extend(Path(desc['path']).relative_to(stage) for desc in identities.values())
+        outputs.extend(Path(record[name]['path']).relative_to(stage) for name in ('plan', 'chain', 'sidecar', 'window_env'))
+        state['source_measurement_root'] = handoff['repo']
+        state['c1_prepare'] = {'handoff': handoff, 'outputs': [path.as_posix() for path in outputs]}
     write(session / 'staging/plan-inputs.json', inputs)
     write(session / 'session.json', state)
     print('t0: ' + dt.datetime.fromtimestamp(state['t0_epoch_s'], dt.timezone.utc).isoformat())
@@ -424,9 +502,9 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
     return state
 
 
-def install(session_root, *, run=subprocess.run, home=None, now=time.time):
+def install(session_root, *, run=subprocess.run, home=None, now=time.time, state=None):
     session = Path(session_root).resolve()
-    state = read(session / 'session.json')
+    state = read(session / 'session.json') if state is None else state
     installed = state.get('install', {})
     # Same durable idempotency key as DriverLane.launch. A terminal receipt
     # or a loaded calendar job also survives a crash before install recording.

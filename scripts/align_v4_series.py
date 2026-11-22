@@ -12,7 +12,6 @@ from copy import deepcopy
 import json
 import math
 from pathlib import Path
-import stat
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,7 +20,7 @@ if str(ROOT) not in sys.path:
 from scripts import align_v4_kit as w1
 from scripts.align_pilot_kit import raw_json, sha
 from joulewise.align.apple import v4_cadence as cadence
-from joulewise.align.apple.v4_registration import ARTIFACTS, confined_reader
+from joulewise.align.apple.v4_registration import confined_reader
 from joulewise.align.apple.sampling import episode_seed, leading_seed, turn_seed
 from joulewise.b5 import chain, plan as launch_plan
 
@@ -70,72 +69,6 @@ def c1_kit_identity(file_hashes, plan, tree, read):
             'sentinel_ordinals': [i for i, row in enumerate(rows, 1) if row['role'] == 'sentinel'],
             'staged_kit_files': {path: digest for path, digest in file_hashes.items() if path != 'plan_tree.json'},
             'execution': c1_execution_identity(tree, plan, read, staged=False)}
-
-
-def c1_staged_references(tree, kit, execution):
-    """Files named by the resolved staged dispatch and the C1 kit."""
-    pack = Path('configs/campaigns') / pack_id('C1')
-    required = {pack / 'plan_tree.json', pack / 'plan_tree.sha256', Path(launch_plan.HEAD_PIN_RELATIVE)}
-    required.update(pack / path for path in kit['staged_kit_files'])
-    required.update(launch_plan.stage_repository_paths(tree))
-    for stage in chain.stage_plan(tree):
-        for command in stage.commands:
-            required.add(Path(chain.TOOLS[command.tool_id].program))
-    for stage in tree['stage_graph']:
-        if 'path' in (input_ref := stage.get('input') or {}):
-            required.add(launch_plan.canonical_repo_path(input_ref['path']))
-    for stage in execution['order_manifests']:
-        directory = pack / 'members' / stage['stage_id']
-        required.add(directory / 'order_manifest.json')
-        required.update(directory / name for name in stage['configs'])
-        for name, spare in stage['spares'].items():
-            order = launch_plan.canonical_repo_path(name)
-            required.add(order)
-            required.update(order.parent / name for name in spare['configs'])
-    return {path.as_posix() for path in required}
-
-
-def require_c1_staged_closure(tree, binding, execution):
-    """Reject missing pins and pins with no staged dispatch or registration reference."""
-    required = c1_staged_references(tree, binding, execution)
-    registered = set(ARTIFACTS)
-    present = set(binding['staged_inventory'])
-    absent = set(binding['staged_absent_artifacts'])
-    missing = (required - present) | (registered - present - absent)
-    extra = (present - required - registered) | (absent - registered) | (absent & present)
-    if missing or extra:
-        raise ValueError(f'staged inventory differs from resolved C1 inputs: '
-                         f'missing {sorted(missing)}, unexpected {sorted(extra)}')
-
-
-def c1_staged_inventory(kit, read, optional, artifacts):
-    """Pin required staged files from the selected committed sources."""
-    from scripts.bytes_h_session import render_measurement_files
-
-    source_kit = kit_path('C1')
-    pack = Path('configs/campaigns') / pack_id('C1')
-    files, tree = render_measurement_files(source_kit, pack_id('C1'), read, optional)
-    mirrored = {(pack / path).as_posix(): digest for path, digest in kit['staged_kit_files'].items()}
-    pinned = dict(artifacts)
-    for name in sorted(c1_staged_references(tree, kit, kit['execution'])):
-        path = Path(name)
-        if path in files:
-            digest = sha(files[path])
-        elif name in mirrored:
-            digest = mirrored[name]
-        else:
-            digest = sha(read(path))
-        if name in pinned and pinned[name] != digest:
-            raise ValueError(f'incorrect staged input digest: {name}')
-        pinned[name] = digest
-    descriptors = list(tree['external_inputs']['artifacts'])
-    descriptors.extend(stage['input'] for stage in tree['stage_graph']
-                       if 'sha256' in (stage.get('input') or {}))
-    for row in descriptors:
-        if pinned.get(launch_plan.canonical_repo_path(row['path']).as_posix()) != row['sha256']:
-            raise ValueError(f'committed stage input digest mismatch: {row["path"]}')
-    return {**kit, 'staged_inventory': {path: digest for path, digest in pinned.items() if digest is not None},
-            'staged_absent_artifacts': sorted(path for path, digest in pinned.items() if digest is None)}
 
 
 def _campaign_file(path, read):
@@ -210,32 +143,27 @@ def c1_execution_identity(tree, plan, read, *, staged):
     return {'run_ids': science_ids, 'order_manifests': orders}
 
 
-def read_c1_kit(root):
+def read_c1_kit(root, *, read=None, entries=None):
     """Hash the selected materialization, including the exact collection-plan bytes."""
     relative = kit_path('C1')
     root = Path(root)
-    directory = root
-    for part in relative.parts:
-        directory /= part
-        if not stat.S_ISDIR(directory.lstat().st_mode):
-            raise ValueError('materialized C1 kit directory must be a regular directory')
-    read = confined_reader(root)
+    directory = root / relative
+    if entries is None:
+        entries = (path for path in directory.rglob("*") if not path.is_dir() or path.is_symlink())
+    read = read or confined_reader(root)
     file_hashes, plan, tree = {}, None, None
-    for path in sorted(directory.rglob('*')):
-        mode = path.lstat().st_mode
-        if stat.S_ISDIR(mode):
-            continue
+    for path in sorted(entries):
         relative = path.relative_to(directory)
-        if not stat.S_ISREG(mode) or not c1_kit_file(relative):
-            raise ValueError('unexpected file in materialized C1 kit: ' + relative.as_posix())
+        if not c1_kit_file(relative):
+            raise ValueError("unexpected file in materialized C1 kit: " + relative.as_posix())
         raw = read(path.relative_to(root))
         file_hashes[relative.as_posix()] = sha(raw)
         if relative.as_posix() == C1_PLAN:
             plan = json.loads(raw)
-        elif relative.as_posix() == 'plan_tree.json':
+        elif relative.as_posix() == "plan_tree.json":
             tree = json.loads(raw)
     if not isinstance(plan, dict) or not isinstance(tree, dict):
-        raise ValueError('materialized C1 kit is incomplete')
+        raise ValueError("materialized C1 kit is incomplete")
     return c1_kit_identity(file_hashes, plan, tree, read), plan
 
 

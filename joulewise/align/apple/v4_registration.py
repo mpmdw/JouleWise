@@ -1,6 +1,7 @@
 """V4 registration evidence. Pure stdlib; no probes, data discovery or weights."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import json
 import math
@@ -10,6 +11,7 @@ from pathlib import Path
 import stat
 import statistics
 import subprocess
+import unicodedata
 
 REGISTRATION = 'configs/campaigns/align_v4/registration/'
 RECEIPT_SCHEMA = 'joulewise.align_v4.registration_receipt.v1'
@@ -517,39 +519,732 @@ def confined_reader(root, *other_roots):
     return read
 
 
-class StagedInventory:
-    """Hand decoders only the exact bytes verified against a committed pin."""
+# C1 execution export and prepared-input closure.
 
-    def __init__(self, root, source, pins):
-        if not isinstance(pins, dict) or not pins:
-            raise ValueError('committed staged input inventory missing')
-        self.pins = pins
-        self.read = confined_reader(root, source)
-        self.verified = {}
+SCHEMA = 'joulewise.c1_staged_closure.v1'
+PACKET = 'series/c1-next-arm.json'
+OUTPUTS = 'prepare-outputs.json'
+RESTRICTED = frozenset({'.git', 'restricted', 'night-custody', 'night-archive'})
+HEX = re.compile(r'[0-9a-f]+')
+PIN = re.compile(r'[0-9a-f]{64}')
 
-    def __call__(self, path):
-        key = Path(path).as_posix()
-        if key not in self.pins:
-            raise ValueError(f'staged input is not in the committed inventory: {key}')
-        if key not in self.verified:
-            expected = self.pins[key]
-            if expected is None:
-                try:
-                    self.read(key, metadata_only=True)
-                except FileNotFoundError:
-                    raw = None
-                else:
-                    raise ValueError(f'unlisted staged artifact is present: {key}')
+
+def decode(raw):
+    def unique(pairs):
+        values = {}
+        for key, value in pairs:
+            if key in values:
+                raise ValueError(f'duplicate JSON key: {key}')
+            values[key] = value
+        return values
+    return json.loads(raw, object_pairs_hook=unique)
+
+
+def key(name):
+    if not isinstance(name, str) or '\0' in name or any(
+            part in ('', '.', '..') for part in name.split('/')):
+        raise ValueError(f'invalid closure path: {name!r}')
+    for part in name.split('/'):
+        if part in RESTRICTED or part.startswith('jw-b5-'):
+            raise ValueError(f'restricted closure path: {name}')
+    return name
+
+
+def distinct(names):
+    spellings = set()
+    for name in names:
+        normalized = unicodedata.normalize('NFC', key(name)).casefold()
+        if normalized in spellings:
+            raise ValueError(f'aliased closure path: {name}')
+        spellings.add(normalized)
+
+
+def git(root, *args):
+    env = {**os.environ, 'GIT_NO_LAZY_FETCH': '1', 'GIT_OPTIONAL_LOCKS': '0'}
+    for name in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE'):
+        env.pop(name, None)
+    result = subprocess.run(['git', '--literal-pathspecs', '-C', str(root), *args],
+                            env=env, capture_output=True, check=False)
+    if result.returncode:
+        raise ValueError(f'C1 Git authority unavailable: {args[0]}')
+    return result.stdout
+
+
+def full_oid(root, value, *, object_format=None):
+    fmt = object_format or git(root, 'rev-parse', '--show-object-format').decode().strip()
+    lengths = {'sha1': 40, 'sha256': 64}
+    if fmt not in lengths or not isinstance(value, str) or len(value) != lengths[fmt] or not HEX.fullmatch(value):
+        raise ValueError('C1 authority requires a full Git object ID')
+    if git(root, 'rev-parse', '--verify', value + '^{commit}').decode().strip() != value:
+        raise ValueError('C1 authority must identify a commit object')
+    return value
+
+
+def tree_identity(authority, commit):
+    fmt = git(authority, 'rev-parse', '--show-object-format').decode().strip()
+    commit = full_oid(authority, commit, object_format=fmt)
+    return {'object_format': fmt, 'commit': commit,
+            'tree': git(authority, 'rev-parse', commit + '^{tree}').decode().strip()}
+
+
+class Roots:
+    """Resolve each link hop before touching its target, retaining logical names."""
+    def __init__(self, repo, stage):
+        self.alias = {Path(p).absolute(): Path(p).absolute().resolve(strict=True) for p in (repo, stage)}
+        self.repo, self.stage = (self.alias[Path(p).absolute()] for p in (repo, stage))
+        if self.repo.is_relative_to(self.stage) or self.stage.is_relative_to(self.repo):
+            raise ValueError('C1 repo and stage roots must be disjoint')
+        self.allowed = tuple(self.alias.values())
+        self.alias.update({p: p for p in self.allowed})
+        self.prefixes = {parent for root in self.allowed for parent in root.parents}
+
+    def path(self, path):
+        path = Path(path)
+        if not path.is_absolute():
+            raise ValueError(f'staged path must be absolute: {path}')
+        root = next((p for p in self.alias if path.is_relative_to(p)), None)
+        if root is None:
+            raise ValueError(f'staged path is outside R/S: {path}')
+        current = self.alias[root]
+        parts = list(path.relative_to(root).parts)
+        hops = 0
+        while parts:
+            part = parts.pop(0)
+            if part == '..':
+                current = current.parent
+                if current not in self.prefixes and not any(current.is_relative_to(p) for p in self.allowed):
+                    raise ValueError(f'staged link escapes R/S: {path}')
+                continue
+            target = current / part
+            scope = next((p for p in self.allowed if target.is_relative_to(p)), None)
+            if scope is None:
+                if target in self.prefixes and parts:
+                    current = target
+                    continue
+                raise ValueError(f'staged link escapes R/S: {path}')
+            key(target.relative_to(scope).as_posix()) if target != scope else None
+            mode = target.lstat().st_mode
+            if stat.S_ISLNK(mode):
+                hops += 1
+                if hops > 40:
+                    raise ValueError(f'staged link cycle: {path}')
+                link = Path(os.readlink(target))
+                if link.is_absolute():
+                    base = next((p for p in self.alias if link.is_relative_to(p)), None)
+                    if base is None:
+                        raise ValueError(f'staged link escapes R/S: {path}')
+                    current = self.alias[base]
+                    link = link.relative_to(base)
+                parts = list(link.parts) + parts
             else:
-                raw = self.read(key)
-                if digest(raw) != expected:
-                    raise ValueError(f'staged input SHA-256 mismatch: {key}')
-            self.verified[key] = raw
-        return self.verified[key]
+                if parts and not stat.S_ISDIR(mode):
+                    raise ValueError(f'staged path parent is not a directory: {path}')
+                current = target
+        if not any(current.is_relative_to(p) for p in self.allowed):
+            raise ValueError(f'staged path is outside R/S: {path}')
+        return current
 
-    def verify_all(self):
-        for path in self.pins:
-            self(path)
+    def regular(self, path):
+        result = self.path(path)
+        if not stat.S_ISREG(result.lstat().st_mode):
+            raise ValueError(f'staged input is not a regular file: {path}')
+        return result
+
+    def walk(self, root, *, symlinks=()):
+        def descend(physical, prefix, ancestors):
+            if physical in ancestors:
+                raise ValueError(f'staged directory cycle: {prefix}')
+            parents = ancestors | {physical}
+            for entry in sorted(physical.iterdir()):
+                name = key(prefix + entry.name)
+                if name in symlinks:
+                    if not entry.is_symlink():
+                        raise ValueError(f'expected a Git symlink: {name}')
+                    target = self.path(entry)
+                    if not (target.is_file() or target.is_dir()):
+                        raise ValueError(f'unsupported Git symlink target: {name}')
+                    yield name, '120000', os.fsencode(os.readlink(entry))
+                    continue
+                target = self.path(entry)
+                mode = target.lstat().st_mode
+                if stat.S_ISDIR(mode):
+                    yield name, '040000', None
+                    yield from descend(target, name + '/', parents)
+                elif stat.S_ISREG(mode):
+                    yield name, '100755' if mode & stat.S_IXUSR else '100644', target
+                else:
+                    raise ValueError(f'unsupported staged entry: {name}')
+        root = self.path(root)
+        if not root.is_dir():
+            raise ValueError('C1 closure root must be a directory')
+        yield from descend(root, '', set())
+
+
+def blob_id(fmt, kind, raw):
+    digest = hashlib.new(fmt)
+    digest.update(f'{kind} {len(raw)}\0'.encode())
+    digest.update(raw)
+    return digest.hexdigest()
+
+
+def tree_entries(authority, commit):
+    entries = {}
+    for entry in git(authority, 'ls-tree', '-rzt', '--full-tree', commit).split(b'\0'):
+        if entry:
+            header, raw_name = entry.split(b'\t', 1)
+            mode, _, oid = header.decode().split()
+            name = key(raw_name.decode())
+            if mode not in {'040000', '100644', '100755', '120000'}:
+                raise ValueError(f'unsupported Git entry: {name}')
+            entries[name] = (mode, oid)
+    distinct(entries)
+    return entries
+
+
+def verify_repo(authority, roots, identity):
+    expected = tree_identity(authority, identity['commit'])
+    if identity != expected:
+        raise ValueError('C1 execution tree identity does not match the authority')
+    fmt = expected['object_format']
+    entries = tree_entries(authority, expected['commit'])
+    verified = {}
+    directories = {'': []}
+    for name, mode, path in roots.walk(roots.repo,
+                                      symlinks={p for p, (mode, _) in entries.items() if mode == '120000'}):
+        if entries.get(name, (None,))[0] != mode:
+            raise ValueError(f'unexpected repository path or mode: {name}')
+        parent, _, leaf = name.rpartition('/')
+        directories[parent].append((leaf, mode, name))
+        if mode == '040000':
+            directories[name] = []
+        else:
+            oid = blob_id(fmt, 'blob', path if mode == '120000' else path.read_bytes())
+            if oid != entries[name][1]:
+                raise ValueError(f'repository blob mismatch: {name}')
+            verified[name] = oid
+    if missing := entries.keys() - verified.keys() - directories.keys():
+        raise ValueError(f'missing repository path: {min(missing)}')
+    for name, children in reversed(directories.items()):
+        raw = b''.join((mode.lstrip('0') + ' ' + leaf + '\0').encode() + bytes.fromhex(verified[path])
+                       for leaf, mode, path in sorted(children, key=lambda item: item[0] + ('/' if item[1] == '040000' else '')))
+        verified[name] = blob_id(fmt, 'tree', raw)
+    if verified[''] != expected['tree']:
+        raise ValueError('observed repository tree ID differs')
+
+
+def stage_pins(pins):
+    if not isinstance(pins, dict) or PACKET in pins:
+        raise ValueError('invalid staged inventory or reserved packet collision')
+    distinct([*pins, PACKET])
+    if any(not isinstance(digest, str) or not PIN.fullmatch(digest) for digest in pins.values()):
+        raise ValueError('invalid staged SHA-256 pin')
+    return pins
+
+
+@dataclass(frozen=True)
+class VerifiedView:
+    roots: Roots
+    packet: dict
+    packet_sha256: str
+    stage_files: dict
+
+    def stage_read(self, relative):
+        name = key(Path(relative).as_posix())
+        if name not in self.stage_files:
+            raise ValueError(f'staged input is not pinned: {name}')
+        raw = self.roots.regular(self.roots.stage / name).read_bytes()
+        if digest(raw) != self.stage_files[name]:
+            raise ValueError(f'staged SHA-256 mismatch: {name}')
+        return raw
+
+
+def verify_view(authority, repo, stage, *, delivery_ref, delivery_commit, execution_commit=None):
+    """Authenticate the fixed packet, then compare both complete physical walks."""
+    if not isinstance(delivery_ref, str) or not delivery_ref.startswith('refs/'):
+        raise ValueError('C1 delivery needs a named ref')
+    commit = full_oid(authority, delivery_commit)
+    if git(authority, 'show-ref', '--verify', '--hash', delivery_ref).decode().strip() != commit:
+        raise ValueError('C1 delivery ref does not name the supplied commit')
+    row = git(authority, 'ls-tree', commit, '--', PACKET)
+    if row.split()[:2] not in ([b'100644', b'blob'], [b'100755', b'blob']):
+        raise ValueError('C1 delivery packet must be a committed regular blob')
+    raw = git(authority, 'show', f'{commit}:{PACKET}')
+    roots = Roots(repo, stage)
+    if roots.regular(roots.stage / PACKET).read_bytes() != raw:
+        raise ValueError('staged packet differs from the delivery blob')
+    packet = decode(raw)
+    closure = packet['c1_closure']
+    if closure['schema'] != SCHEMA or (execution_commit is not None and closure['repo']['commit'] != execution_commit):
+        raise ValueError('invalid C1 staged closure identity')
+    pins = {**stage_pins(closure['stage_files']), PACKET: digest(raw)}
+    verify_repo(authority, roots, closure['repo'])
+    seen = set()
+    for name, mode, path in roots.walk(roots.stage):
+        if mode == '040000':
+            continue
+        if name not in pins:
+            raise ValueError(f'unlisted staged file: {name}')
+        if digest(path.read_bytes()) != pins[name]:
+            raise ValueError(f'staged SHA-256 mismatch: {name}')
+        seen.add(name)
+    if missing := pins.keys() - seen:
+        raise ValueError(f'missing staged file: {min(missing)}')
+    return VerifiedView(roots, packet, digest(raw), pins)
+
+
+def declare_outputs(repo, stage, paths):
+    """Record known prepare outputs. This never enumerates staging."""
+    roots = Roots(repo, stage)
+    files = {}
+    for name in paths:
+        name = key(Path(name).as_posix())
+        if name in {OUTPUTS, PACKET} or name in files:
+            raise ValueError(f'duplicate or reserved prepared output: {name}')
+        files[name] = digest(roots.regular(roots.stage / name).read_bytes())
+    distinct(files)
+    descriptor = roots.stage / OUTPUTS
+    with descriptor.open('xb') as handle:
+        handle.write((json.dumps(files, sort_keys=True) + '\n').encode())
+    return descriptor
+
+
+def declared_pins(repo, stage):
+    roots = Roots(repo, stage)
+    raw = roots.regular(roots.stage / OUTPUTS).read_bytes()
+    pins = stage_pins(decode(raw))
+    if OUTPUTS in pins:
+        raise ValueError('prepare manifest contains itself')
+    for name, expected in pins.items():
+        if digest(roots.regular(roots.stage / name).read_bytes()) != expected:
+            raise ValueError(f'prepared output changed: {name}')
+    return {**pins, OUTPUTS: digest(raw)}
+
+LEDGER = 'runs/calibration_observation_ledger.jsonl'
+PACK = Path('configs/campaigns/align-v4-c1')
+
+
+def ledger_pin(roots, path, pins):
+    physical = roots.regular(path)
+    if not physical.is_relative_to(roots.stage):
+        raise ValueError('the starting ledger must reside in S')
+    name = physical.relative_to(roots.stage).as_posix()
+    if name not in pins:
+        raise ValueError('the starting ledger has no prepared inventory row')
+    return {'path': str(physical), 'sha256': pins[name]}
+
+
+def check_ledger(path, pin, *, starting=False):
+    """Check one physical ledger. Only reservation checks its starting bytes."""
+    named = Path(pin['path'])
+    path = Path(path).resolve(strict=True)
+    if path != named or not named.is_absolute() or not path.is_file():
+        raise ValueError('ledger does not resolve to the canonical C1 path')
+    if starting and digest(path.read_bytes()) != pin['sha256']:
+        raise ValueError('C1 starting ledger SHA-256 mismatch')
+    return path
+
+
+class LaunchView:
+    """The legacy command namespace is a projection of the two verified trees."""
+    def __init__(self, roots, view):
+        self.roots, self.root = roots, Path(view).absolute()
+
+    def locate(self, path, *, directory=False):
+        path = Path(path)
+        if not path.is_absolute():
+            path = self.root / path
+        if path.is_relative_to(self.root):
+            name = path.relative_to(self.root)
+            if '..' in name.parts:
+                raise ValueError(f'path escapes the C1 launch view: {path}')
+            # Resolve the actual launch alias using the same fence as the walks.
+            current = self.root
+            for index, part in enumerate(name.parts):
+                key(part)
+                current /= part
+                mode = current.lstat().st_mode
+                if stat.S_ISLNK(mode):
+                    link = Path(os.readlink(current))
+                    target = link if link.is_absolute() else current.parent / link
+                    result = self.roots.path(target.joinpath(*name.parts[index + 1:]))
+                    break
+                if not stat.S_ISDIR(mode):
+                    raise ValueError(f'undeclared file in the launch view: {path}')
+            else:
+                if not directory:
+                    raise ValueError(f'staged input is not a file: {path}')
+                return current
+        else:
+            result = self.roots.path(path)
+        mode = result.lstat().st_mode
+        if not (stat.S_ISDIR(mode) if directory else stat.S_ISREG(mode)):
+            raise ValueError(f'invalid staged input type: {path}')
+        return result
+
+
+def launch_aliases(roots):
+    """Return the launch aliases. The pack remains one physical directory."""
+    leaves, folders = {}, set()
+    for root in (roots.repo, roots.stage):
+        for directory, dirs, names in os.walk(root, followlinks=False):
+            parent = Path(directory)
+            folders.add(parent.relative_to(root))
+            links = [name for name in dirs if (parent / name).is_symlink()]
+            if root == roots.stage and parent == root / PACK.parent and PACK.name in dirs:
+                links.append(PACK.name)
+                dirs.remove(PACK.name)
+            for name in [*names, *links]:
+                path = parent / name
+                relative = path.relative_to(root)
+                key(relative.as_posix())
+                if relative.as_posix() == PACKET:
+                    continue
+                if relative in leaves:
+                    raise ValueError(f'overlapping R/S logical entry: {relative}')
+                leaves[relative] = path
+    if leaves.keys() & folders:
+        raise ValueError('R/S launch namespace has a file/directory overlap')
+    return folders, leaves
+
+
+def link_launch_view(roots, view, *, runtime=None, git_link=None):
+    view = Path(view)
+    folders, leaves = launch_aliases(roots)
+    for relative in sorted(folders):
+        (view / relative).mkdir(parents=True, exist_ok=True)
+    for name, path in (('.venv', runtime), ('.git', git_link)):
+        if path is not None:
+            leaves[Path(name)] = Path(path)
+    for relative, path in sorted(leaves.items()):
+        alias = view / relative
+        if alias.is_symlink() and Path(os.readlink(alias)) == path:
+            continue
+        alias.symlink_to(path)
+    return LaunchView(roots, view)
+
+
+def verify_launch_view(roots, view, *, runtime=None, git_link=None):
+    view = Path(view)
+    if view.is_symlink() or not view.is_dir():
+        raise ValueError('the launch view must be a regular directory')
+    folders, leaves = launch_aliases(roots)
+    for name, path in (('.venv', runtime), ('.git', git_link)):
+        if path is not None:
+            leaves[Path(name)] = Path(path)
+    observed = set()
+    for directory, dirs, names in os.walk(view, followlinks=False):
+        parent = Path(directory)
+        relative = parent.relative_to(view)
+        if relative not in folders:
+            raise ValueError(f'unlisted launch directory: {relative}')
+        observed.add(relative)
+        for name in [*names, *(d for d in dirs if (parent / d).is_symlink())]:
+            path = parent / name
+            relative = path.relative_to(view)
+            if relative not in leaves or not path.is_symlink() or Path(os.readlink(path)) != leaves[relative]:
+                raise ValueError(f'wrong launch alias: {relative}')
+            observed.add(relative)
+    if missing := (leaves.keys() | folders) - observed:
+        raise ValueError(f'missing launch path: {min(missing)}')
+    return LaunchView(roots, view)
+
+
+def export_repo(authority, commit, dest):
+    """Export the execution commit with raw Git modes and no worktree fallbacks."""
+    entries = tree_entries(authority, commit)
+    dest = Path(dest)
+    dest.mkdir()
+    blobs = [oid for mode, oid in entries.values() if mode != '040000']
+    # Use one Git process. A batch record includes the exact object length.
+    env = {**os.environ, 'GIT_NO_LAZY_FETCH': '1', 'GIT_OPTIONAL_LOCKS': '0'}
+    for name in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE'):
+        env.pop(name, None)
+    result = subprocess.run(['git', '-C', str(authority), 'cat-file', '--batch'],
+                            input=('\n'.join(blobs) + '\n').encode(), env=env,
+                            check=True, capture_output=True)
+    from io import BytesIO
+    stream = BytesIO(result.stdout)
+    for name, (mode, oid) in entries.items():
+        path = dest / name
+        if mode == '040000':
+            path.mkdir()
+            continue
+        header = stream.readline().split()
+        if len(header) != 3 or header[:2] != [oid.encode(), b'blob']:
+            raise ValueError(f'cannot export Git blob: {name}')
+        raw = stream.read(int(header[2]))
+        if stream.read(1) != b'\n':
+            raise ValueError(f'truncated Git blob: {name}')
+        if mode == '120000':
+            path.symlink_to(os.fsdecode(raw))
+        else:
+            path.write_bytes(raw)
+            path.chmod(0o755 if mode == '100755' else 0o644)
+
+
+def load_prepared(view, read):
+    state = decode(read('session.json'))
+    if (state.get('v4_series') or {}).get('window_id') != 'C1':
+        raise ValueError('the C1 handoff requires a C1 prepared session')
+    if (Path(state['source_measurement_root']) != view.roots.repo
+            or Path(state['measurement_root']) != view.root):
+        raise ValueError('prepared launch view differs from the C1 handoff')
+    night_path = view.roots.regular(state['plan_path'])
+    if not night_path.is_relative_to(view.roots.stage):
+        raise ValueError('the prepared night plan must reside in S')
+    raw = read(night_path.relative_to(view.roots.stage))
+    if digest(raw) != state['plan_sha256']:
+        raise ValueError('prepared night plan digest differs')
+    night = decode(raw)
+    hazard = night['hazard_window']
+    for path in (night['chain_path'], night['chain_sha256_path'], hazard['window_env']['path']):
+        target = view.roots.regular(path)
+        if not target.is_relative_to(view.roots.stage):
+            raise ValueError('the prepared chain controls must reside in S')
+        read(target.relative_to(view.roots.stage))
+    for descriptor in (hazard['window_env'], hazard.get('registration')):
+        if descriptor is not None:
+            path = view.locate(descriptor['path'])
+            if digest(path.read_bytes()) != descriptor['sha256']:
+                raise ValueError(f'prepared control SHA-256 mismatch: {path}')
+    return state, night
+
+
+def config_references(data, config, view, runner, *, cache_home=None):
+    def resolve(reference, parent):
+        path = Path(reference)
+        if path.is_absolute():
+            return view.locate(path)
+        try:
+            return view.locate(path)
+        except FileNotFoundError:
+            return view.locate(parent / path)
+
+    suite = runner.suite_manifest_ref_from_config(data)
+    refs = (runner.generator_sidecar_ref_from_config(data), suite)
+    visited = set()
+    documents = [(data, config.parent)]
+    for ref in filter(None, refs):
+        path = resolve(ref, config.parent)
+        documents.append((decode(path.read_bytes()), path.parent))
+    if suite:
+        manifest = resolve(suite, config.parent)
+        annotated = manifest.with_name(f'{manifest.stem}_annotations.json')
+        try:
+            path = view.locate(annotated)
+        except FileNotFoundError:
+            pass
+        else:
+            documents.append((decode(path.read_bytes()), path.parent))
+    # Digest-bearing source descriptors can nest in config and sidecar
+    # documents. Generated bundle locators have a different field name.
+    while documents:
+        item, parent = documents.pop()
+        if isinstance(item, dict):
+            if isinstance(item.get('path'), str) and isinstance(item.get('sha256'), str):
+                path = resolve(item['path'], parent)
+                raw = path.read_bytes()
+                if digest(raw) != item['sha256']:
+                    raise ValueError(f'staged descriptor SHA-256 mismatch: {item["path"]}')
+                if path.suffix == '.json' and path not in visited:
+                    visited.add(path)
+                    documents.append((decode(raw), path.parent))
+            documents.extend((value, parent) for value in item.values())
+        elif isinstance(item, list):
+            documents.extend((value, parent) for value in item)
+
+    workload = data.get('workload_profile') or {}
+    spec = decode(workload.get('prompt_text') or '{}') if workload.get('name') == 'align_episode' else {}
+    factory = spec.get('task_factory')
+    if factory == 'joulewise.align.apple.pilot:offline_shade_task' or 'shade' in str(workload.get('name', '')).casefold():
+        from joulewise.align.shade.upstream import PinnedUpstream, exported_file_list_sha256
+        kwargs = spec.get('task_kwargs') or {}
+        selected = {name: kwargs[name] for name in ('cache_dir', 'commit', 'file_sha256') if name in kwargs}
+        if selected.get('cache_dir') is None and cache_home is not None:
+            selected['cache_dir'] = Path(cache_home) / 'joulewise/shade'
+        upstream = PinnedUpstream(allow_fetch=False, **selected)
+        try:
+            required = view.locate(upstream.root, directory=True)
+        except (OSError, ValueError) as exc:
+            raise ValueError('SHADE dependency is absent from the staged view') from exc
+        if exported_file_list_sha256(view.roots, required) != upstream.file_sha256:
+            raise ValueError('staged SHADE manifest differs from the configured pin')
+
+
+def check_selections(view, tree, night, pin, *, cache_home=None, environment=None, starting=True):
+    """Run the actual argv binders and parsers, then check their selected inputs."""
+    from joulewise.b5 import chain
+    from scripts import reserve_calibration_window_bracket as reservation, run_campaign as runner
+
+    en = os.environ if environment is None else environment
+    cache_home = en.get('XDG_CACHE_HOME') or cache_home
+    hazard = night['hazard_window']
+    if hazard['pack']['pack_root'] != str(view.root / PACK):
+        raise ValueError('prepared pack is outside its C1 launch location')
+    bindings = hazard['bindings']
+    if Path(bindings['repo_root']) != view.root:
+        raise ValueError('prepared repo_root binding differs')
+    default_ledger = view.root / LEDGER
+    default_head = view.root / 'configs/calibration/calibration_ledger_head.json'
+    env = {'CALIBRATION_LEDGER': en.get('CALIBRATION_LEDGER') or str(default_ledger),
+           'LEDGER_HEAD_PIN': en.get('LEDGER_HEAD_PIN') or str(default_head)}
+    # The name used by the chain writer and all reader spellings must select
+    # the same physical file, even if an alternate file has identical bytes.
+    for candidate in (default_ledger, bindings['ledger_path']):
+        check_ledger(view.locate(candidate), pin, starting=starting)
+    if fallback := en.get('JOULEWISE_G2A_PRE_BRACKET_PLAN'):
+        view.locate(fallback)
+    selections = {}
+    generated_bound = None
+
+    def check_order(manifest_path):
+        manifest = decode(view.locate(manifest_path).read_bytes())
+        for row in manifest['executed_order']:
+            name = key(row['config'])
+            if '/' in name:
+                raise ValueError(f'invalid dispatched config name: {name}')
+            config = view.locate(Path(manifest_path).parent / name)
+            config_references(decode(config.read_bytes()), config, view, runner, cache_home=cache_home)
+
+    for stage in chain.stage_plan(tree):
+        for command in stage.commands:
+            if not stage.in_chain:
+                # Desk commands are not emitted on the measuring chain.
+                for arg in command.arguments:
+                    chain.bind_argument(arg, bindings, tree, view.root)
+                continue
+            launch = chain.stage_argv(stage, bindings, tree, view.root)
+            view.locate(launch[1])
+            argv = launch[2:]
+            try:
+                if command.tool_id == 'bracket_reserver':
+                    args = reservation._parser(ledger_default=Path(env['CALIBRATION_LEDGER']),
+                                               head_pin_default=Path(env['LEDGER_HEAD_PIN'])).parse_args(argv)
+                    if args.session_kind != 'bracket' or args.allow_uncommitted_pin_for_test or args.test_writer_crash_authorization:
+                        raise ValueError('C1 reservation requires the ordinary bracket')
+                    selections['ledger'] = check_ledger(view.locate(args.ledger), pin, starting=starting)
+                    selections['head_pin'] = view.locate(args.head_pin)
+                    env['LEDGER_HEAD_PIN'] = str(args.head_pin)
+                    selections['session_kind'] = args.session_kind
+                    for path in (args.plan, args.identity_epoch_json, args.t1_bindings_json):
+                        view.locate(path)
+                    if view.locate(args.plan) != view.locate(view.root / PACK / 'collection_plan.json'):
+                        raise ValueError('reservation selects a different C1 collection plan')
+                elif command.tool_id == 'fiducial_capture':
+                    from scripts.validate_powermetrics_fiducial import _capture_parser
+                    args = _capture_parser(ledger_default=Path(env['CALIBRATION_LEDGER']),
+                                           head_pin_default=Path(env['LEDGER_HEAD_PIN'])).parse_args(argv)
+                    check_ledger(view.locate(args.ledger), pin, starting=starting)
+                    view.locate(args.head_pin)
+                    for field in ('identity_epoch_json', 't1_bindings_json', 'plan',
+                                  'identity_epoch_json_for_test', 'battery_probe_fixture_for_test',
+                                  'rederive_from', 'test_writer_crash_authorization'):
+                        if value := getattr(args, field, None):
+                            view.locate(value)
+                elif command.tool_id == 'campaign_runner':
+                    args = runner.parse_args(argv, repo_root=view.root, environment=env)
+                    check_ledger(view.locate(args.calibration_ledger), pin, starting=starting)
+                    view.locate(args.head_pin)
+                    if stage.kind == 'bound_derivation':
+                        selections['derivation'] = view.locate(args.derive_neg8_drift_bound)
+                        generated_bound = view.root / args.neg8_drift_bound_output
+                        if '..' in generated_bound.parts or not generated_bound.is_absolute():
+                            raise ValueError('invalid same-attempt bound output')
+                        config_references(decode(selections['derivation'].read_bytes()),
+                                          selections['derivation'], view, runner)
+                        # Corpus bundle names describe same-attempt products.
+                        manifest = decode(selections['derivation'].read_bytes())
+                        for member in manifest['members']:
+                            name = member['bundle_path']
+                            key(name)
+                    else:
+                        if (args.cli_cmd or args.backup is not None or args.check_prompt_hashes
+                                or args.whole_window_verdict or args.record_supersession):
+                            raise ValueError('unsupported C1 campaign mode')
+                        selections['policy'] = view.locate(args.campaign_policy)
+                        for field in ('waivers', 'environment_override', 'salvage_closure',
+                                      'window_membership_binding', 'bracket_session_binding'):
+                            if value := getattr(args, field, None):
+                                view.locate(value)
+                        if args.neg8_drift_bound and view.root / args.neg8_drift_bound != generated_bound:
+                            view.locate(args.neg8_drift_bound)
+                        if args.instrument_calibration_dir:
+                            selected = view.root / args.instrument_calibration_dir
+                            if selected != Path(bindings['pre_calibration_dir']):
+                                view.locate(selected, directory=True)
+                        directory = view.locate(args.config_dir, directory=True)
+                        check_order(Path(args.config_dir) / 'order_manifest.json')
+                        for path in (stage.spare_sets or {}).values():
+                            check_order(path)
+                        analysis = directory / runner.ANALYSIS_MANIFEST_NAME
+                        if analysis.is_file():
+                            config_references(decode(view.locate(analysis).read_bytes()), analysis, view, runner)
+                        _, marker = runner._reachable_analysis_manifest_v3(directory, allowed_roots=view.roots.allowed)
+                        if marker is not None:
+                            config_references(decode(marker.read_bytes()), marker, view, runner)
+            except SystemExit as exc:
+                raise ValueError(f'{stage.stage_id}: invalid resolved C1 command') from exc
+    return selections
+
+
+def execution_inputs(handoff, ledger):
+    names = ('git', 'repo', 'stage', 'view', 'execution_commit', 'cache_home')
+    return {**{name: handoff[name] for name in names if name in handoff}, 'ledger': ledger}
+
+
+def verify_chain(view, handoff, ledger, tree, tree_sha256, night):
+    """Compare the staged chain to the actual renderer and prepared bindings."""
+    from joulewise.b5 import chain
+
+    hazard = night['hazard_window']
+    runbook = view.locate(chain.RUNBOOK_RELATIVE).read_text(encoding='utf-8')
+    expected = chain.render_chain(
+        tree=tree, tree_sha256=tree_sha256, stages=chain.stage_plan(tree),
+        bindings=hazard['bindings'], measurement_root=view.root, pack_root=view.root / PACK,
+        plan_id=night['plan_id'], runbook_text=runbook, settle_s=hazard['settle_s'],
+        c1_inputs=execution_inputs(handoff, ledger))
+    script = view.locate(night['chain_path'])
+    sidecar = view.locate(night['chain_sha256_path'])
+    if script.read_bytes() != expected or sidecar.read_bytes() != chain.sidecar_bytes(expected, script.name):
+        raise ValueError('prepared chain differs from the resolved C1 dispatch')
+
+
+def prepared_closure(authority, verified_roots, handoff, read):
+    """Derive the inventory from prepare's declaration and check required inputs."""
+    view = verify_launch_view(verified_roots, handoff['view'],
+                              runtime=handoff.get('runtime'), git_link=handoff.get('git_link'))
+    state, night = load_prepared(view, read)
+    pins = declared_pins(verified_roots.repo, verified_roots.stage)
+    ledger = ledger_pin(verified_roots, view.locate(view.root / LEDGER), pins)
+    tree_raw = read(PACK / 'plan_tree.json')
+    expected = f'{digest(tree_raw)}  plan_tree.json\n'.encode()
+    if read(PACK / 'plan_tree.sha256') != expected:
+        raise ValueError('staged plan tree sidecar differs')
+    tree = decode(tree_raw)
+    selections = check_selections(view, tree, night, ledger, cache_home=handoff.get('cache_home'))
+    verify_chain(view, handoff, ledger, tree, digest(tree_raw), night)
+    closure = {'schema': SCHEMA, 'repo': tree_identity(authority, handoff['execution_commit']),
+               'stage_files': pins, 'ledger': ledger}
+    return closure, state, night, tree, view, selections
+
+
+def finalize(authority, handoff):
+    """Read only declared outputs when finalizing an attempt's packet."""
+    roots = Roots(handoff['repo'], handoff['stage'])
+    verify_repo(authority, roots, tree_identity(authority, handoff['execution_commit']))
+    pins = declared_pins(roots.repo, roots.stage)
+    prepared = VerifiedView(roots, {}, '', pins)
+    return prepared_closure(authority, roots, handoff, prepared.stage_read)[0]
+
+
+def runtime_input_context():
+    """The prepared chain carries the already verified attempt context."""
+    return decode(raw) if (raw := os.environ.get('JOULEWISE_C1_INPUTS')) else None
+
+
+def runtime_ledger(path, *, starting=False):
+    context = runtime_input_context()
+    return check_ledger(path, context['ledger'], starting=starting) if context else Path(path)
 
 
 def artifact_set_digest_at(root, commit):

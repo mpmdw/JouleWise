@@ -4,7 +4,7 @@ The contract assertions documenting findings are intentionally red on 03253edca.
 No real measurements, native probes, weights, network or external user paths.
 """
 from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
-from tests.align.v4_registration_fixtures import session_plan
+from tests.align.v4_registration_fixtures import projection_arm_checks, session_plan
 from copy import deepcopy
 import json
 import os
@@ -72,6 +72,7 @@ class CommittedSeriesTests(unittest.TestCase):
                    return_value={'verdict': 'PASS', 'reasons': []}), \
              patch('joulewise.battery_float.observe', return_value=(good, b'synthetic ioreg')), \
              patch.object(kit, 'arm_powermode_check'), \
+             patch.object(session, 'arm_checks', side_effect=projection_arm_checks(session.arm_checks)), \
              patch.object(session, 'w1_disk_check', return_value={'status': 'pass'}), \
              patch.object(session.pilot, 'install', return_value={'synthetic': True}) as install:
             try:

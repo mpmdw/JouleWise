@@ -510,10 +510,10 @@ def canonical(packet):
     return json.dumps(kept, sort_keys=True, separators=(',', ':'), allow_nan=False)
 
 
-def rebuild_and_compare(repo, supplied, *, now_epoch_s, current_artifact_set_sha256):
+def rebuild_and_compare(repo, supplied, *, now_epoch_s, current_artifact_set_sha256, verified_closure=None):
     """The arm's own build from the supplied packet's identities, and whether the supplied packet equals it."""
     built = build_packet(repo, **identities(supplied), now_epoch_s=now_epoch_s,
-                         current_artifact_set_sha256=current_artifact_set_sha256)
+                         current_artifact_set_sha256=current_artifact_set_sha256, c1_closure=verified_closure)
     return built, canonical(supplied) == canonical(built)
 
 
@@ -675,19 +675,11 @@ def committed_c1_kit(evidence, commit, manifest_sha256, projection):
     def read(path):
         return evidence.read(commit, path.as_posix())
 
-    def optional(path):
-        entry = evidence.git('ls-tree', '-z', commit, '--', path.as_posix())
-        if not entry or entry.startswith(b'040000 '):
-            return None
-        return read(path)
-
-    binding = frozen_series.c1_kit_identity(file_hashes, plan, tree, read)
-    return frozen_series.c1_staged_inventory(
-        binding, read, optional, registration.artifact_hashes_at(evidence.repo, commit))
+    return frozen_series.c1_kit_identity(file_hashes, plan, tree, read)
 
 
 def build_packet(repo, *, record_commit, record_path, series_commit, series_path, pushed_ref,
-                 now_epoch_s, current_artifact_set_sha256):
+                 now_epoch_s, current_artifact_set_sha256, c1_closure=None):
     require(number(now_epoch_s), 'arm clock unavailable')
     require(isinstance(current_artifact_set_sha256, str) and SHA.fullmatch(current_artifact_set_sha256),
             'current artifact-set digest unavailable')
@@ -943,6 +935,8 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
             binding = committed_c1_kit(evidence, series_commit, digest(manifest_raw), plan['members'])
             if binding is not None:
                 packet['c1_kit'] = binding
+                if c1_closure is not None:
+                    packet['c1_closure'] = c1_closure
         return {'basis': 'next sentinel roster recorded with the U4 consequence', 'sentinel_ids': expected}
 
     def eligibility():
@@ -1192,6 +1186,7 @@ def main(argv=None):
     for flag in ('record-commit', 'record-path', 'series-commit', 'series-path', 'pushed-ref'):
         parser.add_argument('--' + flag)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--c1-prepared', type=Path, help='C1 prepare handoff before attempt commit')
     args = parser.parse_args(argv)
     if args.emit_triage_template:
         value, code = template(), 0
@@ -1200,10 +1195,15 @@ def main(argv=None):
         if any(getattr(args, name) is None for name in names):
             parser.error('record/series commits and paths and --pushed-ref are required')
         try:
+            closure = None
+            if args.c1_prepared:
+                from joulewise.align.apple import v4_registration as c1_closure
+                closure = c1_closure.finalize(args.repo, c1_closure.decode(args.c1_prepared.read_bytes()))
             value = build_packet(args.repo, **{name: getattr(args, name) for name in names},
                                  now_epoch_s=time.time(),
-                                 current_artifact_set_sha256=registration.artifact_set_digest(args.repo))
-        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+                                 current_artifact_set_sha256=(registration.artifact_set_digest_at(args.repo, closure["repo"]["commit"])
+                                     if closure else registration.artifact_set_digest(args.repo)), c1_closure=closure)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
             print('next-arm packet refused: ' + str(exc), file=sys.stderr)
             return 2
         code = 0 if value['packet_preflight']['ready'] else 2

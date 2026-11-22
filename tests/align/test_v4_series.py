@@ -29,7 +29,7 @@ from joulewise.b5 import plan
 from joulewise.b6 import registration
 from tests.test_b5_driver import Harness, fake_monitor_argv
 from tests.align.test_v4_cadence import arm_seams
-from tests.align.v4_registration_fixtures import fixture_c1_binding, localize_c1_artifacts, span_aware_watchdog
+from tests.align.v4_registration_fixtures import fixture_c1_preflight, span_aware_watchdog
 from tests.align.test_v4_kit import ROOT, FakeArmHost
 
 
@@ -495,9 +495,6 @@ class FakeWorld:
         packet = s.make_packet(m, self.name, history, checks, record_commit=RECORD_COMMIT,
                                last_desk_passed_artifact_set_sha256=v4_registration.artifact_set_digest(m),
                                valid_until_epoch_s=1000.0, now_epoch_s=500.0, commit_check=lambda root, commit: True)
-        if self.name == 'C1':
-            localize_c1_artifacts(m)
-            packet['c1_kit'] = fixture_c1_binding(m)
         # The source builder is separately checked against its exact output;
         # synthetic model/power readiness intentionally differs from a native kit.
         with ExitStack() as stack, redirect_stdout(io.StringIO()):
@@ -533,6 +530,12 @@ class FakeWorld:
             # wait. The pre-arm clock is earlier; the real preflight still reads
             # and verifies the actual writer's plan and budget.
             stack.enter_context(patch.object(session, 'time', SimpleNamespace(**(vars(time) | {'time': lambda: time.time() - 600}))))
+            shared_prepare = h.prepare
+
+            def replay_prepare(*args, attempt_c1=False, **kwargs):
+                return shared_prepare(*args, **kwargs)
+
+            stack.enter_context(patch.object(h, 'prepare', side_effect=replay_prepare))
             state = session.prepare(m, self.session, window_id=self.name, run=self.run_process,
                 now=lambda: time.time() - 480, statvfs=lambda _: SimpleNamespace(f_bavail=10**12, f_frsize=1),
                 capacity=lambda _: None, frequency_reader=lambda: frequency_probe(0),
@@ -549,11 +552,16 @@ class FakeWorld:
             host = FakeArmHost(0)
             stack.enter_context(patch.object(session, 'w1_disk_check', return_value={'admitted': True}))
             stack.enter_context(patch.dict(os.environ, {'JOULEWISE_HOST_STATE_DIR': str(self.root / 'host-state')}))
+            seams = {**arm_seams(), 'watchdog_check': span_aware_watchdog}
+            if self.name == 'C1':
+                stack.enter_context(patch.object(session, 'c1_arm_preflight',
+                                                 side_effect=fixture_c1_preflight(state, packet, seams['packet_builder'])))
+                seams['c1_handoff'] = {'window': 'C1'}
             installed = session.install(self.session, run=self.run_process, runner=host, volume_runner=host,
                 now=lambda: state['t0_epoch_s'] - 1, next_arm_triage=packet,
                 obc_off_attested_by='SYNTHETIC operator', battery_log=self.battery_log(state),
                 frequency_reader=lambda: frequency_probe(0),
-                **{**arm_seams(), 'watchdog_check': span_aware_watchdog})
+                **seams)
             test.assertEqual(installed['exit_code'], 0)
             test.assertEqual(len(self.installer_calls), 1)
             harness.plan_path = Path(state['plan_path'])
