@@ -1,0 +1,927 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "legs",
+    "timing_edge_j",
+    "aligned_power",
+    "dose_response"
+  ],
+  "properties": {
+    "legs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/leg"
+      },
+      "minItems": 12,
+      "maxItems": 12
+    },
+    "timing_edge_j": {
+      "type": "number",
+      "const": 1.0
+    },
+    "aligned_power": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "qualified"
+          ],
+          "properties": {
+            "qualified": {
+              "type": "string",
+              "const": "not_run"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "qualified",
+            "all_legs_close",
+            "cpu_burn_order"
+          ],
+          "properties": {
+            "qualified": {
+              "type": "string",
+              "enum": [
+                "yes",
+                "no"
+              ]
+            },
+            "all_legs_close": {
+              "type": "boolean"
+            },
+            "cpu_burn_order": {
+              "type": "boolean"
+            }
+          }
+        }
+      ]
+    },
+    "dose_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gpu_rail",
+        "cpu_rail",
+        "rail_sum",
+        "dc_in"
+      ],
+      "properties": {
+        "gpu_rail": {
+          "$ref": "#/$defs/doseFit"
+        },
+        "cpu_rail": {
+          "$ref": "#/$defs/doseFit"
+        },
+        "rail_sum": {
+          "$ref": "#/$defs/doseFit"
+        },
+        "dc_in": {
+          "$ref": "#/$defs/doseFit"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "numberOrNull": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "instrumentReason": false,
+    "floor": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "joules",
+            "duration_s",
+            "floor_j",
+            "window_s",
+            "units",
+            "under_shortest_window",
+            "instrument_manifest_sha256",
+            "reason"
+          ],
+          "properties": {
+            "joules": {
+              "$ref": "#/$defs/numberOrNull"
+            },
+            "duration_s": {
+              "type": "number"
+            },
+            "floor_j": {
+              "$ref": "#/$defs/numberOrNull"
+            },
+            "window_s": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "enum": [
+                    10,
+                    40,
+                    128
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "units": {
+              "$ref": "#/$defs/numberOrNull"
+            },
+            "under_shortest_window": {
+              "type": "boolean"
+            },
+            "instrument_manifest_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "gap_over_u1",
+                    "recovery_incomplete",
+                    "trace_or_clock_unavailable"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "const": "no_matched_floor"
+                },
+                {
+                  "$ref": "#/$defs/instrumentReason"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "joules",
+            "duration_s",
+            "floor_j",
+            "window_s",
+            "units",
+            "reason"
+          ],
+          "properties": {
+            "joules": {
+              "$ref": "#/$defs/numberOrNull"
+            },
+            "duration_s": {
+              "type": "number"
+            },
+            "floor_j": {
+              "$ref": "#/$defs/numberOrNull"
+            },
+            "window_s": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "enum": [
+                    10,
+                    40,
+                    128
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "units": {
+              "$ref": "#/$defs/numberOrNull"
+            },
+            "reason": {
+              "type": "string",
+              "const": "no_matched_floor"
+            }
+          }
+        }
+      ]
+    },
+    "absolutePhase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seconds",
+        "joules",
+        "mean_watts"
+      ],
+      "properties": {
+        "seconds": {
+          "type": "number"
+        },
+        "joules": {
+          "$ref": "#/$defs/numberOrNull"
+        },
+        "mean_watts": {
+          "$ref": "#/$defs/numberOrNull"
+        },
+        "joules_per_token": {
+          "$ref": "#/$defs/numberOrNull"
+        }
+      }
+    },
+    "absolute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phases",
+        "ungated_j",
+        "phase_sum_j",
+        "absolute_error_j",
+        "relative_error",
+        "closes",
+        "missing_first_token_turns",
+        "missing_logged_decode_boundary"
+      ],
+      "properties": {
+        "phases": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "prefill",
+            "decode",
+            "tool",
+            "other"
+          ],
+          "properties": {
+            "prefill": {
+              "$ref": "#/$defs/absolutePhase"
+            },
+            "decode": {
+              "$ref": "#/$defs/absolutePhase"
+            },
+            "tool": {
+              "$ref": "#/$defs/absolutePhase"
+            },
+            "other": {
+              "$ref": "#/$defs/absolutePhase"
+            }
+          }
+        },
+        "ungated_j": {
+          "$ref": "#/$defs/numberOrNull"
+        },
+        "phase_sum_j": {
+          "$ref": "#/$defs/numberOrNull"
+        },
+        "absolute_error_j": {
+          "$ref": "#/$defs/numberOrNull"
+        },
+        "relative_error": {
+          "$ref": "#/$defs/numberOrNull"
+        },
+        "closes": {
+          "type": "boolean"
+        },
+        "missing_first_token_turns": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "minItems": 0
+        },
+        "missing_logged_decode_boundary": {
+          "type": "boolean"
+        }
+      }
+    },
+    "hidden": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "delivered_tokens",
+        "seconds",
+        "call_j",
+        "prefill_j",
+        "decode_j",
+        "j_per_token",
+        "j_per_token_reason",
+        "tail_cut",
+        "floor"
+      ],
+      "properties": {
+        "delivered_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "seconds": {
+          "type": "number"
+        },
+        "call_j": {
+          "$ref": "#/$defs/numberOrNull"
+        },
+        "prefill_j": {
+          "$ref": "#/$defs/numberOrNull"
+        },
+        "decode_j": {
+          "$ref": "#/$defs/numberOrNull"
+        },
+        "j_per_token": {
+          "$ref": "#/$defs/numberOrNull"
+        },
+        "j_per_token_reason": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "enum": [
+                "gap_over_u1",
+                "recovery_incomplete",
+                "trace_or_clock_unavailable"
+              ]
+            },
+            {
+              "type": "string",
+              "enum": [
+                "zero_tokens",
+                "missing_first_token",
+                "trace_coverage"
+              ]
+            }
+          ]
+        },
+        "tail_cut": {
+          "type": "boolean"
+        },
+        "floor": {
+          "$ref": "#/$defs/floor"
+        }
+      }
+    },
+    "otherPart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seconds",
+        "joules",
+        "above_baseline_j",
+        "floor"
+      ],
+      "properties": {
+        "seconds": {
+          "type": "number"
+        },
+        "joules": {
+          "$ref": "#/$defs/numberOrNull"
+        },
+        "above_baseline_j": {
+          "$ref": "#/$defs/numberOrNull"
+        },
+        "floor": {
+          "$ref": "#/$defs/floor"
+        }
+      }
+    },
+    "channel": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "absolute",
+            "baseline_w",
+            "baseline_reason",
+            "baseline_drift_j",
+            "baseline_drift_reason",
+            "above_baseline_j",
+            "other",
+            "phase_floors",
+            "baseline_drift_floor"
+          ],
+          "properties": {
+            "absolute": {
+              "$ref": "#/$defs/absolute"
+            },
+            "baseline_w": {
+              "$ref": "#/$defs/numberOrNull"
+            },
+            "baseline_reason": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "gap_over_u1",
+                    "recovery_incomplete",
+                    "trace_or_clock_unavailable"
+                  ]
+                }
+              ]
+            },
+            "baseline_drift_j": {
+              "$ref": "#/$defs/numberOrNull"
+            },
+            "baseline_drift_reason": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "gap_over_u1",
+                    "recovery_incomplete",
+                    "trace_or_clock_unavailable"
+                  ]
+                }
+              ]
+            },
+            "above_baseline_j": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "prefill",
+                "decode",
+                "tool",
+                "other"
+              ],
+              "properties": {
+                "prefill": {
+                  "$ref": "#/$defs/numberOrNull"
+                },
+                "decode": {
+                  "$ref": "#/$defs/numberOrNull"
+                },
+                "tool": {
+                  "$ref": "#/$defs/numberOrNull"
+                },
+                "other": {
+                  "$ref": "#/$defs/numberOrNull"
+                }
+              }
+            },
+            "other": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {
+                "hidden": {
+                  "$ref": "#/$defs/otherPart"
+                },
+                "hidden_prefill": {
+                  "$ref": "#/$defs/otherPart"
+                },
+                "hidden_decode": {
+                  "$ref": "#/$defs/otherPart"
+                },
+                "cpu": {
+                  "$ref": "#/$defs/otherPart"
+                },
+                "gap": {
+                  "$ref": "#/$defs/otherPart"
+                },
+                "recovery": {
+                  "$ref": "#/$defs/otherPart"
+                },
+                "remainder": {
+                  "$ref": "#/$defs/otherPart"
+                }
+              }
+            },
+            "phase_floors": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "prefill",
+                "decode",
+                "tool",
+                "other"
+              ],
+              "properties": {
+                "prefill": {
+                  "$ref": "#/$defs/floor"
+                },
+                "decode": {
+                  "$ref": "#/$defs/floor"
+                },
+                "tool": {
+                  "$ref": "#/$defs/floor"
+                },
+                "other": {
+                  "$ref": "#/$defs/floor"
+                }
+              }
+            },
+            "baseline_drift_floor": {
+              "$ref": "#/$defs/floor"
+            },
+            "hidden": {
+              "$ref": "#/$defs/hidden"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "reason",
+            "baseline_w",
+            "baseline_reason"
+          ],
+          "properties": {
+            "reason": {
+              "type": "string",
+              "enum": [
+                "gap_over_u1",
+                "recovery_incomplete",
+                "trace_or_clock_unavailable"
+              ]
+            },
+            "baseline_w": {
+              "$ref": "#/$defs/numberOrNull"
+            },
+            "baseline_reason": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "gap_over_u1",
+                    "recovery_incomplete",
+                    "trace_or_clock_unavailable"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "call": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "duration_s",
+            "requested_tokens",
+            "delivered_tokens",
+            "context_tokens"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "turn",
+                "hidden"
+              ]
+            },
+            "duration_s": {
+              "type": "number"
+            },
+            "requested_tokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "delivered_tokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "context_tokens": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "duration_s",
+            "requested_s"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "cpu",
+                "gap",
+                "recovery"
+              ]
+            },
+            "duration_s": {
+              "type": "number"
+            },
+            "requested_s": {
+              "type": "number"
+            }
+          }
+        }
+      ]
+    },
+    "leg": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "leg_id",
+            "kind",
+            "disposition"
+          ],
+          "properties": {
+            "leg_id": {
+              "type": "string",
+              "enum": [
+                "L001",
+                "L002",
+                "L003",
+                "L004",
+                "L005",
+                "L006",
+                "L007",
+                "L008",
+                "L009",
+                "L010",
+                "L011",
+                "L012"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "extra-turn",
+                "hidden",
+                "cpu",
+                "split",
+                "plain"
+              ]
+            },
+            "disposition": {
+              "type": "string",
+              "enum": [
+                "not_dispatched",
+                "episode_missing"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "leg_id",
+            "kind",
+            "disposition",
+            "reason"
+          ],
+          "properties": {
+            "leg_id": {
+              "type": "string",
+              "enum": [
+                "L001",
+                "L002",
+                "L003",
+                "L004",
+                "L005",
+                "L006",
+                "L007",
+                "L008",
+                "L009",
+                "L010",
+                "L011",
+                "L012"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "extra-turn",
+                "hidden",
+                "cpu",
+                "split",
+                "plain"
+              ]
+            },
+            "disposition": {
+              "type": "string",
+              "const": "not_evaluable"
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "logged_envelope",
+                "script_record_missing",
+                "script_digest",
+                "script_identity",
+                "script_order",
+                "step_bounds",
+                "call_counts_or_bounds",
+                "interval_dose",
+                "script_record_shape",
+                "step_order_or_episode_bounds",
+                "envelope_counts",
+                "envelope_stamps",
+                "other_partition"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "leg_id",
+            "kind",
+            "disposition",
+            "delivery",
+            "calls",
+            "envelope",
+            "channels"
+          ],
+          "properties": {
+            "leg_id": {
+              "type": "string",
+              "enum": [
+                "L001",
+                "L002",
+                "L003",
+                "L004",
+                "L005",
+                "L006",
+                "L007",
+                "L008",
+                "L009",
+                "L010",
+                "L011",
+                "L012"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "extra-turn",
+                "hidden",
+                "cpu",
+                "split",
+                "plain"
+              ]
+            },
+            "disposition": {
+              "type": "string",
+              "enum": [
+                "admitted",
+                "unadmitted"
+              ]
+            },
+            "delivery": {
+              "type": "string",
+              "enum": [
+                "short",
+                "as_requested"
+              ]
+            },
+            "calls": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/call"
+              },
+              "minItems": 2
+            },
+            "envelope": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "prompt_tokens",
+                "decode_tokens"
+              ],
+              "properties": {
+                "prompt_tokens": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "decode_tokens": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "channels": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "gpu_rail",
+                "cpu_rail",
+                "rail_sum",
+                "dc_in"
+              ],
+              "properties": {
+                "gpu_rail": {
+                  "$ref": "#/$defs/channel"
+                },
+                "cpu_rail": {
+                  "$ref": "#/$defs/channel"
+                },
+                "rail_sum": {
+                  "$ref": "#/$defs/channel"
+                },
+                "dc_in": {
+                  "$ref": "#/$defs/channel"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "doseFit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slope",
+        "intercept",
+        "range",
+        "reason",
+        "legs"
+      ],
+      "properties": {
+        "slope": {
+          "$ref": "#/$defs/numberOrNull"
+        },
+        "intercept": {
+          "$ref": "#/$defs/numberOrNull"
+        },
+        "range": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          ]
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "const": "insufficient_legs"
+            }
+          ]
+        },
+        "legs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "L001",
+              "L002",
+              "L003",
+              "L004",
+              "L005",
+              "L006",
+              "L007",
+              "L008",
+              "L009",
+              "L010",
+              "L011",
+              "L012"
+            ]
+          },
+          "minItems": 0,
+          "maxItems": 6
+        }
+      }
+    }
+  }
+}
