@@ -9,7 +9,7 @@ synthetic inputs and temporary bare repositories with a temporary home.
 
 | Finding | Disposition | Named regression |
 | --- | --- | --- |
-| F1 / 4.1 | NEEDS_SPEC. Strict owner validation reproduced the compatibility failure described below. | `test_gemini_4_1_unregistered_pointer_owner_is_refused` in the local trial |
+| F1 / 4.1 | Fixed in `7689a9dd6`. Only the seven exact historical pairs can use an unregistered owner, once each per render and only below a strictly higher pointer rank. The selected pointer and the JSON validator require a registered owner. | `test_gemini_4_1_unregistered_pointer_owner_is_refused` and seven companion tests |
 | F2 / 4.2.1 | Fixed in `3cd3fd051`. A new add refuses while the caller's spool has pending requests. The caller can flush, then retry. | `test_gemini_4_2_1_pending_item_cannot_be_overtaken` |
 | F3 / 4.2.2 | Fixed in `3cd3fd051`. The spool captures attachment bytes and mode. Replay stages from that snapshot and checks the staged byte identity. | `test_gemini_4_2_2_spooled_with_file_replays_original_bytes` |
 | F4 / 4.2.3 | Fixed in `3cd3fd051`. Validation failures move to `failed/` with a `.reason` file. Flush continues in queue order and exits 2 after draining a queue with quarantines. Transient Git failures still stop flush with pending entries intact. | `test_gemini_4_2_3_stale_set_is_quarantined_and_later_items_land_in_order` |
@@ -17,33 +17,28 @@ synthetic inputs and temporary bare repositories with a temporary home.
 Legacy queued requests with no attachments replay as before. A legacy request
 with attachments goes to `failed/` because its original bytes are unavailable.
 
-## NEEDS_SPEC
+## F1 compatibility ruling
 
-At the base, 156 pointer declarations parse and produce the checked-in
-`CURRENT.json` byte for byte. Seven historical declarations use owner text
-outside `run_state_items.OWNERS`, in items 316, 310, 292, 291, 291b, 290,
-and 289. The first is `research lead` at line 12638 in this base. The strict
-trial rejected that block with `INVALID_OWNER` on both interpreters. The
-generator checks every declaration and the writer calls the generator before
-landing any item, so this would stop otherwise valid additions from both
-writers.
-
-The lead should choose between a lead-owned normalization of the seven
-historical declarations before enforcing strict validation and a precisely
-scoped historical exception. Normalize first if editing those declarations
-is permitted, then rerun the named regression and regenerate against the
-updated main. F1 needs that ruling before it can enter the branch.
+Seven of the 156 pointer declarations at the base use historical owner text
+in items 316, 310, 292, 291, 291b, 290, and 289. The first strict trial
+rejected item 316 with `INVALID_OWNER`. The lead approved a scoped exception
+for the seven exact pairs in those superseded declarations. The exception
+preserves the historical text and leaves all other block checks in force.
 
 ## Verification
 
-All four named regressions reproduced the failures on the original code. The
-strict F1 trial passed its synthetic case and failed
-`test_real_repository_agrees` on both interpreters.
-The shipped writer regressions also cover legacy attachments, Git line-ending
+The named regressions reproduced the audit findings on the original code.
+The F1 cases verify exact pair matching, case sensitivity, repeat rejection,
+strictly higher pointer rank, other block checks, and forged JSON rejection.
+The writer regressions also cover legacy attachments, Git line-ending
 normalization, and transient fetch failure.
 
-The focused suites passed 99 tests each on Python 3.13.18 and 3.14.6 across
-`test_gen_current`, `test_run_state_items`, and `test_run_state_add`.
-`gen_current.py --check` passed on both interpreters. The typed-items check
-and `git diff --check` passed. The full suite runs in the draft PR's hosted
-CI. The Tier 1 post-build cross-family review remains a lead gate.
+All 107 focused tests passed on each of Python 3.13.18 and 3.14.6 across
+`test_gen_current`, `test_run_state_items`, and `test_run_state_add`. On both
+interpreters, `gen_current.py --check` exited 0 against `RUN_STATE.md` and
+`CURRENT.json` read from the same `origin/main` revision,
+`82b93c157e92e3ef510d1768c4043f88bd4bf799`. Explicit regeneration matched
+the checked-in bytes on both interpreters. The check also exited 0 on each
+interpreter after main advanced to `7eec25d6ab4cc8cf72b37532ad407cbb6ceefa13`.
+The full suite runs in the draft PR's hosted CI. Tier 1 cross-family review
+remains a lead gate.
