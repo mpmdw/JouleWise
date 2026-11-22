@@ -710,6 +710,10 @@ class C1ClosureTests(unittest.TestCase):
             adapter.option(stage(tree, 'calibration_capture'), '--custody-budget-s', 'literal', '0')
             return {}
 
+        def zero_reservation_budget(tree):
+            adapter.option(stage(tree, 'bracket_reservation'), '--custody-budget-s', 'literal', '0')
+            return {}
+
         def shakedown(tree):
             adapter.option(stage(tree, 'campaign_collection'), '--shakedown-gate', 'literal',
                            'production_uncertainty_v1')
@@ -718,6 +722,7 @@ class C1ClosureTests(unittest.TestCase):
         cases = ((outside_custody, 'C1 reservation refuses: calibration_reservation_input_invalid'),
                  (no_execute, 'C1 reservation must append its session'),
                  (zero_budget, 'custody budget must be finite and positive'),
+                 (zero_reservation_budget, 'custody budget must be finite and positive'),
                  (shakedown, 'unsupported C1 campaign mode'))
         for edit, detail in cases:
             with self.subTest(case=edit.__name__):
