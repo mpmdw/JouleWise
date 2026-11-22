@@ -305,6 +305,34 @@ class DeskPolicyAttempt(adapter.Attempt):
     desk_epoch = adapter.series.raw_json({'power_policy': 'ac_low_power'})
 
 
+class ResumableSessionAttempt(adapter.Attempt):
+    """The starting ledger already holds this attempt's open session (the reservation's resumable route)."""
+
+    def prepare(self):
+        from joulewise import calibration_ledger as ledger_module
+        from joulewise.powermetrics_fiducial import V2_BINDING_FIELDS
+
+        epoch = {'os_build': 'invented', 'hardware_model': 'fixture', 'power_policy': 'ac_high_power',
+                 'sampling_interval_ms': 100, 'estimator_revision': 'invented',
+                 'pulse_protocol_id': 'invented'}
+        build = self.work / 'starting-ledger'
+        path = adapter.put(build, 'ledger.jsonl', b'')
+        pin = adapter.put(build, 'pin.json', {'sequence': 0, 'head_digest': '0' * 64,
+                                             'ledger_schema': 'joulewise.calibration_observation_ledger.v1'})
+        with ledger_module.CalibrationWriterLease(path):
+            ledger_module.append_bracket_session_receipt(
+                path, session_id=self.bindings['bracket_session_id'], window_id='C1',
+                plan_id=self.source['plan']['plan_id'], plan_sha256=self.source['plan']['actual_sha256'],
+                evidence_root_id='fixture-evidence', runs_root=self.bindings['claim_runs_root'],
+                slots={slot: {'attempt_id': self.bindings[f'{slot}_attempt_id'], 'identity_epoch': epoch,
+                              't1_bindings': {**dict.fromkeys(V2_BINDING_FIELDS, 'invented'), **epoch},
+                              'custody_locator': self.bindings[f'{slot}_calibration_dir']}
+                       for slot in ('pre', 'post')},
+                head_pin_path=pin, require_committed_pin=False, pin_relation_record={})
+        self.ledger = path.read_bytes()
+        super().prepare()
+
+
 def capture_arguments(tree, slot):
     for row in tree['stage_graph']:
         if row['kind'] == 'calibration_capture':
@@ -860,6 +888,29 @@ class C1ClosureTests(unittest.TestCase):
                 return {retired: pin}
 
             self.assert_admitted_on_both_routes(self.attempt(edit_source=same))
+
+    def test_r11_resumable_session_preflight_takes_no_lease(self):
+        """Review MED-1: the read-only pre-reserve decision's session-status route takes no lease either."""
+        attempt = self.attempt(make_attempt=ResumableSessionAttempt)
+        ledger = attempt.stage / adapter.LEDGER
+        before = ledger.read_bytes()
+        self.assertTrue(before)
+        self.assert_admitted_on_both_routes(attempt)
+        self.assertEqual(ledger.read_bytes(), before)
+        self.assertEqual(sorted(path.name for path in ledger.parent.iterdir()), [ledger.name])
+
+    def test_r11_capture_slot_binding_must_match_the_reservation(self):
+        """Review MED-2: each capture's session, attempt and custody locator match its reserved slot."""
+        for slot, flag, value in (('pre', '--session-id', 'fixture-other-session'),
+                                  ('post', '--attempt-id', 'fixture-other-attempt'),
+                                  ('pre', '--output-root', 'other_validation')):
+            with self.subTest(slot=slot, flag=flag):
+                def edit(tree, slot=slot, flag=flag, value=value):
+                    set_option(capture_arguments(tree, slot), flag, 'literal', value)
+                    return {}
+
+                self.assert_refused_on_both_routes(self.attempt(edit_source=edit),
+                                                   'calibration_reserved_slot_mismatch')
 
     def test_r11_caller_ledger_pointer_is_refusal_only(self):
         """Ruling item 2: a caller's CALIBRATION_LEDGER may only refuse; unset imposes nothing."""
