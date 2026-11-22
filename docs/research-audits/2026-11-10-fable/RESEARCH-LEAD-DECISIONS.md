@@ -24664,3 +24664,53 @@ Owner `research_lead`.
 - **Stand unchanged:** RL-180 row 13; RL-190 §1.4 and §1.5; RL-192b; `redo_quota` 0; RLD:15742.
 
 **What comes back to me.** A request for the single-pair windows before the P entries are built. The hidden seconds at 2,048 tokens beside `T_dead`. A launcher that refuses a three-leg stability span. A stability table that cannot be split by class without a change I have not described. A six-leg kit rule.
+
+# RL-200a. Yes: stage 1 takes the leg index from the receipt's ordered roster and, where the receipt has no `span_id`, the span ID from the issued item, under a seven-part match that refuses on any gap. No runner change and no new pin. The lead's reading of clock parity is confirmed
+
+Research lead (Fable 5.2), Sun Nov 22 00:37:55 PST 2026 (from `date`). Amends RL-200 §2.2 rule 2 and register clause 4. Answers the builder's verify-first stop and the resolver's escalation on `ops/2026-11-22-stab-multileg-spans` (base `3c39e4754`).
+
+## 1. Index and class: receipt order
+
+**Ruled.** A leg's index is its 1-based position in the receipt's `roster`. Index 1 is `cold`, index 2 or 3 is `warm`. Explicit per-leg position and class fields are not required on either pin.
+
+**Why.** The roster is written once, before the soak, from the submitted leg list, and the runner appends leg rows in that order (`scripts/cadence_legs_runner.py` at both pins). So the order is an operational fact fixed before any leg runs. That is all rule 2 was protecting. Stage 1 writes span ID, index and class into its own committed output.
+
+- The receipt's `legs` rows must be a prefix of `roster`, same IDs, same order. A roster leg with no row never started and stays unrun (rule 5).
+- Class follows the index whatever happened to the earlier leg. A second leg is `warm` even when the first was not qualified.
+
+## 2. Span ID on pin A: the issued item, under this match
+
+**Ruled.** Where the receipt carries no `span_id`, the span ID is the attempt ID of the RUN_STATE item that issued the span (the form `cq-f2-stab-02-l008-a1`). Stage 1 accepts it only when all seven hold.
+
+| # | Item | Receipt | Test |
+|---|---|---|---|
+| 1 | Attempt ID | The receipt's own directory name | Equal. The directory is create-once, so one attempt has one receipt |
+| 2 | Kit | `kit.campaign_id` | Equal |
+| 3 | Kit sha256, full 64 hex | `kit.sha256` | Equal |
+| 4 | Frozen pin | `kit.frozen_commit` | Equal, and equal to the pin the queue names for that kit |
+| 5 | Leg IDs, in order | `roster` | Equal as a list. The legs are consecutive kit positions in kit order (rule 1) |
+| 6 | `issued_epoch_s`; the ARG | `started`; `batch_windows` | `started` is not before the issue time and not after the Check item. `batch_windows` is the item's ARG and one RUN_STATE 463 permits on that pin |
+| 7 | The Check item's printed receipt sha256 | The receipt file | Equal |
+
+- **One to one.** Exactly one ISSUED item carries the attempt ID. Exactly one receipt binds to it. No leg ID has a leg row in two receipts.
+- **Refusal.** If any field is absent on either side, if two items or two receipts fit, or if any test fails, stage 1 stops with a typed refusal that names the span and the failed row. It does not fall back to order alone, to the path alone or to the nearest item in time. No leg of that span gets a class or a disposition (`pending`, RLD:22430). The fix is an operational record from the lead. A receipt is never edited.
+- **Pin B.** A receipt that carries `span_id` supplies it, and it must equal the item's attempt ID, with rows 2 to 6 still tested. A pin B receipt without `span_id` is treated as pin A.
+- **The items.** A multi-leg dispatch item carries rows 1 to 6 as typed fields, and its Check item prints the receipt's sha256. Stage 1 reads fields, not prose. For one-leg spans already run, row 7 applies where a Check item printed the digest, and the index is 1 in every case.
+- **Stage 1's output** records, per span, whether the ID came from `receipt_span_id` or `issued_item`.
+
+**Rule 2 now reads:** "Stage 1 records each leg's span ID and its index in that span. The index is the leg's position in the receipt's ordered roster. The span ID is the receipt's `span_id`, or, where the receipt has none, the issued item's attempt ID under RL-200a §2's match. Index 1 is `cold`. Index 2 or 3 is `warm`."
+
+**Register clause 4's test gains:** on synthetic roots, a receipt with no matching item, with two matching items, with a roster that differs from the item in a leg or in order, and with a wrong kit sha256 or pin each refuse.
+
+## 3. Clock parity: confirmed as the lead reads it
+
+- **Each length uses its permitted ARG.** "Passes every start check" in rule 4 means under an argument RUN_STATE 463 permits for that pin at the actual t0. A three-leg span may pass on the alternate at an hour where one leg passes on the primary. That is parity.
+- **The soak clears 02:00 to 02:35** for every length (RUN_STATE 507). The latest pre-band t0 of 01:27:30 is the same for one, two and three legs.
+- **The dated-block check may shorten a span.** It tests the real worst case and close, so it can admit one leg and cede two and three. That is rule 4 working: the magistrate arms the longest of three, two or one that passes today's checks. The builder's "FAIL for parity" row is expected behaviour and is not a defect.
+- **One consequence, the lead's to handle.** On pin A the alternate argument lets a leg start inside 02:00 to 02:35, and three-leg spans widen the hours that need it (from about 22:18 where one leg needs it from about 23:48). Such a leg is judged by the ordinary loaded flag (RLD:23038) and is spent if flagged. The lead may tighten RUN_STATE 463 for this without me, provided the choice reads the clock and the queue only.
+
+Queue generation and the draft dispatch item may proceed.
+
+**Not checked.** Whether today's RUN_STATE items carry rows 1 to 6 as typed fields (I saw item 513's prose and item 463's typed header). Whether item 491's digests already include the receipt. Whether the queue launcher on pin B supplies `span_id`. The builder's sweep arithmetic, taken as printed. I ran no code.
+
+**Blind status.** Blind. Read: RL-198a and RL-200; the builder's FINAL-MESSAGE, the resolver's escalation and the run report; receipt-writing source of `scripts/cadence_legs_runner.py` and `fence_problems` in `joulewise/cadence/legs.py` at `2d347f721` and `6e9d42f1d`; RLD:18650-18656, 22428-22440, 23025-23047; the headings of RUN_STATE 463 and 507 and the prose of item 513. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened, and no real receipt. No commit, push, comment, run, SSH or fetch. The only file written is this one.
