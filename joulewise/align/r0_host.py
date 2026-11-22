@@ -9,9 +9,13 @@ QuietGuard.verify_publication).
 The verdict's windows come only from that series: the startup and daemon
 samples, then the read each publication census takes at run end. It judges
 every window the sliding rule defines over the series, including the one
-ending at the final read, and also the window of exactly INTERVAL_S ending
-at the final read. Admission windows reproduce the admitted L3 guard's
-flags; they can add a flag, never supply an opening to the verdict.
+ending at the final read. At every sample it also runs the exact check: for
+each earlier sample at most INTERVAL_S before it, a contaminant whose
+counter grew by at least the limit times INTERVAL_S is flagged. Each sample
+is judged once, when it first ends a window, and a flag is never withdrawn,
+so adding samples cannot remove a flag. Admission windows reproduce the
+admitted L3 guard's flags; they can add a flag, never supply an opening to
+the verdict.
 
 Foreground admission is advisory. It saves work that the final verdict
 would discard; it cannot make a run pass. Its last act before it returns
@@ -221,27 +225,28 @@ def _wall_divergence_ns(reads):
     return max(offsets) - min(offsets) if offsets else 0
 
 
-def _full_length_window(snapshots, observations):
-    """The window of exactly INTERVAL_S that ends at the final read, or None.
+def _exact_window_evidence(earlier, later):
+    """Contaminant CPU between two samples at most INTERVAL_S apart, charged to INTERVAL_S.
 
-    Counters exist only at samples. The opening carries the counters of the
-    oldest sample inside the window, which bounds the window's CPU from
-    below; its time is the window's start, so rates use the full INTERVAL_S.
-    The caller reports the window from that sample to the final read. None
-    when a sample sits exactly on the start (the sliding window is this
-    window) or none lies inside.
+    Such a pair proves at least that much CPU inside an INTERVAL_S window.
+    Only an identity listed by both samples counts, and only when the
+    earlier counter is the process's own reading, not a regressed one.
+    Flags at or above the limit (the CPU is at least limit x INTERVAL_S).
     """
-    current = snapshots[-1]
-    start_ns = current.midpoint_ns - prewindow.INTERVAL_S * 1_000_000_000
-    if any(sample.midpoint_ns == start_ns for sample in snapshots[:-1]):
-        return None
-    inside = next((sample for sample in snapshots[:-1] if sample.midpoint_ns > start_ns), None)
-    if inside is None:
-        return None
-    stamp = Stamp(start_ns + _wall_offset_ns(inside), start_ns, start_ns)
-    opening = replace(inside, started=stamp, finished=stamp, admitted_start_ns=start_ns,
-                      admitted_finish=stamp, host=None, host_error="full-length window opening")
-    return opening, current, [opening, *_window_reads(observations, inside, current)[1:]], inside
+    interval_ns = prewindow.INTERVAL_S * 1_000_000_000
+    evidence = []
+    for identity, row in later.rows.items():
+        before = earlier.rows.get(identity)
+        if before is None or "peak_cpu_seconds" in before:
+            continue
+        if not (row["contaminant"] or before["contaminant"]):
+            continue
+        growth_cs = round(row["cumulative_cpu_seconds"] * 100) - round(before["cumulative_cpu_seconds"] * 100)
+        if growth_cs * 1_000_000_000 * _CPU_LIMIT_DEN >= _CPU_LIMIT_NUM * interval_ns:
+            evidence.append({"pid": identity[0], "command": row["command"], "start": identity[1],
+                             "cpu_s_per_s": growth_cs * 10_000_000 / interval_ns,
+                             "basis": "CPU between two samples at most 30 s apart, charged to 30 s"})
+    return evidence
 
 
 def _window_reads(reads, opening, current):
@@ -769,7 +774,7 @@ class QuietGuard:
             # windows below use only the series.
             current = self._cpu_snapshot()
             self._admission_interval(receipt, current)
-            self._cpu_interval(receipt, final=True)
+            self._cpu_interval(receipt)
             self._require_fresh_background(self._now(), latest)
             self._require_background_clear()
         except Exception as exc:
@@ -792,7 +797,7 @@ class QuietGuard:
     def __exit__(self, exc_type, exc, traceback):
         self.close()
 
-    def _record_cpu_flags(self, receipt, details, busy):
+    def _record_cpu_flags(self, receipt, details, busy, *, kind=None):
         if not busy:
             return
         interval = {key: details[key] for key in ("start_monotonic_s", "end_monotonic_s", "elapsed_s")}
@@ -807,8 +812,11 @@ class QuietGuard:
             flag = f"contaminating CPU contention: {names}"
             details["contention_flag"] = flag
             receipt.setdefault("contention_flag", flag)
-            self.contention_flags.append({"monotonic_s": receipt.get("monotonic_s", interval["end_monotonic_s"]),
-                                          "flag": flag, "interval": interval, "busy": fresh})
+            entry = {"monotonic_s": receipt.get("monotonic_s", interval["end_monotonic_s"]),
+                     "flag": flag, "interval": interval, "busy": fresh}
+            if kind is not None:
+                entry["kind"] = kind
+            self.contention_flags.append(entry)
 
     def _record_clock_flag(self, receipt, details):
         if not details.get("wall_clock_diverged"):
@@ -863,9 +871,8 @@ class QuietGuard:
             cutoff = min(self._snapshots[0].started.monotonic_ns, samples[0].started.monotonic_ns)
             self._process_observations = [read for read in self._process_observations if _read_finished_ns(read) >= cutoff]
 
-    def _cpu_interval(self, receipt, *, final=False):
+    def _cpu_interval(self, receipt):
         # Admission's closing read can judge a second batch into its receipt.
-        # final: the newest sample is a read at run end (verify_publication).
         details = receipt.get("cpu_interval") or {"regressed_counters": [], "regressed_noncontaminant": []}
         judged = receipt.setdefault("cpu_intervals", [])
         dwell_ns = prewindow.INTERVAL_S * 1_000_000_000
@@ -889,37 +896,41 @@ class QuietGuard:
                 # the previous end and every stretch is judged.
                 start = next((i for i in range(end - 1, -1, -1)
                               if snapshots[end].midpoint_ns - snapshots[i].midpoint_ns >= dwell_ns), None)
-                if start is None:
-                    continue  # only the admission's mid-baseline snapshot
-                interval_details = {"regressed_counters": [], "regressed_noncontaminant": []}
-                reads = _window_reads(observations, snapshots[start], snapshots[end])
-                endpoint, endpoint_busy, lifetime_busy = self._judge_cpu_interval(
-                    snapshots[start], snapshots[end], interval_details, reads=reads)
-                judged.append(interval_details)
-                details = interval_details
-                self._judged_end, opening = end, start
-                busy.extend(endpoint_busy + lifetime_busy)
-                if interval_details["long_interval"]:
+                long_interval = None
+                if start is not None:  # None only at the admission's mid-baseline snapshot
+                    interval_details = {"regressed_counters": [], "regressed_noncontaminant": []}
+                    reads = _window_reads(observations, snapshots[start], snapshots[end])
+                    endpoint, endpoint_busy, lifetime_busy = self._judge_cpu_interval(
+                        snapshots[start], snapshots[end], interval_details, reads=reads)
+                    judged.append(interval_details)
+                    details = interval_details
+                    self._judged_end, opening = end, start
+                    busy.extend(endpoint_busy + lifetime_busy)
+                    if interval_details["long_interval"]:
+                        long_interval = interval_details["elapsed_s"]
+                    else:
+                        self._record_interval_flags(receipt, interval_details, endpoint, endpoint_busy, lifetime_busy)
+                # The exact check at this sample, against every earlier sample
+                # at most INTERVAL_S before it. Openings are pruned only once
+                # they lie at least INTERVAL_S before a judged end.
+                for earlier in range(end - 1, -1, -1):
+                    span_ns = snapshots[end].midpoint_ns - snapshots[earlier].midpoint_ns
+                    if span_ns > dwell_ns:
+                        break
+                    exact = _exact_window_evidence(snapshots[earlier], snapshots[end])
+                    if exact:
+                        exact_details = {"start_monotonic_s": snapshots[earlier].midpoint_ns / 1e9,
+                                         "end_monotonic_s": snapshots[end].midpoint_ns / 1e9,
+                                         "elapsed_s": span_ns / 1e9, "charged_s": prewindow.INTERVAL_S,
+                                         "busy": exact}
+                        receipt.setdefault("exact_windows", []).append(exact_details)
+                        busy.extend(exact)
+                        self._record_cpu_flags(receipt, exact_details, exact, kind="exact_30s")
+                if long_interval is not None:
                     receipt["long_interval"] = True
                     raise Refused(
-                        f"census indeterminate: judged CPU window of {interval_details['elapsed_s']:.1f} s "
+                        f"census indeterminate: judged CPU window of {long_interval:.1f} s "
                         f"exceeds {self.MAX_WINDOW_S:g} s (background snapshots stalled)")
-                self._record_interval_flags(receipt, interval_details, endpoint, endpoint_busy, lifetime_busy)
-            window = _full_length_window(snapshots, observations) if final else None
-            if window is not None:
-                window_opening, window_end, reads, inside = window
-                interval_details = {"regressed_counters": [], "regressed_noncontaminant": [],
-                                    "full_length_at_final_read": True,
-                                    "opening_counters_monotonic_s": inside.midpoint_ns / 1e9}
-                endpoint, endpoint_busy, lifetime_busy = self._judge_cpu_interval(
-                    window_opening, window_end, interval_details, reads=reads)
-                # Rates use the full INTERVAL_S. The reported window starts at
-                # the sample whose counters open it, so both ends are samples.
-                interval_details["window_start_monotonic_s"] = interval_details["start_monotonic_s"]
-                interval_details["start_monotonic_s"] = endpoint["start_monotonic_s"] = inside.midpoint_ns / 1e9
-                judged.append(interval_details)
-                busy.extend(endpoint_busy + lifetime_busy)
-                self._record_interval_flags(receipt, interval_details, endpoint, endpoint_busy, lifetime_busy)
         finally:
             for row in pending["regressed_counters"]:
                 for key in ("regressed_counters", "regressed_noncontaminant"):

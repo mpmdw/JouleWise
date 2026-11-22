@@ -41,6 +41,11 @@ OLD_START = "Fri Nov  6 17:00:00 2026"
 NEW_START = "Fri Nov  6 18:05:15 2026"
 
 
+def rule_flags(guard):
+    """Flags of the sliding rule windows (R0-L3): not the exact 30 s check, not the wall clock."""
+    return [flag for flag in guard.contention_flags if flag.get("kind") is None]
+
+
 def cpu_table(*rows):
     return PS_HEADER + f"    1     0 {OLD_START}   0:01.00 launchd         \n" + "".join(
         f"{pid:5d}     1 {start}   {cpu} {name:<16}\n" for pid, start, cpu, name in rows)
@@ -765,7 +770,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
         with self.assertRaisesRegex(Refused, "judged CPU window of 60.0 s exceeds"):
             guard.check(force=True)
         receipt = guard.receipts[-1]
-        self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in guard.contention_flags],
+        self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in rule_flags(guard)],
                          [45])
         self.assertEqual([window["end_monotonic_s"] for window in receipt["cpu_intervals"]],
                          [45, 105])
@@ -782,7 +787,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                          [45, 60, 75, 90])
         self.assertEqual([entry["monotonic_s"] for entry in receipt["background_census"]],
                          [45, 60, 75, 90])
-        self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in guard.contention_flags],
+        self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in rule_flags(guard)],
                          [45, 60])
         self.assertEqual(launchctl_at, [0, 30, 45, 60, 75, 90, 90])
         self.assertIsNone(guard.failure)
@@ -792,7 +797,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
         guard.check(force=True)
         advance(45)
         guard.check(force=True)
-        self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in guard.contention_flags], [45])
+        self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in rule_flags(guard)], [45])
         advance(60, census_ok=False)
         with self.assertRaisesRegex(Refused, "background sampler: .*LaunchAgent census indeterminate"):
             guard.check()
@@ -803,7 +808,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
         guard.check(force=True)
         advance(45)
         guard.check(force=True)
-        self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in guard.contention_flags], [45])
+        self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in rule_flags(guard)], [45])
         clock.now = 96
         with self.assertRaisesRegex(Refused, "background snapshots stalled"):
             guard.check(force=True)
@@ -819,7 +824,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                 self.assertEqual(launchctl_at, [0, 30, *range(45, 331, 15), 330])
                 self.assertEqual(sum(clock.sleeps), prewindow.INTERVAL_S)
                 self.assertEqual(len(guard.receipts[-1]["cpu_intervals"]), 20)
-                self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in guard.contention_flags],
+                self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in rule_flags(guard)],
                                  [45, 60] if busy else [])
                 self.assertIsNone(guard.failure)
 
@@ -847,7 +852,9 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                 self.assertEqual(report["checks"][0]["status"], "refused")
                 self.assertIn(reason, report["refusal"])
                 self.assertEqual(report["checks"][0]["contention_flags"][0]["interval"]["end_monotonic_s"], 45)
-                self.assertEqual(report["contention"]["guard_flags"], expected_flags)
+                # The exact 30 s check adds its own flags; the rule windows are these.
+                self.assertEqual(report["contention"]["guard_flags"], len(guard.contention_flags))
+                self.assertEqual(len(rule_flags(guard)), expected_flags)
                 self.assertEqual(json.loads((root / "report.json").read_text())["status"], "refused")
                 self.assertTrue(guard._stop_sampler.is_set())
 
@@ -954,7 +961,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                     self.assertEqual((published["status"], row["status"]), ("refused", "refused"))
                     self.assertIn("R0-L3 contention flagged", published["refusal"])
                     self.assertEqual([flag["interval"]["end_monotonic_s"]
-                                      for flag in row.get("contention_flags", ())], [45])
+                                      for flag in row.get("contention_flags", ()) if flag.get("kind") is None], [45])
                     self.assertEqual(published["census"][-1]["background_census"][0]["monotonic_s"], 45)
                 else:
                     self.assertEqual((published["status"], row["status"]), ("refused", "refused"))
@@ -1117,7 +1124,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                     clock.now = 96
                 with self.assertRaisesRegex(Refused, message):
                     guard.check(force=True)
-                self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in guard.contention_flags], [45])
+                self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in rule_flags(guard)], [45])
                 self.assertIn("contention_flag", guard.receipts[-1])
 
     def test_execute_refuses_when_background_launchagent_directory_is_unreadable(self):
@@ -1220,8 +1227,9 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
         self.assertEqual((published["status"], row["status"]), ("fail", "fail"))
         self.assertEqual(row["error"], "RuntimeError: injected host failure")
         self.assertIn("LaunchAgent census indeterminate", published.get("refusal", ""))
-        self.assertEqual(published["contention"]["guard_flags"], 1)
-        self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in row["contention_flags"]], [45])
+        self.assertEqual(published["contention"]["guard_flags"], len(guard.contention_flags))
+        self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in row["contention_flags"]
+                          if flag.get("kind") is None], [45])
 
     def test_cli_refuses_when_required_background_census_root_cannot_be_enumerated(self):
         from contextlib import nullcontext
@@ -1343,9 +1351,9 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                 guard.run = command
                 report = self.execute_host(guard, host, Path(tmp))
                 self.assertEqual(report["status"], "refused" if flagged else "pass")
-                self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in guard.contention_flags], flagged)
+                self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in rule_flags(guard)], flagged)
                 if 60 in flagged:
-                    evidence = guard.contention_flags[-1]["busy"][0]
+                    evidence = rule_flags(guard)[-1]["busy"][0]
                     self.assertAlmostEqual(evidence["cpu_s_per_s"], 1.8 / (60 - birth))
                     self.assertIn("lower bound", evidence["basis"])
 
@@ -1540,9 +1548,10 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                 self.assertTrue(all(at == 30 for at in samples[3:]))
                 record = output if output.exists() else next(output.parent.glob(".output.r0-*"))
                 report = json.loads((record / "report.json").read_text())
-                self.assertEqual(report["contention"]["guard_flags"], int(flagged))
+                self.assertEqual(report["contention"]["guard_flags"], len(guard.contention_flags))
+                self.assertEqual(len(rule_flags(guard)), int(flagged))
                 if flagged:
-                    event, = guard.contention_flags
+                    event, = rule_flags(guard)
                     evidence, = event["busy"]
                     self.assertAlmostEqual(evidence["cpu_s_per_s"], 0.06)
                     if last is None:
@@ -1971,7 +1980,9 @@ class R0PublicationAuditTest(unittest.TestCase):
                 pid, born, cpu, command, argv = super().row(now)
                 return pid, born, 75 if 45 <= now < 60 else cpu, command, argv
 
-        for delay, cpu, busy in ((0, 151, True), (0.5, 151, True), (2, 151, True), (0.5, 150, False)):
+        # The quiet control sits one TIME quantum below 1.50 CPU-s: at least
+        # the limit within 30 s flags (lead ruling after audit 5).
+        for delay, cpu, busy in ((0, 151, True), (0.5, 151, True), (2, 151, True), (0.5, 149, False)):
             with self.subTest(delay=delay, cpu=cpu):
                 paired = False
 
@@ -2006,7 +2017,8 @@ class R0PublicationAuditTest(unittest.TestCase):
                 self.assertTrue(any(flag[:3] == (0.0, 30.0, fixture.PID) for flag in result["flags"]), result)
                 self.assertIn((0.0, 30.0), result["report_intervals"])
 
-        for command, centiseconds in (("corespotlightd", 150), ("neutral-worker", 180)):
+        # One TIME quantum below the limit stays quiet; ties flag (lead ruling after audit 5).
+        for command, centiseconds in (("corespotlightd", 149), ("neutral-worker", 180)):
             with self.subTest(command=command, centiseconds=centiseconds):
                 worker = fixture.Process(command, cpu_at=30, centiseconds=centiseconds)
                 result = self.trial(fixture.Case("admitted_contaminant_control", (worker,), end=60))
@@ -2663,12 +2675,13 @@ class R0AdvisoryAdmissionTest(unittest.TestCase):
 
 
 class R0FinalVerdictTest(unittest.TestCase):
-    """Lead ruling after audit 4: the final verdict is self-contained.
+    """Lead rulings after audits 4 and 5: the final verdict is self-contained.
 
     Its windows come only from the sample series (startup, daemon, and the
     read each publication census takes at run end). It judges every sliding
-    window, the one ending at the final read, and the window of exactly
-    INTERVAL_S ending at the final read. Admission is never its opening.
+    window, including the one ending at the final read, and at every sample
+    the exact check against each earlier sample at most INTERVAL_S before
+    it. Admission is never its opening.
     """
     setUp = R0HostTest.setUp
     runner = R0HostTest.runner
@@ -2719,10 +2732,16 @@ class R0FinalVerdictTest(unittest.TestCase):
 
     @staticmethod
     def verdict_windows(guard, *, flagged=False):
-        """Windows the verdict judged over the series (never admission windows)."""
+        """Windows the verdict judged over the series (never admission windows).
+
+        Exact-check pairs are recorded only when they hold at least the
+        limit, so each one listed is a flagged window.
+        """
         receipts = [*guard.receipts, *(r["publication_census"] for r in guard.receipts if "publication_census" in r)]
-        return sorted({(w["start_monotonic_s"], w["end_monotonic_s"]) for r in receipts
-                       for w in r.get("cpu_intervals", ()) if w.get("contention_flag") or not flagged})
+        rule = {(w["start_monotonic_s"], w["end_monotonic_s"]) for r in receipts
+                for w in r.get("cpu_intervals", ()) if w.get("contention_flag") or not flagged}
+        exact = {(w["start_monotonic_s"], w["end_monotonic_s"]) for r in receipts for w in r.get("exact_windows", ())}
+        return sorted(rule | exact)
 
     @classmethod
     def verdict_flags(cls, guard):
@@ -2781,15 +2800,15 @@ class R0FinalVerdictTest(unittest.TestCase):
                                 if w[0] <= burst_at and burst_at + 4 <= w[1]]
                     self.assertTrue(covering, (burst_at, self.verdict_flags(model.guard)))
 
-    def test_full_length_window_uses_the_oldest_sample_inside_it(self):
-        # Regular cadence, final read at 74 s. The sliding window ending at
-        # 74 s opens at 30 s; the full-length window is 44-74 s, opened with
-        # the counters of the 45 s sample and reported from that sample, so
-        # every reported endpoint is a sample. 1.50 CPU-s inside it is exactly
-        # 0.05 over 30 s and stays quiet; 1.52 CPU-s flags.
+    def test_exact_check_flags_at_least_the_limit_within_any_30_s(self):
+        # Regular cadence, final read at 74 s. The worker's counter jumps at
+        # 70 s. The sliding window ending at 74 s opens at 30 s (44 s long);
+        # the exact check pairs 74 s with the 45 s and 60 s samples, charging
+        # their growth to 30 s. At least 1.50 CPU-s (the limit times 30 s)
+        # flags, ties included; 1.49 stays quiet.
         from tests.align import test_r0_vs_l3_differential as fixture
 
-        for total_cs, flagged in ((150, False), (152, True)):
+        for total_cs, flagged in ((149, False), (150, True), (152, True)):
             with self.subTest(total_cs=total_cs):
                 class Exact(self.schedule(first_tick=45, cadence=15)):
                     def processes(self):
@@ -2798,22 +2817,114 @@ class R0FinalVerdictTest(unittest.TestCase):
                         return [*rows, (fixture.PID, -100, cs, fixture.WORKER, "/fixture/mdworker_shared")]
 
                 result, model = self.run_model(fixture.Case(f"exact_{total_cs}", end=74), Exact)
-                windows = [w for r in model.guard.receipts for p in [r.get("publication_census", {})]
-                           for w in p.get("cpu_intervals", ()) if w.get("full_length_at_final_read")]
-                self.assertTrue(windows)
-                # Reported from the 45 s sample whose counters open it; its rate
-                # uses the full 30 s that starts at 44 s.
-                self.assertEqual({(w["start_monotonic_s"], w["end_monotonic_s"], w["elapsed_s"],
-                                   w["window_start_monotonic_s"], w["opening_counters_monotonic_s"])
-                                  for w in windows}, {(45.0, 74.0, 30.0, 44.0, 45.0)})
                 if flagged:
                     self.assertEqual((result["rc"], result["published"]), (2, False), result)
-                    self.assertIn((45.0, 74.0), self.verdict_flags(model.guard))
-                    busy = [row for f in model.guard.contention_flags for row in f["busy"]
-                            if (f["interval"]["start_monotonic_s"], f["interval"]["end_monotonic_s"]) == (45.0, 74.0)]
-                    self.assertAlmostEqual(busy[0]["cpu_s_per_s"], 1.52 / 30)
+                    self.assertLessEqual({(45.0, 74.0), (60.0, 74.0)}, set(self.verdict_flags(model.guard)))
+                    rates = {row["cpu_s_per_s"] for f in model.guard.contention_flags for row in f["busy"]
+                             if (f["interval"]["start_monotonic_s"], f["interval"]["end_monotonic_s"]) == (45.0, 74.0)}
+                    self.assertEqual(rates, {total_cs / 100 / 30})
                 else:
                     self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+
+    def series_fixture(self, ticks, rows):
+        """The frozen fixture with explicit daemon ticks and extra process rows."""
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        class Series(fixture.Fixture):
+            def __init__(self, case, root):
+                super().__init__(case, root)
+                self.ticks = list(ticks)
+
+            def move(self, end):
+                while self.ticks and self.ticks[0] <= end:
+                    self.now = self.ticks.pop(0)
+                    self.apply_tree()
+                    self.timer.pulse()
+                self.now = end
+                self.apply_tree()
+
+            def processes(self):
+                return [*super().processes(), *rows(self.now)]
+
+        return Series
+
+    def verdict_flag_keys(self, guard):
+        windows = set(self.verdict_windows(guard))
+        return {(f["interval"]["start_monotonic_s"], f["interval"]["end_monotonic_s"], row["pid"])
+                for f in guard.contention_flags for row in f["busy"]
+                if (f["interval"]["start_monotonic_s"], f["interval"]["end_monotonic_s"]) in windows}
+
+    def test_audit5_quiet_samples_appended_after_an_interior_burst_keep_its_flag(self):
+        # Audit round 5 interior_burst.py. The daemon wakes 0.5 s late: samples
+        # at 45.5, 61.0, 76.5 s and on. A worker accrues TOTAL centiseconds
+        # between 52 and 56 s. "short" ends at 61.0 s; "extended" appends
+        # quiet samples through 107.5 s. 671bd3f1d flagged short_152 and
+        # short_160 and published every extended run.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        ticks = [45.5 + 15.5 * k for k in range(5)]
+        for total in (0, 150, 152, 160):
+            def rows(now, total=total):
+                return [(fixture.PID, -100, round(total * min(1, max(0, (now - 52) / 4))),
+                         fixture.WORKER, "/fixture/mdworker_shared")]
+
+            outcomes = {}
+            for name, end in (("short", 61.0), ("extended", 107.5)):
+                with self.subTest(total=total, run=name):
+                    result, model = self.run_model(fixture.Case(f"{name}_{total}", end=end),
+                                                   self.series_fixture(ticks, rows))
+                    outcomes[name] = result, self.verdict_flag_keys(model.guard)
+                    if total == 0:
+                        self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+                    else:
+                        # At least 1.50 CPU-s between the 45.5 s and 61.0 s samples.
+                        self.assertEqual((result["rc"], result["status"], result["published"]),
+                                         (2, "refused", False), result)
+                        self.assertIn((45.5, 61.0, fixture.PID), outcomes[name][1])
+            with self.subTest(total=total, monotone=True):
+                self.assertLessEqual(outcomes["short"][1], outcomes["extended"][1])
+
+    def test_appending_quiet_samples_never_removes_a_verdict_flag(self):
+        # Generated: burst position x size around the limit x daemon schedule
+        # x appended quiet tail. Each short run ends on a daemon tick, so its
+        # samples are a subset of every extended run's. Bursts accrue over 4 s.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        schedules = {"on": [45 + 15 * k for k in range(6)],
+                     "off": [45.5 + 15.5 * k for k in range(6)],
+                     "jitter": [45 + 15 * k + (0.4 if k % 2 == 0 else -0.4) for k in range(6)]}
+        for label, ticks in schedules.items():
+            short_end = ticks[2]
+            positions = {"start": 2.0, "interior": 50.0, "end": short_end - 4}
+            for position, burst_at in positions.items():
+                for size_cs in (149, 150, 151, 180):
+                    def rows(now, burst_at=burst_at, size_cs=size_cs):
+                        return [(fixture.PID, -100, round(size_cs * min(1, max(0, (now - burst_at) / 4))),
+                                 fixture.WORKER, "/fixture/mdworker_shared")]
+
+                    runs = {}
+                    for tail in (0, 1, 3):
+                        end = ticks[2 + tail]
+                        result, model = self.run_model(
+                            fixture.Case(f"{label}_{position}_{size_cs}_{tail}", end=end),
+                            self.series_fixture(ticks, rows))
+                        runs[tail] = result, self.verdict_flag_keys(model.guard)
+                    with self.subTest(schedule=label, position=position, size_cs=size_cs):
+                        short, short_keys = runs[0]
+                        for tail in (1, 3):
+                            longer, longer_keys = runs[tail]
+                            self.assertLessEqual(short_keys, longer_keys, (tail, short_keys, longer_keys))
+                            if short["rc"] == 2:
+                                self.assertEqual((longer["rc"], longer["published"]), (2, False), longer)
+                        if size_cs >= 150:
+                            # A 4 s burst lies between two samples at most 30 s apart.
+                            self.assertEqual((short["rc"], short["published"]), (2, False), short)
+                            self.assertTrue(any(start <= burst_at and burst_at + 4 <= stop
+                                                for start, stop, _ in short_keys), short_keys)
+                        else:
+                            for tail in (0, 1, 3):
+                                self.assertEqual((runs[tail][0]["rc"], runs[tail][0]["published"],
+                                                  runs[tail][0]["flags"]), (0, True, []), runs[tail][0])
 
 
 class R0ProcessIdentityTest(unittest.TestCase):
@@ -3529,7 +3640,7 @@ class R0QuietIntervalTest(unittest.TestCase):
         receipt = {}
         self.assertEqual(guard._cpu_interval(receipt), [])
         self.assertEqual(receipt["cpu_interval"]["exited_over_limit"], [])
-        flag, = guard.contention_flags
+        flag, = rule_flags(guard)
         self.assertEqual(flag["interval"]["end_monotonic_s"], 30)
 
     def test_exit_delta_uses_growth_since_opening_for_same_worker(self):
@@ -3632,7 +3743,7 @@ class R0QuietIntervalTest(unittest.TestCase):
         interval = guard.receipts[-1]["cpu_interval"]
         self.assertEqual(interval["exited_over_limit"], [])
         self.assertTrue(interval["regressed_counters"][0]["contaminant"])
-        original, carried = guard.contention_flags
+        original, carried = rule_flags(guard)
         self.assertEqual(original["interval"]["end_monotonic_s"], 30)
         self.assertEqual(carried["interval"]["start_monotonic_s"], 30)
         self.assertEqual(carried["interval"]["end_monotonic_s"], 60)
