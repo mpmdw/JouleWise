@@ -1056,6 +1056,18 @@ horizon_skip() {
 }"""
 
 
+def c1_reservation_args(argv: Sequence[str], root: Path, ledger_path: str):
+    """Use the reservation CLI's option and default semantics for C1 launch."""
+    from joulewise.b5.plan import HEAD_PIN_RELATIVE
+    from scripts.reserve_calibration_window_bracket import _parser
+
+    try:
+        return _parser(ledger_default=Path(ledger_path),
+                       head_pin_default=root / HEAD_PIN_RELATIVE).parse_args(argv)
+    except SystemExit as exc:
+        raise ChainRenderError("invalid C1 reservation command") from exc
+
+
 def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[Stage],
                  bindings: Mapping[str, Any], measurement_root: Path, pack_root: Path,
                  plan_id: str, runbook_text: str, settle_s: int | float = SETTLE_S,
@@ -1100,11 +1112,17 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
     def value_after(argv: Sequence[str], flag: str) -> str | None:
         return argv[argv.index(flag) + 1] if flag in argv and argv.index(flag) + 1 < len(argv) else None
 
-    frozen_plan = value_after(reservation_argv, "--plan")
-    head_pin = value_after(reservation_argv, "--head-pin")
-    if head_pin is None and c1_inputs is not None:
-        from joulewise.b5.plan import HEAD_PIN_RELATIVE
-        head_pin = str(root / HEAD_PIN_RELATIVE)
+    ledger_path = bindings["ledger_path"]
+    bracket_session_id = bindings["bracket_session_id"]
+    if c1_inputs is None:
+        frozen_plan = value_after(reservation_argv, "--plan")
+        head_pin = value_after(reservation_argv, "--head-pin")
+    else:
+        selected = c1_reservation_args(reservation_argv[2:], root, ledger_path)
+        frozen_plan = str(selected.plan) if selected.plan is not None else None
+        head_pin = str(selected.head_pin)
+        ledger_path = str(selected.ledger)
+        bracket_session_id = selected.session_id
     # The NEG-8 corpus stage (row 13): the last collection before the bound
     # derivation that collects into the derivation's --runs-dir.
     derivation = next((stage for stage in chain if stage.kind == "bound_derivation"), None)
@@ -1161,7 +1179,7 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
         f"export PY={_literal(python)}",
         'export PYTHONPATH="$REPO"',
         *(["export JOULEWISE_C1_INPUTS=" + _literal(json.dumps(c1_inputs, sort_keys=True)),
-           "export CALIBRATION_LEDGER=" + _literal(bindings["ledger_path"]),
+           "export CALIBRATION_LEDGER=" + _literal(ledger_path),
            "export LEDGER_HEAD_PIN=" + _literal(head_pin)]
           if c1_inputs is not None else []),
         *(["export XDG_CACHE_HOME=" + _literal(c1_inputs["cache_home"])]
@@ -1251,8 +1269,8 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
             lines.append(run(stage, argv))
             if frozen_plan is not None and head_pin is not None:
                 status_argv = [python, str(root / "scripts/recover_calibration_ledger.py"),
-                               "--ledger", bindings["ledger_path"], "--head-pin", head_pin, "session-status",
-                               "--session-id", bindings["bracket_session_id"], "--plan", frozen_plan]
+                               "--ledger", ledger_path, "--head-pin", head_pin, "session-status",
+                               "--session-id", bracket_session_id, "--plan", frozen_plan]
                 lines.append(run(stage, budgeted("session_status_record", status_argv),
                                  label=stage.stage_id + ".session-status",
                                  kind="session_status_record", suffix=".session-status",

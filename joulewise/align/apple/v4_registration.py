@@ -1084,7 +1084,7 @@ def check_selections(view, tree, night, pin, *, cache_home=None, environment=Non
     """Run the actual argv binders and parsers, then check their selected inputs."""
     from types import FunctionType, SimpleNamespace
     from joulewise.b5 import chain
-    from scripts import reserve_calibration_window_bracket as reservation, run_campaign as runner
+    from scripts import run_campaign as runner
 
     en = os.environ if environment is None else environment
     cache_home = en.get('XDG_CACHE_HOME') or cache_home
@@ -1095,12 +1095,11 @@ def check_selections(view, tree, night, pin, *, cache_home=None, environment=Non
     if Path(bindings['repo_root']) != view.root:
         raise ValueError('prepared repo_root binding differs')
     default_ledger = view.root / LEDGER
-    default_head = view.root / 'configs/calibration/calibration_ledger_head.json'
-    env = {'CALIBRATION_LEDGER': en.get('CALIBRATION_LEDGER') or str(default_ledger),
-           'LEDGER_HEAD_PIN': en.get('LEDGER_HEAD_PIN') or str(default_head)}
+    env = {}
     # The name used by the chain writer and all reader spellings must select
     # the same physical file, even if an alternate file has identical bytes.
-    for candidate in (default_ledger, bindings['ledger_path']):
+    for candidate in (default_ledger, bindings['ledger_path'],
+                      en.get('CALIBRATION_LEDGER') or default_ledger):
         check_ledger(view.locate(candidate), pin, starting=starting)
     if fallback := en.get('JOULEWISE_G2A_PRE_BRACKET_PLAN'):
         view.locate(fallback)
@@ -1115,19 +1114,27 @@ def check_selections(view, tree, night, pin, *, cache_home=None, environment=Non
     generated_bound = None
 
     def check_order(manifest_path):
-        manifest = decode(view.locate(manifest_path).read_bytes())
-        for row in manifest['executed_order']:
-            name = key(row['config'])
-            if '/' in name:
-                raise ValueError(f'invalid dispatched config name: {name}')
-            config = view.locate(Path(manifest_path).parent / name)
-            config_references(decode(config.read_bytes()), config, view, runner, cache_home=cache_home)
-        directory = view.locate(Path(manifest_path).parent, directory=True)
+        directory = view.root / Path(manifest_path).parent
+        resolved = view.locate(directory, directory=True)
+        # Keep the bound-file decoder's duplicate-key check and use the
+        # campaign's own directory selection and manifest validation.
+        decode(view.locate(manifest_path).read_bytes())
+        order, _ = runner.load_order_entries(directory)
+        for entry in order:
+            if '/' in key(entry.config):
+                raise ValueError(f'invalid dispatched config name: {entry.config}')
         analysis = directory / runner.ANALYSIS_MANIFEST_NAME
         if analysis.is_file():
-            config_references(decode(view.locate(analysis).read_bytes()), analysis, view, runner)
-        scope = next(root for root in view.roots.allowed if directory.is_relative_to(root))
-        if len(directory.relative_to(scope).parts) < runner.MAX_ANALYSIS_MANIFEST_V3_ANCESTOR_DEPTH:
+            data = decode(view.locate(analysis).read_bytes())
+            if data.get('schema_version') == runner.AXI_MANIFEST_SCHEMA_VERSION:
+                raise ValueError('C1 dispatch must use its sealed order manifest')
+            config_references(data, analysis, view, runner)
+        configs = runner.apply_order_manifest(runner.discover_configs(directory), order)
+        for config in configs:
+            raw = view.locate(config).read_bytes()
+            config_references(decode(raw), config, view, runner, cache_home=cache_home)
+        scope = next(root for root in view.roots.allowed if resolved.is_relative_to(root))
+        if len(resolved.relative_to(scope).parts) < runner.MAX_ANALYSIS_MANIFEST_V3_ANCESTOR_DEPTH:
             raise ValueError('campaign ancestor lookup would leave the verified roots')
         _, marker = runner._reachable_analysis_manifest_v3(directory)
         if marker is not None:
@@ -1145,13 +1152,12 @@ def check_selections(view, tree, night, pin, *, cache_home=None, environment=Non
             argv = launch[2:]
             try:
                 if command.tool_id == 'bracket_reserver':
-                    args = reservation._parser(ledger_default=Path(env['CALIBRATION_LEDGER']),
-                                               head_pin_default=Path(env['LEDGER_HEAD_PIN'])).parse_args(argv)
+                    args = chain.c1_reservation_args(argv, view.root, bindings['ledger_path'])
                     if args.session_kind != 'bracket' or args.allow_uncommitted_pin_for_test or args.test_writer_crash_authorization:
                         raise ValueError('C1 reservation requires the ordinary bracket')
                     selections['ledger'] = check_ledger(view.locate(args.ledger), pin, starting=starting)
                     selections['head_pin'] = view.locate(args.head_pin)
-                    env['LEDGER_HEAD_PIN'] = str(args.head_pin)
+                    env.update(CALIBRATION_LEDGER=str(args.ledger), LEDGER_HEAD_PIN=str(args.head_pin))
                     selections['session_kind'] = args.session_kind
                     for path in (args.plan, args.identity_epoch_json, args.t1_bindings_json):
                         view.locate(path)

@@ -2005,7 +2005,7 @@
   },
   {
     "file": "scripts/validate_powermetrics_fiducial.py",
-    "locator": "main:541443a289d468bd",
+    "locator": "_capture_parser:541443a289d468bd",
     "command": "pmset",
     "seam": "none"
   },
@@ -2017,7 +2017,7 @@
   },
   {
     "file": "scripts/validate_powermetrics_fiducial.py",
-    "locator": "main:99396a2a5503574e",
+    "locator": "_capture_parser:99396a2a5503574e",
     "command": "pmset",
     "seam": "none"
   }

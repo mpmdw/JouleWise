@@ -499,7 +499,7 @@ REFUSALS = {
     'unclosed_legacy_source_equals_view': 'unexpected repository path',
     'ambient_shade_only': 'SHADE dependency is absent',
     'wrong_start_digest': 'starting ledger',
-    'closed_stage_wrong_order': 'member count differs',
+    'closed_stage_wrong_order': 'config(s) absent from manifest',
 }
 
 
