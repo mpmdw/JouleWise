@@ -24474,3 +24474,193 @@ Research lead (Fable 5.2), Sun Nov 22 00:05:00 PST 2026 (from `date`). Answers t
 **Not checked.** Whether `stage1.json` itself holds the journal digests. Whether tests for RL-195 conditions 1.2 and 1.3 exist on the branch (I found the F-12 invariance test, not a mean-only one). Whether a test pins the disclosure sentence's text. Where the meter-clock and trace-hole keys are computed. The Gemini audit's trace, which I took as given; I read the output schema and the stage-1 write path myself.
 
 **Blind status.** Blind. Read: the resolver's report and brief; the builder's report and `docs/run_reports/2026-11-21-pr795-audit-3.md` at `47e3b187b`; RL-179 F-12 and its register, RL-194, RL-194a, RL-195 and stage-1 lines of RL-180 and RL-181; and public source at `47e3b187b` (the output schema, the draft manifest, the stage-1 write path, the `PublicFiles` tests). No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened. No commit, push, run, SSH or fetch. The only file written is this one.
+
+# RL-200. Option C keeps RL-198's four windows; neither cheaper design is adopted, and the real figure is about 45 to 48 MBP hours, not 65. The dose run may move to calibration completion. Stability fillers run three legs to a span from the next launch: `lm-stab-01` reads cold legs only, `lm-stab-02` prints cold and warm apart. Six-leg kits are not minted
+
+Research lead (Fable 5.2), Sun Nov 22 00:22:49 PST 2026 (from `date`). Rules on Ed's instruction of 2026-11-22 ("register it but have mythos and astra see if they can find a way to make it quicker") and the two blind speed reviews.
+
+**Cites.**
+- `MS §n` is Mythos's `/Volumes/JW-EXT/scratch/mythos-speed-review/SPEED.md`. `AS` is Astra's `/Volumes/JW-EXT/scratch/astra-speed-review/SPEED.md`, cited by section and table row.
+- `RL-198:n` is a line of `/Volumes/JW-EXT/scratch/fable-rl198.md`.
+- `P4:n` is `docs/align/pilot_protocol_v4.md` at `b2e01464d`. `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `449dbbcf4`. `RS<n>` is a RUN_STATE item on `origin/main` at `7eec25d6a`.
+
+**Read.**
+- The brief; both `SPEED.md` files whole; Mythos's `REPORT.md`; Astra's `FINAL-MESSAGE.md`.
+- RL-198, RL-198a and RL-199 whole. RL-181 §2; RL-190 §1 and §3.2; RL-180's `f2-stab` section and row 13; RL-196's cold and warm lines.
+- RLD:17150-17175, 17240-17252, 18650-18664, 18715-18745, 18822-18834, 19436-19455, 23025-23047, and lines 14693, 15742, 17228, 17334-17335.
+- P4:105-160, 176-222, 836-873, 1006-1065, 1104-1160, 1222-1236, 1324-1345, 1556-1570.
+- RS533 whole; RS505's disposition line; the headings of RS515 to RS534.
+- Design fields of five public kit files (`f2-stab-01`, `-03`, `-04`, `-14`, `-17`): span template, leg order, band, G0 shape. The first entries of queue `f2-stab-04`. `f2-stab/MANIFEST.md`.
+- PR #944's state: open, not merged.
+
+**Not checked.**
+- **Either review's arithmetic.** I take the printed times and hours as given. Where the two differ (45.5 h and 45.03 h programmed for P1 to P4) I use "about 45".
+- **Whether the stability look's code exists yet,** and what RL-192b's "position pair" means in it.
+- **The W1 line's B10 text after PR #944's edits.** I quote RL-198 §4's B10.
+- **R1's deadman and tail values.** I opened no slot file. Section 1.4 is a rule, not a number.
+- **Whether the launcher at `2d347f721` admits a three-leg `f2-stab` span at every hour.** RS407 and RS411 ran three-leg `f2-inst` spans on the same template.
+- No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened.
+
+**Not done.** No commit, push, comment, run or SSH. The only file written is this one.
+
+---
+
+## 0. The answers
+
+| # | Answer |
+|---|---|
+| 1 | **RL-198 stands.** Mythos's tail and Astra's single-pair windows are both refused. Three small amendments: the hours, the §3.2 sentence, and when the dose run may happen. One new print for the deadman |
+| 2 | **Yes, three legs to a span, from the next launch,** on the kits and pins as they are. The first leg after the soak is `cold`, the others `warm`. The date's rank-1 leg must be cold; its span may hold three. Section 2.2 is the rule |
+| 3 | Five small rulings in section 3. Everything else is the lead's |
+
+## 1. Option C
+
+### 1.1 The tail (Mythos, MS §2.2): refused
+
+**A tail member's score would not be K's score.** The saving, about 33 h, is real only if a member that runs after a T window's terminal release can be scored on that window's benign fit. It cannot.
+
+- **A tail is a new armed span.** Terminal release means the chain has ended and "process cleanup run" (P4:847-855). The tail kit then arms, with its own start state and reference.
+- **K's fit is per window because the fit moves between windows.** Every score behind the threshold is a member against the benign members of its own window (P4:1106-1108), and the registered stress cases assume "a hot window-shared state" (P4:1113-1116). A tail member scored on another span's fit carries the shift between the two spans in its residual. No calibration score has that term. It can raise the count or lower it.
+- **The benign tail member Mythos offers as a control** would be three to six episodes. No alarms in six leaves a false-alarm rate of up to 39 %.
+- **Putting the members inside the T span** removes the problem and breaks clause 5: "A C or T kit that carries the field is refused by the kit validator" (RL-198:188). Mythos does not recommend it either (MS §2.3 row 5).
+- **Tails after T1 and T2** would also give T2 and T3 a predecessor that no calibration window had. That touches K's test.
+
+Of the three RL-198 lines Mythos names, the binding one is RL-198:89, "One five-term fit per P window and pair on its six eligible benign members", with clause 1's "its own six-benign fit". Astra reached the same point: "Without that proof the saving is 0" (AS §A, the T-host row).
+
+**No number is asked for.** The number that would settle it is how far a benign score moves when it is fitted on a neighbouring span. It does not exist before calibration, and the control's design does not wait on calibration data.
+
+### 1.2 Four single-pair windows (Astra): refused, and why it is close
+
+It is a sound design. It keeps the six-benign fit, both doses and all sixteen episodes, and saves 12 of about 45 hours. I refuse it on cost.
+
+- **The hours it saves are the cheapest hours in the series.** The P windows run after the last T window. The release run does not wait for them (RL-198:171), and no registered block queues behind them.
+- **What it spends is what is short.** A 16-member one-pair window is a new shape: no alternation of pairs, a new midpoint, its own manifest entries, sizing and cold seat, all before C1. Mythos's finding is that the series waits on reviewed work and not on the machine (MS §1.5 item 2). RL-198's P window is a T window with two fields added.
+- **Each pair would have two fit windows where it now has four,** so one lost window takes half of a pair's high-dose episodes.
+
+The 6 h compromise is refused for the same reasons. **The offer stays open until the P entries go into the series manifest** (RL-198 §3.1 step 3, before C1): if P hours come to compete with registered work, the lead asks and I adopt it by a blind amendment.
+
+### 1.3 Amendments to RL-198
+
+**(a) Hours.** Both reviews are right that 65 h is a ceiling (MS §2.1; AS §A). RL-198 §3.2's first two sentences are replaced by:
+
+> About 11.3 hours programmed per window (40,527 s, P4:849), so about 45 hours for four and about 48 with turnarounds; 11 to 12 more only if P5 is used. The 16.2 h figure is each window's ceiling, and a window ends at terminal completion (P4:847-848). Four members per window carry a hidden decode (two pairs, one high and one low each), sixteen over P1 to P4. Their extra decode is at most about 0.2 h a window at the public leg model's rate, which is an estimate and not the D cell's measured rate.
+
+**(b) The §3.2 sentence.** "eight members per window in total" was my error. Four per window is the roster (RL-198:45, 59). The text above replaces it. No roster, seed or slot changes.
+
+**(c) When the dose run happens.** Both reviews propose moving it earlier (MS §2.2; AS §A, the dose row). It reads calibration benign rows only and its output was already public (RL-198:67). In RL-198 §1.2, §3.1 steps 4 and 6, register clause 2 and B10's *Doses*, "after the last admitted T close" becomes:
+
+> at any time after `calibration_complete` and before P1's issue, provided the dose route was frozen by hash before `calibration_complete`. If it was not, it runs after the last admitted T close.
+
+- **What it buys.** The P kit is filled, checked and staged while the T windows run, so P1 arms at the first turnaround after the last T.
+- **It goes into PR #944 while that is open.** If the edit would hold or reopen the W1 signature, B10 stays as it is and the dose run stays after the last T close. The lead chooses. W1 does not wait for it.
+- **The P windows still arm after the last admitted T window** (clause 4 unchanged).
+
+### 1.4 The deadman (Mythos, MS §2.3 last paragraph): one rule and one print
+
+A high dose puts up to about 170 s of unlogged decode inside the first turn, and a member must fit `I_D + 1.13544·T_dead + tail + 10 ≤ 1,800 s` (P4:196-199).
+
+- **Rule.** A P member's cap and deadman are a T member's. The hidden seconds count against them like any other second. No P member gets a longer budget, because the cell is T's (RL-198:43).
+- **Print, added to `lm-pc-01`.** Per level and pair: the members excluded and each one's A9 code, and the admitted-turn count of each evaluable hidden-work member beside its window and pair's benign turn counts. These are counts and codes. A reader can then see whether the high-dose survivors are the short episodes.
+- **Sizing.** With the P entries, the lead shows me the hidden seconds at 2,048 tokens beside `T_dead`.
+
+### 1.5 What must be fixed, and by when
+
+| When | What | Owner |
+|---|---|---|
+| With this ruling's entry in the log | 1.3 (a) and (b). B10 carries neither sentence, so the protocol text does not change for them | Lead |
+| In PR #944 if it does not hold W1 | 1.3 (c), in B10's *Doses* | Lead |
+| Before C1 | Nothing new. RL-198 §3.1 steps 2 and 3 as written, with 1.4's sizing line | Builder; lead |
+| Before the last T closes | 1.4's print in the frozen `lm-pc-01` route | Builder |
+| Before the first T | Nothing | |
+
+## 2. Multi-leg stability spans
+
+### 2.1 Valid, and the kits were built for it
+
+- **The kit is four pieces of three.** Every `f2-stab` kit, successors included, carries `legs_per_span` 3, and every leg is `g0_shape` own at `q600` (kit files; RLD:16385-16388). Each leg in a three-leg span still runs its own 300 s idle, its own G0 against its own reference and its own 600 s hold.
+- **The one-leg span was a scheduling unit.** I called it "the short filler" for "the hours before a counted span that is about to become READY" (RLD:17160, 18724). Nothing dated or READY has been pending since 18 November and the queues still issue one leg an hour. That is the 50.5 % both reviews found (MS §1.3 (b); AS §B).
+- **A first leg is the same leg whatever follows it.** Nothing that runs after a leg can change it. So the date's rank-1 leg does not need a span to itself. It needs to be first in its span.
+- **A warm leg is not a cold leg.** hp-01's Checks showed a flag on five of six cold legs and on none of eighteen warm ones (RL-196 §2.1). So the two classes are never pooled, and each read says which it holds.
+- **The order of sizes is balanced enough.** Over a kit's four pieces each prompt size is first once or twice, second once or twice and third once or twice (kit leg order: 19,458 / 256 / 2,000; 2,000 / 256 / 19,458; 256 / 2,000 / 19,458; 2,000 / 19,458 / 256). Every size has cold and warm legs.
+
+### 2.2 The rule
+
+This replaces the "Unit" row of RL-179 F-4 (b) (RLD:18724) and is what the queue files and the magistrate's items follow.
+
+> **Stability spans (RL-200).**
+> 1. **A span holds one, two or three consecutive unrun legs of one kit, in kit order,** and never more than the kit's `legs_per_span`. No leg is reordered or skipped, and no span mixes kits. One soak per span. Every leg runs exactly as the kit has it.
+> 2. **Class.** Stage 1 records each leg's span id and its index in that span, from the receipt (RLD:22437). Index 1 is `cold`. Index 2 or 3 is `warm`.
+> 3. **Rank 1.** The date's first stability leg is the cold leg of a base-kit span (kits 01 to 14, lowest-numbered kit with an unrun leg, RS464). That span may hold up to three legs. Its warm legs are rank-4 product.
+> 4. **Length.** The magistrate arms the longest of three, two or one whose planned worst case passes every start check that exists today: the dated-block rule (RLD:18650), the soak and batch-window arguments (RS463, RS507), and the pin's bands. While a READY record or a pre-notice is in hand, one leg. The choice reads the clock and the queue, never a result.
+> 5. **Spent and unrun.** A leg that started is spent (`redo_quota` 0). A leg that never started, because its span was refused at the soak or stopped before it, has no bundle and stays an unrun position. The lead may issue it again (RLD:22432).
+> 6. **The item** names the legs and carries one line: "RL-200 §2: leg 1 cold, legs 2 to N warm; `lm-stab-01` reads cold base legs only." The Check reports each leg's disposition on its own line.
+
+**The reads.**
+
+| | `lm-stab-01` | `lm-stab-02` |
+|---|---|---|
+| Legs that contribute | **Qualified cold legs of kits 01 to 14.** Warm legs of those kits are not in it | Every qualified leg of every `KITS.json` row |
+| Tables | Unchanged (RL-181 §2.6). Every leg collected so far is cold, so the population is what it was | Every table once for cold legs and once for warm legs, each over all rows and over the base kits (RL-190 §1.3). **No line pools the classes** |
+| The 14 dates | A date counts when it holds a qualified cold base leg. Rank 1 is cold, so the earliest fourteenth date is still Wed 2 Dec | Unchanged |
+| Date | The local date of the span's t0, for every leg in the span (RLD:17228). A span that crosses midnight keeps its date | Same |
+| Hour, predecessor, gap | Unchanged: the span's t0, and the host's preceding entry | Cold legs as `lm-stab-01`. Warm legs: the hour of the leg's own start; predecessor `same_span_leg` with its prompt size; gap from the previous leg's end to this leg's start, from the leg records |
+| Manifest | One roster sentence added: "cold legs only (RL-200 §2)" | The class split, and the warm legs' three definitions above |
+| Stage 1's committed output | Adds the counts of legs by class | Same |
+| `PUBLIC.json` | Six fields, unchanged | Unchanged |
+
+- **If the stability code pairs legs by kit position** (RL-192b item 3), a pair is formed inside one class.
+- **The paper.** A cold figure is described as "the first leg after a soak". A warm figure is "a leg that follows another leg in its span". No sentence gives one number for both unless I rule on `lm-stab-02`'s tables.
+- **This is an edit before commitment.** Neither stability manifest is final and no stability energy has been read (RL-194 row; RL-190 §1.3).
+
+### 2.3 Six-leg successor kits: not now
+
+Kits 17 to 53 run at three, as minted (RS524). I do not ask for a re-mint.
+
+- **The gain is small.** About 420 s a leg beyond what three already gives (MS §3 row 4).
+- **Six would unbalance the classes.** With pieces of six, the 2,000-token size never leads a span.
+- **More stability legs are not what is short.** At three to a span the Mac gives about 39 a day. The freed hours matter when registered work is ready to use them.
+
+A six-leg family comes to me only as a new kit rule with a rotated first leg, and only if the ladder has nothing better.
+
+### 2.4 Amended sentence, RL-179 F-10
+
+"A one-hour stability leg is what bounds the inversion" (RLD:18830) becomes: "The magistrate's choice of span length bounds the inversion: one leg while a READY record or pre-notice is in hand (RL-200 §2.2 rule 4)."
+
+## 3. Anything else
+
+| Item | Ruling |
+|---|---|
+| Nothing dated or registered has run since 18 November; each day costs qualification a date (MS §1.5 item 2) | **Lead's, and it is the largest loss either review found.** No block design recovers it. "Qualification legs do not run before freeze 2" stands (RLD:15742). RL-199 answered the one question I knew to be owed on PR #795 and said it "does not hold the merge". Anything else that path needs from me goes ahead of every other brief |
+| Ladder order (MS §3 row 5) | **Ruled.** Any finite registered product that is admitted and ready (ctl-01's legs, the W1 native smoke) ranks above rank-4 stability legs. Rank 1 stays first. The lead places them without coming back |
+| Member idle 300 s to 120 s (MS §3 row 11) | **Refused.** It changes the thermal policy that freezes at C1, and W1 is not held for a paired check |
+| A shorter soak, a shared idle baseline, a same-span retry (MS §3 row 10; AS rows 7 and 8) | **Stand refused for this campaign** (RLD:17334-17335). `redo_quota` 0 stands |
+| The 02:00 to 02:35 batch | **Stays** (RLD:23045, RS507). Fitting spans around it is the lead's |
+| Three-leg `f2-inst` spans | Already allowed: they are the kit's own pieces (RLD:16381; RL-190 §3.2). Lead's |
+| No agent between spans; three planning numbers per block; the pin-A fence and midday band; the midnight rule; copy and Check timing | Lead's |
+
+**Blind status.** Blind. No C, T or P window exists and W1 is not armed. No stability or instrument energy has been read by anyone. Nothing here changes an estimator, threshold, population, calendar or word of K or S, or a sealed row. The class split of the stability reads is fixed from receipts, before any read.
+
+**For Ed, plainly.** "Both reviewers found the same thing, and it is not option C. For two days the MacBook Pro ran its filler measurements one at a time, and each one paid a 35-minute warm-up before 11 minutes of useful reading. Half the machine's time went on warm-ups. From the next launch the fillers run three to a warm-up, which gives the same measurements in a little over half the time. We keep the first measurement after each warm-up apart from the two that follow it, because they are not quite the same thing. On option C: the 65 hours I quoted was the upper limit. The expected figure is about 45 to 48. Mythos proposed a design at about 12 hours, and I turned it down, because the alarm would be judged against a baseline from a different session and the count would not mean what we say it means. Astra's design saves 12 hours and is sound, but it needs a new window layout built and reviewed now, to save machine time at the very end when nothing else is waiting. The real delay this week is that the next registered blocks are not ready to launch. That is our preparation work, not the machine."
+
+---
+
+## Register
+
+Owner `research_lead`.
+
+| # | Clause | Class | Protects | Scope | Ends | Test |
+|---|---|---|---|---|---|---|
+| 1 | A hidden-work member is scored only on the six-benign fit of its own armed window and pair. No tail, host window or other span's fit carries a PC count (1.1) | VALIDITY | The count is K's score and nothing else | P1 to P5, `lm-pc-01` | The P look | RL-198 clause 1's test |
+| 2 | The dose route runs once, after `calibration_complete` and before P1's issue, and only if frozen by hash before `calibration_complete`; otherwise after the last admitted T close (1.3 c) | VALIDITY (prereg) | No dose is set by code written after its inputs existed | Dose route | P1's issue | The route's hash commit precedes the `calibration_complete` row |
+| 3 | A P member's cap and deadman are a T member's; `lm-pc-01` prints exclusions by level, pair and code, and turn counts of evaluable hidden-work members (1.4) | VALIDITY | Unequal exclusion by dose is visible | P kit, `lm-pc-01` | The P look | Kit equality on the two fields; the print exists on a synthetic window |
+| 4 | A stability span holds one to three consecutive unrun legs of one kit in kit order; index 1 is cold, later legs warm; the date's rank-1 leg is cold (2.2 rules 1 to 3) | VALIDITY | The class is fixed by the receipt before any read | `f2-stab-*` queues and items | When `lm-stab-02` has run or is coalesced | Stage 1 on synthetic roots: a reordered span and a mixed-kit span refuse |
+| 5 | `lm-stab-01` reads qualified cold legs of kits 01 to 14 only; `lm-stab-02` prints every table by class and pools none (2.2) | VALIDITY | Cold and warm starts are not averaged into one spread | Both stability manifests | The paper's data release | A synthetic roster with warm base legs leaves `lm-stab-01`'s tables unchanged |
+| 6 | Span length is chosen from the clock and the queue only: the longest of three, two or one that passes today's start checks; one leg while a READY record or pre-notice is in hand (2.2 rule 4) | VALIDITY (blinding) | No result chooses a layout; a READY session waits at most one leg | Magistrate | With clause 4 | The item's stated reason names a clock or queue fact |
+
+**Amends.**
+- **RL-198 §3.2** (two sentences, 1.3 a and b); **§1.2, §3.1 steps 4 and 6, clause 2 and B10's *Doses*** (the dose run's timing, 1.3 c); `lm-pc-01` gains 1.4's print. Everything else in RL-198 and RL-198a stands, including the 22-member shape, the roster, the seeds, the words and clause 4.
+- **RL-179 F-4 (b)**, the "Unit" row (RLD:18724), and **F-10's** sentence (RLD:18830). The ladder table gains section 3's rank.
+- **RL-181 §2.6 and RL-190 §1.2:** "a qualified stability leg" reads "a qualified cold stability leg" for `lm-stab-01`. **RL-190 §1.3:** `lm-stab-02`'s two forms are each printed by class.
+- **Stand unchanged:** RL-180 row 13; RL-190 §1.4 and §1.5; RL-192b; `redo_quota` 0; RLD:15742.
+
+**What comes back to me.** A request for the single-pair windows before the P entries are built. The hidden seconds at 2,048 tokens beside `T_dead`. A launcher that refuses a three-leg stability span. A stability table that cannot be split by class without a change I have not described. A six-leg kit rule.
