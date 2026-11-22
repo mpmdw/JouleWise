@@ -236,18 +236,41 @@ boundaries.
 
 ### 3.3 The known-bytes stream test
 
-Whether the GPU rail includes the energy of the memory controller decides how the rails-versus-rest split of
-memory energy should be read. A registered **known-bytes stream test**, a GPU workload streaming a known number of
-bytes, was scheduled after pass-1 collection and before stage-1 unblinding, from its own non-claim checkout.
+The sampler reports no memory rail, so the energy of reading memory is split between the rails and the
+rest (Section 7.2). Whether memory traffic costs energy on the GPU rail, on the rails and on the rest was
+measured by a registered **known-bytes stream test**: a GPU workload that streams a known number of bytes
+twice, once over rotating addresses intended to read memory and once over repeated addresses intended to
+read on-chip cache. The test is non-claim: it changes no registered number, exclusion or estimator. It
+ran on 30 and 31 October 2026 (23:21 to 00:38 PDT), after pass-1 collection and before stage-1
+unblinding, from its own non-claim checkout.
 
-**[BRANCH 6.6.1 — the test ran and the rail responded as registered]** {{FILL: P1-BY-KB | outcome of the known-bytes stream test with its record}} The rail and rest boundaries are read as registered.
-**[END BRANCH 6.6.1]**
+With matched 32 MiB dispatches, the contrast of rotating minus repeated addresses, in joules per gigabyte
+of logical bytes, was 0.0092 ± 0.0021 at the rails, 0.00879 ± 0.00010 on the GPU rail, 0.0389 ± 0.0072 at
+the DC input and 0.0296 ± 0.0084 for the rest. The rails, the GPU rail and the rest were each classed
+RESOLVED (the whole interval lies above zero) and the DC-input contrast was valid. The test identifies
+memory-traffic energy on a boundary, not whether it is the memory controller, the fabric or the GPU
+waiting on memory; on rest it does not separate the memory chips from power conversion and fans. The rail
+and rest boundaries are read as registered, and nothing is printed beside their claim lines. The 32 MiB
+dispatch reads at 106 to 116 GB/s and is latency-bound, so transfer to bandwidth-bound decode traffic is
+a stated limit of this test.
 
-**[BRANCH 6.6.2 — the test ran and a boundary did not respond as registered]** {{FILL: P1-BY-KB | outcome}} That
-outcome is printed beside every claim line of the boundary concerned. **[END BRANCH 6.6.2]**
+The rule by which the test is read was revised on the night of the test. A desk replay showed the rule
+admitted on 30 October refusing four of four real scans; a matched-geometry revision replaced it before
+the test ran and before any outcome existed. No record line admitted the revision before the run: the
+lead bound it by disposing two cold reviews, re-executing and arming the test from the revised code
+(`53bcceeac`), and the research lead accepted that act as the rule's admission on 11 November 2026, after
+the outcome was known. Two corrections to the rule's text were settled after the data existed. The first
+concerns the lag count of the baseline variance estimator: the result above uses the named 10 s estimator
+as run (75 to 77 lags at the delivered cadence), and the rule's literal gloss of 100 lags gives 0.0092 ±
+0.0020 J/GB at the rails and 0.0296 ± 0.0084 J/GB for the rest, with every class unchanged. The second
+corrects the GPU edge bound to the larger of the rails and GPU-rail envelopes, which the harvest already
+used; its effect is 3 × 10⁻⁸ J/GB.
 
-**[BRANCH 6.6.3 — the test did not run]** The test did not run in its slot; the split of memory energy between rails
-and rest is reported as not measured, and every rails and rest statement carries that caveat. **[END BRANCH 6.6.3]**
+Source: [BYTES registration §1 and §18 at `d7098081d`](https://github.com/mpmdw/JouleWise/blob/d7098081d/docs/registrations/bytes_pack_v1.md),
+the [admitted slot text](../../process_traces/2026-10-31-magistrate-5cbfbcfc/KB-SLOT-FILL.md)
+and the [reading rule, Parts A and B](https://github.com/mpmdw/JouleWise/blob/d7098081d/docs/registrations/bytes_known_bytes_reading_rule.md).
+<!-- P1-BY-KB source (RL-201 §1.2). Slot SHA-256: `5729d8c7dad4400b533d9939f885037e100fa6fd27e75d812bbe31035c970312`.
+Reading rule Part A SHA-256 (the as-run rule at `53bcceeac`): `569601b3cce8b88dda20d8cbe7e4804c37d04fedfe5945f60c6492328ea79132`. -->
 
 ### 3.4 Whole-machine cross-check
 
@@ -1213,7 +1236,7 @@ therefore test whether a line stays straight over the range of bytes; the MoE mo
 right. This is said wherever dense results are printed.
 
 "Bytes read" here is a count from the model format, never a reading of a memory-controller counter. Whether the
-memory system actually moves those bytes, and whether the GPU rail includes the memory controller's energy, are
+memory system actually moves those bytes, and on which boundaries memory traffic costs energy, are
 separate questions (Section 3.3).
 
 ### 7.2 Design
@@ -1239,7 +1262,7 @@ bytes per token.
 | fit | Qwen3-8B, 4-bit | dense | 4.597 | 4.608 |
 | held out, dense | Qwen3-14B, 4-bit | dense | 8.248 | 8.308 |
 | held out, dense | Qwen3-32B, 4-bit | dense | 18.596 | 18.430 |
-| held out, dense | Llama-3.3-70B-Instruct, 4-bit | dense | 39.852 | 39.688 |
+| held out, dense | Llama-3.3-70B-Instruct†, 4-bit | dense | 39.852 | 39.688 |
 | held out, dense | Qwen3-8B, 8-bit | dense | 8.381 | 8.703 |
 | held out, MoE | Qwen3-30B-A3B, 4-bit | 8 of 128 | 1.938 | 17.175 |
 | held out, MoE | Qwen3-Next-80B-A3B-Instruct, 4-bit | 10 of 512, plus shared experts | 2.166 | 44.844 |
@@ -1250,7 +1273,10 @@ one embedding row, the whole output layer, k/E of the routed expert weights and 
 cache averaged over the positions after prefill and after the last decode pass); R = all loaded weight storage.
 Both are counted, not estimated, from the model files by a manifest script frozen before the first session
 ({{FILL: P1-BY-MANIFEST | SHA-256 of the frozen bytes manifest, from the registration}}); 1 GB = 10⁹ bytes. Layers of recurrent or state-space type
-have a constant-size state. The roster spans a 32-fold range of b and a 71-fold range of R.*
+have a constant-size state. The roster spans a 32-fold range of b and a 71-fold range of R.
+† Per-request decode durations of this model's pass-1 session were read and published before the stage-1
+commitment (deviation BY-BLIND-1; Section 8.3). No energy was read. The model stays in the registered
+families.*
 
 **Workload.** Every run is the same request: a prompt of exactly 2,048 token ids, then exactly 512 output tokens
 chosen greedily with the end-of-sequence token suppressed, after a 4-token warm-up. The runtime dispatches 512
@@ -1384,7 +1410,9 @@ reveal a withheld module's duration. The registered stages are:
 The required ordering is a recorded prediction commitment before held-out energies are *unblinded*, rather than
 before they are measured. The commitment record remains unfilled here; this description of the requirement
 does not assert that it has been satisfied.
-<!-- FACT H30: paper-audit §4.2 (commitment), F-08; RL-7(a); RL-24 seat 3. -->
+<!-- FACT H30: paper-audit §4.2 (commitment), F-08; RL-7(a); RL-24 seat 3.
+RL-201 §3.1: RL-7(d), RL-33 item 2 and RL-44 refer to §7.3 in the current manuscript.
+Replace the ordering paragraph and this comment at stage-2 release or the Tier D call. -->
 
 **Two implementations.** The analysis and an independent twin, written from the registration alone and sharing no
 code with it, compute the same tables. They agree when every word, count, degree of freedom, refusal, label and
@@ -1401,11 +1429,18 @@ sessions are dropped first ({{FILL: P1-BYX-STATUS | source identifiers for the t
 ### 7.5 Results
 
 <!-- TEMPLATE. Fill only from the stage-2 records of the registered analysis after release.
-Keep one branch of each group. Extension results removed under RL-5 item 5 (H16). -->
+Select the H1 word branch per model and boundary, and the active-or-resident branch per boundary.
+Extension results removed under RL-5 item 5 (H16). -->
 
 **Collection.** {{FILL: P1-BY-SESSIONS | per sub-pack and pass: counting or not with cause; per model: pass status (two passes, one pass, no pass) and kept units per stratum and boundary}}
 
 **Per-model quantities.** {{FILL: P1-BY-TABLE | Table 8, per model and boundary (rails, DC input, rest), primary selection, gross basis: each pass's m with interval, the pass mean and difference, e with interval, τ, P̄ with half-width, BW, b, R, the drift scale, the rail and meter attribution floors, the battery term's stratified mean and largest value and count of nonzero runs, the largest v; with the flagged-inclusive and idle-subtracted lines and, where applicable, the without-assisted line}}
+
+<!-- Table 8 template (RL-201 §3.4). Mark Llama-3.3-70B† in each row that names it. Append to the caption:
+† Per-request decode durations of this model's pass-1 session were read and published before the stage-1
+commitment (deviation BY-BLIND-1; Section 8.3). No energy was read. The model stays in the registered
+families.
+-->
 
 **The committed lines.** {{FILL: P1-BY-LINES | the predictions file's SHA-256 and commit, the commitment date relative to the stage-2 release, and for each boundary the three fit lines (intercept, slope) with their corner-line ranges; and, if a second commitment exists, both, labelled}}
 
@@ -1414,9 +1449,38 @@ measured interval and the three log ratios.
 
 {{FILL: P1-BY-H1-TABLE | Table 9: per held-out model and boundary: word, measured interval for e, prediction interval for each of b, R, τ, consistency, ln(e_measured/e_predicted) for each; per-pass words as description}}
 
+<!-- Table 9 template (RL-201 §3.4). Mark Llama-3.3-70B† in each row that names it. Append to the caption:
+† Per-request decode durations of this model's pass-1 session were read and published before the stage-1
+commitment (deviation BY-BLIND-1; Section 8.3). No energy was read. The model stays in the registered
+families.
+When any row carries `missing`, print this note (RL-92):
+no H1 word; the reason column says whether the model's rows were withheld-missing or its passes refused.
+-->
+
 The words at the processor rails were {{FILL: P1-BY-H1-WORDS-rails | list of held-out model: word, rails}}, at the
-DC input {{FILL: P1-BY-H1-WORDS-dc | list, DC input}} and for the rest {{FILL: P1-BY-H1-WORDS-rest | list, rest}}. For each held-out
-model and boundary, the word is interpreted by exactly one of the following:
+DC input {{FILL: P1-BY-H1-WORDS-dc | list, DC input}} and for the rest {{FILL: P1-BY-H1-WORDS-rest | list, rest}}.
+Over the six held-out models other than Llama-3.3-70B†, the words were {{FILL: P1-BY-H1-OTHER6-rails |
+count of each H1 word over the other six, then the same count over all seven in parentheses, from the H1
+words list keys}} at the rails, {{FILL: P1-BY-H1-OTHER6-dc | count of each H1 word over the other six,
+then the same count over all seven in parentheses, from the H1 words list keys}} at the DC input and
+{{FILL: P1-BY-H1-OTHER6-rest | count of each H1 word over the other six, then the same count over all
+seven in parentheses, from the H1 words list keys}} for the rest. This is a second reading of the words
+printed above: no interval is recomputed, the registered family size stays 21 checks per boundary, and
+the active-or-resident answer, which is defined over the three MoE models, does not involve
+Llama-3.3-70B.
+
+<!-- RL-201 §§2.1, 2.3, 3.4. In every H1 words list, mark Llama-3.3-70B† and
+render each model covered by W6 as "⟨model⟩: no word". When any W6 branch is kept, append:
+The registered family size, 21 checks per boundary, is unchanged.
+
+On the first commitment, if no held-out model has pass status `no_pass` on any of the three
+boundaries, append this clause at the end of the H1 words paragraph:
+Every held-out model had at least one computed pass at every boundary, so the labelling rule of deviation
+BY-LABEL-1 applied to no real model.
+Delete W6a–W6c, the Table 9 note and A4 in this case, and keep BY-LABEL-1 with date and blind
+status in P1-DEV-LIST. Otherwise omit the clause and use W6 and A4 where they apply. -->
+
+For each held-out model and boundary, the word is interpreted by exactly one of the following:
 
 **[BRANCH 6.5.W1 — word `bytes`]** Only the line in bytes read per pass predicts this model's decode energy per
 pass within the registered uncertainty; the lines in resident size and in decode time do not. For an MoE model this
@@ -1443,10 +1507,27 @@ direction each line misses. A `neither` is informative: it says that something o
 quantities, for example a model-specific kernel efficiency, quantization format or architecture, moves energy per
 pass for this model, and the paper does not name which. **[END BRANCH 6.5.W5]**
 
-**[BRANCH 6.5.W6 — no word: the model has no point]** The model has no word because {{FILL: P1-BY-NOWORD | both passes refused or were missing, with the reason}}. **[END BRANCH 6.5.W6]**
+**[BRANCH 6.5.W6a — no word: both passes withheld-missing]** ⟨Model⟩ has no point and no H1 word at
+⟨boundary⟩: the withheld rows of both of its passes were missing (flag `bytes.withheld_missing`; ⟨n₁⟩ and
+⟨n₂⟩ withheld rows recorded in the export sidecars). The model prints `missing`. **[END BRANCH 6.5.W6a]**
+
+**[BRANCH 6.5.W6b — no word: both passes refused]** ⟨Model⟩ has no point and no H1 word at ⟨boundary⟩:
+both of its passes were refused (pass 1: ⟨reason⟩; pass 2: ⟨reason⟩). The model is not labelled
+`missing`. Its row in Table 9 carries the status `missing`, which in that table means only that there is
+no H1 word (deviation BY-LABEL-1). **[END BRANCH 6.5.W6b]**
+
+**[BRANCH 6.5.W6c — no word: one pass withheld-missing, the other refused]** ⟨Model⟩ has no point and no
+H1 word at ⟨boundary⟩: the withheld rows of pass ⟨i⟩ were missing (flag `bytes.withheld_missing`) and
+pass ⟨j⟩ was refused (⟨reason⟩). The model is not labelled `missing`, because that label is reserved for
+a model both of whose passes are missing. Its row in Table 9 carries the status `missing`, which in that
+table means only that there is no H1 word (deviation BY-LABEL-1). **[END BRANCH 6.5.W6c]**
 
 **Active or resident.** {{FILL: P1-BY-AR-rails | the active-or-resident answer at the rails, with each MoE model's misses}} at the rails;
 {{FILL: P1-BY-AR-dc | the answer at DC input, with misses}} at the DC input.
+
+<!-- RL-201 §2.2. For a boundary where the record prints no answer, the corresponding
+P1-BY-AR fill reads "no answer (⟨k⟩ of the three MoE models had a point)".
+Keep 6.5.A3 only when all three MoE models have a point and the record's answer is `mixed`. -->
 
 **[BRANCH 6.5.A1 — `active`]** On all three MoE models, the resident-size line overpredicts the measured energy
 per pass beyond the registered uncertainty: decode energy on this machine follows the experts a token activates,
@@ -1459,7 +1540,20 @@ active bytes alone predict. **[END BRANCH 6.5.A2]**
 **[BRANCH 6.5.A3 — `mixed`]** The three MoE models do not agree on either pattern; each model's misses are
 printed, and no general statement about active versus resident bytes is made. **[END BRANCH 6.5.A3]**
 
+**[BRANCH 6.5.A4 — no answer: fewer than three MoE models have a point]** At ⟨boundary⟩ no
+active-or-resident answer is printed. The answer is defined over the H1 results of all three MoE models,
+and ⟨each MoE model without a point, with its reason⟩ had no point. The words of the MoE models that do
+have a point are in Table 9 and are read one model at a time. No statement about active versus resident
+bytes is made at this boundary. **[END BRANCH 6.5.A4]**
+
 **H2.** {{FILL: P1-BY-H2-TABLE | Table 10, per boundary and basis: each fit's n, p, df, status and k; ε (simple), ε and ρ (resident-extended), tier ε and ρ, with HC3 primary intervals and OLS errors; tier deviations of each non-tier model with both parts of their intervals; the rest fit with λ, ε_rest, VIF and r; leave-one-out predictions as description; at DC input and rest the label-offset alternative interval and dβ/dδ in J/GB per ms}}
+
+<!-- Table 10 template (RL-201 §3.4). Mark Llama-3.3-70B† in each row that names it,
+including tier-deviation and leave-one-out rows. Append to the caption:
+† Per-request decode durations of this model's pass-1 session were read and published before the stage-1
+commitment (deviation BY-BLIND-1; Section 8.3). No energy was read. The model stays in the registered
+families.
+-->
 
 The primary energy per byte of bandwidth was ε = {{FILL: P1-BY-H2-EPS-rails | resident-extended ε at rails with HC3 interval, J/GB}} at
 the rails and {{FILL: P1-BY-H2-EPS-dc | resident-extended ε at DC input with HC3 interval and the label-offset alternative}} at the DC input.
@@ -1765,7 +1859,28 @@ number, with what each taught. The record runs to 10 November 2026.
   time and little protection"); docs/process_traces/2026-10-27-pipeline-audit/SYNTHESIS.md (proposals, not adopted;
   corrected by CRITIQUE.md). -->
 
-{{FILL: P1-AUTO-BLINDCHECK | disclosure from the recorded check and deviation BY-BLIND-1: per-request timing of one held-out model was read and published before the stage-1 commitment; per-stage timestamps of every session were in the public operational record; each model's approximate decode time was registered from the pilot; why the committed lines cannot depend on any of it; and what the check could not establish}}
+**Held-out timing was read before the BYTES commitment.** The BYTES registration kept clock times out of
+analysis exports, so that a held-out model's decode duration could not be read before the predictions
+were committed. That closure covered analysis exports. It did not cover reads of raw session records. On
+27 and 28 October 2026 an operations agent diagnosing a thermal hazard read such records for the pass-1
+session of one held-out model, Llama-3.3-70B: first the timing of the thermal level relative to request
+ends, then each science request's decode duration, which was committed to the project record and was
+public from then on. No energy or power field was read. Separately, the public operational record of
+every BYTES session carried one timestamp per session stage, from which the wall time of a held-out stage
+can be derived coarsely; those records carry no per-request clock, and whether anyone derived a stage
+time is not known. Each model's approximate decode time had been measured, without power, in the design
+pilot and written into the registration before collection. The committed lines cannot depend on any of
+this: they are computed from the three fit-set models by an estimator whose digest dates from 24 October
+2026 and a manifest frozen on 22 October 2026, both before the reads. One registered rule, the pass-2
+thermal window, was motivated by the first read; it was registered before any pass-2 session and blind to
+every energy, and it applies to fit-set sessions too. A structure-only check recorded before the
+commitment found these reads (deviation BY-BLIND-1). That check covers the committed project record only
+and cannot show that held-out timing was never read by other means. Llama-3.3-70B stays in the registered
+families, is marked † in every table, and the H1 words are also stated over the other six held-out models
+(Section 7.5).
+<!-- P1-AUTO-BLINDCHECK: BY-BLIND-1 in `d7098081d:docs/registrations/bytes_deviation_log.md`;
+`d7098081d:docs/process_traces/2026-11-11-bytes-blindcheck/BLINDCHECK.md`; RL-44, RL-45, RL-201 §3.2.
+Under Tier D the last sentence ends at "registered families." -->
 
 The lesson we draw, an inference from this record rather than a demonstrated guarantee, is that agents can run a
 measurement study with the rigour such a study needs only if the rigour is mechanical. Digests, custody maps,
@@ -1827,12 +1942,17 @@ carries more baseline energy, and part of any model difference is duration times
 of the load-correlated and battery-assist rules; no line can show the effect of physical-hazard removals, which are
 required.
 
-**BYTES.** Bytes per token are format-derived counts, not measured memory traffic. Dense held-out models cannot
-discriminate between the hypotheses. The split of memory energy between rails and rest depends on whether the GPU
-rail includes the memory controller (Section 3.3). The meter's label offset was not measured; DC-input and rest
-statements are printed under both the registered and the alternative interval. No drift-transfer test passed, so
-the drift allowance is scaled by a registered rule rather than measured transfer. Both extension models were
-dropped (Section 7.4). The KV cache size is averaged over the 512 decode passes of one prompt length. BYTES compares models; it does not vary routing within a model, where the bytes read per token are fixed by k.
+**BYTES.** Bytes per token are format-derived counts, not measured memory traffic. Dense held-out models
+cannot discriminate between the hypotheses. The known-bytes test shows that memory traffic costs energy
+at the rails and in the rest; it does not show which component spends it, and it does not give the split
+of decode memory energy between them (Section 3.3). The meter's label offset was not measured; DC-input
+and rest statements are printed under both the registered and the alternative interval. No drift-transfer
+test passed, so the drift allowance is scaled by a registered rule rather than measured transfer. Both
+extension models were dropped (Section 7.4). The KV cache size is averaged over the 512 decode passes of
+one prompt length. BYTES compares models; it does not vary routing within a model, where the bytes read
+per token are fixed by k. Before the commitment, per-request decode durations of one held-out model,
+Llama-3.3-70B, were read and published, and per-stage timestamps of every session were public; no energy
+was read and the committed lines were frozen earlier (Section 8.3).
 
 **Automation.** The agents that ran the study also wrote much of this paper. The controls of Section 8.2 constrain
 what an agent could change in the data and the analysis; they do not make the prose neutral. The registrations'
@@ -1989,6 +2109,9 @@ Part 2 (BYTES) registered sentences:
 - *BYTES dense models:* "Dense held-out models test linearity over the format-derived bytes range; their small
   rival splits do not identify the hypothesis."
 - *BYTES per-token label:* "512 decode forward passes, one of which yields no returned token."
+- *BYTES known-bytes stream test:* "The test identifies memory-traffic energy on a boundary, not whether
+  it is the memory controller, the fabric or the GPU waiting on memory; on rest it does not separate the
+  memory chips from power conversion and fans."
 
 ## Appendix D. Estimator derivations and synthetic examples
 
