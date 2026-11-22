@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field, replace
 from hashlib import sha256
+from importlib.util import find_spec
 import json
 from math import sqrt
 from types import SimpleNamespace
@@ -257,15 +258,23 @@ class TestControlsConventions(unittest.TestCase):
             analysis.read_parameters(**params)
 
 
+def native_kernel():
+    module = "joulewise.align.apple.rl176_phases"
+    try:
+        spec = find_spec(module)
+    except ModuleNotFoundError as error:
+        if error.name not in {"joulewise.align", "joulewise.align.apple"}:
+            raise
+        spec = None
+    if spec is None:
+        raise unittest.SkipTest("RL-176 kernel awaits the integration base")
+    return analysis.PhaseKernel.frozen()
+
+
 class TestFrozenPhaseIntegration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        try:
-            cls.kernel = analysis.PhaseKernel.frozen()
-        except ModuleNotFoundError as error:
-            if error.name != "joulewise.align":
-                raise
-            raise unittest.SkipTest("RL-176 kernel awaits the integration base") from error
+        cls.kernel = native_kernel()
 
     def episode(self, envelope, end, *, cpu_watts=4, cpu_pulse=None):
         from joulewise.align.records import Episode, PowerTrace, Turn
@@ -384,12 +393,7 @@ class TestEnvelopeDisclosure(unittest.TestCase):
         self.assertEqual(row["envelope"], {"prompt_tokens": 4000, "decode_tokens": 1024})
 
     def test_native_round_trip_hidden_token_reproduction_refuses(self):
-        try:
-            kernel = analysis.PhaseKernel.frozen()
-        except ModuleNotFoundError as error:
-            if error.name != "joulewise.align":
-                raise
-            self.skipTest("native record codec awaits the pinned kernel overlay")
+        kernel = native_kernel()
         from joulewise.align.records import Episode, from_json, to_json
 
         episode = TestFrozenPhaseIntegration().episode(Turn(), 135)
