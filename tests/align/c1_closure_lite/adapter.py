@@ -69,6 +69,9 @@ class Attempt:
         self.handoff_file = work / 'handoff.json'
         self.prepared_file = work / 'prepared.json'
         self.fixture = fixture
+        # Desk identity files the reservation reads (empty on the frozen tape).
+        self.desk_epoch = getattr(self, 'desk_epoch', b'{}\n')
+        self.desk_t1 = getattr(self, 'desk_t1', b'{}\n')
         self.form = form
         self.now = 141.0 if fixture == 'expired_141' else NOW
         history = work / 'history.git'
@@ -289,7 +292,7 @@ class Attempt:
             closure.digest(files[closure.PACK / 'plan_tree.json']) + '  plan_tree.json\n').encode()
         if self.fixture != 'drop_initial_ledger_before_build':
             files[LEDGER] = self.ledger
-        files.update({Path('inputs/epoch.json'): b'{}\n', Path('inputs/t1.json'): b'{}\n'})
+        files.update({Path('inputs/epoch.json'): self.desk_epoch, Path('inputs/t1.json'): self.desk_t1})
         window_env = self.stage / 'controls/window.env'
         window_env_raw = b'WAIVER_PATH=none\n'
         files[window_env.relative_to(self.stage)] = window_env_raw

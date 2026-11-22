@@ -300,6 +300,27 @@ class ShadeCacheAttempt(PublicInputAttempt):
             for home in homes})
 
 
+class DeskPolicyAttempt(adapter.Attempt):
+    # The reservation records the desk epoch's power policy before the plan's.
+    desk_epoch = adapter.series.raw_json({'power_policy': 'ac_low_power'})
+
+
+def capture_arguments(tree, slot):
+    for row in tree['stage_graph']:
+        if row['kind'] == 'calibration_capture':
+            arguments = adapter.arguments(row)
+            if arguments[arguments.index(adapter.literal('--slot')) + 1]['value'] == slot:
+                return arguments
+    raise AssertionError(slot)
+
+
+def set_option(arguments, flag, kind, value):
+    if adapter.literal(flag) in arguments:
+        index = arguments.index(adapter.literal(flag))
+        del arguments[index:index + 2]
+    adapter.option(arguments, flag, kind, value)
+
+
 class DuplicateOptionAttempt(adapter.Attempt):
     def prepare(self):
         render = adapter.chain.render_chain
@@ -730,6 +751,117 @@ class C1ClosureTests(unittest.TestCase):
                 code, _ = attempt.build()
                 self.assertEqual(code, 2, attempt.build_error)
                 self.assertIn(detail, attempt.build_error)
+
+    def assert_refused_on_both_routes(self, attempt, detail):
+        """Install exits 2 with packet_kit_mismatch; direct arm refuses; no host entry; ledger untouched."""
+        ledger = attempt.stage / adapter.LEDGER
+        before = ledger.read_bytes()
+        code, packet = attempt.build()
+        attempt.deliver(packet)
+        observed = (code, *self.consumer_outcomes(attempt))
+        self.assertEqual(observed, (2, 2, 'refuse', 0, 0), attempt.cli_error)
+        self.assertIn('packet_kit_mismatch', attempt.cli_error)
+        for text in (attempt.build_error, attempt.cli_error, attempt.native['packet_kit']['detail']):
+            self.assertIn(detail, text)
+        self.assertEqual(ledger.read_bytes(), before)
+        self.assertEqual(sorted(path.name for path in ledger.parent.iterdir()), [ledger.name])
+
+    def assert_admitted_on_both_routes(self, attempt):
+        code, packet = attempt.build()
+        attempt.deliver(packet)
+        self.assertEqual((code, *self.consumer_outcomes(attempt)), (0, 0, 'admit', 1, 1), attempt.cli_error)
+
+    def test_r11_capture_power_policy_must_equal_the_reserved_policy(self):
+        """Ruling item 1: each capture's --power-policy equals what the reservation records."""
+        for slot in ('pre', 'post'):
+            with self.subTest(mismatch=slot):
+                def edit(tree, slot=slot):
+                    set_option(capture_arguments(tree, slot), '--power-policy', 'literal', 'ac_low_power')
+                    return {}
+
+                self.assert_refused_on_both_routes(self.attempt(edit_source=edit),
+                                                   'calibration_reserved_slot_mismatch')
+        with self.subTest(control='desk epoch policy matched by both captures'):
+            def matched(tree):
+                for slot in ('pre', 'post'):
+                    set_option(capture_arguments(tree, slot), '--power-policy', 'literal', 'ac_low_power')
+                return {}
+
+            self.assert_admitted_on_both_routes(self.attempt(make_attempt=DeskPolicyAttempt, edit_source=matched))
+
+    def test_r11_capture_sampler_must_be_the_reserved_sampler(self):
+        """Ruling item 1: --sampler-binary selects the reservation's sampler, judged without opening it."""
+        from scripts import validate_powermetrics_fiducial as fiducial
+
+        default = Path(fiducial.POWER_METRICS)
+        for slot, sampler in (('pre', '/usr/bin/true'), ('post', '/synthetic-absent/powermetrics')):
+            with self.subTest(mismatch=slot):
+                def edit(tree, slot=slot, sampler=sampler):
+                    set_option(capture_arguments(tree, slot), '--sampler-binary', 'literal', sampler)
+                    return {}
+
+                self.assert_refused_on_both_routes(self.attempt(edit_source=edit),
+                                                   'calibration_reserved_slot_mismatch')
+        with self.subTest(control='omitted default'):
+            self.assert_admitted_on_both_routes(self.attempt())
+        with self.subTest(control='explicit equivalent spelling'):
+            spelled = str(default.parent / '..' / default.parent.name / default.name)
+
+            def equivalent(tree):
+                for slot in ('pre', 'post'):
+                    set_option(capture_arguments(tree, slot), '--sampler-binary', 'literal', spelled)
+                return {}
+
+            self.assert_admitted_on_both_routes(self.attempt(edit_source=equivalent))
+
+    def test_r11_sole_rollback_head_pin_refuses_before_host(self):
+        """Ruling item 1: the reservation's pre-reserve pin check on the exact parsed --head-pin."""
+        retired = 'configs/calibration/retired-head.json'
+        pin = adapter.series.raw_json({'sequence': 7, 'head_digest': '7' * 64,
+                                       'ledger_schema': 'joulewise.calibration_observation_ledger.v1'})
+
+        def reservation(tree):
+            return adapter.arguments(next(row for row in tree['stage_graph'] if row['kind'] == 'bracket_reservation'))
+
+        def rollback(tree):
+            set_option(reservation(tree), '--head-pin', 'repo_path', retired)
+            return {retired: pin}
+
+        def default(tree):
+            return {retired: pin}
+
+        with self.subTest(case='sole retired pin selected'):
+            self.assert_refused_on_both_routes(self.attempt(edit_source=rollback), 'calibration_ledger_rollback')
+        with self.subTest(control='same tree, default pin selected'):
+            self.assert_admitted_on_both_routes(self.attempt(edit_source=default))
+
+    def test_r11_caller_ledger_pointer_is_refusal_only(self):
+        """Ruling item 2: a caller's CALIBRATION_LEDGER may only refuse; unset imposes nothing."""
+        attempt = self.attempt()
+        code, packet = attempt.build()
+        self.assertEqual(code, 0, attempt.build_error)
+        attempt.deliver(packet)
+        canonical = attempt.stage / adapter.LEDGER
+        outside = adapter.put(attempt.work, 'outside-ledger.jsonl', canonical.read_bytes())
+        outside.chmod(0)  # an outside path refuses before its bytes are read
+        self.addCleanup(outside.chmod, 0o600)
+        cases = (('unset', None, None), ('canonical file', str(canonical), None),
+                 ('launch view alias', str(attempt.view / adapter.LEDGER), None),
+                 ('empty', '', 'CALIBRATION_LEDGER is empty'),
+                 ('missing', str(attempt.view / 'runs/absent-ledger.jsonl'), 'missing'),
+                 ('outside', str(outside), 'outside R/S'))
+        for name, value, refusal in cases:
+            with self.subTest(case=name), patch.dict(os.environ):
+                os.environ.pop('CALIBRATION_LEDGER', None)
+                if value is not None:
+                    os.environ['CALIBRATION_LEDGER'] = value
+                if refusal is None:
+                    session.c1_arm_preflight(attempt.handoff_file, now_epoch_s=adapter.NOW)
+                else:
+                    with self.assertRaisesRegex(session.PacketKitMismatch, refusal):
+                        session.c1_arm_preflight(attempt.handoff_file, now_epoch_s=adapter.NOW)
+        with patch.dict(os.environ, {'CALIBRATION_LEDGER': str(attempt.view / adapter.LEDGER)}):
+            self.assertEqual(self.consumer_outcomes(attempt), (0, 'admit', 1, 1), attempt.cli_error)
 
     def test_frozen_lite_decisions(self):
         completed = subprocess.run([sys.executable, '-B', str(HERE / 'suite/run.py'),
