@@ -9,7 +9,7 @@ import shutil
 import subprocess
 from unittest.mock import patch
 
-from align.test_v4_cadence import write_battery_log
+from tests.align.test_v4_cadence import write_battery_log
 from joulewise.align.apple import powermode, v4_registration as closure
 from joulewise.b5 import chain
 from scripts import align_v4_next_arm_packet as builder, align_v4_series as series

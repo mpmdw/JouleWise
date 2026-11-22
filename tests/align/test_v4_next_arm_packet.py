@@ -166,7 +166,10 @@ def write_c1_fixture_kit(scenario, files):
     for stage in tree['stage_graph']:
         descriptor = stage.get('input') or {}
         if 'sha256' in descriptor:
-            raw = (scenario.root / descriptor['path']).read_bytes()
+            path = staging.plan.canonical_repo_path(descriptor['path'])
+            if not (scenario.root / path).is_file() and stage['kind'] == 'bound_derivation':
+                scenario.write(path, {'members': [{'bundle_path': 'invented-reference'}]})
+            raw = (scenario.root / path).read_bytes()
             descriptor['sha256'] = builder.digest(raw)
             if descriptor['kind'] == 'manifest':
                 descriptor['manifest_id'] = json.loads(raw)['manifest_id']

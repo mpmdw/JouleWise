@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from align.c1_closure_lite import adapter
+from tests.align.c1_closure_lite import adapter
 from joulewise.align.apple import v4_registration as closure
 from scripts import align_v4_session as session
 
