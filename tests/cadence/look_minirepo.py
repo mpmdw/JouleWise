@@ -110,7 +110,8 @@ def mini_repo(test):
 def bare_origin(test, copy):
     """A bare repository beside ``copy`` to stand for its origin, removed with it."""
     made = Path(os.path.realpath(str(copy))).with_name(Path(copy).name + "-origin.git")
-    run(["git", "init", "-q", "--bare", "-b", "main", str(made)], made.parent, check=True)
+    made.mkdir()
+    init_git_fixture(made, "-q", "--bare", "-b", "main")   # the shared helper: no detached auto-maintenance
     if test is not None:
         test.addCleanup(lambda: shutil.rmtree(made, ignore_errors=True))
     return made
