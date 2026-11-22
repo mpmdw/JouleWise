@@ -21,12 +21,14 @@ How to read this file:
 
 ## Abstract
 
-Language-model inference has two phases: *prefill*, in which the model reads the prompt and computes the first
-output token, and *decode*, in which it writes the remaining tokens. We ask how finely a laptop's own power
-sensors can divide inference energy between these phases, and we answer with a method whose limits are part of
-its output. On one Apple M3 Max laptop running the MLX framework, the operating system's power sampler reports
-the average power of the processor package (CPU, GPU and neural engine) over records of roughly a tenth of a
-second. We assign each record's energy to a phase in proportion to its time overlap with the phase, and we carry
+A laptop's power sensors report averages about every tenth of a second, while the structure of a
+language-model request (its phases, its tokens, the weights each token reads) is mostly finer than that. We
+ask what such sensors can attribute to that structure, and we answer with methods whose limits are part of
+their output. The first case is the coarsest structure: *prefill*, in which the model reads the prompt and
+computes the first output token, and *decode*, in which it writes the remaining tokens. On one Apple M3 Max
+laptop running the MLX framework, the operating system's power sampler reports the average power of the
+processor package (CPU, GPU and neural engine) over records of roughly a tenth of a second. We assign each
+record's energy to a phase in proportion to its time overlap with the phase, and we carry
 every source of timing uncertainty into the result: a calibration with commanded GPU pulses before and after
 each measurement session, a fitted clock mapping, and a drift screen built from repeated reference requests.
 From these we derive four quantities: the reported phase energy with an interval, the *attribution floor* (how
@@ -36,9 +38,10 @@ detection floor). We then report a pre-registered, blinded experiment on Qwen3-1
 a 512-token decode workload and a 2,048-token prefill workload, two primary model contrasts with Holm
 correction, and an independent recomputation of the core arithmetic from raw power records with recorded
 collection-time judgments as inputs. A registered replication, nine further sessions on later days, was collected and analysed blind and released after the primary block. <!-- FACT H01: RL-5; R2P P3; LEAN-COVERAGE-AUDIT.md §§2-4; paper-audit C-11; RL-147 §8; RUN_STATE item 312. -->
-On M3 Max / MLX / powermetrics SoC rails, from one session per model, the reported gross energy per request was 51.21 J [48.92, 53.49] for Qwen3-1.7B decode, 26.25 J [23.32, 29.19] for its 2,048-token prefill, 198.36 J [195.23, 201.49] for Qwen3-8B decode and 128.28 J [125.19, 131.38] for its 2,048-token prefill, each an instrument result (L1) whose phase attribution was not checked by an independent instrument. Timing movement did not at least double every detection floor (dominance branch B). The decode and 2,048-token prefill contrasts were both *direction supported*, in the registered direction (the 8B model used more phase energy than the 1.7B model), with 6 of 10 and 5 of 10 planned quads kept in one session. Both contrasts replicated under the registered definition: each of the three replication contrast sessions gave the primary session's outcome word and sign. In a second part, BYTES, we test whether decode energy per
-token on the same laptop follows the bytes the model reads per token, its resident size in memory, or its
-decode time: the registration requires three straight lines fixed on three dense models to be committed before
+On M3 Max / MLX / powermetrics SoC rails, from one session per model, the reported gross energy per request was 51.21 J [48.92, 53.49] for Qwen3-1.7B decode, 26.25 J [23.32, 29.19] for its 2,048-token prefill, 198.36 J [195.23, 201.49] for Qwen3-8B decode and 128.28 J [125.19, 131.38] for its 2,048-token prefill, each an instrument result (L1) whose phase attribution was not checked by an independent instrument. Timing movement did not at least double every detection floor (dominance branch B). The decode and 2,048-token prefill contrasts were both *direction supported*, in the registered direction (the 8B model used more phase energy than the 1.7B model), with 6 of 10 and 5 of 10 planned quads kept in one session. Both contrasts replicated under the registered definition: each of the three replication contrast sessions gave the primary session's outcome word and sign.
+The second case is structure that no record can split: in BYTES we test whether decode energy per token on
+the same laptop follows the bytes the model reads per token, its resident size in memory, or its decode
+time: the registration requires three straight lines fixed on three dense models to be committed before
 seven held-out models, including three mixture-of-experts models, are unblinded.
 <!-- FACT H02: RL-5 item 5; paper-audit §4.2 (BYTES commitment is a requirement, not a completed step). -->
 {{FILL: P1-ABS-PART2 | one sentence: the H1 verdict
@@ -67,9 +70,11 @@ Measuring phase energy on a laptop is attractive because the sensors are already
 processor's power through its `powermetrics` sampler, with no external meter and no special hardware. But a
 software sampler reports *averages over records*, not instantaneous power, and its records do not line up with
 the phase boundary. A record that begins in prefill and ends in decode reports one average for both. Any split
-of that record between the phases is an allocation, and the allocation moves when the boundary moves. The
-question this paper asks is therefore not only "how much energy does each phase use?" but first "how finely can
-these sensors divide energy between phases at all, and what limits that?"
+of that record between the phases is an allocation, and the allocation moves when the boundary moves. For
+phases the question is therefore not only "how much energy does each phase use?" but first "how finely can
+these sensors divide energy between phases at all, and what limits that?" For structure finer than a record,
+such as tokens and the weights they read, no division of a record is possible; what can be tested is whether
+energy across many requests or models follows a count of that structure (Section 7).
 
 ### 1.2 Approach
 
@@ -105,9 +110,10 @@ the independent recomputation uses recorded collection-time judgments as inputs 
    primary model contrasts under a multiplicity correction and a claims ladder that caps what each result may
    say, and a replication in further sessions whose agreement word was defined before replication collection (Sections 5
    and 6). The replication's results are reported beside the primary block's (Section 6.8). <!-- FACT H04: paper-audit C-10/C-11; RL-5 item 5; RL-147 §8; RUN_STATE item 312. -->
-3. **BYTES, a pre-registered test of what drives decode energy per token** on the same laptop, requiring rival
-   lines to be committed before held-out models are unblinded and using mixture-of-experts models to separate
-   bytes read from bytes held (Section 7).
+3. **BYTES, a pre-registered test of what drives decode energy per token** on the same laptop, requiring
+   rival lines to be committed before held-out models are unblinded. It is the sparse-model question in its
+   simplest form: mixture-of-experts models hold far more bytes than they read per token, so they separate
+   what a model reads from what it holds (Section 7).
 4. **An account of research run by AI agents** under human direction, with the integrity controls that
    constrained them and the failures those controls did and did not catch (Section 8).
 
