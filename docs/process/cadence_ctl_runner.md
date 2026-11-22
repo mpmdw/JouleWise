@@ -128,8 +128,11 @@ from its `span_id` and `attempt`. Pass `--queue`, `--queue-sha256`,
 that owns the queue-relative kit path. The checklist verifies kit bytes and
 host observations. The launcher independently verifies the pinned queue,
 row, exact kit path and digest, roster, local not-before date, halt and expiry.
-It repeats this under the desk lock before recording the attempt. Expiry is
-exclusive and must allow for the agent-free startup.
+It repeats this under the desk lock. Before recording any ledger-backed attempt,
+the launcher also verifies the actual `--repo` checkout root, its pinned HEAD,
+clean tree and frozen working-tree bytes. A checkout refusal leaves the ledger
+unchanged. Queue expiry is exclusive for both `next` and launch and must allow
+for the agent-free startup.
 
 The pilot needs no prior hand-read. For span 2, the independent seat signs
 the F-3(c) and four RL-197 view checks for the entire pilot. The lead pins

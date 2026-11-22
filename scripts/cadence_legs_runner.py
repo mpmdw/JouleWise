@@ -328,26 +328,39 @@ class ProductionHost:
         return launcher.display_dwell_seconds()
 
 
-def verify_frozen_production(kit):
+def verify_frozen_production(kit, *, repo=None, require_clean=False):
     if kit.get("runner", {}).get("kind") == ctl.RUNNER_KIND:
         try:
             ctl.require_issued(kit)
         except kitmod.KitError as error:
             raise SpanRefusal(str(error)) from error
-    head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
-                          timeout=60).stdout.strip()
+    checkout = (ROOT if repo is None else Path(repo)).resolve()
+
+    def git_read(*args):
+        try:
+            return subprocess.run(["git", "--no-optional-locks", "-C", str(checkout), *args],
+                                  capture_output=True, text=True, check=True, timeout=60).stdout
+        except (OSError, subprocess.SubprocessError) as error:
+            raise SpanRefusal(f"could not verify measurement checkout with git {args[0]}") from error
+
+    identity = git_read("rev-parse", "--show-toplevel", "HEAD").splitlines()
+    if len(identity) != 2 or Path(identity[0]).resolve() != checkout:
+        raise SpanRefusal("--repo must name the measurement checkout root")
+    head = identity[1]
     if head != kit["frozen"]["commit"]:
         raise SpanRefusal(f"HEAD {head[:12]} is not the kit's frozen commit {kit['frozen']['commit'][:12]}")
     bad = []
     for path, expected in sorted(kit["frozen"]["paths"].items()):
         try:
-            got = hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
+            got = hashlib.sha256((checkout / path).read_bytes()).hexdigest()
         except OSError:
             got = None
         if got != expected:
             bad.append(path)
     if bad:
         raise SpanRefusal(f"frozen paths differ from the kit in the working tree: {bad[:5]}")
+    if require_clean and git_read("status", "--porcelain=v1", "--untracked-files=all", "--ignore-submodules=none"):
+        raise SpanRefusal("measurement checkout is dirty")
     return {"rc": 0, "head": head, "paths": len(kit["frozen"]["paths"])}
 
 

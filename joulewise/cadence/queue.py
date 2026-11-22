@@ -75,6 +75,11 @@ def parse_time(text):
     return None if moment.tzinfo is None else moment.timestamp()
 
 
+def is_expired(document, now):
+    expires = parse_time(document.get("expires_at"))
+    return now is not None and expires is not None and now >= expires
+
+
 def plan_id(span):
     return f"cq-{span['span_id']}-a{span['attempt']}"
 
@@ -259,8 +264,7 @@ class Decision:
 def next_action(queue, evidence=None, halts=(), now=None):
     states = {s["span_id"]: span_state(s, evidence, now) for s in queue["spans"]}
     reasons = []
-    expires = parse_time(queue.get("expires_at"))
-    if now is not None and expires is not None and now > expires:
+    if is_expired(queue, now):
         reasons.append(f"queue expired at {queue['expires_at']}")
     if queue.get("halt"):
         reasons.append(f"queue halt by {queue['halt']['by']}: {queue['halt']['reason']}")

@@ -470,6 +470,11 @@ def launch(args, *, loaded_kit=None) -> None:
             if any(attempt["span_id"] == span_id for attempt in ledger["attempts"]):
                 raise ValueError("ctl queue plan already has a recorded attempt")
             require_ctl_pilot_pass(args, kit, row, authority, ledger, span_runner)
+        if ledger_path is not None:
+            try:
+                span_runner.verify_frozen_production(kit, repo=args.repo, require_clean=True)
+            except span_runner.SpanRefusal as error:
+                raise ValueError(str(error)) from error
         job.mkdir(parents=True)
         runner_spec.write_text(json.dumps({"kind": RUNNER_KIND, "argv": child_argv}) + "\n")
         plist.write_bytes(plistlib.dumps(job_spec))

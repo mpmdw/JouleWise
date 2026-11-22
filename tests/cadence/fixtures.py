@@ -4,12 +4,32 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import subprocess
 
 from joulewise.cadence import kit as kitmod
+from tests.git_fixture import init_git_fixture
 
 RUNNER = "scripts/cadence_legs_runner.py"
 FIT = "joulewise/cadence_fit.py"
 COMMIT = "a" * 40
+
+
+def checkout_git(repo, *args):
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=True).stdout.strip()
+
+
+def make_runner_checkout(repo, runner_bytes=b"# synthetic runner\n"):
+    """Make a disposable, clean checkout and return its kit pin."""
+    repo.mkdir()
+    init_git_fixture(repo, "-q")
+    entry = repo / RUNNER
+    entry.parent.mkdir()
+    entry.write_bytes(runner_bytes)
+    checkout_git(repo, "add", RUNNER)
+    checkout_git(repo, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                 "-c", "commit.gpgsign=false", "commit", "-qm", "synthetic runner")
+    return {"commit": checkout_git(repo, "rev-parse", "HEAD"),
+            "paths": {RUNNER: hashlib.sha256(runner_bytes).hexdigest()}}
 
 
 def make_kit(n_legs=6, legs_per_span=3, **overrides):

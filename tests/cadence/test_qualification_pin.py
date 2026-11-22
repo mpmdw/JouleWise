@@ -17,6 +17,7 @@ from unittest.mock import patch
 from joulewise.cadence import legs, queue
 from scripts import cadence_legs_runner as runner, cadence_queue, launch_cadence_span as launcher
 from tests.cadence import test_kit_v11 as v11_tests
+from tests.cadence.fixtures import make_runner_checkout
 
 ROOT = runner.ROOT
 PIN = "6e9d42f1dd3d308bc9239143d0d634ab965e50e1"
@@ -59,10 +60,14 @@ class QualificationGates(unittest.TestCase):
         ledger.write_text(json.dumps(original))
         output = self.root / "output"
         fence_root = self.root / "fence"
-        args = SimpleNamespace(kit=QUAL_KIT, span_id="qual-01-s01", t0_not_before_ns=close_ns,
+        checkout = self.root / "measurement"
+        kit_path = self.root / "synthetic-qualification.json"
+        kit_path.write_text(json.dumps({**json.loads(QUAL_KIT.read_text()), "frozen": make_runner_checkout(checkout)}))
+        self.enterContext(patch.object(launcher, "subprocess", SimpleNamespace(**vars(subprocess))))
+        args = SimpleNamespace(kit=kit_path, span_id="qual-01-s01", t0_not_before_ns=close_ns,
                                attempt_ledger=None, previous_close_receipt=None,
                                magistrate_pid=234, deadline=T0 + 30000, output=output,
-                               legs=",".join(QUAL_ROSTER), batch_window=None, repo=ROOT,
+                               legs=",".join(QUAL_ROSTER), batch_window=None, repo=checkout,
                                python_bin=Path(sys.executable), custody_root=fence_root,
                                exit_wait_seconds=180, disk_path=self.root, pgrep_bin="stub-pgrep",
                                kill_bin="stub-kill", pmset_bin="stub-pmset", launchctl_bin="stub-launchctl")
@@ -104,9 +109,17 @@ class QualificationGates(unittest.TestCase):
             self.assertEqual(command[1], "bootout")
             return subprocess.CompletedProcess(command, 0, b"", b"")
 
+        stale = self.root / "stale"
+        make_runner_checkout(stale, b"# stale qualification runner\n")
         with (patch.object(launcher.base, "pid_alive", return_value=True),
               patch.object(launcher.time, "time", return_value=T0),
-              patch.object(launcher.subprocess, "run", side_effect=synthetic_service)):
+              patch.object(launcher.subprocess, "run", side_effect=synthetic_service) as service):
+            args.repo = stale
+            with self.assertRaisesRegex(ValueError, "is not the kit's frozen commit"):
+                launcher.launch(args)
+            service.assert_not_called()
+            self.assertEqual(json.loads(ledger.read_text()), original)
+            args.repo = checkout
             with self.assertRaises(subprocess.CalledProcessError):
                 launcher.launch(args)
         self.assertEqual(json.loads(ledger.read_text())["attempts"], [prior, pending])

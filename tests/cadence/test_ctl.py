@@ -10,6 +10,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, call, patch
 
@@ -17,6 +18,7 @@ from joulewise.cadence import ctl, kit as kits, legs, desk, queue
 from joulewise.align.apple import cadence_ctl, r1_runtime as rt, workload
 from scripts import cadence_legs_runner as runner, cadence_queue, launch_cadence_span as launcher
 from tests.cadence import test_kit_v11 as v11_tests
+from tests.cadence.fixtures import checkout_git, make_runner_checkout
 from tests.cadence.test_legs_runner import local, NEW_WINDOW
 
 KIT = runner.ROOT / "docs/process/cadence/kits/cl-ctl-01.draft.json"
@@ -180,10 +182,14 @@ class LaunchAuthorityTests(unittest.TestCase):
     span_id = "cq-ctl-01-s01-a1"
 
     def setUp(self):
-        kit = draft()
-        kit.update(status="issued", frozen={"commit": "a" * 40, "paths": {kit["runner"]["entry"]: "1" * 64}})
-        kit["ruling"]["authorizes_spans"] = True
         self.root = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        self.repo = self.root / "measurement"
+        self.frozen = make_runner_checkout(self.repo)
+        # Only bootstrap is simulated. Checkout verification uses real Git in the fixture.
+        self.enterContext(patch.object(launcher, "subprocess", SimpleNamespace(**vars(subprocess))))
+        kit = draft()
+        kit.update(status="issued", frozen=self.frozen)
+        kit["ruling"]["authorizes_spans"] = True
         self.kit_path = self.root / "synthetic-issued.json"
         self.kit_path.write_text(json.dumps(kit))
         self.approved_sha = hashlib.sha256(self.kit_path.read_bytes()).hexdigest()
@@ -207,7 +213,7 @@ class LaunchAuthorityTests(unittest.TestCase):
                        "legs": kit["layout"][0], "not_before": "2026-11-19"}],
         }
         self.write_queue()
-        self.argv = ["launch", "--repo", str(runner.ROOT), "--kit", str(self.kit_path), "--output", str(self.output),
+        self.argv = ["launch", "--repo", str(self.repo), "--kit", str(self.kit_path), "--output", str(self.output),
                      "--legs", "L001,L002,L003", "--python-bin", sys.executable, "--disk-path", str(self.root),
                      "--custody-root", str(self.fence_root), "--magistrate-pid", "234",
                      "--deadline", str(self.now + 40000), "--launchctl-bin", "synthetic-launchctl",
@@ -235,7 +241,7 @@ class LaunchAuthorityTests(unittest.TestCase):
         pilot.write_text(json.dumps({
             "schema": runner.RECEIPT_SCHEMA, "runner_kind": ctl.RUNNER_KIND, "mock": False,
             "span_id": self.span_id, "rc": 0, "roster": draft()["layout"][0], "legs_finished": 3,
-            "kit": {"campaign_id": "cl-ctl-01", "sha256": self.approved_sha, "frozen_commit": "a" * 40},
+            "kit": {"campaign_id": "cl-ctl-01", "sha256": self.approved_sha, "frozen_commit": self.frozen["commit"]},
         }))
         self.ledger.write_text(json.dumps({"attempts": [
             {"sequence": 1, "span_id": self.span_id, "close_receipt": str(pilot),
@@ -313,6 +319,68 @@ class LaunchAuthorityTests(unittest.TestCase):
         self.assertEqual(child[child.index("--t0-anchor") + 1], ":".join(map(str, anchor)))
         self.assertEqual(child[child.index("--t0-not-before-ns") + 1], str(self.close_ns))
         self.check_child_close_bound(child[2:])
+
+    def expect_checkout_refusal(self, message, *extra):
+        original_ledger = self.ledger.read_bytes()
+        with (patch.object(launcher.time, "time", return_value=self.now),
+              patch.object(launcher.base, "pid_alive", return_value=True),
+              patch.object(runner.RealClock, "arm_anchor_ns", return_value=(self.close_ns, self.ns, self.ns)),
+              patch.object(launcher.subprocess, "run") as service):
+            self.assertIn(message, self.launch(self.proof, *extra))
+            service.assert_not_called()
+        self.assertEqual(self.ledger.read_bytes(), original_ledger)
+        self.assertIsNone(launcher.base.read_fence(self.fence_root))
+        self.assertFalse((self.fence_root / "r0-launches").exists())
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(launcher.main(["close-proof", "--attempt-ledger", str(self.ledger)]), 0)
+
+    def test_audit_round_two_wrong_checkout_refuses_after_passing_checklist(self):
+        observations = self.root / "observations.json"
+        observations.write_text(json.dumps({
+            **v11_tests.FreeT0Checklist.GOOD, "kit_sha256": self.approved_sha,
+            "measurement_head": self.frozen["commit"], "frozen_path_sha256": self.frozen["paths"],
+            "t0_epoch_s": self.now, "end_by_epoch_s": self.now + 40000,
+        }))
+        with redirect_stdout(io.StringIO()) as stdout:
+            self.assertEqual(cadence_queue.main([
+                "checklist", "--kit", str(self.kit_path), "--kit-sha256", self.approved_sha,
+                "--observations", str(observations),
+            ]), 0)
+            self.assertIn("CHECKLIST PASS", stdout.getvalue())
+
+        stale = self.root / "stale-runner"
+        make_runner_checkout(stale, b"# previous synthetic runner\n")
+        self.expect_checkout_refusal("is not the kit's frozen commit", "--repo", str(stale))
+
+    def test_ctl_refuses_wrong_head_with_identical_frozen_files(self):
+        checkout_git(self.repo, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                     "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "different HEAD")
+        self.expect_checkout_refusal("is not the kit's frozen commit")
+
+    def test_ctl_refuses_dirty_tree_with_unchanged_frozen_files(self):
+        (self.repo / "untracked.txt").write_text("synthetic dirty tree\n")
+        self.expect_checkout_refusal("measurement checkout is dirty")
+
+    def test_ctl_refuses_changed_frozen_file_even_when_git_status_is_clean(self):
+        entry, = self.frozen["paths"]
+        checkout_git(self.repo, "update-index", "--assume-unchanged", entry)
+        (self.repo / entry).write_bytes(b"# changed synthetic runner\n")
+        self.assertEqual(checkout_git(self.repo, "status", "--porcelain"), "")
+        self.expect_checkout_refusal("frozen paths differ")
+
+    def test_next_and_ctl_launch_agree_at_exclusive_expiry(self):
+        self.queue_doc["expires_at"] = "2026-11-19T00:00:01-08:00"
+        self.write_queue()
+        for instant, expected in ((self.now, "arm"), (self.now + 1, "halt"), (self.now + 2, "halt")):
+            with self.subTest(instant=instant), redirect_stdout(io.StringIO()) as stdout:
+                self.assertEqual(cadence_queue.main(["next", "--queue", str(self.queue_path), "--now", str(instant)]), 0)
+                self.assertEqual(json.loads(stdout.getvalue())["action"], expected)
+        with (patch.object(launcher.time, "time", return_value=self.now + 1),
+              patch.object(launcher.base, "pid_alive") as probe, patch.object(launcher.subprocess, "run") as service):
+            self.assertIn("queue expired", self.launch(self.proof))
+            probe.assert_not_called()
+            service.assert_not_called()
+        self.assertEqual(json.loads(self.ledger.read_text())["attempts"], [self.prior])
 
     def test_ctl_rejects_both_roster_swaps_before_recording_attempt(self):
         with (patch.object(launcher.time, "time", return_value=self.now),
@@ -423,6 +491,8 @@ class LaunchAuthorityTests(unittest.TestCase):
         }))
         obs = self.root / "observations.json"
         obs.write_text(json.dumps({**v11_tests.FreeT0Checklist.GOOD, "kit_sha256": self.approved_sha,
+                                   "measurement_head": self.frozen["commit"],
+                                   "frozen_path_sha256": self.frozen["paths"],
                                    "t0_epoch_s": self.now, "end_by_epoch_s": self.now + 40000}))
         validate = ["validate-queue", str(queue_file), "--kits-root", str(self.root)]
         check = ["checklist", "--kit", str(self.kit_path), "--observations", str(obs),

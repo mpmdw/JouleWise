@@ -254,7 +254,7 @@ def add_queue_authority_arguments(parser):
 def check_queue_window(document, span, kit, now):
     if document["halt"] is not None:
         raise ValueError("ctl queue is halted")
-    if now >= queue.parse_time(document["expires_at"]):
+    if queue.is_expired(document, now):
         raise ValueError("ctl queue expired")
     earliest = date.fromisoformat(span["not_before"])
     actual = datetime.fromtimestamp(now, ZoneInfo(kit["span_template"]["timezone"])).date()
