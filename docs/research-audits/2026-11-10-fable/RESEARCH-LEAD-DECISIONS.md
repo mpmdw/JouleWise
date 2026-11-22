@@ -25040,3 +25040,43 @@ BYTES stopped on 12 November because the hand-off that locked the predictions sa
 | `fill_index.md` | `P1-BY-KB` source corrected. `P1-RELEASE-BYTES` supplier named. Every `P1-BY-*` source re-pointed to the release record at regeneration. New: `P1-BY-H1-OTHER6-rails`, `-dc`, `-rest`. Retired: `P1-BY-NOWORD`, `P1-BY-KB-STATE`. |
 | `variants/tierD_bytes_registered_design.md` | Abstract, §7.5, §3.3 and conclusion texts replaced by §5.4; header comment's "stage 1 not committed by about 15 November" replaced by the test of §5.1. |
 | New files | `docs/bytes/stage2/RELEASE.md`, `docs/bytes/stage2/release-record.json` (records branch); `docs/bytes/TIER-CALL.md` (`main`). |
+
+# RL-201a. The BYTES journal on the clean path reads 2/1/2, one line per guarded command: RL-201 §4.2's "one line" is replaced by "one line per implementation". No shared-admission command is built. The second-commitment branch gets an execution packet only if step 4 attributes a library defect
+
+Research lead (Fable 5.2), Sun Nov 22 01:30:43 PST 2026 (from `date`). Amends RL-201 §4.2 lines 3 and 5 and adds one item to §4.3. Answers the desk-item draft's NEEDS_SPEC on the admission count. The count hold on posting is lifted; the draft's other pre-post conditions stand.
+
+## 1. Ruling: 2/1/2, with the code as it is
+
+**Why.** RL-201 §4.2 wrote "one `heldout_rows` line" and "one `heldout_analysis` line" without checking the guard. That was my error, not a requirement. In the code at `d7098081d` every guarded command appends its own attempt, under a lock and with an fsync, before it opens a held-out row or copies a key: the primary in `scripts/bytes_analyze.py` (calls `bc.admit`), the twin in `scripts/bytes_twin.py` (runs `bytes_commitment.py admit` as a subprocess), the key release in `scripts/b6_release_subset.py`. The guard refuses a second admission until the previous line is committed. So one line means "one guarded command was admitted to read", and two implementations reading the same rows are two such commands. That is the truer record. A 1/1/1 journal would need a new entry point that lets one implementation reach held-out rows without making its own append. That is a weaker guard and new unreviewed code on the path to the held-out data, bought only to match my wording. Nothing else in RL-201 depends on the count: the Tier D state sentence (§5.4) and the date rule (§5.2) read event names and the first `heldout_keys` line, and both are unchanged.
+
+**RL-201 §4.2, lines 3 and 5, now read:**
+
+> 3. **Blinded held-out agreement.** Two `heldout_rows` admission lines, the primary's and then the twin's, each committed and pushed before the next guarded command. (rest unchanged)
+> 5. **Stage 2.** Two `heldout_analysis` lines, the primary's and then the twin's, each committed and pushed before the next guarded command. (rest unchanged)
+
+Line 4 is unchanged: exactly one `heldout_keys` line.
+
+**Order of the five lines.** `heldout_rows` (primary), `heldout_rows` (twin), `heldout_keys`, `heldout_analysis` (primary), `heldout_analysis` (twin). The draft's command order already gives this.
+
+**What each line carries.** The guard writes three fields and no more: `event`, `unblinded_utc` (the attempt time, taken before the read) and `stage1_commit`, which must be `569591e53ffcd91efbab7a9ebaff1d580bbc78ba` on every line. The line does not name the implementation and the schema is not changed. The implementation is bound by the commit instead:
+
+- one journal line per commit, and that commit's message names the event and the implementation (the draft's `BYTES <event> admission (<tag>)` with its `a-`/`t-` tags does this);
+- the `heldout_keys` commit also carries `docs/bytes/stage1/heldout-release.json`;
+- each commit is pushed, non-force, to `records/2026-11-bytes-stage1` and the push verified before the next guarded command. The guard enforces "committed"; "pushed" is the operator's check, as the draft has it.
+
+**Append-only.** No journal line is ever edited, reordered or removed, including an attempt whose command later failed. Such a line is committed and pushed like any other.
+
+**Addition to RL-201 §4.3 (the release record).** The record lists every journal line in order with its event, `unblinded_utc`, implementation, journal commit and the GitHub push time of that commit, and states the count by event.
+
+## 2. When the count is not 2/1/2
+
+- **Extra `heldout_rows` or `heldout_analysis` line from a command that appended and then stopped for a cause that involves no held-out value** (a path, an argument, a full disk, a refused push). The lead records the cause, resumes, and the release record accounts for the line. It does not return to me.
+- **Anything else comes to me before the next guarded command:** a second `heldout_keys` line, any line out of the order above, a line naming another `stage1_commit`, or a rerun after an above-bar field (that one is already RL-80 and RL-201 §4.6).
+
+## 3. The second-commitment branch
+
+No execution packet now: it is written only if step 4 produces an above-bar field and I attribute it to the bound library, as part of that attribution ruling (the guard refuses any `--predictions` bytes other than the original, so that packet needs reviewed code, and its line count, 4/1/4 on the same reasoning, is fixed there). It does not hold posting. A twin-only fix needs no packet.
+
+**Not checked.** That the P1/M1 head leaves these three admission call sites as they are at `d7098081d` (the lead confirms when pinning `<P1M1_HEAD>`; if a call site changed, this comes back). That the desk-item's shell blocks run as written. That RL-201 is on the audit branch at the commit the draft cites (no fetch).
+
+**Blind status.** Blind. Read: RL-198a (format), RL-201, the desk-item draft and its FINAL-MESSAGE, and source at `d7098081d` (`scripts/bytes_commitment.py`, the admission call sites of `scripts/bytes_analyze.py`, `scripts/bytes_twin.py` and `scripts/b6_release_subset.py`, `docs/design/bytes_commitment.md`). The journal itself was not opened. No custody, energy, withheld, key or prediction file was opened. No commit, push, comment, run, SSH or fetch. The only file written is this one.
