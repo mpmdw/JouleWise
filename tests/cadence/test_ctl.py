@@ -524,6 +524,64 @@ class LaunchAuthorityTests(unittest.TestCase):
         self.assertFalse(self.output.exists())
         self.assertEqual(json.loads(self.ledger.read_text())["attempts"], [self.prior])
 
+    def test_audit_round_three_kit_and_queue_changes_refuse_before_recording_attempt(self):
+        observations = self.root / "observations.json"
+        observations.write_text(json.dumps({
+            **v11_tests.FreeT0Checklist.GOOD, "kit_sha256": self.approved_sha,
+            "measurement_head": self.frozen["commit"], "frozen_path_sha256": self.frozen["paths"],
+            "t0_epoch_s": self.now, "end_by_epoch_s": self.now + 40000,
+        }))
+        with redirect_stdout(io.StringIO()) as stdout:
+            self.assertEqual(cadence_queue.main([
+                "checklist", "--kit", str(self.kit_path), "--kit-sha256", self.approved_sha,
+                "--observations", str(observations),
+            ]), 0)
+            self.assertIn("CHECKLIST PASS", stdout.getvalue())
+
+        lock = launcher.base.fence_lock
+        verify_checkout = runner.verify_frozen_production
+        ledger_before = self.ledger.read_bytes()
+        cases = (
+            ("kit before lock acquisition", self.kit_path, "kit hash differs"),
+            ("kit after checkout verification", self.kit_path, "kit hash differs"),
+            ("queue after checkout verification", self.queue_path, "queue bytes differ"),
+        )
+        for case, document, refusal in cases:
+            original = document.read_bytes()
+
+            @contextmanager
+            def acquire_after_other_writer(root):
+                if case == "kit before lock acquisition":
+                    # Reproduce the competing writer releasing the real desk lock.
+                    with lock(root):
+                        document.write_bytes(original + b"\n")
+                with lock(root):
+                    yield
+
+            def verify_then_change(*args, **kwargs):
+                result = verify_checkout(*args, **kwargs)
+                if case != "kit before lock acquisition":
+                    document.write_bytes(original + b"\n")
+                return result
+
+            try:
+                with (self.subTest(case=case),
+                      patch.object(launcher.base, "fence_lock", side_effect=acquire_after_other_writer),
+                      patch.object(runner, "verify_frozen_production", side_effect=verify_then_change),
+                      patch.object(launcher.base, "pid_alive", return_value=True),
+                      patch.object(launcher.time, "time", return_value=self.now),
+                      patch.object(runner.RealClock, "arm_anchor_ns", return_value=(self.close_ns, self.ns, self.ns)),
+                      patch.object(launcher.subprocess, "run",
+                                   side_effect=AssertionError("bootstrap reached with changed authority")) as service):
+                    self.assertIn(refusal, self.launch(self.proof))
+                    service.assert_not_called()
+                    self.assertEqual(self.ledger.read_bytes(), ledger_before)
+                    self.assertIsNone(launcher.base.read_fence(self.fence_root))
+                    with redirect_stdout(io.StringIO()):
+                        self.assertEqual(launcher.main(["close-proof", "--attempt-ledger", str(self.ledger)]), 0)
+            finally:
+                document.write_bytes(original)
+
     def test_ctl_refuses_kit_revision_between_launch_and_child(self):
         child = []
 

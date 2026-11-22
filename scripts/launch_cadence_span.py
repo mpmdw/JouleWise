@@ -479,6 +479,9 @@ def launch(args, *, loaded_kit=None) -> None:
         runner_spec.write_text(json.dumps({"kind": RUNNER_KIND, "argv": child_argv}) + "\n")
         plist.write_bytes(plistlib.dumps(job_spec))
         if scripted_ctl:
+            ctl.require_queue_kit_hash(approved_sha, hashlib.sha256(args.kit.read_bytes()).hexdigest())
+            if hashlib.sha256(args.queue.read_bytes()).hexdigest() != args.queue_sha256:
+                raise ValueError("ctl queue bytes differ from the lead-approved queue hash")
             ctl.check_queue_window(document, row, kit, time.time())
         if ledger_path is not None:
             append_attempt(ledger_path, ledger, previous, span_id, args.output / span_runner.RECEIPT_NAME,
