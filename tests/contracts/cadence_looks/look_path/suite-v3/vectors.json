@@ -1,0 +1,298 @@
+{
+  "profiles": {
+    "pair": {
+      "code": "ok",
+      "members": [
+        "good"
+      ],
+      "candidates": {
+        "001": []
+      }
+    },
+    "boot_open": {
+      "code": "boot_mismatch",
+      "members": [
+        "open_late_missing_raw",
+        "boot"
+      ],
+      "candidates": {
+        "002": [
+          "stream_unclosed",
+          "anchor_unusable",
+          "not_bracketed"
+        ],
+        "004": [
+          "boot_mismatch"
+        ]
+      }
+    },
+    "open_part": {
+      "code": "stream_unclosed",
+      "members": [
+        "partial",
+        "open_late_missing_raw"
+      ],
+      "candidates": {
+        "002": [
+          "not_bracketed"
+        ],
+        "004": [
+          "stream_unclosed",
+          "anchor_unusable",
+          "not_bracketed"
+        ]
+      }
+    },
+    "ok_boot": {
+      "code": "ok",
+      "members": [
+        "boot",
+        "good"
+      ],
+      "candidates": {
+        "002": [
+          "boot_mismatch"
+        ],
+        "004": []
+      },
+      "selected": "004"
+    },
+    "inside": {
+      "code": "not_bracketed",
+      "members": [
+        "partial"
+      ],
+      "candidates": {
+        "002": [
+          "not_bracketed"
+        ]
+      }
+    },
+    "anchor_cap": {
+      "code": "anchor_unusable",
+      "members": [
+        "cap",
+        "no_start_raw_late"
+      ],
+      "candidates": {
+        "002": [
+          "half_width_over_cap"
+        ],
+        "004": [
+          "anchor_unusable",
+          "not_bracketed"
+        ]
+      }
+    },
+    "cap_part": {
+      "code": "half_width_over_cap",
+      "members": [
+        "partial",
+        "partial_cap"
+      ],
+      "candidates": {
+        "002": [
+          "not_bracketed"
+        ],
+        "004": [
+          "half_width_over_cap",
+          "not_bracketed"
+        ]
+      }
+    },
+    "multi": {
+      "code": "boot_mismatch",
+      "members": [
+        "partial_cap_boot"
+      ],
+      "candidates": {
+        "002": [
+          "boot_mismatch",
+          "half_width_over_cap",
+          "not_bracketed"
+        ]
+      }
+    },
+    "missing_anchor": {
+      "code": "ok",
+      "members": [
+        "good"
+      ],
+      "side": "L003_remove_end_mono",
+      "candidates": {
+        "002": [],
+        "004": [
+          "anchor_unusable",
+          "not_bracketed"
+        ]
+      }
+    },
+    "equal_boundary": {
+      "code": "ok",
+      "members": [
+        "good"
+      ],
+      "side": "L001_end_at_L002_start",
+      "candidates": {
+        "001": [
+          "not_bracketed"
+        ],
+        "002": []
+      }
+    },
+    "no_candidate": {
+      "code": "not_bracketed",
+      "members": [
+        "absent"
+      ],
+      "candidates": {}
+    },
+    "absent_span": {
+      "code": "meter_absent",
+      "members": [
+        "absent"
+      ],
+      "side": "all_pilot_absent",
+      "candidates": {}
+    },
+    "few_legs": {
+      "code": "not_bracketed",
+      "legacy": "three_left",
+      "members": [],
+      "candidates": {}
+    },
+    "few_levels": {
+      "code": "ok",
+      "legacy": "two_levels",
+      "members": [],
+      "candidates": {
+        "001": []
+      }
+    },
+    "open_boot": {
+      "code": "boot_mismatch",
+      "members": [
+        "open_late_missing_raw_boot"
+      ],
+      "candidates": {
+        "002": [
+          "boot_mismatch",
+          "stream_unclosed",
+          "anchor_unusable",
+          "not_bracketed"
+        ]
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "h_byte_identity",
+      "profile": "pair",
+      "outcome": "paired"
+    },
+    {
+      "id": "boot_open_fresh",
+      "profile": "boot_open",
+      "outcome": "fresh"
+    },
+    {
+      "id": "boot_disposition_refuses",
+      "profile": "boot_open",
+      "disposition": "boot_mismatch",
+      "outcome": "fresh"
+    },
+    {
+      "id": "open_disposition_cannot_mask_boot",
+      "profile": "boot_open",
+      "disposition": "stream_unclosed",
+      "outcome": "fresh"
+    },
+    {
+      "id": "open_partial_fresh",
+      "profile": "open_part",
+      "outcome": "fresh"
+    },
+    {
+      "id": "open_partial_disposed",
+      "profile": "open_part",
+      "disposition": "stream_unclosed",
+      "outcome": "success"
+    },
+    {
+      "id": "lower_disposition_refuses",
+      "profile": "open_part",
+      "disposition": "not_bracketed",
+      "outcome": "fresh"
+    },
+    {
+      "id": "only_passing_stream_wins",
+      "profile": "ok_boot",
+      "outcome": "success"
+    },
+    {
+      "id": "same_boot_ends_inside",
+      "profile": "inside",
+      "outcome": "fresh"
+    },
+    {
+      "id": "anchor_precedes_cap",
+      "profile": "anchor_cap",
+      "outcome": "fresh"
+    },
+    {
+      "id": "cap_precedes_bracket",
+      "profile": "cap_part",
+      "outcome": "fresh"
+    },
+    {
+      "id": "three_failures_one_stream",
+      "profile": "multi",
+      "outcome": "fresh"
+    },
+    {
+      "id": "incomplete_anchors_stay_candidates",
+      "profile": "missing_anchor",
+      "outcome": "success"
+    },
+    {
+      "id": "touching_boundary_stays_candidate",
+      "profile": "equal_boundary",
+      "outcome": "success"
+    },
+    {
+      "id": "other_streams_exist_outside_leg",
+      "profile": "no_candidate",
+      "disposition": "not_bracketed",
+      "outcome": "success"
+    },
+    {
+      "id": "no_streaming_samples_fresh",
+      "profile": "absent_span",
+      "outcome": "fresh"
+    },
+    {
+      "id": "no_streaming_samples_disposed",
+      "profile": "absent_span",
+      "disposition": "meter_absent",
+      "outcome": "success"
+    },
+    {
+      "id": "correct_code_too_few_hidden_legs",
+      "profile": "few_legs",
+      "disposition": "not_bracketed",
+      "outcome": "fresh"
+    },
+    {
+      "id": "correct_code_too_few_hidden_levels",
+      "profile": "few_levels",
+      "disposition": "not_bracketed",
+      "outcome": "fresh"
+    },
+    {
+      "id": "header_boot_test_without_trailer",
+      "profile": "open_boot",
+      "disposition": "stream_unclosed",
+      "outcome": "fresh"
+    }
+  ]
+}

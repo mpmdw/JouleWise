@@ -1,0 +1,9 @@
+{
+  "joulewise/adapters/powermetrics.py": "70f47086b2445e88d0cb25ed2d47751dfd99843d0cf1e149f2fe630c5116e5e4",
+  "joulewise/align/apple/rl176_phases.py": "a924b1f4fe5e4e3d7dee719027e57cdb7548f4d66ec7705ad249d5d6b2ff18f8",
+  "joulewise/align/attribution.py": "805d5d5e0dde33ab54ed943b883f95e5f738bf2391a8c21300f569a0cabb014d",
+  "joulewise/align/power/windows.py": "e8a3d5ecaecda79f9214f0569d7a36f47bb3a0237a8721474888332721870391",
+  "joulewise/align/records.py": "d5b8f8583716ba5419c0c84710ffec30735128a31b056830767dca6d13cccf93",
+  "joulewise/bundle_read.py": "8eeae4f575d59447d372ac7184362365cce3b118125791465069ae1a14218403",
+  "joulewise/reduce.py": "7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc"
+}

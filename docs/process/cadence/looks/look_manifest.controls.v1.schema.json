@@ -37,29 +37,58 @@
     "instrument_output_schema": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["commit", "path", "sha256"],
+      "required": [
+        "commit",
+        "path",
+        "sha256"
+      ],
       "properties": {
-        "commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
-        "path": {"type": "string", "minLength": 1},
-        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+        "commit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
       }
     },
     "instrument_stage1": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["ledger_commit", "stage1_sha256"],
+      "required": [
+        "ledger_commit",
+        "stage1_sha256"
+      ],
       "properties": {
-        "ledger_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
-        "stage1_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+        "ledger_commit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "stage1_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
       }
     },
     "release_layout": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["private", "public"],
+      "required": [
+        "private",
+        "public"
+      ],
       "properties": {
-        "private": {"$ref": "#/$defs/releaseDirectory"},
-        "public": {"$ref": "#/$defs/releaseDirectory"}
+        "private": {
+          "$ref": "#/$defs/releaseDirectory"
+        },
+        "public": {
+          "$ref": "#/$defs/releaseDirectory"
+        }
       }
     },
     "pins": {
@@ -69,24 +98,40 @@
         "controls_route",
         "edges",
         "hold",
+        "hold_reasons",
         "instrument_floor_schema",
         "instrument_manifest",
+        "inventory_schema",
         "output_schema",
         "print_code",
         "print_code/analysis",
         "print_code/attribution",
+        "print_code/book",
         "print_code/branch_release",
+        "print_code/clock",
+        "print_code/custody_pins",
+        "print_code/dc_decoder",
         "print_code/dispatch",
+        "print_code/inputs",
         "print_code/integrator",
+        "print_code/launcher",
+        "print_code/layout",
         "print_code/manifest",
         "print_code/manifest_json",
         "print_code/phase",
+        "print_code/pinned_inputs",
         "print_code/powermetrics_adapter",
         "print_code/projection",
+        "print_code/rail_join",
+        "print_code/reader",
         "print_code/records",
+        "print_code/sampler",
+        "print_code/time_fields",
         "print_code/trace_point",
         "print_code/windows",
-        "restricted_schema"
+        "print_code/worker",
+        "restricted_schema",
+        "stage1_schema"
       ],
       "properties": {
         "controls_route": {
@@ -101,11 +146,19 @@
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         },
+        "hold_reasons": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
         "instrument_floor_schema": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         },
         "instrument_manifest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "inventory_schema": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         },
@@ -125,7 +178,23 @@
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         },
+        "print_code/book": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
         "print_code/branch_release": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/clock": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/custody_pins": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/dc_decoder": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         },
@@ -133,7 +202,19 @@
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         },
+        "print_code/inputs": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
         "print_code/integrator": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/launcher": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/layout": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         },
@@ -149,6 +230,10 @@
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         },
+        "print_code/pinned_inputs": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
         "print_code/powermetrics_adapter": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
@@ -157,7 +242,23 @@
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         },
+        "print_code/rail_join": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/reader": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
         "print_code/records": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/sampler": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "print_code/time_fields": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         },
@@ -169,7 +270,43 @@
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         },
+        "print_code/worker": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
         "restricted_schema": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "stage1_schema": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "host",
+        "uid",
+        "bindings_sha256",
+        "sources_sha256"
+      ],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1
+        },
+        "uid": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "bindings_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "sources_sha256": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         }
@@ -180,11 +317,24 @@
     "releaseDirectory": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "device", "inode"],
+      "required": [
+        "path",
+        "device",
+        "inode"
+      ],
       "properties": {
-        "path": {"type": "string", "pattern": "^/(?:[^/]+/)*lm-ctl-01$"},
-        "device": {"type": "integer", "minimum": 0},
-        "inode": {"type": "integer", "minimum": 1}
+        "path": {
+          "type": "string",
+          "pattern": "^/(?:[^/]+/)*lm-ctl-01$"
+        },
+        "device": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "inode": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     }
   }
