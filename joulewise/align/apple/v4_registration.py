@@ -850,6 +850,12 @@ class LaunchView:
         self.roots, self.root = roots, Path(view).absolute()
 
     def locate(self, path, *, directory=False):
+        try:
+            return self._locate(path, directory=directory)
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(exc.errno, 'staged input is missing', str(path)) from exc
+
+    def _locate(self, path, *, directory):
         path = Path(path)
         if not path.is_absolute():
             path = self.root / path

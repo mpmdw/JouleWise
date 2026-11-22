@@ -702,6 +702,8 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
         'last_desk_passed_artifact_set_sha256': None,
         'checks': {}, 'arm_pending': [r['id'] for r in cadence.NEXT_ARM_TRIAGE if r['source'] == cadence.ARM],
         'entry_sources': {r['id']: r['source'] for r in cadence.NEXT_ARM_TRIAGE}}
+    if c1_closure is not None:
+        packet['c1_closure'] = c1_closure
 
     def source(name):
         return evidence.source(series_commit, series.get(name))
@@ -935,8 +937,6 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
             binding = committed_c1_kit(evidence, series_commit, digest(manifest_raw), plan['members'])
             if binding is not None:
                 packet['c1_kit'] = binding
-                if c1_closure is not None:
-                    packet['c1_closure'] = c1_closure
         return {'basis': 'next sentinel roster recorded with the U4 consequence', 'sentinel_ids': expected}
 
     def eligibility():

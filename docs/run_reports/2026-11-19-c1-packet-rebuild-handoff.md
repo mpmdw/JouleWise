@@ -860,3 +860,9 @@ Integration-owner and Opus acceptance, W1 signing, the real C1 preparation
 and final post-close packet, and all live checks remain with their authorized
 owners. The lead or magistrate owns the final packet. Opus owns merging.
 `NEEDS_SPEC: none`.
+
+The first adapter replay reached the relabelled-sentinel case and found
+that a diagnostic packet omitted the closure when the roster check
+refused. The builder now carries the verified transport closure on
+diagnostic packets as well. Both consumers can authenticate the attempt
+and report the sentinel failure before they consider host access.
