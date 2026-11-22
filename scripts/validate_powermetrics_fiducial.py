@@ -2116,6 +2116,97 @@ def _capture_parser(*, ledger_default=DEFAULT_LEDGER_PATH, head_pin_default=DEFA
     return parser
 
 
+def _capture_fixture_error(args: argparse.Namespace) -> str | None:
+    """The parser error for an invalid test-fixture combination, if any."""
+
+    if args.identity_epoch_json_for_test is not None and not args.sampler_direct_for_test:
+        return "identity epoch fixture requires --sampler-direct-for-test"
+    if args.battery_probe_fixture_for_test is not None and (
+        not args.sampler_direct_for_test or args.time_scale_for_test == 1
+    ):
+        return "battery probe fixture requires the logical sampler test mode"
+    if (not math.isfinite(args.battery_probe_duration_for_test)
+            or args.battery_probe_duration_for_test < 0
+            or (args.battery_probe_duration_for_test and args.battery_probe_fixture_for_test is None)):
+        return "battery probe test duration requires a fixture and must be nonnegative"
+    return None
+
+
+def _bracket_mode(args: argparse.Namespace) -> bool:
+    return all(value is not None and value != "" for value in (args.session_id, args.slot, args.attempt_id))
+
+
+def _capture_mode_refusal(
+    args: argparse.Namespace,
+) -> tuple[RefusalCode, dict[str, Any] | None] | None:
+    """Refusals before the re-derivation branch, in ``main``'s order.
+
+    ``main`` and the C1 arm preflight both call this function.
+    """
+
+    bracket_values = (args.session_id, args.slot, args.attempt_id)
+    bracket_mode = _bracket_mode(args)
+    if any(value is not None for value in bracket_values) and not bracket_mode:
+        return RefusalCode.WRITER_BRACKET_ARGUMENTS, None
+    if bracket_mode and (args.rederive_from is not None or args.output is not None):
+        return RefusalCode.WRITER_BRACKET_REDERIVE_CONFLICT, None
+    if args.derivation_only and (
+        args.rederive_from is not None or args.output is not None
+    ):
+        # Re-derivation replays bytes that already exist; derivation-only is a
+        # live capture parameter and can never describe that replay.  This
+        # refusal must precede the --rederive-from branch below, which returns
+        # success on its own.
+        return RefusalCode.WRITER_BRACKET_REDERIVE_CONFLICT, {
+            "detail": "--derivation-only applies only to live capture",
+            # The registry code is the ordinary "these parameters apply
+            # only to live capture" family, so name the flags actually
+            # passed; a reader must not go hunting for a --rederive-from
+            # that was never on the command line.
+            "conflicting_flags": sorted(
+                flag
+                for flag, present in (
+                    ("--derivation-only", args.derivation_only),
+                    ("--rederive-from", args.rederive_from is not None),
+                    ("--output", args.output is not None),
+                )
+                if present
+            ),
+        }
+    if not verify_frozen_protocol():
+        return RefusalCode.FROZEN_PROTOCOL_INVALID, None
+    return None
+
+
+def _live_capture_refusal(
+    args: argparse.Namespace,
+) -> tuple[RefusalCode, dict[str, Any] | None] | None:
+    """Live-capture argument refusals after launch authentication, in order.
+
+    ``main`` and the C1 arm preflight both call this function.
+    """
+
+    if not args.allow_live:
+        return RefusalCode.QUIET_MAC_AUTH_REQUIRED, None
+    if not args.power_policy:
+        return RefusalCode.POWER_POLICY_REQUIRED, None
+    if args.time_scale_for_test <= 0 or args.time_scale_for_test > 1:
+        return RefusalCode.WRITER_BRACKET_ARGUMENTS, {"detail": "test time scale must be in (0, 1]"}
+    if args.projection_cell_budget_for_test is not None and (
+        not args.sampler_direct_for_test
+        or args.time_scale_for_test == 1
+        or args.identity_epoch_json_for_test is None
+        or args.projection_cell_budget_for_test <= 0
+        or args.projection_cell_budget_for_test
+        > DETECTION_PROJECTION_CELL_BUDGET
+    ):
+        # Tests may only tighten the production budget inside the existing
+        # accelerated synthetic seam. There is no live operator override that
+        # can raise, disable, or recover from the frozen fail-closed bound.
+        return RefusalCode.WRITER_BRACKET_ARGUMENTS, {"detail": "invalid test-only projection budget"}
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     from joulewise.align.apple.v4_registration import runtime_input_context, runtime_ledger
 
@@ -2130,16 +2221,8 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as exc:
             print(f"C1 capture refused: {exc}", file=sys.stderr)
             return 2
-    if args.identity_epoch_json_for_test is not None and not args.sampler_direct_for_test:
-        parser.error("identity epoch fixture requires --sampler-direct-for-test")
-    if args.battery_probe_fixture_for_test is not None and (
-        not args.sampler_direct_for_test or args.time_scale_for_test == 1
-    ):
-        parser.error("battery probe fixture requires the logical sampler test mode")
-    if (not math.isfinite(args.battery_probe_duration_for_test)
-            or args.battery_probe_duration_for_test < 0
-            or (args.battery_probe_duration_for_test and args.battery_probe_fixture_for_test is None)):
-        parser.error("battery probe test duration requires a fixture and must be nonnegative")
+    if (fixture_error := _capture_fixture_error(args)) is not None:
+        parser.error(fixture_error)
     custody_deadline = None
     ledger_lifecycle = None
 
@@ -2175,50 +2258,9 @@ def main(argv: list[str] | None = None) -> int:
         args.test_writer_crash_authorization,
         entry_point=Path(__file__),
     )
-    bracket_values = (args.session_id, args.slot, args.attempt_id)
-    bracket_mode = all(value is not None and value != "" for value in bracket_values)
-    if any(value is not None for value in bracket_values) and not bracket_mode:
-        return emit_refusal(
-            RefusalCode.WRITER_BRACKET_ARGUMENTS,
-            stream=sys.stderr,
-        )
-    if bracket_mode and (args.rederive_from is not None or args.output is not None):
-        return emit_refusal(
-            RefusalCode.WRITER_BRACKET_REDERIVE_CONFLICT,
-            stream=sys.stderr,
-        )
-    if args.derivation_only and (
-        args.rederive_from is not None or args.output is not None
-    ):
-        # Re-derivation replays bytes that already exist; derivation-only is a
-        # live capture parameter and can never describe that replay.  This
-        # refusal must precede the --rederive-from branch below, which returns
-        # success on its own.
-        return emit_refusal(
-            RefusalCode.WRITER_BRACKET_REDERIVE_CONFLICT,
-            context={
-                "detail": "--derivation-only applies only to live capture",
-                # The registry code is the ordinary "these parameters apply
-                # only to live capture" family, so name the flags actually
-                # passed; a reader must not go hunting for a --rederive-from
-                # that was never on the command line.
-                "conflicting_flags": sorted(
-                    flag
-                    for flag, present in (
-                        ("--derivation-only", args.derivation_only),
-                        ("--rederive-from", args.rederive_from is not None),
-                        ("--output", args.output is not None),
-                    )
-                    if present
-                ),
-            },
-            stream=sys.stderr,
-        )
-    if not verify_frozen_protocol():
-        return emit_refusal(
-            RefusalCode.FROZEN_PROTOCOL_INVALID,
-            stream=sys.stderr,
-        )
+    bracket_mode = _bracket_mode(args)
+    if (refusal := _capture_mode_refusal(args)) is not None:
+        return emit_refusal(refusal[0], context=refusal[1], stream=sys.stderr)
     if args.rederive_from is not None:
         if args.output is None:
             return emit_refusal(
@@ -2251,38 +2293,8 @@ def main(argv: list[str] | None = None) -> int:
         if _calibration_launch_reason_code(exc) is None:
             raise
         return _emit_calibration_launch_refusal(exc)
-    if not args.allow_live:
-        return emit_refusal(
-            RefusalCode.QUIET_MAC_AUTH_REQUIRED,
-            stream=sys.stderr,
-        )
-    if not args.power_policy:
-        return emit_refusal(
-            RefusalCode.POWER_POLICY_REQUIRED,
-            stream=sys.stderr,
-        )
-    if args.time_scale_for_test <= 0 or args.time_scale_for_test > 1:
-        return emit_refusal(
-            RefusalCode.WRITER_BRACKET_ARGUMENTS,
-            context={"detail": "test time scale must be in (0, 1]"},
-            stream=sys.stderr,
-        )
-    if args.projection_cell_budget_for_test is not None and (
-        not args.sampler_direct_for_test
-        or args.time_scale_for_test == 1
-        or args.identity_epoch_json_for_test is None
-        or args.projection_cell_budget_for_test <= 0
-        or args.projection_cell_budget_for_test
-        > DETECTION_PROJECTION_CELL_BUDGET
-    ):
-        # Tests may only tighten the production budget inside the existing
-        # accelerated synthetic seam. There is no live operator override that
-        # can raise, disable, or recover from the frozen fail-closed bound.
-        return emit_refusal(
-            RefusalCode.WRITER_BRACKET_ARGUMENTS,
-            context={"detail": "invalid test-only projection budget"},
-            stream=sys.stderr,
-        )
+    if (refusal := _live_capture_refusal(args)) is not None:
+        return emit_refusal(refusal[0], context=refusal[1], stream=sys.stderr)
 
     identity_fixture: Mapping[str, Any] = {}
     if args.identity_epoch_json_for_test is not None:

@@ -244,6 +244,27 @@ def _parser(*, ledger_default=DEFAULT_LEDGER_PATH, head_pin_default=DEFAULT_HEAD
     return parser
 
 
+def verify_frozen_plan(path: Path | None, *, plan_id: str, plan_sha256: str) -> None:
+    """Refuse a frozen plan whose exact bytes, plan ID or SHA-256 differ.
+
+    The reservation and the C1 arm preflight both call this gate.
+    """
+
+    if path is None:
+        return
+    try:
+        plan_raw = Path(path).read_bytes()
+        plan_value = json.loads(plan_raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise CalibrationLedgerError(RefusalCode.PLAN_UNREADABLE) from exc
+    if (
+        not isinstance(plan_value, Mapping)
+        or plan_value.get("plan_id") != plan_id
+        or hashlib.sha256(plan_raw).hexdigest() != plan_sha256
+    ):
+        raise CalibrationLedgerError(RefusalCode.PLAN_HASH_MISMATCH)
+
+
 def _declared_slot_sources(
     args: argparse.Namespace,
 ) -> tuple[tuple[str, ...], list[tuple[str, str]]]:
@@ -389,18 +410,7 @@ def main(argv: list[str] | None = None) -> int:
                 detail="HAZARD reservation skipped the committed-pin check and the historical "
                        "custody pass",
             )
-        if args.plan is not None:
-            try:
-                plan_raw = args.plan.read_bytes()
-                plan_value = json.loads(plan_raw)
-            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-                raise CalibrationLedgerError(RefusalCode.PLAN_UNREADABLE) from exc
-            if (
-                not isinstance(plan_value, Mapping)
-                or plan_value.get("plan_id") != args.plan_id
-                or hashlib.sha256(plan_raw).hexdigest() != args.plan_sha256
-            ):
-                raise CalibrationLedgerError(RefusalCode.PLAN_HASH_MISMATCH)
+        verify_frozen_plan(args.plan, plan_id=args.plan_id, plan_sha256=args.plan_sha256)
         declared, slot_sources = _declared_slot_sources(args)
         slots = {
             role: {

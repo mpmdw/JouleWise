@@ -78,7 +78,9 @@ reason) under ``$NIGHT_DIR/transcript/``; the driver copies the locator into
 ``night/hazard_result.json`` (``neg8_corpus``).
 
 The rendered bytes carry every value as a literal. They read nothing from the
-driver's environment except ``NIGHT_DIR``, and they refuse both inspection
+driver's environment except ``NIGHT_DIR``. A C1 chain also exports or unsets
+every variable its consumers read before any stage (``C1_ENVIRONMENT_NAMES``),
+so no launch-shell value reaches them. The chains refuse both inspection
 modes (``NIGHT_VERIFY_ONLY``, ``NIGHT_RESERVATION_ARGV_ONLY``) without running
 anything, so no legacy probe or installer path can start a capture by running
 this file.
@@ -88,6 +90,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import fnmatch
 import hashlib
 import json
 import os
@@ -1218,6 +1221,70 @@ def c1_stage_commands(stages, bindings, tree, root):
     return commands
 
 
+# The C1 chain's closed environment. Every variable that a consumer in the
+# chain reads through os.environ or os.getenv is named here or matches a
+# pattern. tests.align.test_c1_closure derives those reads from the chain's
+# modules and fails on an unlisted one. The chain exports the values it
+# validated and unsets every other listed name before any stage runs, so a
+# launch-shell value never reaches a consumer. The patterns also close the
+# interpreter's own switches. NIGHT_DIR is the driver's output directory and
+# the only launch variable the chain keeps.
+C1_ENVIRONMENT_PATTERNS = ("JOULEWISE_*", "PYTHON*")
+C1_ENVIRONMENT_NAMES = (
+    "CALIBRATION_LEDGER", "CUSTODY_BUDGET_S", "EVIDENCE_MANIFEST_SHA256", "EVIDENCE_NETWORK_TIME_RECORD",
+    "EVIDENCE_PLAN_PATH", "EVIDENCE_POWER_RECORDER_REPLAY", "EVIDENCE_POWER_RECORDER_REPLAY_LABEL_SHIFT",
+    "EVIDENCE_PROCESS_JOURNAL", "JW_FAKE_TIME_ORIGIN", "LEDGER_HEAD_PIN", "MAGISTRATE_SESSION_BIN",
+    "MAGISTRATE_WATCHDOG_CUSTODY_ROOT", "MAGISTRATE_WATCHDOG_STATUS_HOST", "MEASUREMENT_HEAD",
+    "MEASUREMENT_ROOT", "NIGHT_PLAN_ID", "NIGHT_RESERVATION_ARGV_ONLY", "NIGHT_VERIFY_ONLY",
+    "XDG_CACHE_HOME",
+)
+C1_LAUNCH_ENVIRONMENT = ("NIGHT_DIR",)
+
+
+def c1_environment(c1_inputs, *, ledger, head_pin, plan_id):
+    """Map each closed C1 variable to its exported value, or None to unset it."""
+    environment = dict.fromkeys(C1_ENVIRONMENT_NAMES)
+    environment.update({
+        "CALIBRATION_LEDGER": str(ledger),
+        "JOULEWISE_C1_INPUTS": json.dumps(c1_inputs, sort_keys=True),
+        "JOULEWISE_NIGHT_PLAN_ID": plan_id,
+        "LEDGER_HEAD_PIN": str(head_pin),
+        "XDG_CACHE_HOME": c1_inputs.get("cache_home") or None,
+    })
+    return dict(sorted(environment.items()))
+
+
+def c1_chain_environment(*, stages, bindings, tree, measurement_root, plan_id, c1_inputs):
+    """Return the chain's closed environment and parsed launches, as rendered."""
+    chain = [stage for stage in stages if stage.in_chain]
+    commands = c1_stage_commands(chain, bindings, tree, Path(measurement_root))
+    selected = commands[chain[0].stage_id].args
+    return c1_environment(c1_inputs, ledger=selected.ledger, head_pin=selected.head_pin,
+                          plan_id=plan_id), commands
+
+
+def apply_c1_environment(environment, base):
+    """Return the variables a chain consumer sees when launched from ``base``."""
+    def closed(name):
+        return name in environment or any(fnmatch.fnmatchcase(name, p) for p in C1_ENVIRONMENT_PATTERNS)
+
+    result = {name: value for name, value in base.items() if not closed(name)}
+    result.update({name: value for name, value in environment.items() if value is not None})
+    return result
+
+
+def c1_environment_lines(environment):
+    """The chain lines that apply ``environment`` before any stage runs."""
+    unset = [name for name, value in environment.items() if value is None]
+    return [
+        "# C1 closed environment: every variable a chain consumer reads is exported",
+        "# from the validated attempt or unset here; NIGHT_DIR is the driver's output.",
+        "unset -m " + " ".join(_literal(pattern) for pattern in C1_ENVIRONMENT_PATTERNS),
+        *(["unset " + " ".join(unset)] if unset else []),
+        *[f"export {name}={_literal(value)}" for name, value in environment.items() if value is not None],
+    ]
+
+
 
 def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[Stage],
                  bindings: Mapping[str, Any], measurement_root: Path, pack_root: Path,
@@ -1258,7 +1325,12 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
     reservation = chain[0]
     pre = next(stage for stage in chain if stage.slot == "pre")
     post = next(stage for stage in chain if stage.slot == "post")
-    c1_commands = c1_stage_commands(chain, bindings, tree, root) if c1_inputs is not None else None
+    c1_environment_block, c1_commands = [], None
+    if c1_inputs is not None:
+        environment, c1_commands = c1_chain_environment(stages=chain, bindings=bindings, tree=tree,
+                                                        measurement_root=root, plan_id=plan_id,
+                                                        c1_inputs=c1_inputs)
+        c1_environment_block = c1_environment_lines(environment)
     reservation_argv = (list(c1_commands[reservation.stage_id].argv) if c1_commands else
                         stage_argv(reservation, bindings, tree, root))
 
@@ -1336,15 +1408,10 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
         f"  exit {EXIT_INSPECTION_REFUSED}",
         "fi",
         ': "${NIGHT_DIR:?the HAZARD_PACK driver exports NIGHT_DIR}"',
+        *c1_environment_block,
         f"export REPO={_literal(str(root))}",
         f"export PY={_literal(python)}",
         'export PYTHONPATH="$REPO"',
-        *(["export JOULEWISE_C1_INPUTS=" + _literal(json.dumps(c1_inputs, sort_keys=True)),
-           "export CALIBRATION_LEDGER=" + _literal(ledger_path),
-           "export LEDGER_HEAD_PIN=" + _literal(head_pin)]
-          if c1_inputs is not None else []),
-        *(["export XDG_CACHE_HOME=" + _literal(c1_inputs["cache_home"])]
-          if c1_inputs is not None and c1_inputs.get("cache_home") else []),
         "export PYTHONDONTWRITEBYTECODE=1 GIT_OPTIONAL_LOCKS=0",
         f"export SETTLE_S={settle_text}",
         f"OPERATOR_LOG_ROOT={_literal(bindings['operator_log_root'])}",
@@ -1685,4 +1752,6 @@ __all__ = [
     "CALIBRATION_HORIZON_S", "HORIZON_MEMBER_ALLOWANCE_S", "HORIZON_POST_RESERVE_S", "HORIZON_SKIPPED_RC",
     "COLLECTION_DEADLINE_RECORD", "NEG8_RETRY_MINIMUM", "NEG8_RETRY_SNAPSHOT", "CHAIN_FLAG_WRITER",
     "SPARE_RETRY_HELPER", "SPARE_RETRY_SCHEMA", "SPARE_RETRY_SNAPSHOT", "spare_argv", "spare_retry_lines",
+    "C1_ENVIRONMENT_PATTERNS", "C1_ENVIRONMENT_NAMES", "C1_LAUNCH_ENVIRONMENT", "c1_environment",
+    "c1_chain_environment", "apply_c1_environment", "c1_environment_lines",
 ]

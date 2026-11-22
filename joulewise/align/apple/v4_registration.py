@@ -1,8 +1,10 @@
 """V4 registration evidence. Pure stdlib; no probes, data discovery or weights."""
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
+import importlib
 import json
 import math
 import os
@@ -1019,7 +1021,35 @@ def load_prepared(view, read):
     return state, night
 
 
-def config_references(data, config, view, runner, *, cache_home=None):
+def shade_dependency(spec):
+    """Run the SHADE consumer's own offline resolver in the chain environment."""
+    from joulewise.align.apple import pilot
+    from joulewise.align.shade.upstream import PinnedUpstream
+
+    kwargs = spec.get('task_kwargs') or {}
+    if not isinstance(kwargs, dict):
+        raise ValueError('SHADE task arguments must be a mapping')
+    if kwargs.get('cache_dir') is None and 'XDG_CACHE_HOME' not in os.environ:
+        # Otherwise the consumer would fall back to the launching user's home.
+        raise ValueError('SHADE dependency is absent from the staged view: no cache_home binds its cache')
+    try:
+        if spec.get('task_factory') == pilot.FACTORY:
+            # The align workload's own resolution of its configured factory.
+            module, name = pilot.FACTORY.split(':', 1)
+            upstream = getattr(importlib.import_module(module), name)(**kwargs).upstream
+        else:
+            upstream = PinnedUpstream(allow_fetch=False, **{
+                name: kwargs[name] for name in ('cache_dir', 'commit', 'file_sha256') if name in kwargs})
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f'SHADE task arguments are invalid: {exc}') from exc
+    if upstream.prepare() is None:
+        if 'upstream_manifest_mismatch' in upstream.flags:
+            raise ValueError('staged SHADE manifest differs from the configured pin: '
+                             + ', '.join(upstream.flags))
+        raise ValueError('SHADE dependency is absent from the staged view: ' + ', '.join(upstream.flags))
+
+
+def config_references(data, config, view, runner):
     def resolve(reference, parent, *, base=view.root):
         path = Path(reference)
         if path.is_absolute():
@@ -1066,45 +1096,81 @@ def config_references(data, config, view, runner, *, cache_home=None):
     spec = decode(workload.get('prompt_text') or '{}') if workload.get('name') == 'align_episode' else {}
     factory = spec.get('task_factory')
     if factory == 'joulewise.align.apple.pilot:offline_shade_task' or 'shade' in str(workload.get('name', '')).casefold():
-        from joulewise.align.shade.upstream import PinnedUpstream, exported_file_list_sha256
-        kwargs = spec.get('task_kwargs') or {}
-        selected = {name: kwargs[name] for name in ('cache_dir', 'commit', 'file_sha256') if name in kwargs}
-        if selected.get('cache_dir') is None and cache_home is not None:
-            selected['cache_dir'] = Path(cache_home) / 'joulewise/shade'
-        upstream = PinnedUpstream(allow_fetch=False, **selected)
-        try:
-            required = view.locate(upstream.root, directory=True)
-        except (OSError, ValueError) as exc:
-            raise ValueError('SHADE dependency is absent from the staged view') from exc
-        if exported_file_list_sha256(view.roots, required) != upstream.file_sha256:
-            raise ValueError('staged SHADE manifest differs from the configured pin')
+        shade_dependency(spec)
 
 
-def check_selections(view, tree, night, pin, *, cache_home=None, environment=None, starting=True):
-    """Run the actual argv binders and parsers, then check their selected inputs."""
+@contextmanager
+def consumer_environment(environment, cwd):
+    """Run consumer checks with the chain's variables and working directory."""
     from joulewise.b5 import chain
-    from scripts import run_campaign as runner
 
-    en = os.environ if environment is None else environment
-    cache_home = en.get('XDG_CACHE_HOME') or cache_home
+    saved, previous = dict(os.environ), os.getcwd()
+    try:
+        os.environ.clear()
+        os.environ.update(chain.apply_c1_environment(environment, saved))
+        os.chdir(cwd)
+        yield
+    finally:
+        os.chdir(previous)
+        os.environ.clear()
+        os.environ.update(saved)
+
+
+def consumer_check(consumer, call):
+    """Report a consumer's own refusal as a C1 preflight refusal."""
+    from joulewise.calibration_exits import RefusalCode
+    from joulewise.calibration_ledger import CalibrationLedgerError
+
+    try:
+        result = call()
+    except CalibrationLedgerError as exc:
+        code = exc.code.value if exc.code else 'refused'
+        raise ValueError(f'C1 {consumer} refuses: {code}') from exc
+    if isinstance(result, tuple) and result and isinstance(result[0], RefusalCode):
+        raise ValueError(f'C1 {consumer} refuses: {result[0].value}')
+    return result
+
+
+def check_selections(view, tree, night, pin, *, c1_inputs, starting=True):
+    """Run the consumers' own parsers and pre-host checks on the rendered chain.
+
+    The checks run with the variables and working directory that the rendered
+    chain gives its consumers, never the caller's environment.
+    """
+    from joulewise.b5 import chain
+
     hazard = night['hazard_window']
     if hazard['pack']['pack_root'] != str(view.root / PACK):
         raise ValueError('prepared pack is outside its C1 launch location')
     bindings = hazard['bindings']
     if Path(bindings['repo_root']) != view.root:
         raise ValueError('prepared repo_root binding differs')
+    # O2a: a ledger pointer in the caller's shell must name the one live file.
+    # The chain replaces it, so this check only refuses; it selects nothing.
+    if launch_ledger := os.environ.get('CALIBRATION_LEDGER'):
+        check_ledger(view.locate(launch_ledger), pin, starting=starting)
+    stages = chain.stage_plan(tree, c1=True)
+    environment, launches = chain.c1_chain_environment(
+        stages=stages, bindings=bindings, tree=tree, measurement_root=view.root,
+        plan_id=night['plan_id'], c1_inputs=c1_inputs)
+    with consumer_environment(environment, view.root):
+        return _check_consumers(view, tree, stages, launches, bindings, pin, starting=starting)
+
+
+def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
+    from joulewise.b5 import chain
+    from scripts import reserve_calibration_window_bracket as reservation, run_campaign as runner
+    from scripts import validate_powermetrics_fiducial as fiducial
+
     default_ledger = view.root / LEDGER
     # The name used by the chain writer and all reader spellings must select
     # the same physical file, even if an alternate file has identical bytes.
-    for candidate in (default_ledger, bindings['ledger_path'],
-                      en.get('CALIBRATION_LEDGER') or default_ledger):
+    for candidate in (default_ledger, bindings['ledger_path'], os.environ['CALIBRATION_LEDGER']):
         check_ledger(view.locate(candidate), pin, starting=starting)
-    if fallback := en.get('JOULEWISE_G2A_PRE_BRACKET_PLAN'):
-        view.locate(fallback)
     selections = {}
     generated_bound = None
 
-    def check_order(manifest_path):
+    def check_order(manifest_path, args):
         directory = view.root / Path(manifest_path).parent
         resolved = view.locate(directory, directory=True)
         # Keep the bound-file decoder's duplicate-key check and use the
@@ -1120,20 +1186,30 @@ def check_selections(view, tree, night, pin, *, cache_home=None, environment=Non
             if data.get('schema_version') == runner.AXI_MANIFEST_SCHEMA_VERSION:
                 raise ValueError('C1 dispatch must use its sealed order manifest')
             config_references(data, analysis, view, runner)
+        manifest = runner.load_analysis_manifest(directory)
+        if manifest is not None and not manifest.valid:
+            raise ValueError('C1 campaign analysis manifest validation failed before execution')
         configs = runner.apply_order_manifest(runner.discover_configs(directory), order)
         for config in configs:
             raw = view.locate(config).read_bytes()
-            config_references(decode(raw), config, view, runner, cache_home=cache_home)
+            config_references(decode(raw), config, view, runner)
         scope = next(root for root in view.roots.allowed if resolved.is_relative_to(root))
         if len(resolved.relative_to(scope).parts) < runner.MAX_ANALYSIS_MANIFEST_V3_ANCESTOR_DEPTH:
             raise ValueError('campaign ancestor lookup would leave the verified roots')
         _, marker = runner._reachable_analysis_manifest_v3(directory)
         if marker is not None:
             config_references(decode(marker.read_bytes()), marker, view, runner)
+        runner.resolve_prospective_analysis_manifest_v3(directory)
+        # The runner's own pre-launch gates on the dispatched configs.
+        gate = runner.config_warning_gate(configs, acknowledge=args.ack_config_warnings, mode='campaign')
+        if gate['details']['errors'] or gate['status'] == 'fail':
+            raise ValueError(f"C1 campaign config gate refuses: {gate['summary']}")
+        items = runner.read_config_infos(configs, runner.order_entry_by_config(order))
+        if errors := [item.message for item in items if isinstance(item, runner.ConfigError)]:
+            raise ValueError(f'C1 campaign config refuses: {errors[0]}')
+        if (duplicate := runner.duplicate_run_id_error(items)) is not None:
+            raise ValueError(f'C1 campaign config refuses: {duplicate}')
 
-    stages = chain.stage_plan(tree, c1=True)
-    measuring = [stage for stage in stages if stage.in_chain]
-    launches = chain.c1_stage_commands(measuring, bindings, tree, view.root)
     for stage in stages:
         if not stage.in_chain:
             # Desk commands are not emitted on the measuring chain.
@@ -1154,16 +1230,30 @@ def check_selections(view, tree, night, pin, *, cache_home=None, environment=Non
                 view.locate(path)
             if view.locate(args.plan) != view.locate(view.root / PACK / 'collection_plan.json'):
                 raise ValueError('reservation selects a different C1 collection plan')
+            # The reservation's own gates on its prepared inputs, before any host work.
+            consumer_check('reservation', lambda: runtime_ledger(args.ledger, starting=True))
+            consumer_check('reservation', lambda: reservation.verify_frozen_plan(
+                args.plan, plan_id=args.plan_id, plan_sha256=args.plan_sha256))
+            consumer_check('reservation', lambda: reservation._declared_slot_sources(args))
         elif stage.kind == 'calibration_capture':
             if args.slot != stage.slot:
                 raise ValueError('C1 capture resolved to the wrong slot')
+            if args.rederive_from is not None or args.output is not None:
+                raise ValueError('C1 capture must be a live bracket capture')
             check_ledger(view.locate(args.ledger), pin, starting=starting)
             view.locate(args.head_pin)
             for field in ('identity_epoch_json', 't1_bindings_json', 'plan',
                           'identity_epoch_json_for_test', 'battery_probe_fixture_for_test',
-                          'rederive_from', 'test_writer_crash_authorization'):
+                          'test_writer_crash_authorization'):
                 if value := getattr(args, field, None):
                     view.locate(value)
+            # The capture writer's own argument gates. Launch lineage, the
+            # reserved session and the host identity exist only after launch.
+            consumer_check('capture', lambda: runtime_ledger(args.ledger))
+            if (error := fiducial._capture_fixture_error(args)) is not None:
+                raise ValueError(f'C1 capture refuses: {error}')
+            consumer_check('capture', lambda: fiducial._capture_mode_refusal(args))
+            consumer_check('capture', lambda: fiducial._live_capture_refusal(args))
         else:
             check_ledger(view.locate(args.calibration_ledger), pin, starting=starting)
             view.locate(args.head_pin)
@@ -1187,19 +1277,25 @@ def check_selections(view, tree, night, pin, *, cache_home=None, environment=Non
                         or args.whole_window_verdict or args.record_supersession):
                     raise ValueError('unsupported C1 campaign mode')
                 selections['policy'] = view.locate(args.campaign_policy)
+                # The runner's own loaders on the exact bytes it will read.
+                runner.load_campaign_policy(args.campaign_policy)
+                runner._require_external_campaign_log(
+                    Path(args.log) if args.log else Path(args.runs_dir) / 'campaign_log.jsonl')
                 for field in ('waivers', 'environment_override', 'salvage_closure',
                               'window_membership_binding', 'bracket_session_binding'):
                     if value := getattr(args, field, None):
                         view.locate(value)
+                runner.load_waivers(args.waivers)
                 if args.neg8_drift_bound and view.root / args.neg8_drift_bound != generated_bound:
                     view.locate(args.neg8_drift_bound)
+                    runner.load_neg8_drift_bound_artifact(args.neg8_drift_bound)
                 if args.instrument_calibration_dir:
                     selected = view.root / args.instrument_calibration_dir
                     if selected != Path(bindings['pre_calibration_dir']):
                         view.locate(selected, directory=True)
-                check_order(Path(args.config_dir) / 'order_manifest.json')
+                check_order(Path(args.config_dir) / 'order_manifest.json', args)
                 for path in (stage.spare_sets or {}).values():
-                    check_order(path)
+                    check_order(path, args)
     return selections
 
 
@@ -1237,7 +1333,7 @@ def prepared_closure(authority, verified_roots, handoff, read):
     if read(PACK / 'plan_tree.sha256') != expected:
         raise ValueError('staged plan tree sidecar differs')
     tree = decode(tree_raw)
-    selections = check_selections(view, tree, night, ledger, cache_home=handoff.get('cache_home'))
+    selections = check_selections(view, tree, night, ledger, c1_inputs=execution_inputs(handoff, ledger))
     verify_chain(view, handoff, ledger, tree, digest(tree_raw), night)
     closure = {'schema': SCHEMA, 'repo': tree_identity(authority, handoff['execution_commit']),
                'stage_files': pins, 'ledger': ledger}

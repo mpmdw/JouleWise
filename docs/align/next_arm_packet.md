@@ -200,6 +200,20 @@ state at `--series-commit`, with:
   checkout. A matching copy has the same digest. An escaping link or a
   staged kit or dispatch mismatch refuses install with exit 2 and
   `packet_kit_mismatch`.
+  The C1 chain runs with a closed environment. Before any stage, it exports
+  the validated ledger, head pin, attempt inputs, plan ID and `cache_home`.
+  It unsets every other variable that a chain consumer reads
+  (`joulewise.b5.chain.C1_ENVIRONMENT_NAMES`, `JOULEWISE_*` and `PYTHON*`).
+  Without `cache_home` it unsets `XDG_CACHE_HOME`. `NIGHT_DIR` is the
+  driver's output directory and the only launch variable kept. Preflight
+  derives that environment from the renderer's own function. It runs each
+  consumer's pre-host checks under that environment and in the launch view.
+  Those checks are the reservation's ledger, frozen-plan and slot gates, the
+  capture writer's argument gates and ledger gate, the runner's policy, log,
+  waiver, analysis-manifest, order, config and duplicate-ID gates, and the
+  SHADE task's own offline resolver. A SHADE workload without a cache binding
+  refuses. A `CALIBRATION_LEDGER` in the caller's shell must name the
+  canonical ledger; the chain never consumes it.
 * The window records are **hash-chained**: each record names its predecessor
   (`previous_record`: `commit`, `path`, `sha256`) and the series ledger `series/state.json`
   names the latest one (`previous_record`, `series_sha256`). The builder walks the chain back to
