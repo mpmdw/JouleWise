@@ -347,6 +347,29 @@ class BytesAvailabilityTests(unittest.TestCase):
             fields = [f'`{row["path"]}`', row["phase"], row["primary"], *row["faults"].values(), row["flags"]]
             self.assertIn("| " + " | ".join(field.replace("|", r"\|") for field in fields) + " |", documented)
 
+    @unittest.skipUnless(shutil.which("zstd"), "compressed reference trace needs zstd")
+    def test_export_restores_verified_reference_inventory(self):
+        with tempfile.TemporaryDirectory(prefix="bytes-reference-restore-") as directory:
+            root = Path(directory)
+            fixture = AvailabilityFixture(root / "base", "mock")
+            members = agreement.load(fixture.archive / "derived/roster.json")["members"]
+            reference = next(member["run_id"] for member in members if member["role"] == "start")
+            bundle = fixture.archive / "sources/claim-runs" / reference
+            log = bundle / "logs/controller.log"
+            log.parent.mkdir(exist_ok=True)
+            body = b"synthetic reference controller note\n"
+            log.write_bytes(body)
+            sources = fixture.archive / "sources"
+            with (sources / "SHA256SUMS").open("a") as ledger:
+                ledger.write(f"{hashlib.sha256(body).hexdigest()}  {log.relative_to(sources)}\n")
+            compress_member(bundle / "events.jsonl", fixture.archive)
+
+            with trace_primary_inputs(fixture) as reads:
+                fixture.export_again(root / "reference-export", root / "reference-private")
+            self.assertTrue({"archive.desk/compression.jsonl", "bundle/logs/controller.log",
+                             "bundle/status.json"} <= reads)
+            self.assert_contract_covers_reads(reads, "export", restoring=True)
+
     def test_required_phase_pairs_follow_primary_marker_and_clock_rules(self):
         phases = ("idle_baseline", "tokenize", "decode")
         metadata = {"uncertainty_evidence": {"clock_anchor": {"clock_stamps": {"sampling_started": {

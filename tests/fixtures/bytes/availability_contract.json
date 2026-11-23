@@ -197,17 +197,17 @@
   {
     "id": "restore_bundle_inventory",
     "path": "bundle/logs/controller.log and every regular file in an activated verified restore",
-    "phase": "analysis",
-    "primary": "joulewise/desk_restore.py:109\u2013127,153\u2013195,208\u2013229",
+    "phase": "both",
+    "primary": "joulewise/b6/export_runs.py:324\u2013348,424\u2013439; joulewise/desk_restore.py:109\u2013127,153\u2013195,208\u2013229",
     "scope": "observed_branch",
     "restore_only": true,
     "faults": {
-      "absent": "Restore inventories files that are present. Metadata has a separate required gate. A missing optional log is not part of the copy.",
-      "zero": "Copied verbatim unless a journal size or digest disagrees.",
-      "half": "Copied verbatim unless a journal size or digest disagrees.",
-      "garbage": "Plain files are opaque to the copy; read failures and journal size or digest mismatches stop restoration."
+      "absent": "Reference export refuses if a listed input is missing. Active restore inventories the files present and requires metadata. A missing optional log is not part of the copy.",
+      "zero": "Reference export refuses an inventory digest mismatch. Restore copies plain files verbatim unless a journal size or digest disagrees.",
+      "half": "Same as zero.",
+      "garbage": "Same as zero. Plain files are opaque to the copy. Read failures stop restoration."
     },
-    "flags": "StorageStop / restore_refused on unreadable files, inconsistent custody, or invalid restore inventory. No flag is derived by parsing controller text.",
+    "flags": "StorageStop when reference export cannot authenticate its inventory. StorageStop / restore_refused on unreadable files, inconsistent custody, or invalid restore inventory. No flag is derived by parsing controller text.",
     "read_paths": [
       "bundle/*"
     ]
