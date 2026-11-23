@@ -18,5 +18,10 @@
     "id": "b5-fake-hazard-monitor",
     "command_regex": "\\s-c\\s(?:\\\\012| )?import json, os, pathlib, sys, time(?:\\\\012| )custody, life, code = ",
     "source": "tests/test_b5_driver.py: FAKE_MONITOR via fake_monitor_argv (python -c, a stand-in for the hazard monitor); its source has newlines, which macOS ps prints as the four characters \\012 and Linux procps ps prints as one space"
+  },
+  {
+    "id": "close-offload-fake-provider-child",
+    "command_regex": "(?:^|\\s)jw-close-offload-fixture-provider-child-v1(?:\\s|$)",
+    "source": "tests/test_close_offload.py: test_deadline_cleans_provider_grandchild_after_normal_worker_exit; explicit argv marker on the fake provider child"
   }
 ]

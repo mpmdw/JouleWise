@@ -66,6 +66,17 @@ class FixtureOrphanCensusTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(sentinel.census(row(command), self.signatures), [])
 
+    def test_close_offload_provider_fixture_is_specific(self) -> None:
+        command = ("/usr/bin/python3 -B -c import time; time.sleep(30) "
+                   "jw-close-offload-fixture-provider-child-v1")
+        self.assertEqual([item["signature"] for item in sentinel.census(row(command), self.signatures)],
+                         ["close-offload-fake-provider-child"])
+        self.assertEqual(sentinel.census(row(command, ppid=234), self.signatures), [])
+        for other in (command.replace("jw-close-offload-fixture-provider-child-v1", "production-provider"),
+                      command + "-production", "/usr/bin/brctl evict /private/cloud/archive"):
+            with self.subTest(command=other):
+                self.assertEqual(sentinel.census(row(other), self.signatures), [])
+
     def test_age_start_rss_and_json_schema(self) -> None:
         start = time.mktime(time.strptime(START, "%a %b %d %H:%M:%S %Y"))
         matches = sentinel.census(row(VLLM), self.signatures, now=start + 13 * 86400 + 5.5)

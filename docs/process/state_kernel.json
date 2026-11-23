@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "Activation 152c9255 record: acceptance ruled (Interactive+v3); claim-gate wiring, reducer and J/correct floor ruled; CG-1 accuracy-term amendment; PR-L/PR-R/PR-0/A292 in review",
-    "path": "docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md"
+    "label": "PR #804 and PR #807 Astra operations audit round 10",
+    "path": "docs/run_reports/2026-11-17-astra-offload-round10.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -2117,6 +2117,53 @@
       "rank": 300,
       "status": "queued",
       "status_note": "Registered 2026-09-25 after PR #410 final pass.",
+      "stop_card": null
+    },
+    "CLOSE-OFFLOAD-01": {
+      "acceptance": {
+        "evidence": [
+          "scripts/close_offload.py",
+          "tests/test_close_offload.py",
+          "docs/ops/CLOSE-OFFLOAD.md",
+          "tests/test_span_offload.py"
+        ],
+        "pointer": {
+          "label": "Close offload exit checklist",
+          "path": "docs/run_reports/2026-11-17-close-offload-retarget.md"
+        },
+        "summary": "The after-Check frontend uses the admitted #804 backend, preserves newest GAP receipts, records the Air-independent route, and requires verified close and fresh transfer CLEAR. The lead owns cold and native admission before standing-item issue."
+      },
+      "authority": {
+        "label": "2026-11-17 lead retarget ruling, RL-174 D, and RUN_STATE item 388",
+        "path": "docs/run_reports/2026-11-17-close-offload-retarget.md"
+      },
+      "dependencies": [
+        {
+          "evidence": {
+            "label": "test_air_absent_cloud_only_arms_with_materialised_archive_and_no_ssd_probe",
+            "path": "tests/test_close_offload.py"
+          },
+          "kind": "decision",
+          "note": "Lead ruling 2026-11-17 resolves the old contract conflict.",
+          "required": "Use the shared #804 backend and RL-174 D storage logic with item 388 Air independence.",
+          "scope": "start",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "CLOSE-OFFLOAD-RL174-INTEGRATION"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [
+        "provisional_until_live"
+      ],
+      "goal": "Build automatic closed-span verified cloud offload and Air SSD pull without contacting the measurement host.",
+      "id": "CLOSE-OFFLOAD-01",
+      "lane": "agent",
+      "priority": "p0_safety",
+      "rank": 500,
+      "status": "partial",
+      "status_note": "2026-11-17: Astra audit round 10 revises controller-owned close, reclaim, marker publication and raw retention. PR #807 remains draft. Software evidence in the run report and PR bodies. RL-174 D blind check, native GUI production-key round trip, close-interval floor recheck and standing-item issue are lead-owned.",
       "stop_card": null
     },
     "COLDGATE-CONVENE-DOCTRINE-FREE-01": {
@@ -11449,5 +11496,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-25"
+  "updated": "2026-11-17"
 }

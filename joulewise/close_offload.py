@@ -1,0 +1,381 @@
+"""After-Check selection and supervision for the shared span-offload backend."""
+
+from __future__ import annotations
+
+import argparse
+import contextlib
+from dataclasses import dataclass
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import signal
+import stat
+import subprocess
+import sys
+import time
+
+from joulewise import span_offload as so
+
+CAMPAIGN_ROOT = Path("/Users/edr/campaign-out")
+WORK_ROOT = Path("/Users/edr/code/jw-wt")
+FENCE = Path("/Users/edr/night-custody/magistrate/desk_fence.json")
+RUNNERS = (r"(^|/|[[:space:]])(run_align_r1_smoke|cadence_legs_runner|launch_cadence_span|"
+           r"align_r1_runtime|align_r0_checks|align_v4_session|align_r1_rehearsal)([.]py)?([[:space:]]|$)")
+STAMPED = re.compile(r"(.+)-[0-9]{8}T[0-9]{6}Z")
+AIR_FALLBACK = "AIR FALLBACK (item 388): verified iCloud copy; MBP archive retained for later SSD pull"
+
+
+@dataclass(frozen=True)
+class Span:
+    kind: str
+    path: Path
+    plan: str
+    receipt_mtime_ns: int | None  # None for an interrupted retirement
+
+
+def real_directory(path):
+    return stat.S_ISDIR(path.lstat().st_mode) if os.path.lexists(path) else False
+
+
+def span_plan(kind, path):
+    if kind == "partc":
+        return so.check_id(path.name, "Part C output")
+    match = STAMPED.fullmatch(path.name)
+    if not match:
+        raise so.refused("BAD_SPAN_NAME", "expected a timestamped campaign OUT")
+    so.check_id(path.name, "campaign output")
+    return so.check_id(match[1], "campaign plan")
+
+
+def scan_spans(args, deadline):
+    """Use receipt metadata only. Keep every newest-mtime tie within each kind."""
+    found = []
+    for kind, root in (("campaign", args.campaign_root), ("partc", args.work_root)):
+        if not real_directory(root) or Path(root.resolve()) != root:
+            raise so.refused("RECEIPT_ROOT", "a GAP receipt root is missing or linked")
+        for tree in sorted(root.iterdir()):
+            deadline.remaining()
+            if not real_directory(tree):
+                continue
+            parent = tree if kind == "campaign" else tree / ".desk"
+            if not real_directory(parent):
+                continue
+            for entry in sorted(parent.iterdir()):
+                deadline.remaining()
+                retiring = entry.name.startswith(so.RETIREMENT_PREFIX)
+                path = entry.with_name(entry.name.removeprefix(so.RETIREMENT_PREFIX))
+                if kind == "partc" and not path.name.startswith("r1-partc-"):
+                    continue
+                if retiring:
+                    if not real_directory(entry) or os.path.lexists(path):
+                        raise so.refused("RETIREMENT_CONFLICT", "invalid interrupted retirement")
+                    found.append(Span(kind, path, span_plan(kind, path), None))
+                elif real_directory(entry):
+                    receipt = path / "runner_receipt.json"
+                    if os.path.lexists(receipt):
+                        info = receipt.lstat()
+                        if not stat.S_ISREG(info.st_mode):
+                            raise so.refused("NONREGULAR_RECEIPT", "a runner receipt is not a regular file")
+                        found.append(Span(kind, path, span_plan(kind, path), info.st_mtime_ns))
+    if len({span.plan.casefold() for span in found}) != len(found):
+        raise so.refused("PLAN_COLLISION", "two outputs would share an offload plan")
+    return found
+
+
+class Guard:
+    def __init__(self, args):
+        self.fence = args.fence
+        self.deadline = so.Deadline(args.deadline_epoch)
+        purpose, pid, lease = (getattr(args, f"controller_fence_{field}", None)
+                               for field in ("purpose", "pid", "deadline_epoch"))
+        self.controller_fence = None
+        if any(value is not None for value in (purpose, pid, lease)):
+            if (not re.fullmatch(r"cadence-controller:[0-9a-f]{12}", purpose or "")
+                    or pid is None or pid <= 1 or not so.number(lease)):
+                raise so.refused("CONTROLLER_FENCE_ARGUMENTS", "supply the controller purpose, PID and lease deadline")
+            self.controller_fence = {"purpose": purpose, "pid": pid, "deadline": lease}
+        self.pgrep = shutil.which("pgrep")
+        if not self.pgrep or any(so._overlaps(root, self.pgrep) for root in protected_roots(args)):
+            raise so.refused("RUNNER_CENSUS_FAILED", "runner census executable is missing or inside a receipt root")
+
+    def check_fence(self):
+        if self.controller_fence is None:
+            if not os.path.lexists(self.fence):
+                return
+            raise so.refused("DESK_FENCE_PRESENT", "close requires the desk fence to be down")
+        try:
+            with so.open_regular(self.fence, "the standing desk fence", single_link=True) as handle:
+                raw = handle.read(4097)
+            record = json.loads(raw) if len(raw) <= 4096 else None
+        except (so.OffloadError, OSError, ValueError, RecursionError):
+            record = None
+        if (not isinstance(record, dict) or type(record.get("pid")) is not int
+                or not so.number(record.get("deadline")) or record != self.controller_fence):
+            raise so.refused("CONTROLLER_FENCE_MISMATCH", "the standing fence differs from the supplied owner and lease")
+        if record["deadline"] <= time.time() or record["deadline"] < self.deadline.epoch:
+            raise so.refused("CONTROLLER_FENCE_LEASE", "the standing fence must cover the whole close deadline")
+
+    def quiet(self):
+        self.check_fence()
+        try:
+            probe = subprocess.run([self.pgrep, "-f", RUNNERS], stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL, timeout=self.deadline.remaining())
+        except subprocess.TimeoutExpired:
+            raise so.unverified("DEADLINE", "runner census timed out") from None
+        if probe.returncode == 0:
+            raise so.refused("RUNNER_PRESENT", "a measurement runner is present")
+        if probe.returncode != 1:
+            raise so.refused("RUNNER_CENSUS_FAILED", "runner absence could not be verified")
+
+    @contextlib.contextmanager
+    def lock(self):
+        lock = self.fence.parent / ".desk-fence.lock"
+        fd = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        try:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise so.refused("DESK_LOCK_BUSY", "the desk fence lock is held") from None
+            self.quiet()
+            yield
+        finally:
+            os.close(fd)
+
+
+def protected_roots(args):
+    return args.campaign_root, args.work_root, args.span_dir, so.retirement_path(args.span_dir)
+
+
+def outside_receipt_roots(args, paths):
+    for root in protected_roots(args):
+        so.check_output_paths(root, paths)
+
+
+def load_config(args):
+    config = so.load_mbp_config(args.config)
+    backend = so.make_backend(config.get("backend", {}))
+    if not isinstance(backend, so.ICloudBackend):
+        raise so.refused("ICLOUD_REQUIRED", "close requires observed iCloud readback")
+    controls = {"stage root": config["stage_root"], "marker directory": config["marker_dir"],
+                "public key": config["recipient_public_key"], "cloud root": backend.root}
+    for name, executable in (("OpenSSL", config.get("openssl", "openssl")), ("brctl", backend.brctl)):
+        resolved = shutil.which(executable)
+        if resolved and any(so._overlaps(root, resolved) for root in protected_roots(args)):
+            raise so.refused("PATH_OVERLAPS_SPAN", f"{name} is inside a receipt root")
+    if args.command == "reclaim":
+        controls["SSD receipt"] = args.ssd_receipt
+    outside_receipt_roots(args, controls)
+    return config
+
+
+def close_one(args, config, span, *, retain_original=False, ssd_receipt=None,
+              require_files=("runner_receipt.json",)):
+    record = so.close_offload(config, span.plan, span.path, retain_original=retain_original,
+                              ssd_receipt=ssd_receipt, deadline_epoch=args.deadline_epoch,
+                              partc_work_root=args.work_root if span.kind == "partc" else None,
+                              require_files=require_files)
+    return {"plan": span.plan, "original_deleted": record["original_deleted"],
+            "archive_evicted": record["archive_evicted"], "storage_mail_sent": record["storage_mail_sent"],
+            "manifest_sha256": record["manifest_sha256"], "ciphertext_sha256": record["ciphertext"]["sha256"]}
+
+
+def require_staged_source(config, span):
+    stage = Path(config["stage_root"]) / span.plan
+    with so._directory_no_links(stage) as fd:
+        source = json.loads(so._read_in(fd, so.SOURCE_RECORD))
+    if source != {"source": str(span.path)}:
+        raise so.refused("STAGE_CONFLICT", "the stage belongs to another OUT")
+
+
+def separate_out(args):
+    """A Check in a separate custody root supplies its exact OUT and #804 plan."""
+    if args.plan is None or any(so._overlaps(root, args.span_dir) for root in (args.campaign_root, args.work_root)):
+        raise so.refused("CHECK_OUT_REQUIRED", "use a managed Check OUT or name the plan for a separate OUT")
+    plan = so.check_id(args.plan, "plan")
+    so.check_close_source(args.span_dir, None)
+    if args.span_dir.resolve() != args.span_dir or not so.span_name_ok(args.span_dir.name, plan):
+        raise so.refused("PLAN_SPAN_MISMATCH", "the separate OUT path is linked or differs from the plan")
+    return Span("separate", args.span_dir, plan, None)
+
+
+def checked_close(args, config, guard, spans):
+    retained = so.raw_retention_paths(config)
+    checked = next((span for span in spans if span.path == args.span_dir and span.receipt_mtime_ns is not None), None)
+    if checked is None:
+        checked = separate_out(args)
+        if any(span.plan.casefold() == checked.plan.casefold() for span in spans):
+            raise so.refused("PLAN_COLLISION", "the separate OUT conflicts with a managed plan")
+        if not os.path.lexists(checked.path):
+            if args.keep_raw or checked.path in retained:
+                raise so.refused("CHECK_OUT_REQUIRED", "the designated raw OUT is absent")
+            require_staged_source(config, checked)
+    elif args.require_file or (args.plan is not None and args.plan != checked.plan):
+        raise so.refused("CHECK_OUT_REQUIRED", "a managed OUT uses its derived plan and runner receipt")
+    newest = {}
+    for span in spans:
+        if span.receipt_mtime_ns is not None:
+            newest[span.kind] = max(newest.get(span.kind, span.receipt_mtime_ns), span.receipt_mtime_ns)
+    eligible = [span for span in spans if span != checked and span.path not in retained and
+                (span.receipt_mtime_ns is None or span.receipt_mtime_ns < newest[span.kind])]
+
+    # Resume interrupted removals and rotate the most recent eligible output of each kind.
+    # Catch-up can also retire older receipt-bearing outputs in the same close interval.
+    selected = set()
+    guard.quiet()
+    results = [close_one(args, config, checked, retain_original=checked.kind != "separate" or args.keep_raw,
+                         require_files=tuple(args.require_file or ("runner_receipt.json",)))]
+    for span in sorted(eligible, key=lambda span: (span.receipt_mtime_ns is not None, -(span.receipt_mtime_ns or 0),
+                                                    str(span.path))):
+        if span.receipt_mtime_ns is not None:
+            if span.kind in selected and not args.catch_up and not (
+                Path(config["stage_root"]) / span.plan / ".retirement.json"
+            ).exists():
+                continue
+            selected.add(span.kind)
+        guard.quiet()
+        results.append(close_one(args, config, span))
+    return {"spans": results, "air_fallback": AIR_FALLBACK}
+
+
+def reclaim(args, config, guard):
+    path = args.span_dir
+    if path.is_relative_to(args.campaign_root) and len(path.relative_to(args.campaign_root).parts) == 2:
+        span = Span("campaign", path, span_plan("campaign", path), None)
+    elif path.is_relative_to(args.work_root):
+        so.check_close_source(path, args.work_root)
+        span = Span("partc", path, span_plan("partc", path), None)
+    else:
+        span = separate_out(args)
+    if (path in so.raw_retention_paths(config) or path.resolve() != path or os.path.lexists(path)
+            or os.path.lexists(so.retirement_path(path))):
+        raise so.refused("RAW_RETAINED", "reclaim needs an already retired OUT")
+    if args.plan is not None and args.plan != span.plan:
+        raise so.refused("PLAN_SPAN_MISMATCH", "the requested plan differs from the retired OUT")
+    require_staged_source(config, span)
+    guard.quiet()
+    return {"spans": [close_one(args, config, span, ssd_receipt=args.ssd_receipt)]}
+
+
+def run(args):
+    outside_receipt_roots(args, {"config": args.config, "desk fence": args.fence})
+    guard = Guard(args)
+    with guard.lock():
+        config = load_config(args)
+        if guard.controller_fence is not None:
+            forbidden = config.get("forbid_paths", [])
+            if not isinstance(forbidden, list):
+                raise so.refused("CONFIG", "forbid_paths must be a list")
+            # The guard verified this exact fence and holds its lock through the entire close.
+            config["forbid_paths"] = [path for path in forbidden if path != str(args.fence)]
+        if args.command == "after-check":
+            result = checked_close(args, config, guard, scan_spans(args, guard.deadline))
+        else:
+            result = reclaim(args, config, guard)
+        guard.quiet()
+        pending = so.pending_transfers(config)
+        if not pending["clear"]:
+            raise so.unverified("ICLOUD_PENDING", "pending or unknown CloudDocs state")
+        guard.deadline.remaining()
+    return dict(result, status="CLOSE_OK", pending=pending, holds_next_arm=False)
+
+
+def parser():
+    top = argparse.ArgumentParser(description=__doc__)
+    commands = top.add_subparsers(dest="command", required=True)
+    after = commands.add_parser("after-check", help="verify Check OUT, preserve GAP and rotate older outputs")
+    after.add_argument("--catch-up", action="store_true", help="also process all older eligible outputs")
+    after.add_argument("--require-file", action="append", help="for a separate OUT only, require this Check file basename")
+    after.add_argument("--keep-raw", action="store_true", help="preserve a separate OUT designated for a pending look")
+    after.add_argument("--controller-fence-purpose", help="exact standing fence purpose, including the controller token")
+    after.add_argument("--controller-fence-pid", type=int, help="exact standing fence owner PID")
+    after.add_argument("--controller-fence-deadline-epoch", type=float, help="exact standing fence lease deadline")
+    cleanup = commands.add_parser("reclaim", help="later SSD-backed eviction of a retired OUT")
+    cleanup.add_argument("--ssd-receipt", type=Path, required=True)
+    for command in (after, cleanup):
+        command.add_argument("--config", type=Path, required=True)
+        command.add_argument("--span-dir", type=Path, required=True, help="absolute OUT from the Check")
+        command.add_argument("--plan", help="required for an OUT in a separate custody root")
+        command.add_argument("--deadline-epoch", type=float, required=True)
+        command.add_argument("--campaign-root", type=Path, default=CAMPAIGN_ROOT)
+        command.add_argument("--work-root", type=Path, default=WORK_ROOT)
+        command.add_argument("--fence", type=Path, default=FENCE)
+        command.add_argument("--_worker", action="store_true", help=argparse.SUPPRESS)
+    return top
+
+
+def report(status, code, **details):
+    print(json.dumps({"status": status, "holds_next_arm": code != 0, **details}, sort_keys=True), flush=True)
+    return code
+
+
+def worker(args):
+    os.umask(0o077)
+    try:
+        result = run(args)
+    except so.OffloadError as error:
+        return report(error.code, so.EXIT[error.exit_kind])
+    except Exception as error:
+        # Report a fixed status and exception type without exposing payloads or provider output.
+        return report("CLOSE_INTERNAL", so.EXIT["internal"], error=type(error).__name__)
+    print(json.dumps(result, sort_keys=True), flush=True)
+    return 0
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    top = parser()
+    args = top.parse_args(argv)
+    left = args.deadline_epoch - time.time()
+    if not so.number(left) or left > so.MAX_DEADLINE_AHEAD_S:
+        top.error("deadline must be a finite epoch at most 24 hours ahead")
+    if not all(path.is_absolute() and path.name and ".." not in path.parts
+               for path in (args.span_dir, args.campaign_root, args.work_root, args.fence)):
+        top.error("OUT, receipt roots and fence must be absolute paths without parent traversal")
+    if left <= 0:
+        return report("DEADLINE", so.EXIT["unverified"])
+    if args._worker:
+        return worker(args)
+    script = Path(__file__).resolve().parents[1] / "scripts/close_offload.py"
+    end = time.monotonic() + left
+    child = None
+    interrupted = False
+
+    def interrupt(_signum, _frame):
+        nonlocal interrupted
+        interrupted = True
+        if child is not None:
+            raise KeyboardInterrupt
+
+    previous = {sig: signal.signal(sig, interrupt) for sig in (signal.SIGINT, signal.SIGHUP, signal.SIGTERM)}
+    try:
+        child = subprocess.Popen([sys.executable, "-B", str(script), *argv, "--_worker"], start_new_session=True,
+                                 stdout=subprocess.PIPE, text=True)
+        if interrupted:
+            raise KeyboardInterrupt
+        output, _ = child.communicate(timeout=max(0, end - time.monotonic()))
+    except subprocess.TimeoutExpired:
+        return report("DEADLINE", so.EXIT["unverified"])
+    except KeyboardInterrupt:
+        return report("TERMINATED", so.EXIT["unverified"])
+    except OSError:
+        return report("CLOSE_SUPERVISOR", so.EXIT["internal"])
+    finally:
+        for sig in previous:
+            signal.signal(sig, signal.SIG_IGN)
+        if child is not None:
+            # Clear the whole group even when a provider child outlived a normally exiting worker.
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(child.pid, signal.SIGKILL)
+            child.wait()
+            child.stdout.close()
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+    if time.monotonic() >= end or time.time() >= args.deadline_epoch:
+        return report("DEADLINE", so.EXIT["unverified"])
+    if child.returncode < 0 or not output:
+        return report("CLOSE_WORKER_LOST", so.EXIT["unverified"])
+    print(output, end="", flush=True)
+    return child.returncode
