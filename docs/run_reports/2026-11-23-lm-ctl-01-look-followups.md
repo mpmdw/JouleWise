@@ -101,3 +101,52 @@ the return-to-spec decision before further audit or readiness. A change
 from the ruled per-leg outcome to a fresh whole-look refusal for a
 well-formed placement fault requires a new ruling. All checks here used
 synthetic inputs. The draft gate ledger carries the final-head CI runs.
+
+## Revision 5 return to spec
+
+The lead closed the non-decaying review cycle on draft PR #957.
+[Revision 5](../process/cadence/looks/lm-ctl-01.print-spec.v5.md)
+was committed and recorded as `d0bd98bb53de68dc8fd03ba5bffd318d61b61aa5`
+before the replay and acceptance-test changes. The production
+implementation under test is `20ae1de1f9a8cccbff94f56c27008d58c764e580`.
+
+The historical replay used exact Git archives of the production
+source at each listed head and the same synthetic registrar and test
+fixture from `20ae1de1f`. A healthy synthetic roster served as the
+preflight commitment for inputs that refused at stage 1. The table
+reports actual statuses for the two independent blind gates. Each
+corrected structural case also ran directly through stage 2, and the
+test asserted fresh status, no reservation or marker, no public files
+and zero claim or value-read events.
+
+| Verified HIGH | Audited source result | Result on `20ae1de1f` |
+| --- | --- | --- |
+| Unknown config observation and typed ambient observation | `d7feefb5a`. Each independent mutation triggered the whole-document decode guard at stage 1 and preflight. | Both guarded gates exited 0 for each mutation. |
+| Malformed G0 interval missing its required end | `d7feefb5a`. Stage 1 and preflight unexpectedly exited 0. | Stage 1, preflight and stage 2 exited 2 with `REFUSE PREFLIGHT INPUT_CHANNELS`. |
+| Missing finished-step `ended_ns` and unrepresentable `requested_s` | `71b1c2e19`. Both independent mutations passed stage 1 and preflight. | Each mutation exited 2 with `REFUSE PREFLIGHT INPUT_CHANNELS` at all three entry points. |
+| Diagnostic episode flag | `71b1c2e19`. The scalar conversion guard failed at both blind gates. | Both guarded gates exited 0. |
+
+The acceptance harness reuses the frozen profiles and the earlier
+regressions and checks additional reader predicates with rebound
+synthetic inputs. The meter mutations keep unaffected polling records
+so an insufficient clock fit cannot stand in for a wire-shape
+failure. The shape tests check the projection refusal's cause. A
+positive native interrupted-tail case passes both blind gates. The
+hosted publication case combines the opacity sentinels with a
+well-formed stamp mismatch and checks the authenticated mapping,
+the private `envelope_stamps` row, eleven other printed legs, and
+the exact public bytes' shape and sentinel absence.
+
+The frozen suites and production implementation match their
+respective saved trees byte for byte. The gate ledger on PR #957
+identifies both the spec freeze and the final-head CI. The lead's
+Tier 2 routing request is for one independent executing reviewer from
+each model family. It includes the historical replay table, the
+both-gate acceptance map, and the installed byte pass and bound-host
+blind preflight as the subsequent lead gates before reservation.
+
+All four local frozen checksum manifests verified. The installed
+v3.1 suite and hand vectors passed 846/846, and 27 adjacent controls,
+reservation and cumulative-gate tests passed. The local runner
+denied creation of the synthetic reservation directory in the
+publication test, so hosted Linux owns the publication witness.

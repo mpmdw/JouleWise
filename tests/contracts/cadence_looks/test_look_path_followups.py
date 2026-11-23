@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
@@ -21,6 +22,8 @@ from tests.contracts.cadence_looks import look_path_driver as registrar
 
 FROZEN = runpy.run_path(str(Path(__file__).with_name("look_path") / "suite/run_suite.py"))
 CHANNELS = b"REFUSE PREFLIGHT INPUT_CHANNELS\n"
+BINDING = b"REFUSE PREFLIGHT INPUT_BINDING\n"
+FREEZE = b"REFUSE PREFLIGHT FREEZE\n"
 OFFLINE_BOOTSTRAP = """
 import runpy
 import sys
@@ -36,6 +39,8 @@ def mutate(world, role, fault):
     span, runtime, bundle = FROZEN["location"](world, "L002")
     path = {
         "stream": FROZEN["meter"](span),
+        "stream-order": FROZEN["meter"](span),
+        "leg-record": runtime.parent / "leg_record.json",
         "episode": bundle / "outputs/align_episode.json",
         "config": bundle / "config.json",
         "metadata": bundle / "metadata.json",
@@ -46,8 +51,12 @@ def mutate(world, role, fault):
         lines = path.read_bytes().splitlines()
         header, poll, trailer = map(json.loads, (lines[0], lines[1], lines[-1]))
         fault(header, poll)
-        path.write_bytes(b"".join(registrar.manifest.canonical(row) + b"\n"
-                                  for row in (header, poll, trailer)))
+        path.write_bytes(b"\n".join([
+            registrar.manifest.canonical(header), registrar.manifest.canonical(poll),
+            *lines[2:-1], registrar.manifest.canonical(trailer),
+        ]) + b"\n")
+    elif role == "stream-order":
+        path.write_bytes(b"\n".join(fault(path.read_bytes().splitlines())) + b"\n")
     elif role == "rails":
         path.write_bytes(fault(path.read_bytes()))
     elif role == "script":
@@ -91,6 +100,10 @@ def blind_values(world):
     FROZEN["reanchor"](world, span)
 
 
+def add_diagnostic_flag(document):
+    document["flags"].append("task.synthetic_telemetry.power_w=91827.375")
+
+
 def single_support(raw):
     header, *lines = raw.splitlines()
     latest = [line.split(b",") for line in lines[-3:]]
@@ -98,6 +111,52 @@ def single_support(raw):
     for row in latest:
         row[4] = start
     return b"\n".join([header, *(b",".join(row) for row in latest)]) + b"\n"
+
+
+def rail_field(raw, index, value):
+    header, first, *rest = raw.splitlines()
+    fields = first.split(b",")
+    fields[index] = value(fields) if callable(value) else value
+    return b"\n".join([header, b",".join(fields), *rest]) + b"\n"
+
+
+def conflicting_boot_ids(world):
+    mutate(world, "episode", lambda d: d["hardware"].update(boot_id="synthetic-episode"))
+    mutate(world, "metadata", lambda d: d.update(boot_id="synthetic-bundle"))
+
+
+def bad_tool_interval(document):
+    start = document["start_ns"]
+    document["turns"][0]["tool_calls"] = [{
+        "name": "synthetic", "start_ns": start + 1, "end_ns": start,
+        "args_bytes": 0, "result_bytes": 0,
+    }]
+
+
+def interrupted_script(world):
+    def interrupt(work):
+        turn = next(row for row in work["steps"] if row["kind"] == "turn")
+        work["steps"] = [work["steps"][0], {
+            "kind": "turn", "complete": False, "actual_tokens": None,
+            "requested_tokens": turn["requested_tokens"], "started_ns": turn["started_ns"],
+        }]
+        work["complete"] = False
+
+    mutate(world, "script", interrupt)
+    span, runtime, _ = FROZEN["location"](world, "L002")
+    result_path = runtime / "runtime_result.json"
+    record_path = runtime.parent / "leg_record.json"
+    receipt_path = span / "runner_receipt.json"
+    result, record, receipt = map(registrar.read, (result_path, record_path, receipt_path))
+    receipt_leg = next(leg for leg in receipt["legs"] if leg["leg_id"] == "L002")
+    for row in (result, record["result"]):
+        row.update(script_complete=False, leg_status="incomplete")
+    for row in (record, receipt_leg):
+        row["attempts"][-1]["leg_status"] = "incomplete"
+    receipt_leg["summary"]["admitted"] = False
+    for path, document in zip((result_path, record_path, receipt_path), (result, record, receipt), strict=True):
+        registrar.put(path, document)
+    FROZEN["reanchor"](world, span)
 
 
 class LookPathFollowupTests(TestCase):
@@ -149,11 +208,27 @@ class LookPathFollowupTests(TestCase):
                                 capture_output=True, check=False)
         return result.returncode, result.stdout, result.stderr
 
-    def test_structural_faults_refuse_stage1_and_preflight_fresh(self):
-        good_world, good_bench = self.prepare("good")
+    def stage_scaffold(self, name):
+        good_world, good_bench = self.prepare(name)
         self.assertEqual(self.invoke(good_world, good_bench, "stage1"), (0, b"", b""))
         self.assertEqual(self.invoke(good_world, good_bench, "commit-stage1"), (0, b"", b""))
         self.assertEqual(self.invoke(good_world, good_bench, "preflight"), (0, b"", b""))
+        return self.private(good_bench)
+
+    def assert_refuses_at_blind_gates(self, world, bench, scaffold, *, token=CHANNELS,
+                                     driver_fault="require_structural_cause"):
+        self.assertEqual(self.invoke(world, bench, "stage1", driver_fault), (2, b"", token))
+        # The synthetic commitment lets preflight reach the same structural
+        # predicate even though the malformed world cannot produce a roster.
+        for basename in ("stage1.json", "inputs.v1.json"):
+            shutil.copy2(scaffold / basename, self.private(bench) / basename)
+        self.assertEqual(self.invoke(world, bench, "commit-stage1"), (0, b"", b""))
+        for operation in ("preflight", "stage2"):
+            self.assertEqual(self.invoke(world, bench, operation, driver_fault), (2, b"", token))
+        self.assert_fresh(world, bench)
+
+    def test_structural_faults_refuse_stage1_and_preflight_fresh(self):
+        scaffold = self.stage_scaffold("good")
 
         faults = (
             ("rate-missing", "stream", lambda h, p: h.pop("rate_idx")),
@@ -207,16 +282,104 @@ class LookPathFollowupTests(TestCase):
         for name, role, fault in faults:
             with self.subTest(fault=name):
                 world, bench = self.prepare(name, role=role, fault=fault)
-                self.assertEqual(self.invoke(world, bench, "stage1"), (2, b"", CHANNELS))
-                # A synthetic registrar supplies a committed prior roster. The
-                # invalid inputs are already pinned in this world's Check so
-                # preflight must reach structure validation, not a hash error.
-                for basename in ("stage1.json", "inputs.v1.json"):
-                    shutil.copy2(self.private(good_bench) / basename, self.private(bench) / basename)
-                self.assertEqual(self.invoke(world, bench, "commit-stage1"), (0, b"", b""))
-                for operation in ("preflight", "stage2"):
-                    self.assertEqual(self.invoke(world, bench, operation), (2, b"", CHANNELS))
-                self.assert_fresh(world, bench)
+                self.assert_refuses_at_blind_gates(world, bench, scaffold)
+
+    def test_stream_wire_prerequisites_at_both_blind_gates(self):
+        scaffold = self.stage_scaffold("valid-meter")
+        faults = (
+            ("meter-schema", "stream", lambda h, p: h.update(schema="synthetic.unknown")),
+            ("late-header", "stream-order", lambda rows: [rows[1], rows[0], *rows[2:]]),
+            ("duplicate-header", "stream-order", lambda rows: [rows[0], *rows]),
+            ("duplicate-trailer", "stream-order", lambda rows: [*rows, rows[-1]]),
+            ("poll-after-trailer", "stream-order", lambda rows: [*rows, rows[1]]),
+            ("sampled-tx-missing", "stream", lambda h, p: p.pop("tx")),
+            ("sampled-count-mismatch", "stream", lambda h, p: p.update(n=p["n"] + 1)),
+            ("count-without-payload", "stream", lambda h, p: p.pop("p")),
+            ("payload-object", "stream", lambda h, p: p.update(p={})),
+            ("nonhex-payload", "stream", lambda h, p: p.update(p="xy")),
+            ("partial-packet", "stream", lambda h, p: p.update(p="00")),
+        )
+        for name, role, fault in faults:
+            with self.subTest(fault=name):
+                world, bench = self.prepare(name, role=role, fault=fault)
+                self.assert_refuses_at_blind_gates(world, bench, scaffold)
+
+    def test_bundle_and_work_prerequisites_at_both_blind_gates(self):
+        scaffold = self.stage_scaffold("valid-bundle")
+        faults = (
+            ("config-cadence", "config", lambda d: d["sampling"].update(power_hz=0)),
+            ("rail-manifest-duplicate", "metadata", lambda d: d["device"]["rail_manifest"].append("cpu_power")),
+            ("rail-manifest-missing-member", "metadata", lambda d: d["device"]["rail_manifest"].remove("cpu_power")),
+            ("episode-domain", "episode", lambda d: d.update(clock_domain="synthetic:other")),
+            ("episode-zero-extent", "episode", lambda d: d.update(end_ns=d["start_ns"], turns=[])),
+            ("stamp-missing-member", "episode", lambda d: d["hardware"]["paired_clock_stamps_ns"][0].pop(
+                "wall_resolution_ns")),
+            ("stamp-reversed-pair", "episode", lambda d: d["hardware"]["paired_clock_stamps_ns"][0].update(
+                monotonic_before_ns=d["hardware"]["paired_clock_stamps_ns"][0]["monotonic_after_ns"] + 1)),
+            ("tool-interval", "episode", bad_tool_interval),
+            ("router-dimension", "episode", lambda d: d.update(router_log={
+                "model": "synthetic", "num_experts": 2, "top_k": 1, "layers": [0],
+                "phase": ["decode"], "experts": [[]],
+            })),
+            ("rail-row-width", "rails", lambda raw: raw + b"123\n"),
+            ("rail-source", "rails", lambda raw: rail_field(raw, 2, b"synthetic")),
+            ("rail-nonfinite-stamp", "rails", lambda raw: rail_field(raw, 0, b"nan")),
+            ("rail-width", "rails", lambda raw: rail_field(raw, 4, lambda fields: fields[5])),
+            ("rail-end-stamp", "rails", lambda raw: rail_field(raw, 0, lambda fields: fields[4])),
+            ("rail-unequal-grid", "rails", lambda raw: b"\n".join(raw.splitlines()[:1] + raw.splitlines()[2:])),
+            ("rail-duplicate-stamp", "rails", lambda raw: raw + raw.splitlines()[1] + b"\n"),
+            ("rail-coverage", "rails", lambda raw: b"\n".join(raw.splitlines()[:1] + raw.splitlines()[301:])),
+            ("thermal-only-end-missing", "episode", lambda d: d["hardware"]["thermal"]["intervals"][0].pop("end_ns")),
+            ("script-order", "script", lambda d: d["steps"].reverse()),
+            ("script-completion-type", "script", lambda d: d["steps"][0].update(complete=1)),
+            ("script-first-token-bounds", "script", lambda d: d["steps"][0].update(
+                first_token_ns=d["steps"][0]["ended_ns"] + 1)),
+        )
+        for name, role, fault in faults:
+            with self.subTest(fault=name):
+                world, bench = self.prepare(name, role=role, fault=fault)
+                self.assert_refuses_at_blind_gates(world, bench, scaffold)
+        world, bench = self.prepare("boot-id-conflict", configure=conflicting_boot_ids)
+        self.assert_refuses_at_blind_gates(world, bench, scaffold)
+
+    def test_authentication_and_candidate_refusals_at_both_blind_gates(self):
+        scaffold = self.stage_scaffold("valid-auth")
+        wired_faults = (
+            ("run-id-mismatch", "metadata", lambda d: d.update(run_id="synthetic-other"), FREEZE),
+            ("config-digest-mismatch", "metadata", lambda d: d.update(config_sha256="0" * 64), FREEZE),
+            ("leg-attempt-mismatch", "leg-record", lambda d: d["attempts"][-1].update(attempt=2), BINDING),
+            ("work-leg-mismatch", "script", lambda d: d.update(leg_id="L003"), BINDING),
+        )
+        for name, role, fault, token in wired_faults:
+            with self.subTest(fault=name):
+                world, bench = self.prepare(name, role=role, fault=fault)
+                self.assert_refuses_at_blind_gates(world, bench, scaffold, token=token,
+                                                  driver_fault="worker_entrypoint")
+        for name, token in (("missing-pinned-role", CHANNELS), ("changed-pinned-payload", BINDING)):
+            with self.subTest(fault=name):
+                world, bench = self.prepare(name)
+                _, _, bundle = FROZEN["location"](world, "L002")
+                path = bundle / "power_trace.csv"
+                if token == CHANNELS:
+                    path.unlink()
+                else:
+                    path.write_bytes(path.read_bytes() + b"\n")
+                self.assert_refuses_at_blind_gates(world, bench, scaffold, token=token, driver_fault="none")
+
+        fixture_dir = Path(__file__).with_name("look_path")
+        with patch.object(sys, "path", sys.path.copy()):
+            v2 = runpy.run_path(str(fixture_dir / "suite-v2/fixtures.py"))
+            with patch.dict(sys.modules, fixtures=SimpleNamespace(**v2)):
+                v3 = runpy.run_path(str(fixture_dir / "suite-v3/bundle_cases.py"))
+        profiles = v3["catalog"]()["profiles"]
+        for name, configure in (
+            ("boot-mismatch", lambda world: v2["make"](world, "boot_mismatch")),
+            ("ambiguous-candidates", lambda world: v2["make"](world, "ambiguous_overlap")),
+            ("absent-samples", lambda world: v3["materialize"](world, "absent_span", profiles["absent_span"])),
+        ):
+            with self.subTest(fault=name):
+                world, bench = self.prepare(name, configure=configure)
+                self.assert_refuses_at_blind_gates(world, bench, scaffold, driver_fault="none")
 
     def test_stage1_and_preflight_skip_config_and_receipt_observations(self):
         world, bench = self.prepare("blind-values", configure=blind_values)
@@ -226,14 +389,50 @@ class LookPathFollowupTests(TestCase):
         self.assert_fresh(world, bench)
 
     def test_stage1_and_preflight_keep_diagnostic_flags_opaque(self):
-        def add_flag(document):
-            document["flags"].append("task.synthetic_telemetry.power_w=91827.375")
-
-        world, bench = self.prepare("blind-flags", role="episode", fault=add_flag)
+        world, bench = self.prepare("blind-flags", role="episode", fault=add_diagnostic_flag)
         self.assertEqual(self.invoke(world, bench, "stage1", "guard_blind_values"), (0, b"", b""))
         self.assertEqual(self.invoke(world, bench, "commit-stage1"), (0, b"", b""))
         self.assertEqual(self.invoke(world, bench, "preflight", "guard_blind_values"), (0, b"", b""))
         self.assert_fresh(world, bench)
+
+    def test_blind_stamp_disposition_and_opacity_survive_native_publication(self):
+        def configure(world):
+            blind_values(world)
+            mutate(world, "episode", add_diagnostic_flag)
+
+            def mismatch(work):
+                turn = next(step for step in work["steps"] if step["kind"] == "turn")
+                turn["first_token_ns"] += 1
+
+            mutate(world, "script", mismatch)
+
+        world, bench = self.prepare("blind-publication", configure=configure)
+        self.assertEqual(self.invoke(world, bench, "stage1", "guard_blind_values"), (0, b"", b""))
+        self.assertEqual(self.invoke(world, bench, "commit-stage1"), (0, b"", b""))
+        self.assertEqual(self.invoke(world, bench, "preflight", "guard_blind_values"), (0, b"", b""))
+        self.assert_fresh(world, bench)
+        result = self.invoke(world, bench, "stage2")
+        if sys.platform == "darwin" and result == (2, b"", b"REFUSE PREFLIGHT CLAIM_SETUP\n"):
+            self.assert_fresh(world, bench)
+            self.skipTest("local runner cannot create the synthetic reservation directory")
+        self.assertEqual(result, (0, b"", b""))
+
+        private = self.private(bench)
+        public_path = bench / "public" / registrar.LOOK / layout.PUBLIC_NAME
+        self.assertEqual(registrar.read(public_path), registrar.read(bench / "registered-public.json"))
+        for sentinel in (b"91827.375", b"19.8375"):
+            self.assertNotIn(sentinel, public_path.read_bytes())
+        report = registrar.read(private / layout.PRIVATE_NAME / "controls.json")
+        rows = {row["leg_id"]: row for row in report["legs"]}
+        self.assertEqual((rows["L002"]["disposition"], rows["L002"]["reason"]),
+                         ("not_evaluable", "envelope_stamps"))
+        self.assertEqual(sum("channels" in row for row in rows.values()), 11)
+        certificate = registrar.read(private / "certificates/L002.json")
+        joined = registrar.read(bench / "joined-observed.json")["L002"]
+        self.assertEqual(joined, {
+            "method": certificate["method"], "offset_ns": certificate["offset_ns"],
+            "uncertainty_ns": certificate["H_ns"], "dc_times_sha256": certificate["dc_times_sha256"],
+        })
 
     def test_blind_view_preserves_ruled_per_leg_dispositions(self):
         _, runtime, bundle = FROZEN["location"](self.pristine, "L002")
@@ -261,6 +460,12 @@ class LookPathFollowupTests(TestCase):
         work["steps"][0]["actual_tokens"] = 1
         with self.assertRaisesRegex(analysis.ViewError, "^script_record_shape$"):
             analysis.script_steps(work, "plain", allow_interrupted=True)
+
+        world, bench = self.prepare("interrupted", configure=interrupted_script)
+        self.assertEqual(self.invoke(world, bench, "stage1"), (0, b"", b""))
+        self.assertEqual(self.invoke(world, bench, "commit-stage1"), (0, b"", b""))
+        self.assertEqual(self.invoke(world, bench, "preflight"), (0, b"", b""))
+        self.assert_fresh(world, bench)
 
     def test_blind_projection_skips_value_tokens(self):
         forbidden = "987654321"

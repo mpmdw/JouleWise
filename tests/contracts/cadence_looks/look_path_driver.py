@@ -279,6 +279,7 @@ def run(operation, world, bench, fault):
 
         forbidden = ("91827.375", "19.8375")
         original_loads, original_convert = json.loads, fields._convert
+        original_project = fields.project_json
 
         def guarded_loads(raw, *args, **kwargs):
             text = raw.decode("utf-8") if isinstance(raw, (bytes, bytearray)) else raw
@@ -289,7 +290,13 @@ def run(operation, world, bench, fault):
             assert not any(value in text for value in forbidden), "blind observation conversion"
             return original_convert(kind, text)
 
+        def guarded_project(raw, projection, **kwargs):
+            result = original_project(raw, projection, **kwargs)
+            assert not any(value in repr(result) for value in forbidden), "observation in blind projection"
+            return result
+
         json.loads, fields._convert = guarded_loads, guarded_convert
+        inputs.project_json = reader.project_json = guarded_project
 
     if operation == "project":
         authority = Authority(Book(repo))
@@ -394,9 +401,15 @@ def run(operation, world, bench, fault):
     reader.meter.parse_bytes, reader.first_read = decode, first_read
     if fault in ("observe_ruled_h", "observe_zero_h_on_clone"):
         observe_kernel(reader, bench, force_zero=fault == "observe_zero_h_on_clone")
+    if fault == "worker_entrypoint":
+        return worker.main([operation], repo)
     try:
         return worker.run(operation, repo)
     except layout.GateRefusal as error:
+        if fault == "require_structural_cause":
+            from joulewise.cadence_looks.controls_time_fields import TimeFieldError
+
+            assert isinstance(error.__cause__, TimeFieldError), "wrong blind refusal cause"
         if os.environ.get("CTL_BENCH_DEBUG"):
             with (bench/"driver-debug.txt").open("a") as stream:
                 print_exc(file=stream)
