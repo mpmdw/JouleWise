@@ -1,0 +1,25 @@
+{
+  "schema": "joulewise.cadence_queue.v1",
+  "queue_id": "cq-ctl-01-s01",
+  "expires_at": "2026-11-24T20:00:00-08:00",
+  "halt": null,
+  "standing_notice": null,
+  "spans": [
+    {
+      "seq": 1,
+      "span_id": "ctl-01-s01",
+      "block_id": "ctl-01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/ctl-01/kits/cl-ctl-01.issued.json",
+        "sha256": "1d7d6f5fe8531b74401fb8d6e60b8fa17f068849e59ec3c241caaa6f523ff2bf"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003"
+      ],
+      "attempt": 1,
+      "not_before": "2026-11-23"
+    }
+  ]
+}
