@@ -9,13 +9,19 @@ not live hardware validation.
 from __future__ import annotations
 
 import json
+import sys
 import unittest
+from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
+# Sibling test module import: make tests/ importable under `python -m unittest tests.<module>` too.
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 from joulewise.adapters.mlx_runtime import MlxRuntimeAdapter
 from joulewise.clock import FakeClock
-from test_mlx_runtime import make_config, make_suite_manifest, suite_item
+from test_mlx_runtime import make_config, make_suite_manifest, suite_item  # noqa: E402
 
 
 class BPEStreamingDetokenizer:
