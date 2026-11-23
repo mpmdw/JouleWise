@@ -1,0 +1,40 @@
+{
+  "schema": "joulewise.mbp_queue.v1",
+  "timezone": "America/Los_Angeles",
+  "admitted": [
+    {
+      "pin": "b2e01464d6d4fbf2901ff4d4154df9455104a12a",
+      "kit_sha256": null
+    }
+  ],
+  "entries": [
+    {
+      "id": "f0-part-c",
+      "kind": "diagnostic_filler",
+      "launcher": "Part C",
+      "worktree": "<lead fills at merge>",
+      "argv": [
+        "<lead fills at merge>"
+      ],
+      "pin": "b2e01464d6d4fbf2901ff4d4154df9455104a12a",
+      "kit_sha256": null,
+      "expected_s": 7140,
+      "worst_case_s": 12180,
+      "requires": [
+        "pin-admitted",
+        "counted-fits",
+        "launcher-admits",
+        "not-refused",
+        "f0-retirement"
+      ],
+      "params": {
+        "launch_window_local": [
+          "02:35:00",
+          "22:40:00"
+        ]
+      },
+      "repeat": true,
+      "product": "W1-line Part C diagnostic."
+    }
+  ]
+}

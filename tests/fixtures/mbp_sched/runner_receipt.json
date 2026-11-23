@@ -1,0 +1,20 @@
+{
+  "entry_id": "fixture-entry",
+  "kit_sha256": null,
+  "rc": 0,
+  "error": null,
+  "mock": true,
+  "roster": ["fixture-leg"],
+  "started": {"epoch_s": 101, "other": "SENTINEL", "unread": 111},
+  "ended": {"epoch_s": 111, "other": "SENTINEL", "unread": 222},
+  "span_result": {
+    "outcome": "fixture",
+    "chain_outcome": "fixture",
+    "fault": null,
+    "other": "SENTINEL",
+    "unread": 333,
+    "steps": [{"name": "fixture-step", "rc": 0, "other": "SENTINEL", "unread": 444}]
+  },
+  "other": "SENTINEL",
+  "unread": 555
+}
