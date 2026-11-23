@@ -52,3 +52,22 @@ Independent executing review of the follow-up head and the cold final pass
 are outstanding on this draft. After CI, the lead can take the draft through
 those reviews, the installed byte pass and the bound-host blind preflight
 before any production reservation. NEEDS_SPEC at handoff: none.
+
+## Independent executing audit round 1
+
+The round-1 audit blocked draft PR #957 at `d7feefb5a`. The branch
+matched the remote on intake. The audit and builder used synthetic inputs.
+
+| Finding | Disposition | Regression in `test_look_path_followups.py` |
+| --- | --- | --- |
+| HIGH. The blind config check materialized opaque observations. | Stage 1 and preflight validate a strict allowlist of base-schema configuration fields through the typed constructor. The projection scans unknown members and masks the ambient reading and free text before construction. The same boundary now covers the native close receipt, leg record and terminal map. Comparison of receipt and leg attempts binds the raw JSON tokens without converting diagnostics. The pinned writer serializes those attempt objects with sorted keys in both files. | `test_stage1_and_preflight_skip_config_and_receipt_observations` uses the audit's config mutation and extends it to matching attempt observations. It guards both whole-document parsing and scalar conversion. |
+| HIGH. Thermal interval structure escaped the blind gates. | Stage 1 and preflight project thermal interval kinds, bounds and hold turn references. They share the interval shape validator with the analysis path. Malformed rows refuse fresh. A minimum of two shared rail support rows is enforced before claim. | `test_structural_faults_refuse_stage1_and_preflight_fresh` covers the missing G0 timestamp, malformed containers, kinds, bounds and hold references, overlapping entries and one-row rail support. |
+| LOW. Failed rollback and failed restat could misclassify a surviving reservation. | A successful mkdir with unconfirmed removal retains the half-made refusal if inspection also fails. A successful or redundant removal clears the claim evidence. | `test_unconfirmed_cleanup_preserves_half_made` and `test_mkdir_denied_without_reservation_reports_claim_setup` |
+| LOW. The current tip could hide a prior spend. | The launcher recognizes spend records in the local first-parent ledger ancestry before checking the remote. The full ledger replay still validates authorization for a fresh look. | `test_committed_spend_reports_spent_offline_even_without_local_marker` now drops the spend from a successor ledger and verifies the terminal refusal. |
+
+RL-202 §4.1 governs placement of a well-formed G0, including the frozen
+one-nanosecond overlap. RL-187 §3.1 keeps the per-leg disposition for
+physical-call view semantics. The unchanged frozen suites check the
+release and supersession behavior. Hosted CI runs the full suite and the
+marker-present regression. The gate ledger on draft PR #957 records the
+final-head CI runs and the remaining independent review.

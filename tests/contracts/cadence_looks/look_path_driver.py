@@ -274,6 +274,23 @@ def run(operation, world, bench, fault):
     make_inputs = inputs.make_inputs
     inputs.make_inputs = lambda *args: make_inputs(*args, synthetic=True)
 
+    if fault == "guard_blind_values":
+        from joulewise.cadence_looks import controls_time_fields as fields
+
+        forbidden = ("91827.375", "19.8375")
+        original_loads, original_convert = json.loads, fields._convert
+
+        def guarded_loads(raw, *args, **kwargs):
+            text = raw.decode("utf-8") if isinstance(raw, (bytes, bytearray)) else raw
+            assert not any(value in text for value in forbidden), "unprojected blind JSON decode"
+            return original_loads(raw, *args, **kwargs)
+
+        def guarded_convert(kind, text):
+            assert text not in forbidden, "blind observation conversion"
+            return original_convert(kind, text)
+
+        json.loads, fields._convert = guarded_loads, guarded_convert
+
     if operation == "project":
         authority = Authority(Book(repo))
         binding, source, _ = worker._binding(authority, private)

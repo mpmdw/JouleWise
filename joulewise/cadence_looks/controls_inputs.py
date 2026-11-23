@@ -16,7 +16,7 @@ from .controls_reader import (
 from .custody_pins import PinRefusal, safe_relative
 from .description_inputs import PinnedInput
 from .qualification_manifest import _decode
-from .controls_time_fields import TimeFieldError, project_json
+from .controls_time_fields import DigestFields, Nullable, RecordFields, TimeFieldError, project_json
 
 
 IDS = PILOT + REMAINDER
@@ -28,8 +28,13 @@ FILES = {
     "metadata": "metadata.json",
     "rails": "power_trace.csv",
 }
-SCRIPT_FIELDS = dict.fromkeys(("kind", "hidden_tokens", "cpu_s", "gap_s", "recovery_s"))
+SCRIPT_FIELDS = RecordFields.fromkeys(("kind", "hidden_tokens", "cpu_s", "gap_s", "recovery_s"))
 SCRIPT_FIELDS["turn_tokens"] = [None]
+SPEC_FIELDS = DigestFields(
+    **dict.fromkeys(("schema", "campaign_id", "g0_role", "prefill_tokens", "leg_id", "seed",
+                     "start_band", "decode_tokens", "g0_shape")),
+    script=SCRIPT_FIELDS,
+)
 WORK_FIELDS = {
     **dict.fromkeys(("schema", "leg_id", "leg_spec_sha256", "complete")),
     "script": SCRIPT_FIELDS,
@@ -42,6 +47,25 @@ RESULT_FIELDS = dict.fromkeys((
     "g0_role", "g0_reference_record_sha256", "config_sha256", "script_complete", "script_record_sha256",
     "decode_tokens", "prefill_tokens", "turn_start_ns", "turn_end_ns", "first_token_ns",
 ))
+ATTEMPT_FIELDS = DigestFields.fromkeys(("attempt", "redone", "output_dir", "leg_status", "contaminated"))
+CLOSE_FIELDS = {
+    **dict.fromkeys(("span_id", "schema", "runner_kind", "mock", "rc", "legs_finished", "desk_bundle_error")),
+    "roster": [None],
+    "kit": RecordFields.fromkeys(("campaign_id", "sha256", "frozen_commit")),
+    "feeds": {"meter": {"stop": {"rc": None, "proven_stopped": None}, "files": [
+        {"path": None, "sha256": None},
+    ]}},
+    "span_result": Nullable({"outcome": None}),
+    "steps": [{"name": None, "rc": None}],
+    "legs": [{
+        "leg_id": None, "attempts": [ATTEMPT_FIELDS],
+        "summary": {"leg_id": None, "admitted": None},
+        "span_reference": Nullable(dict.fromkeys(("leg_id", "attempt", "excluded"))),
+    }],
+}
+LEG_RECORD_FIELDS = {"schema": None, "spec": DigestFields(), "attempts": [ATTEMPT_FIELDS],
+                     "result": RESULT_FIELDS}
+TERMINAL_FIELDS = {"schema": None, "status": None, "files": {"runtime_result.json": None}}
 STREAM = re.compile(r"hazards/meter/stream-[0-9]{3,}\.jsonl")
 
 
@@ -89,10 +113,6 @@ def _read(path, entry):
         raise GateRefusal("INPUT_BINDING") from error
 
 
-def _read_doc(root, entry):
-    return _decode(_read(root / entry["path"], entry))
-
-
 def _entries(pins):
     return {entry["path"]: entry for entry in pins["files"]}
 
@@ -107,7 +127,7 @@ def _entry_from_check(check, role, path, expected_sha256=None, *, parent=None):
 
 def _close(kit_sha, runner_commit, check, root, ids, *, synthetic):
     entry = _entry_from_check(check, "close_receipt", "runner_receipt.json")
-    document = _read_doc(root, entry)
+    document = project_json(_read(root / entry["path"], entry), CLOSE_FIELDS, strict=True)
     _require(document["span_id"] == check["span_id"], "INPUT_CHANNELS")
     _require(document["schema"] == "joulewise.cadence_span_receipt.v1"
              and document["runner_kind"] == "cadence-ctl-v1"
@@ -169,24 +189,30 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
     prefix = f"legs/{leg_id}/"
     leg_record = _entry_from_check(check, "leg_record", prefix + "leg_record.json")
     leg_spec = _entry_from_check(check, "leg_spec", prefix + "leg_spec.json")
-    record, spec = _read_doc(root, leg_record), _read_doc(root, leg_spec)
-    canonical_spec_sha = digest(canonical(spec))
+    record = project_json(_read(root / leg_record["path"], leg_record), LEG_RECORD_FIELDS, strict=True)
+    # Both the runner's file writer and its script binding sort object keys.
+    # Compact the verified tokens to obtain the binding without decoding extras.
+    spec, canonical_spec_sha = project_json(_read(root / leg_spec["path"], leg_spec), SPEC_FIELDS, strict=True)
     role = "capture" if ordinal == 0 else "consume"
-    _require(record["schema"] == "joulewise.cadence_leg_record.v1" and record["spec"] == spec
+    _require(record["schema"] == "joulewise.cadence_leg_record.v1" and record["spec"][1] == canonical_spec_sha
              and spec["schema"] == "joulewise.cadence_leg_spec.ctl.v1"
              and spec["campaign_id"] == KIT_ID and spec["g0_role"] == role
              and spec["prefill_tokens"] == ISSUED_SETTINGS["prefill_tokens"]
              and all(spec[key] == kit_leg[key] for key in
                      ("leg_id", "seed", "start_band", "script", "prefill_tokens", "decode_tokens", "g0_shape")))
-    attempts = record["attempts"]
-    _require(attempts and attempts == close_leg["attempts"]
+    # The pinned writer serializes the same attempt objects with sorted keys
+    # in both files. Bind their tokens while leaving diagnostics unconverted.
+    attempts = [attempt for attempt, _ in record["attempts"]]
+    _require(attempts and record["attempts"] == close_leg["attempts"]
              and all(type(row["attempt"]) is int and row["attempt"] == i and row["redone"] is (i < len(attempts))
                      for i, row in enumerate(attempts, 1)))
     selected = attempts[-1]
     runtime = _path(selected["output_dir"])
     _require(runtime == prefix + "runtime" and selected["redone"] is False)
     terminal = _entry_from_check(check, "terminal_map", runtime + "/runtime_custody.json")
-    custody = _read_doc(root, terminal)
+    # The terminal map names the exact run directory from the projected result.
+    terminal_raw = _read(root / terminal["path"], terminal)
+    custody = project_json(terminal_raw, TERMINAL_FIELDS, strict=True)
     _require(custody["schema"] == "joulewise.align.r1_runtime_custody.v1" and custody["status"] == "complete")
 
     def file(role, member):
@@ -211,6 +237,10 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
                                    and result["member_status"] == "succeeded" and not selected["contaminated"])))
     bundle = _path(result["bundle"])
     _require(bundle.startswith("runs/") and len(bundle.split("/")) == 2)
+    member_files = {bundle + "/" + member: None for member in (*FILES.values(),
+                                                               "outputs/align_window_reference.json")}
+    member_files["script-work.json"] = None
+    custody = project_json(terminal_raw, {"files": member_files}, strict=True)
     run_id = bundle.split("/")[1]
     files = {"leg_record": leg_record, "leg_spec": leg_spec, "terminal_map": terminal, "result": result_entry}
     hidden_delivered = None

@@ -373,17 +373,25 @@ def claim(private, public, public_record, redirect):
                             raise ValueError("unexpected claim setup artifact")
                         os.unlink(name, dir_fd=restricted)
                     os.fsync(restricted)
-                os.rmdir(PRIVATE_NAME, dir_fd=private)
+                try:
+                    os.rmdir(PRIVATE_NAME, dir_fd=private)
+                except FileNotFoundError:
+                    pass
+                made = False
                 os.fsync(private)
         except (OSError, ValueError):
-            pass  # The remaining directory determines the durable state.
+            pass
         finally:
             if restricted is not None:
                 os.close(restricted)
         try:
             reservation = _observation(private, PRIVATE_NAME)
         except OSError:
-            reservation = None
-        if reservation is not None and stat.S_ISDIR(reservation.st_mode):
+            # If mkdir succeeded and removal is unconfirmed, keep the half-made
+            # refusal until the reservation can be inspected.
+            half_made = made
+        else:
+            half_made = reservation is not None and stat.S_ISDIR(reservation.st_mode)
+        if half_made:
             raise GateRefusal("HALF_MADE", status=4, special=True) from error
         raise GateRefusal("CLAIM_SETUP") from error

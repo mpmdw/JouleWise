@@ -68,6 +68,32 @@ def mutate(world, role, fault):
     FROZEN["reanchor"](world, span)
 
 
+def blind_values(world):
+    def config_observations(document):
+        document["synthetic_telemetry"] = {"power_w": 91827.375}
+        document["run_metadata"]["ambient_temp_c"] = 19.8375
+
+    mutate(world, "config", config_observations)
+    span, runtime, _ = FROZEN["location"](world, "L002")
+    receipt_path, record_path = span / "runner_receipt.json", runtime.parent / "leg_record.json"
+    receipt, record = registrar.read(receipt_path), registrar.read(record_path)
+    receipt_leg = next(row for row in receipt["legs"] if row["leg_id"] == "L002")
+    for row in (receipt_leg, record):
+        row["attempts"][0]["os_load"] = {"synthetic_observation": 91827.375}
+    registrar.put(receipt_path, receipt)
+    registrar.put(record_path, record)
+    FROZEN["reanchor"](world, span)
+
+
+def single_support(raw):
+    header, *lines = raw.splitlines()
+    latest = [line.split(b",") for line in lines[-3:]]
+    start = lines[0].split(b",")[4]
+    for row in latest:
+        row[4] = start
+    return b"\n".join([header, *(b",".join(row) for row in latest)]) + b"\n"
+
+
 class LookPathFollowupTests(TestCase):
     @classmethod
     def setUpClass(cls):
@@ -77,7 +103,7 @@ class LookPathFollowupTests(TestCase):
         cls.pristine = cls.base / "pristine"
         FROZEN["unpack"](cls.pristine)
 
-    def prepare(self, name, *, role=None, fault=None):
+    def prepare(self, name, *, role=None, fault=None, configure=None):
         root = self.base / name
         world, bench = root / "source", root / "bench"
         shutil.copytree(self.pristine, world)
@@ -85,6 +111,8 @@ class LookPathFollowupTests(TestCase):
             (bench / parent / registrar.LOOK).mkdir(parents=True, mode=0o700)
         if role is not None:
             mutate(world, role, fault)
+        if configure is not None:
+            configure(world)
         self.assertEqual(self.invoke(world, bench, "install-v2"), (0, b"", b""))
         return world, bench
 
@@ -149,6 +177,17 @@ class LookPathFollowupTests(TestCase):
                 effective_clock_anchor_bound_s="0.0001")),
             ("rail-columns", "rails", lambda raw: raw.replace(b",power_w,", b",wrong,", 1)),
             ("rail-support", "rails", lambda raw: raw.replace(b",cpu_power,", b",unknown,", 1)),
+            ("rail-single-sample", "rails", single_support),
+            ("thermal-missing-end", "episode", lambda d: d["hardware"].update(
+                thermal={"intervals": [{"kind": "G0"}]})),
+            ("thermal-object", "episode", lambda d: d["hardware"].update(thermal=[])),
+            ("thermal-interval-list", "episode", lambda d: d["hardware"]["thermal"].update(intervals={})),
+            ("thermal-entry", "episode", lambda d: d["hardware"]["thermal"]["intervals"].append(None)),
+            ("thermal-kind", "episode", lambda d: d["hardware"]["thermal"]["intervals"][0].update(kind="invalid")),
+            ("thermal-time", "episode", lambda d: d["hardware"]["thermal"]["intervals"][0].update(end_ns="1")),
+            ("thermal-hold-turn", "episode", lambda d: d["hardware"]["thermal"]["intervals"][0].update(kind="H")),
+            ("thermal-overlap", "episode", lambda d: d["hardware"]["thermal"]["intervals"].extend(
+                d["hardware"]["thermal"]["intervals"][:1])),
             ("script-duplicate", "script", b',"extra":{"nested":[{"a":0,"\\u0061":1}]}}\n'),
             ("script-nonfinite", "script", b',"extra":{"nested":[NaN]}}\n'),
         )
@@ -165,6 +204,13 @@ class LookPathFollowupTests(TestCase):
                 for operation in ("preflight", "stage2"):
                     self.assertEqual(self.invoke(world, bench, operation), (2, b"", CHANNELS))
                 self.assert_fresh(world, bench)
+
+    def test_stage1_and_preflight_skip_config_and_receipt_observations(self):
+        world, bench = self.prepare("blind-values", configure=blind_values)
+        self.assertEqual(self.invoke(world, bench, "stage1", "guard_blind_values"), (0, b"", b""))
+        self.assertEqual(self.invoke(world, bench, "commit-stage1"), (0, b"", b""))
+        self.assertEqual(self.invoke(world, bench, "preflight", "guard_blind_values"), (0, b"", b""))
+        self.assert_fresh(world, bench)
 
     def test_blind_projection_skips_value_tokens(self):
         forbidden = "987654321"
@@ -202,6 +248,17 @@ class LookPathFollowupTests(TestCase):
         self.assertEqual(self.invoke(world, bench, "stage2", "mkdir_denied"),
                          (2, b"", b"REFUSE PREFLIGHT CLAIM_SETUP\n"))
         self.assert_fresh(world, bench)
+
+    def test_unconfirmed_cleanup_preserves_half_made(self):
+        with (patch.object(layout.os, "mkdir") as mkdir,
+              patch.object(layout.os, "fsync", side_effect=OSError),
+              patch.object(layout.os, "rmdir", side_effect=OSError) as rmdir,
+              patch.object(layout, "_observation", side_effect=[None, OSError])):
+            with self.assertRaises(layout.GateRefusal) as caught:
+                layout.claim(123, 456, {}, Mock())
+        mkdir.assert_called_once_with(layout.PRIVATE_NAME, 0o700, dir_fd=123)
+        rmdir.assert_called_once_with(layout.PRIVATE_NAME, dir_fd=123)
+        self.assertEqual((caught.exception.status, caught.exception.notice), (4, "REFUSE HALF_MADE\n"))
 
     def test_bootstrap_reports_spent_before_source_layout_and_offline_checks(self):
         world, bench = self.prepare("spent")
@@ -247,6 +304,15 @@ class LookPathFollowupTests(TestCase):
         self.assertEqual(self.bootstrap_offline(repo), (2, b"", b"REFUSE PREFLIGHT FREEZE\n"))
         manifest_sha = registrar.digest((repo / book.MANIFEST).read_bytes())
         registrar.add_event(repo, "first_ctl_read", manifest_sha256=manifest_sha, stage1_sha256="a" * 64)
+        self.assertEqual(self.bootstrap_offline(repo), (3, b"", b"REFUSE SPENT\n"))
+        ledger_path = repo / book.LOOKS
+        ledger = registrar.read(ledger_path)
+        ledger["events"].pop()
+        registrar.put(ledger_path, ledger)
+        registrar.commit(repo, "Synthetic successor drops spend row")
+        self.assertEqual(self.bootstrap_offline(repo), (3, b"", b"REFUSE SPENT\n"))
+        ledger_path.unlink()
+        registrar.commit(repo, "Synthetic successor drops ledger")
         self.assertEqual(self.bootstrap_offline(repo), (3, b"", b"REFUSE SPENT\n"))
 
     def test_byte_pass_requires_cumulative_disposition_receipt(self):

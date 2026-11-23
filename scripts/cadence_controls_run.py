@@ -14,6 +14,7 @@ import sys
 
 
 CONTROL = "docs/process/cadence/looks/"
+LEDGER = CONTROL + "LOOKS.json"
 MANIFEST = CONTROL + "lm-ctl-01.json"
 SOURCE_INDEX = CONTROL + "lm-ctl-01.sources.json"
 LAUNCHER = "scripts/cadence_controls_run.py"
@@ -174,17 +175,36 @@ class RegisteredModules(importlib.abc.MetaPathFinder):
         return spec
 
 
+def _look_events(ledger):
+    return [event for event in ledger.get("events", [])
+            if type(event) is dict and event.get("look_id") == LOOK]
+
+
+def _has_spend(events):
+    return any(event.keys() == {"look_id", "kind", "manifest_sha256", "stage1_sha256"}
+               and event["kind"] in ("first_ctl_read", "published")
+               and all(type(event[key]) is str and re.fullmatch("[0-9a-f]{64}", event[key])
+                       for key in ("manifest_sha256", "stage1_sha256"))
+               for event in events)
+
+
+def _require_unspent_ancestry(root, tip):
+    revisions = _git(root, "log", "--first-parent", "--format=%H", tip, "--", LEDGER).decode().splitlines()
+    for revision in revisions:
+        try:
+            old = json.loads(_git(root, "show", f"{revision}:{LEDGER}"), object_pairs_hook=_unique)
+            events = _look_events(old)
+        except (AttributeError, TypeError, ValueError, subprocess.CalledProcessError):
+            continue  # The fully authenticated replay still enforces ledger integrity.
+        if _has_spend(events):
+            raise Spent()
+
+
 def _registration(root):
     tip = _git(root, "rev-parse", "--verify", "refs/remotes/origin/main^{commit}").decode().strip()
-    ledger = json.loads(_git(root, "show", f"{tip}:{CONTROL}LOOKS.json"), object_pairs_hook=_unique)
-    events = [event for event in ledger.get("events", [])
-              if type(event) is dict and event.get("look_id") == LOOK]
-    if any(event.keys() == {"look_id", "kind", "manifest_sha256", "stage1_sha256"}
-           and event["kind"] in ("first_ctl_read", "published")
-           and all(type(event.get(key)) is str and re.fullmatch("[0-9a-f]{64}", event[key])
-                   for key in ("manifest_sha256", "stage1_sha256"))
-           for event in events):
-        raise Spent()
+    _require_unspent_ancestry(root, tip)
+    ledger = json.loads(_git(root, "show", f"{tip}:{LEDGER}"), object_pairs_hook=_unique)
+    events = _look_events(ledger)
     row, = (row for row in ledger["looks"] if type(row) is dict and row.get("look_id") == LOOK)
     committed = _git(root, "show", f"{tip}:{MANIFEST}")
     _demand(_digest(committed) == row["sha256"])

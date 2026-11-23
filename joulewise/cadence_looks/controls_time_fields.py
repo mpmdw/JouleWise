@@ -1,6 +1,7 @@
 """Blind field projection for ctl-01, using the #795 time-only lexer."""
 
 import csv
+from hashlib import sha256
 import io
 import re
 import sys
@@ -29,10 +30,22 @@ NESTED = object()                    # a member whose value is an object or an a
 EMPTY_ARRAY = object()
 SKIP = object()
 OPAQUE_NUMBER = object()
+OPAQUE_STRING = object()
 
 
 class RecordFields(dict):
     """A typed record whose decoder rejects unknown fields."""
+
+
+class Nullable:
+    """A projection that also accepts JSON null."""
+
+    def __init__(self, fields):
+        self.fields = fields
+
+
+class DigestFields(dict):
+    """A projection paired with a digest of the object's compact JSON bytes."""
 
 
 class _Bad(Exception):
@@ -267,6 +280,10 @@ def stream_fields(payload, name):
 def _project(it, token, fields, depth, *, strict):
     if depth > MAX_DEPTH:
         raise _Bad()
+    if isinstance(fields, Nullable):
+        if token == ("lit", "null"):
+            return None
+        fields = fields.fields
     if fields is EMPTY_ARRAY:
         if token != ("punct", "[") or next(it) != ("punct", "]"):
             raise _Bad()
@@ -278,6 +295,21 @@ def _project(it, token, fields, depth, *, strict):
         if token[0] != "num":
             raise _Bad()
         return 0
+    if fields is OPAQUE_STRING:
+        if token[0] != "str":
+            raise _Bad()
+        return "" if token[1] == '""' else "opaque"
+    if isinstance(fields, DigestFields):
+        digest = sha256()
+
+        def capture_tokens():
+            for member_token in it:
+                digest.update(member_token[1].encode("utf-8"))
+                yield member_token
+
+        digest.update(token[1].encode("utf-8"))
+        view = _project(capture_tokens(), token, dict(fields), depth, strict=strict)
+        return view, digest.hexdigest()
     if token == ("lit", "null") and isinstance(fields, RecordFields):
         return None
     if fields is None:

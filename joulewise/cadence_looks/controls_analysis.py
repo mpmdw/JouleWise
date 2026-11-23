@@ -1,6 +1,7 @@
 """RL-187 print calculations over authenticated, in-memory records."""
 
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from math import ceil, fsum, isfinite, sqrt
 from statistics import median
@@ -128,6 +129,27 @@ def _read_steps(payload, digest, leg_id, kind):
         raise ViewError("script_record_shape") from error
 
 
+def thermal_intervals(hardware):
+    """Validate the interval structure shared by the blind and value readers."""
+    thermal = hardware.get("thermal", {})
+    if not isinstance(thermal, Mapping):
+        raise ViewError("thermal_interval_shape")
+    intervals = thermal.get("intervals", ())
+    if not isinstance(intervals, (list, tuple)):
+        raise ViewError("thermal_interval_shape")
+    previous = None
+    for row in intervals:
+        if not isinstance(row, Mapping) or row.get("kind") not in ("G0", "G1", "H"):
+            raise ViewError("thermal_interval_shape")
+        start, end = row.get("start_ns"), row.get("end_ns")
+        if (type(start) is not int or type(end) is not int or start > end
+                or (previous is not None and start < previous)
+                or (row["kind"] == "H" and not _nonnegative_int(row.get("turn")))):
+            raise ViewError("thermal_interval_shape")
+        previous = end
+    return intervals
+
+
 def physical_call_view(leg: LegInput):
     """Replace just the logged turn. Keep the original episode and trace bounds."""
     episode = leg.episode
@@ -135,7 +157,7 @@ def physical_call_view(leg: LegInput):
             or episode.turns[0].tool_calls):
         raise ViewError("logged_envelope")
     steps = tuple(_read_steps(leg.work_bytes, leg.work_sha256, leg.leg_id, leg.kind))
-    gates = (interval["end_ns"] for interval in episode.hardware.get("thermal", {}).get("intervals", ())
+    gates = (interval["end_ns"] for interval in thermal_intervals(episode.hardware)
              if interval["kind"] == "G0")
     previous = max(episode.start_ns, max(gates, default=episode.start_ns))
     for step in steps:

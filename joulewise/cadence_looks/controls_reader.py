@@ -7,7 +7,6 @@ from hashlib import sha256
 import json
 from math import ceil, isfinite
 import struct
-import warnings
 
 from joulewise.adapters.powermetrics import RAIL_MANIFEST
 from joulewise.align.apple.episode_bundle import join_episode_trace
@@ -16,12 +15,12 @@ from joulewise.align.apple.sampler import (
 )
 from joulewise.align.records import ClockMapping, Episode, PowerTrace, _build, from_json
 from joulewise.external import km003c_parse as meter
-from joulewise.schemas import BenchmarkConfig, ConfigKeyWarning
+from joulewise.schemas import BenchmarkConfig
 
 from . import controls_analysis as analysis
 from .qualification_manifest import _decode
 from .controls_time_fields import (
-    EMPTY_ARRAY, OPAQUE_NUMBER, RAIL_COLUMNS, SKIP, RecordFields, TimeFieldError,
+    EMPTY_ARRAY, OPAQUE_NUMBER, OPAQUE_STRING, RAIL_COLUMNS, SKIP, Nullable, RecordFields, TimeFieldError,
     project_json, rail_rows, stream_fields,
 )
 
@@ -46,7 +45,8 @@ TURN_FIELDS = RecordFields(
 EPISODE_FIELDS = RecordFields(
     **dict.fromkeys(("schema", "episode_id", "clock_domain", "start_ns", "end_ns", "condition")),
     **dict.fromkeys(("task_pair", "agent_model", "endpoint", "seed"), SKIP),
-    hardware={"paired_clock_stamps_ns": [STAMP_FIELDS], "boot_id": None},
+    hardware={"paired_clock_stamps_ns": [STAMP_FIELDS], "boot_id": None,
+              "thermal": {"intervals": [dict.fromkeys(("kind", "start_ns", "end_ns", "turn"))]}},
     turns=[TURN_FIELDS], flags=[None], power_traces=EMPTY_ARRAY, clock_mappings=EMPTY_ARRAY,
     main_task_score=SKIP, side_task_success=SKIP,
     monitor_verdicts=[RecordFields(monitor_model=SKIP, visibility=None,
@@ -63,6 +63,35 @@ METADATA_FIELDS = {
         "status", "method", "wall_minus_monotonic_lower_s", "wall_minus_monotonic_upper_s",
         "effective_clock_anchor_bound_s",
     ))},
+}
+CONFIG_FIELDS = {
+    "schema_version": None,
+    "run_id": None,
+    "model": dict.fromkeys(("name", "family", "source", "revision", "weight_format", "context_window",
+                            "tokenizer_json_sha256", "chat_template_sha256")),
+    "quantization": dict.fromkeys(("name", "bits", "group_size")),
+    "hardware_target": {
+        **dict.fromkeys(("id", "transport", "runtime_backend", "telemetry_backend", "host", "device_kind")),
+        "notes": Nullable(OPAQUE_STRING),
+    },
+    "workload_profile": {
+        **dict.fromkeys(("name", "prompt_tokens", "output_tokens", "dataset_ref", "suite_manifest_ref",
+                         "suite_manifest_sha256", "generator_sidecar_ref", "prompt_token_evidence_policy",
+                         "repetitions", "warmup_runs")),
+        "prompt_text": Nullable(OPAQUE_STRING),
+        "prompt_token_expectation": Nullable(RecordFields.fromkeys((
+            "schema_version", "token_hash_domain", "token_count", "token_ids_sha256",
+        ))),
+    },
+    "interconnect": Nullable({"name": None, "link_speed_mbps": None, "notes": Nullable(OPAQUE_STRING)}),
+    "sampling": Nullable(dict.fromkeys(("power_hz", "idle_seconds", "warmup_seconds"))),
+    "run_metadata": Nullable({
+        "project": None, "operator": Nullable(OPAQUE_STRING), "notes": Nullable(OPAQUE_STRING),
+        "tags": [OPAQUE_STRING], "ambient_temp_c": Nullable(OPAQUE_NUMBER),
+    }),
+    "schema_extensions": Nullable([SKIP]),
+    "batch_policy": SKIP,
+    "speculation": SKIP,
 }
 
 
@@ -157,7 +186,7 @@ def episode_timing(episode_raw, metadata):
     try:
         # Use the installed record constructor on the blind envelope. Scores,
         # router observations and non-timing hardware values are skipped or masked.
-        _build(Episode, view)
+        analysis.thermal_intervals(_build(Episode, view).hardware)
     except (AttributeError, KeyError, TypeError, ValueError, OverflowError) as error:
         raise TimeFieldError("invalid native episode envelope") from error
     hardware = view["hardware"]
@@ -182,15 +211,18 @@ def binding_projection(episode, config, metadata, *, run_id, config_sha256):
     manifest = metadata["device"]["rail_manifest"]
     if len(manifest) != len(set(manifest)) or not RAILS <= set(manifest) <= set(RAIL_MANIFEST):
         raise TimeFieldError("native rail manifest")
-    rate = project_json(config, {"sampling": {"power_hz": None}})["sampling"]["power_hz"]
-    if type(rate) not in (float, int) or not isfinite(rate) or rate <= 0 or round(NS / rate) <= 0:
-        raise TimeFieldError("invalid nominal rail cadence")
-    period = round(NS / rate)
     try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", ConfigKeyWarning)
-            typed = BenchmarkConfig.from_mapping(_decode(config))
-        if round(NS / typed.sampling.power_hz) != period:
+        settings = project_json(config, CONFIG_FIELDS, strict=True)
+        # The native ctl runner uses the base config schema. AXI decode
+        # extensions have their own config and opaque backend payloads.
+        if settings.get("schema_extensions") is not None:
+            raise ValueError("non-native config extension")
+        rate = settings["sampling"]["power_hz"]
+        if type(rate) not in (float, int) or not isfinite(rate) or rate <= 0:
+            raise ValueError("invalid nominal rail cadence")
+        period = round(NS / rate)
+        typed = BenchmarkConfig.from_mapping(settings)
+        if period <= 0 or round(NS / typed.sampling.power_hz) != period:
             raise ValueError("typed rail cadence")
     except (KeyError, TypeError, ValueError, OverflowError) as error:
         raise TimeFieldError("invalid native bundle config") from error
@@ -225,7 +257,7 @@ def _native_grid(rows):
             raise TimeFieldError("invalid native rail interval")
         grids[rail].append((t, a, b))
     grid = sorted(grids.pop("cpu_power"))
-    if (not grid or any(a[0] >= b[0] for a, b in zip(grid, grid[1:]))
+    if (len(grid) < 2 or any(a[0] >= b[0] for a, b in zip(grid, grid[1:]))
             or any(sorted(other) != grid for other in grids.values())):
         raise TimeFieldError("missing or incompatible native rail support")
     return grid
