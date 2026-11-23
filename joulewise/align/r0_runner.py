@@ -221,7 +221,7 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
                               "Local inventories do not independently authenticate the remote revision."]}
     # Forecast softwareupdated scans through one per-check timeout per
     # selected check. The result is advisory.
-    forecast_start = datetime.now()
+    forecast_start = datetime.now(timezone.utc)
     report["softwareupdate_scan_forecast"] = softwareupdate_scan_forecast(
         forecast_start, forecast_start + timedelta(seconds=per_check_timeout * max(1, len(checks))))
 

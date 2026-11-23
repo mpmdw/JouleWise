@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from joulewise import prewindow, quiet_admission
 from joulewise.hazards import base, contention
@@ -477,6 +479,13 @@ class RequestOverlapTests(unittest.TestCase):
 
 
 class PsFormatTests(unittest.TestCase):
+    def setUp(self):
+        if hasattr(time, "tzset"):
+            self.addCleanup(time.tzset)
+            self.enterContext(patch.dict(os.environ, {"TZ": "UTC"}))
+            time.tzset()
+        self.enterContext(patch.multiple(contention, _ROW_CACHE={}, _START_EPOCH_CACHE={}))
+
     def test_ucomm_layout_is_the_parse_ps_layout(self):
         self.assertEqual(contention.PS_ARGV[:2], quiet_admission.PS_ARGV[:2])
         self.assertEqual(contention.PS_ARGV[2].split(",")[:4], quiet_admission.PS_ARGV[2].split(",")[:4])

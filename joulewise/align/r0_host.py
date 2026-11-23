@@ -36,7 +36,7 @@ conversion across a wall step.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fnmatch import fnmatchcase
 import hashlib
 import json
@@ -103,9 +103,13 @@ def step_budget(value=None):
             "journal_estimate_note": "Measured 95,467,641 bytes /1,800 slots, rounded up; verify after enumeration."}
 
 
+def _tool_env():
+    return {**os.environ, "LC_ALL": "C", "TZ": "UTC"}
+
+
 def command(argv):
     result = subprocess.run(argv, capture_output=True, text=True, timeout=30,
-                            env={**os.environ, "LC_ALL": "C"})
+                            env=_tool_env())
     if result.returncode:
         raise RuntimeError(f"{argv[0]} exit {result.returncode}: {result.stderr.strip()}")
     return result.stdout
@@ -225,28 +229,45 @@ def _wall_divergence_ns(reads):
     return max(offsets) - min(offsets) if offsets else 0
 
 
-def _exact_window_evidence(earlier, later):
-    """Contaminant CPU between two samples at most INTERVAL_S apart, charged to INTERVAL_S.
-
-    Such a pair proves at least that much CPU inside an INTERVAL_S window.
-    Only an identity listed by both samples counts, and only when the
-    earlier counter is the process's own reading, not a regressed one.
-    Flags at or above the limit (the CPU is at least limit x INTERVAL_S).
-    """
+def _exact_cpu_evidence(identity, row, baseline, basis):
+    """Charge proven counter growth to a full 30 s, including ties at the limit."""
     interval_ns = prewindow.INTERVAL_S * 1_000_000_000
-    evidence = []
+    growth_cs = round(row["cumulative_cpu_seconds"] * 100) - round(baseline * 100)
+    if growth_cs * 1_000_000_000 * _CPU_LIMIT_DEN >= _CPU_LIMIT_NUM * interval_ns:
+        return {"pid": identity[0], "command": row["command"], "start": identity[1],
+                "cpu_s_per_s": growth_cs * 10_000_000 / interval_ns, "basis": basis}
+
+
+def _exact_window_evidence(earlier, later):
+    """Evidence from a sampled opening, including an identity absent at that read."""
+    measured, absent = [], []
     for identity, row in later.rows.items():
         before = earlier.rows.get(identity)
-        if before is None or "peak_cpu_seconds" in before:
+        if before is None:
+            if row["contaminant"]:
+                evidence = _exact_cpu_evidence(identity, row, 0, "CPU since an accounting read proved absence")
+                if evidence:
+                    absent.append(evidence)
+        elif "peak_cpu_seconds" not in before and (row["contaminant"] or before["contaminant"]):
+            evidence = _exact_cpu_evidence(identity, row, before["cumulative_cpu_seconds"],
+                                           "CPU between two samples at most 30 s apart, charged to 30 s")
+            if evidence:
+                measured.append(evidence)
+    return measured, absent
+
+
+def _birth_window_evidence(current, initial_identities, dwell_ns):
+    """The printed start second supplies a zero counter even between samples."""
+    windows = {}
+    for identity, row in current.rows.items():
+        if identity in initial_identities or not row["contaminant"]:
             continue
-        if not (row["contaminant"] or before["contaminant"]):
-            continue
-        growth_cs = round(row["cumulative_cpu_seconds"] * 100) - round(before["cumulative_cpu_seconds"] * 100)
-        if growth_cs * 1_000_000_000 * _CPU_LIMIT_DEN >= _CPU_LIMIT_NUM * interval_ns:
-            evidence.append({"pid": identity[0], "command": row["command"], "start": identity[1],
-                             "cpu_s_per_s": growth_cs * 10_000_000 / interval_ns,
-                             "basis": "CPU between two samples at most 30 s apart, charged to 30 s"})
-    return evidence
+        born = _birth_floor_ns(row, current)
+        if 0 <= current.midpoint_ns - born <= dwell_ns:
+            evidence = _exact_cpu_evidence(identity, row, 0, "CPU since the printed start second")
+            if evidence:
+                windows.setdefault(born, []).append(evidence)
+    return windows.items()
 
 
 def _window_reads(reads, opening, current):
@@ -347,17 +368,14 @@ def _overlap_cpu_evidence(opening, current, reads, *, endpoint_elapsed_ns):
             overlap_ns = min(last_possible, current.finished.monotonic_ns) - start_bound
         if overlap_ns <= 0:
             continue
-        # On a backwards wall step the printed start can be older than the
-        # opening even for a newborn. Use the full monotonic bound then.
-        new_since_opening = (wall_offset < opening_offset - 1_000_000_000
-                             or (reliable_start and window_start < birth_floor + 1_000_000_000))
-        if first is not opening and new_since_opening:
+        if first is not opening:
+            # This complete table proves a zero counter for the identity,
+            # including when it lists another holder of the same PID.
             baseline = 0.0
-            basis = "CPU lower bound from a start and sample inside this window"
+            basis = "CPU lower bound from absence at the opening and a sample inside this window"
         else:
             baseline = first_row.get("peak_cpu_seconds", first_row["cumulative_cpu_seconds"])
-            basis = ("CPU lower bound from the opening counter and a later sample in this window"
-                     if first is opening else "CPU lower bound between samples in this window")
+            basis = "CPU lower bound from the opening counter and a later sample in this window"
         peak = max(row["cumulative_cpu_seconds"] for _, _, row in observed)
         # Darwin TIME is in centiseconds. One quantum ties the limit at
         # 200 ms. Compare integers so a floating point tie stays quiet.
@@ -437,6 +455,7 @@ class QuietGuard:
         self._clock_lock = threading.Lock()
         self._cpu_probe_lock = threading.Lock()
         self._snapshots = []
+        self._initial_identities = frozenset()
         self._admission_snapshots = []
         self._admission_previous_over = {}
         self._process_observations = []
@@ -484,7 +503,7 @@ class QuietGuard:
         try:
             result = self.run(contention.PS_ARGV, capture_output=True, text=True,
                               timeout=contention.PROBE_TIMEOUT_S,
-                              env={**os.environ, "LC_ALL": "C"})
+                              env=_tool_env())
             # Keep the accounting bracket for lifetime evidence and record
             # the full paired read below for the admitted midpoint.
             finished = self._now()
@@ -494,7 +513,7 @@ class QuietGuard:
         if result.returncode:
             raise Refused(f"census indeterminate: cumulative CPU snapshot exit {result.returncode}")
         try:
-            rows = contention.parse(result.stdout.encode("utf-8"))
+            rows = contention.parse(result.stdout.encode("utf-8"), tz=timezone.utc)
         except (ValueError, OverflowError) as exc:
             raise Refused(f"census indeterminate: cumulative CPU snapshot: {exc}") from exc
         sightings = {}
@@ -504,7 +523,7 @@ class QuietGuard:
         try:
             table = self.run(PS_ARGV, capture_output=True, text=True,
                              timeout=contention.PROBE_TIMEOUT_S,
-                             env={**os.environ, "LC_ALL": "C"})
+                             env=_tool_env())
         except Exception as exc:
             raise Refused(f"census indeterminate: process args table: {exc}") from exc
         if table.returncode:
@@ -570,6 +589,8 @@ class QuietGuard:
                             "pid": identity[0], "start": identity[1],
                             "command": rows[identity]["command"], "reason": "counter regressed",
                             "contaminant": rows[identity]["contaminant"] or previous.rows[identity]["contaminant"]})
+            else:
+                self._initial_identities = frozenset(rows)
             self._pending["wall_clock_backwards"] |= backwards
             self._snapshots.append(snapshot)
             if census_summary is not None:
@@ -578,7 +599,7 @@ class QuietGuard:
                     "monotonic_s": snapshot.midpoint_ns / 1e9, **census_summary})
 
     def _probe(self, argv):
-        result = self.run(argv, capture_output=True, text=True, timeout=15)
+        result = self.run(argv, capture_output=True, text=True, timeout=15, env=_tool_env())
         return ProbeResult(argv, result.returncode, result.stdout, result.stderr, time.monotonic_ns())
 
     @staticmethod
@@ -639,7 +660,7 @@ class QuietGuard:
         if installed:
             raise Refused(f"measurement window armed: {installed}")
         launched = self.run(("/bin/launchctl", "print", f"gui/{os.getuid()}/com.joulewise.night"),
-                            capture_output=True, text=True, timeout=15)
+                            capture_output=True, text=True, timeout=15, env=_tool_env())
         receipt["launchctl"] = {"exit_code": launched.returncode, "stdout": launched.stdout,
                                 "stderr": launched.stderr}
         if launched.returncode == 0:
@@ -797,7 +818,7 @@ class QuietGuard:
     def __exit__(self, exc_type, exc, traceback):
         self.close()
 
-    def _record_cpu_flags(self, receipt, details, busy, *, kind=None):
+    def _record_cpu_flags(self, receipt, details, busy, *, kind=None, proof_interval=None):
         if not busy:
             return
         interval = {key: details[key] for key in ("start_monotonic_s", "end_monotonic_s", "elapsed_s")}
@@ -816,6 +837,8 @@ class QuietGuard:
                      "flag": flag, "interval": interval, "busy": fresh}
             if kind is not None:
                 entry["kind"] = kind
+            if proof_interval is not None:
+                entry["proof_interval"] = proof_interval
             self.contention_flags.append(entry)
 
     def _record_clock_flag(self, receipt, details):
@@ -871,6 +894,51 @@ class QuietGuard:
             cutoff = min(self._snapshots[0].started.monotonic_ns, samples[0].started.monotonic_ns)
             self._process_observations = [read for read in self._process_observations if _read_finished_ns(read) >= cutoff]
 
+    def _exact_windows(self, receipt, snapshots, end, dwell_ns, flagged):
+        current = snapshots[end]
+        closing_ns = current.midpoint_ns
+        zero_windows = []
+
+        def interval(opening_ns):
+            return {"start_monotonic_s": opening_ns / 1e9, "end_monotonic_s": closing_ns / 1e9,
+                    "elapsed_s": (closing_ns - opening_ns) / 1e9}
+
+        def record(opening_ns, evidence, fresh, *, sampled_ns=None):
+            details = {**interval(opening_ns), "charged_s": prewindow.INTERVAL_S, "busy": evidence}
+            receipt.setdefault("exact_windows", []).append(details)
+            if sampled_ns is None or sampled_ns == opening_ns:
+                self._record_cpu_flags(receipt, details, fresh, kind="exact_30s")
+            else:
+                # The flag's interval locates the proof between actual
+                # reads. Keep the unsampled start second as the exact proof.
+                self._record_cpu_flags(receipt, interval(sampled_ns), fresh, kind="exact_30s",
+                                       proof_interval=interval(opening_ns))
+            flagged.update((row["pid"], row["start"]) for row in evidence)
+
+        busy = []
+        for earlier in range(end - 1, -1, -1):
+            opening = snapshots[earlier]
+            if closing_ns - opening.midpoint_ns > dwell_ns:
+                break
+            measured, absent = _exact_window_evidence(opening, current)
+            if measured:
+                record(opening.midpoint_ns, measured, measured)
+                busy.extend(measured)
+            if absent:
+                zero_windows.append((opening.midpoint_ns, absent, None))
+        for opening_ns, evidence in _birth_window_evidence(current, self._initial_identities, dwell_ns):
+            sampled_ns = next((sample.midpoint_ns for sample in reversed(snapshots[:end])
+                               if sample.midpoint_ns <= opening_ns), snapshots[0].midpoint_ns)
+            zero_windows.append((opening_ns, evidence, sampled_ns))
+
+        # Keep every qualifying exact window in the receipt. A zero opening
+        # can corroborate another flag for this process at the same read.
+        for opening_ns, evidence, sampled_ns in zero_windows:
+            fresh = [row for row in evidence if (row["pid"], row["start"]) not in flagged]
+            record(opening_ns, evidence, fresh, sampled_ns=sampled_ns)
+            busy.extend(fresh)
+        return busy
+
     def _cpu_interval(self, receipt):
         # Admission's closing read can judge a second batch into its receipt.
         details = receipt.get("cpu_interval") or {"regressed_counters": [], "regressed_noncontaminant": []}
@@ -897,6 +965,7 @@ class QuietGuard:
                 start = next((i for i in range(end - 1, -1, -1)
                               if snapshots[end].midpoint_ns - snapshots[i].midpoint_ns >= dwell_ns), None)
                 long_interval = None
+                flagged = set()
                 if start is not None:  # None only at the admission's mid-baseline snapshot
                     interval_details = {"regressed_counters": [], "regressed_noncontaminant": []}
                     reads = _window_reads(observations, snapshots[start], snapshots[end])
@@ -910,22 +979,10 @@ class QuietGuard:
                         long_interval = interval_details["elapsed_s"]
                     else:
                         self._record_interval_flags(receipt, interval_details, endpoint, endpoint_busy, lifetime_busy)
+                        flagged.update((row["pid"], row["start"]) for row in endpoint_busy + lifetime_busy)
                 # The exact check at this sample, against every earlier sample
-                # at most INTERVAL_S before it. Openings are pruned only once
-                # they lie at least INTERVAL_S before a judged end.
-                for earlier in range(end - 1, -1, -1):
-                    span_ns = snapshots[end].midpoint_ns - snapshots[earlier].midpoint_ns
-                    if span_ns > dwell_ns:
-                        break
-                    exact = _exact_window_evidence(snapshots[earlier], snapshots[end])
-                    if exact:
-                        exact_details = {"start_monotonic_s": snapshots[earlier].midpoint_ns / 1e9,
-                                         "end_monotonic_s": snapshots[end].midpoint_ns / 1e9,
-                                         "elapsed_s": span_ns / 1e9, "charged_s": prewindow.INTERVAL_S,
-                                         "busy": exact}
-                        receipt.setdefault("exact_windows", []).append(exact_details)
-                        busy.extend(exact)
-                        self._record_cpu_flags(receipt, exact_details, exact, kind="exact_30s")
+                # at most INTERVAL_S before it and the printed start seconds.
+                busy.extend(self._exact_windows(receipt, snapshots, end, dwell_ns, flagged))
                 if long_interval is not None:
                     receipt["long_interval"] = True
                     raise Refused(
@@ -1105,24 +1162,29 @@ def softwareupdate_scan_forecast(start, deadline, *, log_path=Path("/var/log/ins
     """Predict six-hour softwareupdated scans; advisory only, never a gate.
 
     Use the latest AutoBackgroundScanFinished line in the last ``tail_bytes``
-    of install.log to project six-hour scans in [start, deadline]. Inputs
-    are local naive datetimes or epoch seconds. A read or parse problem gives
-    status "unknown".
+    of install.log to project six-hour scans in [start, deadline] in UTC.
+    Unzoned inputs and log lines are interpreted as UTC. A read or parse
+    problem gives status "unknown".
     """
+    def utc(value):
+        if isinstance(value, datetime):
+            return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+        return datetime.fromtimestamp(value, timezone.utc)
+
     try:
-        start = start if isinstance(start, datetime) else datetime.fromtimestamp(start)
-        deadline = deadline if isinstance(deadline, datetime) else datetime.fromtimestamp(deadline)
+        start, deadline = utc(start), utc(deadline)
         if deadline < start:
             raise ValueError("deadline precedes start")
         latest = None
         pattern = re.compile(
-            r"(?P<stamp>\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d|[A-Z][a-z]{2}\s+\d{1,2}\s+\d\d:\d\d:\d\d).*AutoBackgroundScanFinished")
+            r"(?P<stamp>\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d(?:Z|[+-]\d\d(?::?\d\d)?)?"
+            r"|[A-Z][a-z]{2}\s+\d{1,2}\s+\d\d:\d\d:\d\d).*AutoBackgroundScanFinished")
         for line in _log_tail(log_path, tail_bytes).splitlines():
             match = pattern.search(line)
             if not match:
                 continue
             stamp = match.group("stamp")
-            parsed = (datetime.strptime(stamp.replace("T", " "), "%Y-%m-%d %H:%M:%S")
+            parsed = utc(datetime.fromisoformat(stamp)
                       if stamp[0].isdigit() else
                       datetime.strptime(f"{start.year} {stamp}", "%Y %b %d %H:%M:%S"))
             if latest is None or parsed > latest:
@@ -1341,10 +1403,9 @@ def display_census(started_epoch, finished_epoch, run=subprocess.run):
     start (the last transition before it) and every `pmset -g log` display
     transition inside [started_epoch, finished_epoch].
     """
-    from datetime import datetime
     record = {"displaysleep_minutes": None, "display_at_start": None, "transitions": [],
               "display_woke_during_run": None}
-    env = {**os.environ, "LC_ALL": "C"}
+    env = _tool_env()
     try:
         settings = run(("/usr/bin/pmset", "-g"), capture_output=True, text=True, timeout=15, env=env)
         match = re.search(r"(?m)^\s*displaysleep\s+(\d+)", settings.stdout)
@@ -1387,7 +1448,8 @@ def smc_enumeration(repo, output, step=None):
                 "--idle-seconds", str(profile["idle_seconds"]), "--idle-max-seconds", str(profile["idle_max_seconds"]),
                 "--load-seconds", str(profile["load_seconds"]),
                 "--recovery-seconds", str(profile["recovery_seconds"]), "--contention-policy", policy]
-        result = subprocess.run(argv, capture_output=True, text=True, timeout=budget["timeout_seconds"])
+        result = subprocess.run(argv, capture_output=True, text=True, timeout=budget["timeout_seconds"],
+                                env=_tool_env())
         if policy == "flag" or result.returncode != CONTENTION_REDO_EXIT:
             break
         attempt = {"argv": argv, "exit_code": result.returncode, "stderr": result.stderr,

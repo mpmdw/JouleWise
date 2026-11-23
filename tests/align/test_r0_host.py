@@ -591,7 +591,7 @@ class R0HostTest(unittest.TestCase):
             log = Path(tmp) / "install.log"
             log.write_text("2026-11-06 23:09:00 AutoBackgroundScanFinished\n")
             result = softwareupdate_scan_forecast(start, datetime(2026, 11, 7, 12), log_path=log)
-            self.assertEqual(result["predicted"], ["2026-11-07T05:09:00", "2026-11-07T11:09:00"])
+            self.assertEqual(result["predicted"], ["2026-11-07T05:09:00+00:00", "2026-11-07T11:09:00+00:00"])
             self.assertEqual(softwareupdate_scan_forecast(start, start, log_path=log.with_name("missing"))["status"],
                              "unknown")
 
@@ -610,9 +610,9 @@ class R0HostTest(unittest.TestCase):
                 "2026-11-07 05:00:00-08 host softwareupdated[1635]: unrelated line\n")
             result = softwareupdate_scan_forecast(start, deadline, log_path=log)
             self.assertEqual(result["status"], "forecast")
-            self.assertEqual(result["last_finished"], "2026-11-07T04:45:00")
-            self.assertEqual(result["predicted"], ["2026-11-07T10:45:00", "2026-11-07T16:45:00"])
-            self.assertEqual(result["window"], ["2026-11-07T06:00:00", "2026-11-07T20:00:00"])
+            self.assertEqual(result["last_finished"], "2026-11-07T12:45:00+00:00")
+            self.assertEqual(result["predicted"], ["2026-11-07T18:45:00+00:00"])
+            self.assertEqual(result["window"], ["2026-11-07T06:00:00+00:00", "2026-11-07T20:00:00+00:00"])
             for path, args in ((Path(tmp), (start, deadline)),            # unreadable: a directory
                                (log, (deadline, start)),                  # inverted window
                                (log, ("not a time", deadline))):
@@ -637,7 +637,7 @@ class R0HostTest(unittest.TestCase):
                                                           tail_bytes=140)["status"], "unknown")
             self.assertEqual(softwareupdate_scan_forecast(start, deadline, log_path=log,
                                                           tail_bytes=len(scan) + 100)["last_finished"],
-                             "2026-11-07T04:45:00")
+                             "2026-11-07T12:45:00+00:00")
 
     def test_smc_receipt_reads_per_phase_jitter_and_refuses_actual_hole(self):
         for hole in (False, True):
@@ -1923,16 +1923,8 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
 
 class R0PublicationAuditTest(unittest.TestCase):
     def trial(self, case, *, publication_delay=0, probe_delay=0, command=None, wall_offset_ns=0, factory=None):
-        from datetime import datetime
         from joulewise.align import r0_runner
         from tests.align import test_r0_vs_l3_differential as fixture
-
-        class LocalPsTime(datetime):
-            @classmethod
-            def fromtimestamp(cls, value, tz=None):
-                # The frozen worker sets TZ=UTC. Here ps and the parser
-                # must agree on the current process's local timezone.
-                return super().fromtimestamp(value)
 
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp).resolve()
@@ -1963,7 +1955,7 @@ class R0PublicationAuditTest(unittest.TestCase):
 
             original_move, original_run = fixture.Fixture.move, fixture.Fixture.run
             original_wall = fixture.Fixture.wall_ns
-            with (patch.object(fixture, "datetime", LocalPsTime), patch.object(fixture.Fixture, "move", move),
+            with (patch.object(fixture.Fixture, "move", move),
                   patch.object(fixture.Fixture, "run", run), patch.object(fixture.Fixture, "wall_ns", wall)):
                 if factory is None:
                     return fixture.run_case(case, root, provenance, oracle=False)
@@ -2613,13 +2605,13 @@ class R0AdvisoryAdmissionTest(unittest.TestCase):
                 result, model = self.run_model(fixture.Case(name, end=40),
                                                self.stepped(10, 2 if name == "step" else 0, rows))
                 self.assertEqual((result["rc"], result["status"], result["published"]), (2, "refused", False), result)
-                clock = [(f["interval"]["start_monotonic_s"], f["interval"]["end_monotonic_s"])
-                         for f in model.guard.contention_flags if f.get("kind") == "wall_clock"]
+                clock = [f for f in model.guard.contention_flags if f.get("kind") == "wall_clock"]
                 if name == "step":
                     # The 0-30 s sampler window and the 0-40 s admission window
-                    # both contain the step; each is flagged.
-                    self.assertEqual(clock, [(0.0, 30.0), (0.0, 40.0)])
-                    self.assertIn("wall clock moved 2 s", result["reason"])
+                    # both contain the step; E1 can flag the CPU at 15 s first.
+                    self.assertEqual([(f["interval"]["start_monotonic_s"], f["interval"]["end_monotonic_s"])
+                                      for f in clock], [(0.0, 30.0), (0.0, 40.0)])
+                    self.assertTrue(all("wall clock moved 2 s" in f["flag"] for f in clock), result)
                 else:
                     self.assertEqual(clock, [])
                     self.assertIn((0.0, 30.0, fixture.PID), [flag[:3] for flag in result["flags"]], result)
@@ -2731,13 +2723,17 @@ class R0FinalVerdictTest(unittest.TestCase):
         return self.trial(case, factory=factory), models[0]
 
     @staticmethod
-    def verdict_windows(guard, *, flagged=False):
+    def series_receipts(guard):
+        return [*guard.receipts, *(r["publication_census"] for r in guard.receipts if "publication_census" in r)]
+
+    @classmethod
+    def verdict_windows(cls, guard, *, flagged=False):
         """Windows the verdict judged over the series (never admission windows).
 
         Exact-check pairs are recorded only when they hold at least the
         limit, so each one listed is a flagged window.
         """
-        receipts = [*guard.receipts, *(r["publication_census"] for r in guard.receipts if "publication_census" in r)]
+        receipts = cls.series_receipts(guard)
         rule = {(w["start_monotonic_s"], w["end_monotonic_s"]) for r in receipts
                 for w in r.get("cpu_intervals", ()) if w.get("contention_flag") or not flagged}
         exact = {(w["start_monotonic_s"], w["end_monotonic_s"]) for r in receipts for w in r.get("exact_windows", ())}
@@ -2826,7 +2822,7 @@ class R0FinalVerdictTest(unittest.TestCase):
                 else:
                     self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
 
-    def series_fixture(self, ticks, rows):
+    def series_fixture(self, ticks, rows, *, read_ms=0):
         """The frozen fixture with explicit daemon ticks and extra process rows."""
         from tests.align import test_r0_vs_l3_differential as fixture
 
@@ -2836,17 +2832,88 @@ class R0FinalVerdictTest(unittest.TestCase):
                 self.ticks = list(ticks)
 
             def move(self, end):
+                if self.case.schedule == "inventory" and end == 45 and "inventory" in self.work_started:
+                    end = self.case.end
                 while self.ticks and self.ticks[0] <= end:
                     self.now = self.ticks.pop(0)
                     self.apply_tree()
                     self.timer.pulse()
-                self.now = end
+                self.now = max(self.now, end)
                 self.apply_tree()
 
             def processes(self):
                 return [*super().processes(), *rows(self.now)]
 
+            def run(self, argv, **kwargs):
+                result = super().run(argv, **kwargs)
+                if tuple(argv) == contention.PS_ARGV:
+                    self.now += read_ms / 1000
+                return result
+
         return Series
+
+    def test_audit_r2_birth_and_absence_supply_zero_exact_openings(self):
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        for mode, size, refused in (("integer", 150, True), ("fractional", 151, True), ("reuse", 151, True),
+                                    ("older", 150, True), ("older", 151, True), ("older", 149, False),
+                                    ("fractional", 149, False)):
+            name = f"{mode}_{size}"
+            opening, end = (46.0, 76.0) if mode == "integer" else (45.5, 75.4)
+            birth = -100 if mode == "older" else opening + 0.1
+
+            def rows(now):
+                if now < birth:
+                    if mode == "reuse":
+                        yield fixture.PID, -100, 0, "ordinary", "/fixture/ordinary"
+                    return
+                early = min(1, max(0, (now - 50) / 4))
+                late = min(1, max(0, (now - 68) / 4))
+                cpu = round(75 * early + (size - 75) * late)
+                yield fixture.PID, int(birth), cpu, fixture.WORKER, "/fixture/mdworker_shared"
+
+            with self.subTest(case=name):
+                result, model = self.run_model(fixture.Case(name, end=end),
+                                               self.series_fixture((opening, opening + 15.5), rows))
+                self.assertEqual((result["rc"], result["published"]), (2, False) if refused else (0, True), result)
+                self.assertEqual(result["recorded"], result["guard_count"])
+                if refused:
+                    self.assertTrue(any(flag.get("kind") == "exact_30s" and
+                                        (flag["interval"]["start_monotonic_s"], flag["interval"]["end_monotonic_s"])
+                                        == (opening, end) for flag in model.guard.contention_flags), result)
+                else:
+                    self.assertEqual(result["flags"], [], result)
+
+    def test_audit_r2_turnover_interior_report_and_inventory(self):
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        for mode in ("reused", "fresh", "resident"):
+            for size in (149, 152):
+                for schedule, read_ms in (("host", 0), ("host", 10), ("inventory", 0), ("inventory", 10)):
+                    name = f"{mode}_{size}_interior"
+                    birth = -100 if mode == "resident" else 45.85
+
+                    def rows(now):
+                        if now < birth:
+                            if mode == "reused":
+                                yield fixture.PID, -100, 7, "ordinary", "/fixture/ordinary"
+                            return
+                        early = min(1, max(0, (now - 48) / 6))
+                        late = min(1, max(0, (now - 67) / 6))
+                        cpu = round(60 * early + (size - 60) * late)
+                        yield fixture.PID, birth, cpu, fixture.WORKER, "/fixture/mdworker_shared"
+
+                    with self.subTest(case=name, schedule=schedule, read_ms=read_ms):
+                        ticks = (45.8, 75.7, 91.2, 106.7)
+                        result, model = self.run_model(fixture.Case(name, schedule=schedule, end=ticks[-1]),
+                                                       self.series_fixture(ticks, rows, read_ms=read_ms))
+                        if size == 152:
+                            self.assertEqual((result["rc"], result["published"]), (2, False), result)
+                            self.assertIn((45.8 + read_ms / 2000, 75.7 + read_ms / 2000, fixture.PID),
+                                          self.verdict_flag_keys(model.guard), result)
+                        else:
+                            self.assertEqual((result["rc"], result["published"], result["flags"]),
+                                             (0, True, []), result)
 
     def verdict_flag_keys(self, guard):
         windows = set(self.verdict_windows(guard))
@@ -2925,6 +2992,257 @@ class R0FinalVerdictTest(unittest.TestCase):
                             for tail in (0, 1, 3):
                                 self.assertEqual((runs[tail][0]["rc"], runs[tail][0]["published"],
                                                   runs[tail][0]["flags"]), (0, True, []), runs[tail][0])
+
+    def test_e1_sweep_crosses_birth_openings_limits_schedules_and_quiet_tails(self):
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        # Split the burst so neither observed counter delta alone suffices
+        # for a newborn. A resident also carries CPU from before the run.
+        for schedule, opening, middle, end, cadence in (
+                ("on", 45, 60, 75, 15), ("off", 45.5, 61, 75.4, 15.5),
+                ("jitter", 45.4, 59.6, 75.3, 15.2)):
+            for mode in ("resident", "born_inside", "reused", "fresh", "start_exactly_30"):
+                if mode in ("born_inside", "start_exactly_30"):
+                    birth = 46.1
+                    close = 75.9 if mode == "born_inside" else 76
+                else:
+                    birth = -100 if mode == "resident" else opening + 0.09
+                    close = end
+                ticks = [opening, middle, *(round(close + cadence * i, 3) for i in range(4))]
+                for size in (149, 150, 151, 152):
+                    def worker_at(now):
+                        if now < birth:
+                            return None
+                        early = min(1, max(0, (now - 50) / 4))
+                        late = min(1, max(0, (now - 68) / 4))
+                        return (230 if mode == "resident" else 0) + round(60 * early + (size - 60) * late)
+
+                    def rows(now):
+                        cpu = worker_at(now)
+                        if cpu is not None:
+                            yield fixture.PID, int(birth), cpu, fixture.WORKER, "/fixture/mdworker_shared"
+                        elif mode == "reused":
+                            yield fixture.PID, -100, 7, "ordinary", "/fixture/ordinary"
+
+                    prior_exact, prior_flags = set(), set()
+                    for tail in (0, 1, 3):
+                        with self.subTest(schedule=schedule, mode=mode, size=size, tail=tail):
+                            samples = [0, 15, 30, *ticks[:3 + tail]]
+                            expected = set()
+                            for j, stop in enumerate(samples):
+                                cpu = worker_at(stop)
+                                if cpu is None:
+                                    continue
+                                openings = [(at, worker_at(at) or 0) for at in samples[:j]]
+                                if mode != "resident":
+                                    openings.append((int(birth), 0))
+                                expected.update((at, stop, fixture.PID) for at, baseline in openings
+                                                if 0 <= stop - at <= 30 and cpu - baseline >= 150)
+                            result, model = self.run_model(
+                                fixture.Case(f"{mode}_{size}", end=samples[-1]), self.series_fixture(ticks, rows))
+                            exact = {(window["start_monotonic_s"], window["end_monotonic_s"], row["pid"])
+                                     for receipt in self.series_receipts(model.guard)
+                                     for window in receipt.get("exact_windows", ()) for row in window["busy"]}
+                            flags = self.verdict_flag_keys(model.guard)
+                            self.assertEqual(exact, expected, result)
+                            self.assertEqual((result["rc"], result["published"]),
+                                             (2, False) if expected else (0, True), result)
+                            self.assertLessEqual(prior_exact, exact)
+                            self.assertLessEqual(prior_flags, flags)
+                            prior_exact, prior_flags = exact, flags
+                            if mode == "start_exactly_30" and size >= 150:
+                                self.assertEqual({at for at, stop, _ in exact if stop == close}, {46})
+                                if size == 150:
+                                    self.assertIn({"start_monotonic_s": 46, "end_monotonic_s": close, "elapsed_s": 30},
+                                                  [flag.get("proof_interval") for flag in model.guard.contention_flags])
+
+    def test_rule_window_uses_absence_even_if_a_wall_step_dates_the_birth_earlier(self):
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        for size in (149, 160):
+            def rows(now):
+                if now >= 45.85:
+                    cpu = round(size * min(1, max(0, (now - 70) / 4)))
+                    yield fixture.PID, 45, cpu, fixture.WORKER, "/fixture/mdworker_shared"
+
+            class Shifted(self.series_fixture((45.8, 76.3), rows)):
+                def wall_ns(self):
+                    return super().wall_ns() + (300_000_000 if self.now >= 46 else 0)
+
+            with self.subTest(size=size):
+                result, model = self.run_model(fixture.Case(f"wall_step_{size}", end=76.3), Shifted)
+                if size == 160:
+                    self.assertEqual((result["rc"], result["published"]), (2, False), result)
+                    self.assertIn((45.8, 76.3), self.verdict_flags(model.guard))
+                    self.assertTrue(all(flag.get("kind") is None for flag in model.guard.contention_flags), result)
+                else:
+                    self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+
+
+class R0AccountingTimezoneTest(unittest.TestCase):
+    trial = R0PublicationAuditTest.trial
+
+    def in_zone(self, zone, expression):
+        import os
+        import sys
+        import time
+
+        if not hasattr(time, "tzset"):
+            self.skipTest("requires time.tzset")
+        program = ("import json, time\n"
+                   "from tests.align.test_r0_host import R0AccountingTimezoneTest as Test\n"
+                   "time.tzset()\n"
+                   f"print(json.dumps({expression}))\n")
+        output = subprocess.check_output([sys.executable, "-B", "-c", program], text=True,
+                                         env={**os.environ, "TZ": zone, "LC_ALL": "C"})
+        return json.loads(output)
+
+    def test_repeated_hour_report_and_inventory_match_utc(self):
+        expected = {"quiet": [0, True, 0], "worker_180": [2, False, 3], "worker_225": [2, False, 3],
+                    "resident_180": [2, False, 3], "terminal_180": [2, False, 1],
+                    "second_live": [2, False, 3], "local-hour": [2, False, 3]}
+        for zone, utc in (("America/Los_Angeles", "2026-11-01T09:15:00+00:00"),
+                          ("America/New_York", "2026-11-01T06:15:00+00:00"),
+                          ("Australia/Lord_Howe", "2026-04-04T15:15:00+00:00")):
+            with self.subTest(zone=zone):
+                expression = f"Test().repeated_hour_cases({utc!r})"
+                baseline = self.in_zone("UTC", expression)
+                self.assertEqual(baseline, expected)
+                self.assertEqual(self.in_zone(zone, expression), baseline)
+
+    def repeated_hour_cases(self, utc):
+        """Synthetic Darwin ps prints lstart in the environment of each call."""
+        import os
+        from datetime import datetime, timezone
+        from zoneinfo import ZoneInfo
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        epoch = int(datetime.fromisoformat(utc).timestamp())
+        self.assertEqual(datetime.fromtimestamp(epoch, ZoneInfo(os.environ["TZ"])).fold,
+                         int(os.environ["TZ"] != "UTC"))
+        probes = set()
+
+        class LocalPS(fixture.Fixture):
+            def wall_ns(self):
+                return epoch * 10**9 + round(self.now * 10**9)
+
+            def move(self, end):
+                if self.case.schedule == "inventory" and end == 45 and "inventory" in self.work_started:
+                    end = self.case.end
+                super().move(end)
+
+            def processes(self):
+                rows = super().processes()
+                name = self.case.name
+                if name == "quiet":
+                    return rows
+                if name in ("second_live", "local-hour"):
+                    birth, size, ramp = 35, 180, 6
+                else:
+                    kind, size = name.split("_")
+                    birth, size, ramp = (61 if kind == "terminal" else 41), int(size), 4
+                    if kind == "worker" and self.now >= 48:
+                        return rows
+                if self.now >= birth:
+                    cpu = round(size * min(1, (self.now - birth) / ramp))
+                    rows.append((fixture.PID, birth, cpu, fixture.WORKER, "/fixture/mdworker_shared"))
+                return rows
+
+            def run(self, argv, **kwargs):
+                result = super().run(argv, **kwargs)
+                env = kwargs.get("env", os.environ)
+                probes.add((tuple(argv[:2]), env.get("TZ"), env.get("LC_ALL")))
+                if tuple(argv) == contention.PS_ARGV:
+                    zone = ZoneInfo(env["TZ"])
+                    fmt = "%a %b %d %H:%M:%S %Y"
+                    for _, born, _, _, _ in self.processes():
+                        original = datetime.fromtimestamp(fixture.EPOCH + born, timezone.utc).strftime(fmt)
+                        printed = datetime.fromtimestamp(epoch + born, zone).strftime(fmt)
+                        result.stdout = result.stdout.replace(original, printed)
+                return result
+
+        outcomes = {}
+        for name in ("quiet", "worker_180", "worker_225", "resident_180", "terminal_180",
+                     "second_live", "local-hour"):
+            schedule = "inventory" if name == "local-hour" else "host"
+            result = self.trial(fixture.Case(name, end=65, schedule=schedule), factory=LocalPS)
+            outcomes[name] = result["rc"], result["published"], result["guard_count"]
+        self.assertEqual({argv[0] for argv, _, _ in probes}, {"/bin/ps", "/usr/bin/pgrep", "/bin/launchctl"})
+        for argv, tz, locale in probes:
+            self.assertEqual((tz, locale), ("UTC", "C"), argv)
+        return outcomes
+
+    def test_r0_parse_uses_utc_even_after_warming_the_local_caches(self):
+        utc, local = self.in_zone("America/Los_Angeles", "Test().parse_fixed_utc_row()")
+        self.assertEqual(utc, 1793524500)  # 2026-11-01 09:15:00 UTC
+        self.assertEqual(local, utc + 8 * 3600)
+
+    def parse_fixed_utc_row(self):
+        from datetime import timezone
+
+        start = "Sun Nov 1 09:15:00 2026"
+        key = (7421, start)
+        table = cpu_table((7421, start, "0:01.80", "mdworker_shared"))
+        local = contention.parse(table.encode())[key]["start_epoch_s"]
+
+        def run(argv, **kwargs):
+            if argv == contention.PS_ARGV:
+                self.assertEqual(kwargs["env"]["TZ"], "UTC")
+                return subprocess.CompletedProcess(argv, 0, table, "")
+            return subprocess.CompletedProcess(argv, 0, "1 0.0 /sbin/launchd\n", "")
+
+        guard = QuietGuard([], run=run, clock=lambda: 0, wall_clock_ns=lambda: 1793524500 * 10**9,
+                           host_reader=None)
+        snapshot, _ = guard._read_cpu_snapshot(include_host=False)
+        utc = snapshot.rows[key]["start_epoch_s"]
+        self.assertEqual(contention.parse(table.encode())[key]["start_epoch_s"], local)
+        different_line = cpu_table((7421, start, "0:01.81", "mdworker_shared"))
+        self.assertEqual(contention.parse(different_line.encode(), tz=timezone.utc)[key]["start_epoch_s"], utc)
+        return utc, local
+
+    def test_command_display_and_smc_subprocesses_request_utc(self):
+        from joulewise.align import r0_host
+
+        result = subprocess.CompletedProcess([], 0, "", "")
+        with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {"TZ": "America/New_York"}):
+            root = Path(tmp)
+            (root / "scripts").mkdir()
+            (root / "scripts/align_smc_enumerate.py").touch()
+            with patch.object(subprocess, "run", return_value=result) as run:
+                r0_host.command(("fixture",))
+                r0_host.display_census(0, 1, run=run)
+                r0_host.smc_enumeration(root, root / "output")
+            self.assertEqual(run.call_count, 4)
+            for call in run.call_args_list:
+                env = call.kwargs["env"]
+                self.assertEqual((env["TZ"], env["LC_ALL"]), ("UTC", "C"), call.args[0])
+
+    def test_r0_time_conversions_use_explicit_timezones(self):
+        import ast
+        from joulewise.align import r0_host
+
+        def name(node):
+            return node.attr if isinstance(node, ast.Attribute) else None
+
+        for path in sorted(Path(r0_host.__file__).parent.glob("r0_*.py")) + [Path(contention.__file__)]:
+            tree = ast.parse(path.read_text())
+            for call in (node for node in ast.walk(tree) if isinstance(node, ast.Call)):
+                location = f"{path.name}:{call.lineno}"
+                method = name(call.func)
+                self.assertNotEqual(method, "mktime", location)
+                if method == "fromtimestamp":
+                    self.assertTrue(len(call.args) == 2 or any(k.arg == "tz" for k in call.keywords), location)
+                elif method == "timestamp":
+                    receiver = call.func.value
+                    self.assertIsInstance(receiver, ast.Call, location)
+                    if name(receiver.func) == "strptime":
+                        self.assertIn("%z", receiver.args[1].value, location)
+                    else:
+                        self.assertEqual(name(receiver.func), "replace", location)
+                        self.assertTrue(any(k.arg == "tzinfo" for k in receiver.keywords), location)
+                elif method == "parse" and isinstance(call.func.value, ast.Name) and call.func.value.id == "contention":
+                    self.assertTrue(any(k.arg == "tz" and ast.unparse(k.value) == "timezone.utc"
+                                        for k in call.keywords), location)
 
 
 class R0ProcessIdentityTest(unittest.TestCase):
