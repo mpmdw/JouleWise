@@ -830,6 +830,7 @@
     "tests.independent_recompute.test_release_trace_20261107": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
     "tests.test_analysis_engine_campaign_log_members": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
     "tests.test_bytes_campaign_split": "New offline regression for the pending ALIGN patch; no hosted timing yet. Discovered and packed at the conservative unknown weight (26.98 s).",
+    "tests.test_mbp_watch": "Added 2026-11-15 (PR #805); pending hosted timing (35 s locally). Still discovered and packed at the conservative unknown weight (26.98 s).",
     "tests.test_pipeline_time_alarms": "Added by PR #759 (RL-127 watcher) on 2026-11-13; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s). Local run: all three modules together take about 3 s.",
     "tests.test_pipeline_time_detect": "Added by PR #759 (RL-127 watcher) on 2026-11-13; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s). Local run: all three modules together take about 3 s.",
     "tests.test_pipeline_time_ledger": "Added by PR #759 (RL-127 watcher) on 2026-11-13; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s). Local run: all three modules together take about 3 s."

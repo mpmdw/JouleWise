@@ -1,0 +1,53 @@
+name: mbp-watch
+
+# RL-173 C (RL-149 §2.8 line 7): the MBP span watcher runs here, so it works when the Air and the lead are
+# both away. Every 10 minutes it re-reads the append-only span log (refs/heads/span-watch/log: each span's
+# arm, pushed before its launch, and its close, pushed by its Check; a ruleset must protect it or the run
+# fails) and opens one `mbp-alarm` issue per new event, assigned to the repository owner: SPAN_SILENT (no
+# visible close by the armed deadline + 20 min), SPAN_STOP, RESULT_UNREADABLE. Issues carry
+# closed-vocabulary codes only; the repository is public. A failed git or API read, or an unconfirmed
+# issue, fails the run. Each arm checks the latest completed run with `python3 scripts/mbp_watch.py read`
+# (C.4). Runbook: docs/ops/MBP-WATCH.md.
+
+on:
+  schedule:
+    - cron: "3-59/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+
+concurrency:
+  group: mbp-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    if: github.repository == 'mpmdw/JouleWise'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+      - name: Refuse a re-run (each health signal is a fresh scheduled run; a re-run always fails)
+        env:
+          ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          if [ "$ATTEMPT" != "1" ]; then
+            echo "MBP_WATCH_ERROR RERUN_REFUSED attempt=$ATTEMPT"
+            exit 1
+          fi
+      - name: Watch the MBP's spans
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          python3 scripts/mbp_watch.py watch
+          --repo "$GITHUB_REPOSITORY"
+          --owner "$GITHUB_REPOSITORY_OWNER"
+          --grace-s 1200
+          --run-url "$RUN_URL"
+          --run-id "$GITHUB_RUN_ID"
