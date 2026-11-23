@@ -12,6 +12,7 @@
   "_hosted_observation_2026_10_22_align_moe": "SUPERSEDED 2026-11-06 for scheduling: tests.align.test_moe_calibration now weighs 1376.959 s, its hosted median from _hosted_observations_2026_11_06_cross_lane, which replaces the earlier hint recorded below (carried verbatim from lane/2026-11-05-align-pilot10-benign so this map is a key superset of every open lane's map and a merge can keep this file's values whole). Earlier hint: ADDED for tests.align.test_moe_calibration: single hosted observation from CI run 39715696032, shard 9, MODULE PASS seconds=1451.183. This is a scheduling hint, not evidence; replace with hosted medians at the next timing harvest.",
   "_local_observation_2026_11_11_b6_analysis": "ADDED for the Block 6 analysis lane: tests.independent_recompute.test_block6 (26 tests, 10.372 s process wall) and tests.independent_recompute.test_b6_production (15 tests, 20.055 s process wall), each run separately with JW_B5_SYNTHETIC_ONLY=1, TMPDIR unset and Python 3.13. Local observations under current load, not hosted medians or production speed evidence. See docs/run_reports/2026-11-11-p1-seat7-r2.md; replace with hosted observations when available.",
   "_local_observation_2026_11_18_flashnext_stream": "tests.test_align_stream_qwen4_exp took 0.139 s in one local Python 3.13 unittest run on the engineering MacBook Air. Eleven synthetic tests passed and native parity was skipped. This is a shard scheduling hint.",
+  "_local_observation_2026_11_18_c1_comparator": "The focused Python 3.13 sharder reported tests.v4_release.test_claim_output_mutations at 0.584 s and tests.v4_release.test_rl187_comparator at 0.014 s. Both modules use invented reports. These are scheduling hints.",
   "exclusive_modules": {
     "tests.test_calibration_exits": {
       "seconds": 820.019,
@@ -811,7 +812,9 @@
     "tests.twins.test_engine_twin": 0.159,
     "tests.twins.test_engine_twin_comparison": 0.658,
     "tests.twins.test_harvest_twin": 0.004,
-    "tests.twins.test_harvest_twin_comparison": 7.145
+    "tests.twins.test_harvest_twin_comparison": 7.145,
+    "tests.v4_release.test_claim_output_mutations": 0.584,
+    "tests.v4_release.test_rl187_comparator": 0.014
   },
   "timing_exemptions": {
     "tests.b5_analysis.test_candidate_physics_memo": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
