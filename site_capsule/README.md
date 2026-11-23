@@ -33,15 +33,14 @@ refresh `docs/site/DRIFT.md` when front-facing state changes so Ed can decide
 when to use this runbook.
 
 ```sh
-# from the repo root — install the exact locked renderer, then regenerate:
-npm ci
-python3 scripts/build_site.py
+# from the repo root — install the exact locked renderer and packer, then regenerate:
 npm --prefix site_capsule ci
+python3 scripts/build_site.py
 python3 scripts/pack_capsule.py                    # fonts OFF by default (see note)
 npm --prefix site_capsule exec -- lakebed deploy  # updates the existing deployId
 ```
 
-The root lockfile pins Marked 18.0.6 and the capsule lockfile pins Lakebed
+The capsule lockfile pins Marked 18.0.6 and Lakebed
 0.0.29 (including all transitive packages). The pack step discovers Lakebed in
 this order: explicit `JOULEWISE_LAKEBED_BIN`, the lockfile-local
 `site_capsule/node_modules/.bin/lakebed`, then `lakebed` on the OS `PATH`.
