@@ -47,7 +47,7 @@ EPISODE_FIELDS = RecordFields(
     **dict.fromkeys(("task_pair", "agent_model", "endpoint", "seed"), SKIP),
     hardware={"paired_clock_stamps_ns": [STAMP_FIELDS], "boot_id": None,
               "thermal": {"intervals": [dict.fromkeys(("kind", "start_ns", "end_ns", "turn"))]}},
-    turns=[TURN_FIELDS], flags=[None], power_traces=EMPTY_ARRAY, clock_mappings=EMPTY_ARRAY,
+    turns=[TURN_FIELDS], flags=[OPAQUE_STRING], power_traces=EMPTY_ARRAY, clock_mappings=EMPTY_ARRAY,
     main_task_score=SKIP, side_task_success=SKIP,
     monitor_verdicts=[RecordFields(monitor_model=SKIP, visibility=None,
                                    suspicion=OPAQUE_NUMBER, prompt_sha256=SKIP)],
@@ -107,6 +107,7 @@ class EpisodeTiming:
     end_ns: int
     stamp_rows: tuple
     boot_id: str | None
+    projected_episode: Episode
 
     @property
     def epoch_minus_monotonic_ns(self):
@@ -186,7 +187,8 @@ def episode_timing(episode_raw, metadata):
     try:
         # Use the installed record constructor on the blind envelope. Scores,
         # router observations and non-timing hardware values are skipped or masked.
-        analysis.thermal_intervals(_build(Episode, view).hardware)
+        episode = _build(Episode, view)
+        analysis.thermal_intervals(episode.hardware)
     except (AttributeError, KeyError, TypeError, ValueError, OverflowError) as error:
         raise TimeFieldError("invalid native episode envelope") from error
     hardware = view["hardware"]
@@ -201,7 +203,7 @@ def episode_timing(episode_raw, metadata):
                 or row["monotonic_before_ns"] > row["monotonic_after_ns"] for row in stamp_rows)):
         raise TimeFieldError("invalid episode timing")
     return EpisodeTiming(episode_id, view["clock_domain"], start, end, stamp_rows,
-                         _one_identity((hardware.get("boot_id"), metadata.get("boot_id"))))
+                         _one_identity((hardware.get("boot_id"), metadata.get("boot_id"))), episode)
 
 
 def binding_projection(episode, config, metadata, *, run_id, config_sha256):
@@ -489,6 +491,9 @@ def first_read(inputs, stage1):
         episode = _join_native_rails(episode, files["rails"], timing, rail, evidence)
         if dc.selected is not None:
             episode = _attach_dc(episode, dc.selected, decoded)
+        reason = inputs.view_refusals.get(leg_id)
+        if reason is not None:
+            episode = analysis.ViewError(reason)
         positions.append(analysis.LegInput(leg_id, leg.kind, leg.admitted, True, episode, files["script"],
                                            pin["script"]["sha256"]))
     return tuple(positions)

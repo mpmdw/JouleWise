@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 
+from .controls_analysis import ViewError, blind_view_refusal, script_steps
 from .controls_layout import GateRefusal, open_file, require_private, write_exclusive
 from .controls_manifest import ISSUED_SETTINGS, STAGE1_SCHEMA, canonical
 from .controls_print import KIT_ID, MASTER_SEED, PILOT, REMAINDER, _hex_pin
@@ -16,7 +17,7 @@ from .controls_reader import (
 from .custody_pins import PinRefusal, safe_relative
 from .description_inputs import PinnedInput
 from .qualification_manifest import _decode
-from .controls_time_fields import DigestFields, Nullable, RecordFields, TimeFieldError, project_json
+from .controls_time_fields import DigestFields, Nullable, OPAQUE_STRING, RecordFields, TimeFieldError, project_json
 
 
 IDS = PILOT + REMAINDER
@@ -38,7 +39,8 @@ SPEC_FIELDS = DigestFields(
 WORK_FIELDS = {
     **dict.fromkeys(("schema", "leg_id", "leg_spec_sha256", "complete")),
     "script": SCRIPT_FIELDS,
-    "steps": [dict.fromkeys(("kind", "complete", "actual_tokens", "requested_tokens"))],
+    "steps": [dict.fromkeys(("kind", "complete", "started_ns", "ended_ns", "first_token_ns",
+                            "actual_tokens", "requested_tokens", "context_tokens", "requested_s"))],
 }
 REFERENCE_FIELDS = {"schema": None, "status": None, "source": {"run_id": None, "config_sha256": None},
                     "record_sha256": None}
@@ -49,7 +51,8 @@ RESULT_FIELDS = dict.fromkeys((
 ))
 ATTEMPT_FIELDS = DigestFields.fromkeys(("attempt", "redone", "output_dir", "leg_status", "contaminated"))
 CLOSE_FIELDS = {
-    **dict.fromkeys(("span_id", "schema", "runner_kind", "mock", "rc", "legs_finished", "desk_bundle_error")),
+    **dict.fromkeys(("span_id", "schema", "runner_kind", "mock", "rc", "legs_finished")),
+    "desk_bundle_error": Nullable(OPAQUE_STRING),
     "roster": [None],
     "kit": RecordFields.fromkeys(("campaign_id", "sha256", "frozen_commit")),
     "feeds": {"meter": {"stop": {"rc": None, "proven_stopped": None}, "files": [
@@ -243,7 +246,7 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
     custody = project_json(terminal_raw, {"files": member_files}, strict=True)
     run_id = bundle.split("/")[1]
     files = {"leg_record": leg_record, "leg_spec": leg_spec, "terminal_map": terminal, "result": result_entry}
-    hidden_delivered = None
+    hidden_delivered = work = None
     if dispatched:
         script = file("script", "script-work.json")
         files["script"] = script
@@ -252,6 +255,10 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
                  and work["schema"] == "joulewise.cadence_script_work.v1" and work["leg_id"] == leg_id
                  and work["leg_spec_sha256"] == canonical_spec_sha and work["script"] == spec["script"]
                  and type(work["complete"]) is bool and result["script_complete"] is work["complete"])
+        try:
+            script_steps(work, spec["script"]["kind"], allow_interrupted=not work["complete"])
+        except ViewError as error:
+            raise TimeFieldError("invalid native script step record") from error
         hidden = [step["actual_tokens"] for step in work["steps"] if step["kind"] == "hidden"]
         if len(hidden) == 1:
             hidden_delivered = hidden[0]
@@ -271,13 +278,14 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
     else:
         reference_sha = result["g0_reference_record_sha256"]
     _require(_hex_pin(reference_sha, 64))
-    return {
+    position = {
         "attempt": selected["attempt"], "role": role, "reference_sha256": reference_sha,
         "kind": spec["script"]["kind"], "admitted": admitted, "g0_released": dispatched,
         "leg_status": result["leg_status"], "script_complete": result["script_complete"],
         "hidden_delivered": hidden_delivered, "spec_sha256": canonical_spec_sha,
         "span_id": check["span_id"], "bundle": runtime + "/" + bundle, "run_id": run_id, "files": files,
     }
+    return position, work
 
 
 @dataclass
@@ -287,6 +295,7 @@ class Inputs:
     inventory: dict
     legs: dict
     certificates: dict
+    view_refusals: dict
 
     @property
     def positions(self):
@@ -323,7 +332,7 @@ def _make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic):
     kit = _kit_inputs(kit_raw, runner_commit, synthetic=synthetic)
     inventory = dict(schema=INVENTORY_SCHEMA, kit_sha256=kit_sha, runner_commit=runner_commit,
                      spans={}, positions={})
-    result = Inputs(source, private, inventory, {}, {})
+    result = Inputs(source, private, inventory, {}, {}, {})
     _require(len(checks) == 2 and len({row["span_id"].casefold() for row in checks}) == 2
              and len({row["check_item"] for row in checks}) == len({row["close_item"] for row in checks}) == 2)
     for number, (ids, check) in enumerate(zip((PILOT, REMAINDER), checks, strict=True), 1):
@@ -337,7 +346,7 @@ def _make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic):
                     streams=streams, capture_leg=ids[0])
         result.spans[span_id] = span
         for ordinal, (leg_id, close_leg) in enumerate(zip(ids, close["legs"], strict=True)):
-            position = _terminal(root, check, close_leg, kit[leg_id], ordinal, synthetic=synthetic)
+            position, work = _terminal(root, check, close_leg, kit[leg_id], ordinal, synthetic=synthetic)
             position.update(span_index=number, disposition_sha256=None, certificate=None)
             result.positions[leg_id] = position
             if ordinal == 0:
@@ -358,6 +367,9 @@ def _make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic):
                     payloads["episode"], payloads["config"], payloads["metadata"],
                     run_id=position["run_id"], config_sha256=files["config"]["sha256"],
                 )
+                reason = blind_view_refusal(timing.projected_episode, work, position["kind"])
+                if reason is not None:
+                    result.view_refusals[leg_id] = reason
                 rail = rail_timing(payloads["rails"], timing, period, evidence)
                 dc = select_dc(timing, stream_views)
                 episode_id, episode_sha, script_sha = timing.episode_id, files["episode"]["sha256"], files["script"]["sha256"]

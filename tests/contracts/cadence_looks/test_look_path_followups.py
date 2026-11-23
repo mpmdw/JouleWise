@@ -11,6 +11,7 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
+from joulewise.cadence_looks import controls_analysis as analysis
 from joulewise.cadence_looks import controls_book as book
 from joulewise.cadence_looks import controls_layout as layout
 from joulewise.cadence_looks import controls_reader as reader
@@ -50,7 +51,12 @@ def mutate(world, role, fault):
     elif role == "rails":
         path.write_bytes(fault(path.read_bytes()))
     elif role == "script":
-        path.write_bytes(path.read_bytes().rstrip()[:-1] + fault)
+        if callable(fault):
+            document = registrar.read(path)
+            fault(document)
+            registrar.put(path, document)
+        else:
+            path.write_bytes(path.read_bytes().rstrip()[:-1] + fault)
         pin = registrar.digest(path.read_bytes())
         result_path = runtime / "runtime_result.json"
         leg_path = runtime.parent / "leg_record.json"
@@ -190,6 +196,13 @@ class LookPathFollowupTests(TestCase):
                 d["hardware"]["thermal"]["intervals"][:1])),
             ("script-duplicate", "script", b',"extra":{"nested":[{"a":0,"\\u0061":1}]}}\n'),
             ("script-nonfinite", "script", b',"extra":{"nested":[NaN]}}\n'),
+            ("script-missing-end", "script", lambda d: d["steps"][0].pop("ended_ns")),
+            ("script-overflow-dose", "script", lambda d: d["steps"][-1].update(requested_s=10**309)),
+            ("script-bool-dose", "script", lambda d: d["steps"][-1].update(requested_s=True)),
+            ("script-missing-context", "script", lambda d: next(
+                step for step in d["steps"] if step["kind"] == "turn").pop("context_tokens")),
+            ("script-reversed-step", "script", lambda d: d["steps"][-1].update(
+                ended_ns=d["steps"][-1]["started_ns"] - 1)),
         )
         for name, role, fault in faults:
             with self.subTest(fault=name):
@@ -211,6 +224,43 @@ class LookPathFollowupTests(TestCase):
         self.assertEqual(self.invoke(world, bench, "commit-stage1"), (0, b"", b""))
         self.assertEqual(self.invoke(world, bench, "preflight", "guard_blind_values"), (0, b"", b""))
         self.assert_fresh(world, bench)
+
+    def test_stage1_and_preflight_keep_diagnostic_flags_opaque(self):
+        def add_flag(document):
+            document["flags"].append("task.synthetic_telemetry.power_w=91827.375")
+
+        world, bench = self.prepare("blind-flags", role="episode", fault=add_flag)
+        self.assertEqual(self.invoke(world, bench, "stage1", "guard_blind_values"), (0, b"", b""))
+        self.assertEqual(self.invoke(world, bench, "commit-stage1"), (0, b"", b""))
+        self.assertEqual(self.invoke(world, bench, "preflight", "guard_blind_values"), (0, b"", b""))
+        self.assert_fresh(world, bench)
+
+    def test_blind_view_preserves_ruled_per_leg_dispositions(self):
+        _, runtime, bundle = FROZEN["location"](self.pristine, "L002")
+        episode = registrar.read(bundle / "outputs/align_episode.json")
+        work = registrar.read(runtime / "script-work.json")
+        kind = work["script"]["kind"]
+
+        def reason():
+            projected = reader.episode_timing(registrar.manifest.canonical(episode), {}).projected_episode
+            return analysis.blind_view_refusal(projected, work, kind)
+
+        self.assertIsNone(reason())
+        turn = next(step for step in work["steps"] if step["kind"] == "turn")
+        turn["first_token_ns"] += 1
+        self.assertEqual(reason(), "envelope_stamps")
+        turn["first_token_ns"] -= 1
+        episode["start_ns"] -= 2
+        episode["hardware"]["thermal"]["intervals"][0]["end_ns"] = episode["start_ns"] + 1
+        self.assertEqual(reason(), "leg_record_invalid")
+
+    def test_incomplete_script_allows_a_native_interrupted_tail(self):
+        work = {"steps": [{"kind": "turn", "complete": False, "actual_tokens": None,
+                           "requested_tokens": 64, "started_ns": 1}]}
+        self.assertEqual(analysis.script_steps(work, "plain", allow_interrupted=True), (None,))
+        work["steps"][0]["actual_tokens"] = 1
+        with self.assertRaisesRegex(analysis.ViewError, "^script_record_shape$"):
+            analysis.script_steps(work, "plain", allow_interrupted=True)
 
     def test_blind_projection_skips_value_tokens(self):
         forbidden = "987654321"
@@ -260,6 +310,15 @@ class LookPathFollowupTests(TestCase):
         rmdir.assert_called_once_with(layout.PRIVATE_NAME, dir_fd=123)
         self.assertEqual((caught.exception.status, caught.exception.notice), (4, "REFUSE HALF_MADE\n"))
 
+    def test_mkdir_collision_with_failed_restat_preserves_half_made(self):
+        with (patch.object(layout.os, "mkdir", side_effect=FileExistsError),
+              patch.object(layout, "_observation", side_effect=OSError),
+              patch.object(layout.os, "rmdir") as rmdir):
+            with self.assertRaises(layout.GateRefusal) as caught:
+                layout.claim(123, 456, {}, Mock())
+        rmdir.assert_not_called()
+        self.assertEqual((caught.exception.status, caught.exception.notice), (4, "REFUSE HALF_MADE\n"))
+
     def test_bootstrap_reports_spent_before_source_layout_and_offline_checks(self):
         world, bench = self.prepare("spent")
         self.assertEqual(self.invoke(world, bench, "stage1"), (0, b"", b""))
@@ -277,7 +336,8 @@ class LookPathFollowupTests(TestCase):
         registered_layout = document["release_layout"]["private"]
         marker.update(device=registered_layout["device"], inode=reservation.stat().st_ino)
         launcher = repo / registrar.manifest.CODE_PATHS["print_code/launcher"]
-        launcher.write_bytes(launcher.read_bytes() + b"\n")
+        original_launcher = launcher.read_bytes()
+        launcher.write_bytes(original_launcher + b"\n")
         (bench / "public" / registrar.LOOK).rename(bench / "missing-public")
 
         registrar.put(private / layout.MARKER_NAME, dict(marker, inode=marker["inode"] + 1), mode=0o600)
@@ -291,6 +351,14 @@ class LookPathFollowupTests(TestCase):
         self.assertEqual(registrar.read(private / layout.MARKER_NAME), marker)
         self.assertEqual(list(reservation.iterdir()), [])
         self.assertFalse((bench / "events.jsonl").exists())
+        launcher.write_bytes(original_launcher)
+        (bench / "missing-public").rename(bench / "public" / registrar.LOOK)
+        ledger_path = repo / book.LOOKS
+        ledger = registrar.read(ledger_path)
+        ledger["events"] = [entry for entry in ledger["events"] if entry["kind"] != "stage1"]
+        registrar.put(ledger_path, ledger)
+        registrar.commit(repo, "Synthetic successor drops marker binding")
+        self.assertEqual(self.bootstrap_offline(repo), (3, b"", b"REFUSE SPENT\n"))
         old_device = registered_layout["device"] + 1
         registrar.put(private / layout.MARKER_NAME, dict(marker, device=old_device), mode=0o600)
         self.assertTrue(runpy.run_path(str(launcher))["_read_started"](

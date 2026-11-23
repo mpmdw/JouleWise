@@ -365,6 +365,7 @@ def claim(private, public, public_record, redirect):
         os.fsync(private)
         return restricted
     except BaseException as error:
+        collision = not made and isinstance(error, FileExistsError)
         try:
             if made and _observation(private, MARKER_NAME) is None:
                 if restricted is not None:
@@ -387,9 +388,8 @@ def claim(private, public, public_record, redirect):
         try:
             reservation = _observation(private, PRIVATE_NAME)
         except OSError:
-            # If mkdir succeeded and removal is unconfirmed, keep the half-made
-            # refusal until the reservation can be inspected.
-            half_made = made
+            # A collision or unconfirmed rollback is evidence of a pathname.
+            half_made = made or collision
         else:
             half_made = reservation is not None and stat.S_ISDIR(reservation.st_mode)
         if half_made:

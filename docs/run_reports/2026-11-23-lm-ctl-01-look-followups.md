@@ -71,3 +71,31 @@ physical-call view semantics. The unchanged frozen suites check the
 release and supersession behavior. Hosted CI runs the full suite and the
 marker-present regression. The gate ledger on draft PR #957 records the
 final-head CI runs and the remaining independent review.
+
+## Independent executing audit round 2
+
+The round-2 audit blocked draft PR #957 at `71b1c2e19`. The local branch
+matched the remote and the worktree was clean on intake.
+
+| Verified finding | Root cause and disposition | Regression |
+| --- | --- | --- |
+| HIGH. Script structure passed the blind gates. | `impl-bug`. The blind projection omitted required physical step fields and the analyzer alone checked numeric ranges. Both paths share the step validator. It checks the issued order, required fields, bounds, counts, and requested duration before claim. The duration predicate handles oversized JSON integers without overflow. The bound runner's interrupted trailing step is a supported shape. | `test_structural_faults_refuse_stage1_and_preflight_fresh` reproduces both the missing `ended_ns` and the oversized `requested_s`, plus malformed bounds, counts and dose types. `test_incomplete_script_allows_a_native_interrupted_tail` covers the writer's interruption shape. |
+| HIGH. Diagnostic flags were decoded before the marker. | `fix-regression`. The episode projection checks string shape with the existing opaque string selector. The close receipt's free-text desk error uses the same selector. The value reader keeps the authenticated original flags. | `test_stage1_and_preflight_keep_diagnostic_flags_opaque` rebinds the audit's synthetic flag and guards whole-document and scalar decoding at both blind gates. |
+| LOW. A collision followed by failed inspection lost the reservation evidence. | `impl-bug`. A confirmed mkdir collision preserves `HALF_MADE` when the immediate inspection fails. | `test_mkdir_collision_with_failed_restat_preserves_half_made` |
+| LOW. A successor ledger could hide the binding for a valid marker. | `impl-bug`. The launcher checks marker bindings against the registered manifest in first-parent ledger history before going online. | `test_bootstrap_reports_spent_before_source_layout_and_offline_checks` removes the stage-1 event from the successor and still expects `SPENT`. |
+
+The blind preflight evaluates the logged envelope, cross-step timing,
+thermal placement and the other-work partition using the projected
+timestamps and the frozen tiler. It carries any governed per-leg
+disposition into the private calculation after the authenticated read
+rechecks its inputs. This preserves RL-187 §3.1 and RL-202 §4.1, including
+the frozen G0 overlap and the digest-mismatch case. The first implementation
+added a LegInput field that the frozen suite rejected. The final revision
+uses its existing episode slot and keeps the audited record shape.
+
+Both rounds recorded two verified HIGHs and two verified LOWs, with zero
+verified MEDs. Round 2 is non-decaying under PIPELINE §3. The lead owns
+the return-to-spec decision before further audit or readiness. A change
+from the ruled per-leg outcome to a fresh whole-look refusal for a
+well-formed placement fault requires a new ruling. All checks here used
+synthetic inputs. The draft gate ledger carries the final-head CI runs.

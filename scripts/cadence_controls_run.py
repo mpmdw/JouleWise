@@ -122,13 +122,17 @@ def _read_started(layout, uid, manifest_sha, stage1_sha):
         os.close(parent)
 
 
-def _check_local_spend(events, manifest, manifest_sha):
+def _check_local_spend(events, manifest, manifest_sha, seen):
     for event in events:
         if event.get("kind") != "stage1" or event.get("manifest_sha256") != manifest_sha:
             continue
         stage1_sha = event.get("stage1_sha256")
         if type(stage1_sha) is not str or re.fullmatch("[0-9a-f]{64}", stage1_sha) is None:
             continue
+        binding = (manifest_sha, stage1_sha)
+        if binding in seen:
+            continue
+        seen.add(binding)
         try:
             started = _read_started(manifest["release_layout"]["private"], manifest["execution"]["uid"],
                                     manifest_sha, stage1_sha)
@@ -188,32 +192,38 @@ def _has_spend(events):
                for event in events)
 
 
+def _registered_manifest(root, revision, ledger):
+    row, = (row for row in ledger["looks"] if type(row) is dict and row.get("look_id") == LOOK)
+    _demand(ledger["schema"] == "joulewise.cadence_look_ledger.v1"
+            and row["manifest_path"] == MANIFEST and row["status"] == "registered")
+    committed = _git(root, "show", f"{revision}:{MANIFEST}")
+    _demand(_digest(committed) == row["sha256"])
+    return json.loads(committed, object_pairs_hook=_unique), row["sha256"]
+
+
 def _require_unspent_ancestry(root, tip):
+    # Historical evidence can only deny execution. The authenticated tip and
+    # full ledger replay still govern authorization for a fresh look.
     revisions = _git(root, "log", "--first-parent", "--format=%H", tip, "--", LEDGER).decode().splitlines()
+    seen = set()
     for revision in revisions:
         try:
             old = json.loads(_git(root, "show", f"{revision}:{LEDGER}"), object_pairs_hook=_unique)
             events = _look_events(old)
-        except (AttributeError, TypeError, ValueError, subprocess.CalledProcessError):
+            if _has_spend(events):
+                raise Spent()
+            if any(event.get("kind") == "stage1" for event in events):
+                manifest, manifest_sha = _registered_manifest(root, revision, old)
+                _check_local_spend(events, manifest, manifest_sha, seen)
+        except (AttributeError, KeyError, TypeError, ValueError, subprocess.CalledProcessError):
             continue  # The fully authenticated replay still enforces ledger integrity.
-        if _has_spend(events):
-            raise Spent()
 
 
 def _registration(root):
     tip = _git(root, "rev-parse", "--verify", "refs/remotes/origin/main^{commit}").decode().strip()
     _require_unspent_ancestry(root, tip)
     ledger = json.loads(_git(root, "show", f"{tip}:{LEDGER}"), object_pairs_hook=_unique)
-    events = _look_events(ledger)
-    row, = (row for row in ledger["looks"] if type(row) is dict and row.get("look_id") == LOOK)
-    committed = _git(root, "show", f"{tip}:{MANIFEST}")
-    _demand(_digest(committed) == row["sha256"])
-    manifest = json.loads(committed, object_pairs_hook=_unique)
-    # The local evidence can only refuse execution. Authorizing a fresh read
-    # still requires the public tip, source pins and full layout validation.
-    _check_local_spend(events, manifest, row["sha256"])
-    _demand(ledger["schema"] == "joulewise.cadence_look_ledger.v1"
-            and row["manifest_path"] == MANIFEST and row["status"] == "registered")
+    manifest, _ = _registered_manifest(root, tip, ledger)
     _demand(tip == _public_tip())
     launcher_pin = manifest["pins"]["print_code/launcher"]
     _demand(_digest(_read(root, LAUNCHER)) == launcher_pin

@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from math import ceil, fsum, isfinite, sqrt
 from statistics import median
+from sys import float_info
 
 from .controls_print import (
     CHANNELS, PILOT, REMAINDER, SCRIPT_STEPS, ControlsRefusal, _hex_pin, validate_script_pin,
@@ -82,11 +83,67 @@ class LegInput:
 
 
 def _finite(value):
-    return type(value) in (float, int) and isfinite(value)
+    if type(value) is int:
+        return -float_info.max <= value <= float_info.max
+    return type(value) is float and isfinite(value)
 
 
 def _nonnegative_int(value):
     return type(value) is int and value >= 0
+
+
+def _step(row, *, interrupted=False):
+    kind = row["kind"]
+    call = kind in ("hidden", "turn")
+    start = row.get("started_ns") if interrupted and call else row["started_ns"]
+    end = row.get("ended_ns") if interrupted else row["ended_ns"]
+    if (any(not _nonnegative_int(row[key]) for key in ("started_ns", "ended_ns") if key in row)
+            or (end is not None and (start is None or end < start))
+            or type(row["complete"]) is not bool):
+        raise ViewError("step_bounds")
+    if call:
+        first = row.get("first_token_ns") if interrupted else row["first_token_ns"]
+        context = row.get("context_tokens") if interrupted else row["context_tokens"]
+        requested, delivered = row["requested_tokens"], row["actual_tokens"]
+        counts = [requested]
+        if not interrupted or "context_tokens" in row:
+            counts.append(context)
+        if not interrupted or delivered is not None:
+            counts.append(delivered)
+        if (not all(_nonnegative_int(value) and _finite(value) for value in counts)
+                or (delivered is not None and delivered > requested)
+                or (first is not None and (not _nonnegative_int(first) or start is None
+                    or end is None or not start <= first <= end))):
+            raise ViewError("call_counts_or_bounds")
+        if interrupted:
+            return None
+        return Step(kind, start, end, row["complete"], first_ns=first, requested_tokens=requested,
+                    delivered_tokens=delivered, context_tokens=context)
+    seconds = row["requested_s"]
+    if (not _finite(seconds) or seconds <= 0
+            or (kind == "cpu" and (type(seconds) is not int or seconds not in (10, 30, 90)))):
+        raise ViewError("interval_dose")
+    return None if interrupted else Step(kind, start, end, row["complete"], requested_s=seconds)
+
+
+def script_steps(record, kind, *, allow_interrupted=False):
+    """Validate the closed step sequence and the wire shape of each reached step."""
+    try:
+        rows = record["steps"]
+        names = tuple(row["kind"] for row in rows)
+        expected = (*SCRIPT_STEPS[kind], "recovery")
+        if names != (expected[:len(rows)] if allow_interrupted else expected):
+            raise ViewError("script_order")
+        steps = []
+        for index, row in enumerate(rows):
+            # The native writer can leave only its last, failed call or
+            # interval unfinished. A finished call always has actual tokens.
+            interrupted = (allow_interrupted and index == len(rows) - 1 and row["complete"] is False
+                           and (row["kind"] not in ("hidden", "turn") or row["actual_tokens"] is None))
+            steps.append(_step(row, interrupted=interrupted))
+        return tuple(steps)
+    except (TypeError, KeyError) as error:
+        raise ViewError("script_record_shape") from error
 
 
 def _read_steps(payload, digest, leg_id, kind):
@@ -101,30 +158,7 @@ def _read_steps(payload, digest, leg_id, kind):
         if (record["schema"] != "joulewise.cadence_script_work.v1" or record["leg_id"] != leg_id
                 or record["script"]["kind"] != kind):
             raise ViewError("script_identity")
-        rows = record["steps"]
-        if tuple(row["kind"] for row in rows) != (*SCRIPT_STEPS[kind], "recovery"):
-            raise ViewError("script_order")
-        for row in rows:
-            step = Step(row["kind"], row["started_ns"], row["ended_ns"], row["complete"])
-            if (not _nonnegative_int(step.start_ns) or not _nonnegative_int(step.end_ns)
-                    or step.end_ns < step.start_ns or type(step.complete) is not bool):
-                raise ViewError("step_bounds")
-            if step.kind in ("hidden", "turn"):
-                step = replace(step, first_ns=row["first_token_ns"], requested_tokens=row["requested_tokens"],
-                               delivered_tokens=row["actual_tokens"], context_tokens=row["context_tokens"])
-                if (not all(map(_nonnegative_int, (step.requested_tokens, step.delivered_tokens,
-                                                    step.context_tokens)))
-                        or not 0 <= step.delivered_tokens <= step.requested_tokens
-                        or (step.first_ns is not None and (not _nonnegative_int(step.first_ns)
-                            or not step.start_ns <= step.first_ns <= step.end_ns))):
-                    raise ViewError("call_counts_or_bounds")
-            else:
-                seconds = row["requested_s"]
-                if (not _finite(seconds) or seconds <= 0
-                        or (step.kind == "cpu" and (type(seconds) is not int or seconds not in (10, 30, 90)))):
-                    raise ViewError("interval_dose")
-                step = replace(step, requested_s=seconds)
-            yield step
+        return script_steps(record, kind)
     except (ManifestError, TypeError, KeyError) as error:
         raise ViewError("script_record_shape") from error
 
@@ -150,13 +184,14 @@ def thermal_intervals(hardware):
     return intervals
 
 
-def physical_call_view(leg: LegInput):
+def physical_call_view(leg: LegInput, *, projected_work=None):
     """Replace just the logged turn. Keep the original episode and trace bounds."""
     episode = leg.episode
     if (episode is None or len(episode.turns) != 1 or episode.turns[0].logged is not True
             or episode.turns[0].tool_calls):
         raise ViewError("logged_envelope")
-    steps = tuple(_read_steps(leg.work_bytes, leg.work_sha256, leg.leg_id, leg.kind))
+    steps = (_read_steps(leg.work_bytes, leg.work_sha256, leg.leg_id, leg.kind) if projected_work is None
+             else script_steps(projected_work, leg.kind))
     gates = (interval["end_ns"] for interval in thermal_intervals(episode.hardware)
              if interval["kind"] == "G0")
     previous = max(episode.start_ns, max(gates, default=episode.start_ns))
@@ -199,8 +234,8 @@ def _project_steps(steps):
 def _other_parts(view, segments):
     """Intersect named work with frozen other segments, retaining the remainder."""
     missing = {turn.index for turn in view.episode.turns if turn.first_token_ns is None}
-    other = [segment for segment in segments if segment.kind == "gap"
-             or (segment.kind == "decode" and segment.turn in missing)]
+    other = [(start, end) for turn, kind, start, end in segments
+             if kind == "gap" or (kind == "decode" and turn in missing)]
     explicit = []
     for step in view.steps:
         if step.kind == "hidden":
@@ -213,24 +248,40 @@ def _other_parts(view, segments):
             explicit.append((step.kind, step.start_ns, step.end_ns))
 
     parts = defaultdict(list)
-    for segment in other:
-        cursor = segment.start_ns
+    for segment_start, segment_end in other:
+        cursor = segment_start
         for name, start, end in explicit:
-            start, end = max(start, segment.start_ns), min(end, segment.end_ns)
+            start, end = max(start, segment_start), min(end, segment_end)
             if end <= start:
                 continue
             if cursor < start:
                 parts["remainder"].append((cursor, start))
             parts[name].append((start, end))
             cursor = end
-        if cursor < segment.end_ns:
-            parts["remainder"].append((cursor, segment.end_ns))
+        if cursor < segment_end:
+            parts["remainder"].append((cursor, segment_end))
     for name in {name for name, _, _ in explicit}:
         if sum(end - start for start, end in parts[name]) != sum(
             end - start for key, start, end in explicit if key == name
         ):
             raise ViewError("other_partition")
     return parts
+
+
+def blind_view_refusal(episode, work, kind):
+    """Compute the ruled per-leg result using only the projected envelope and times."""
+    from joulewise.align.attribution import _segments
+
+    try:
+        leg = LegInput(work["leg_id"], kind, False, True, episode)
+        view = physical_call_view(leg, projected_work=work)
+        segments = _record_call(_segments, view.episode, [])
+        _other_parts(view, segments)
+    except ViewError as error:
+        return str(error)
+    except LegRecordError:
+        return "leg_record_invalid"
+    return None
 
 
 @dataclass(frozen=True)
@@ -551,12 +602,17 @@ def print_controls(positions, *, kernel, pooled, instrument_manifest_sha256, gap
         if leg.episode is None or not leg.g0_released:
             row["disposition"] = "not_dispatched" if not leg.g0_released else "episode_missing"
             continue
+        if isinstance(leg.episode, ViewError):
+            row.update(disposition="not_evaluable", reason=str(leg.episode))
+            continue
         try:
             view = physical_call_view(leg)
             episode = _record_call(kernel.phases.with_package, view.episode)
             attrs = {name: _record_call(kernel.attribute_episode, episode, source=source, channel=channel)
                      for name, (source, channel) in TRACE_CHANNELS.items()}
-            parts = _record_call(_other_parts, view, attrs["gpu_rail"].segments)
+            segments = ((s.turn if s.kind == "decode" else None, s.kind, s.start_ns, s.end_ns)
+                        for s in attrs["gpu_rail"].segments)
+            parts = _record_call(_other_parts, view, segments)
             channels = {name: _channel_values(kernel, view, episode, name, attrs[name], parts,
                                               None if gap_limits_ns is None else gap_limits_ns[name])
                         for name in CHANNELS}

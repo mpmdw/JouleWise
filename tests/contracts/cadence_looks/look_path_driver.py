@@ -286,7 +286,7 @@ def run(operation, world, bench, fault):
             return original_loads(raw, *args, **kwargs)
 
         def guarded_convert(kind, text):
-            assert text not in forbidden, "blind observation conversion"
+            assert not any(value in text for value in forbidden), "blind observation conversion"
             return original_convert(kind, text)
 
         json.loads, fields._convert = guarded_loads, guarded_convert
