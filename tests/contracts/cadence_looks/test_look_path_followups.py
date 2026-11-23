@@ -226,7 +226,11 @@ class LookPathFollowupTests(TestCase):
         registrar.put(private / layout.MARKER_NAME, dict(marker, inode=marker["inode"] + 1), mode=0o600)
         self.assertEqual(self.bootstrap_offline(repo), (2, b"", b"REFUSE PREFLIGHT FREEZE\n"))
         registrar.put(private / layout.MARKER_NAME, marker, mode=0o600)
-        self.assertEqual(self.bootstrap_offline(repo), (3, b"", b"REFUSE SPENT\n"))
+        reservation.chmod(0o000)
+        try:
+            self.assertEqual(self.bootstrap_offline(repo), (3, b"", b"REFUSE SPENT\n"))
+        finally:
+            reservation.chmod(0o700)
         self.assertEqual(registrar.read(private / layout.MARKER_NAME), marker)
         self.assertEqual(list(reservation.iterdir()), [])
         self.assertFalse((bench / "events.jsonl").exists())

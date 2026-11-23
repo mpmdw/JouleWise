@@ -9,7 +9,7 @@ Mythos executing audit of PR #951.
 | --- | --- | --- |
 | F3 | Stage 1 and preflight enforce the stream header and poll shape, typed bundle config, native episode structure, rail clock-bound shape, and strict script JSON. | `test_structural_faults_refuse_stage1_and_preflight_fresh` and `test_blind_projection_skips_value_tokens` |
 | F4 | A failed claim with no reservation directory returns exit 2 and `CLAIM_SETUP`. A directory left on disk is `HALF_MADE`. | `test_mkdir_denied_without_reservation_reports_claim_setup` |
-| F6 | The launcher checks a committed spend or a stage-1-bound marker before polling the remote, verifying installed source pins, or opening the registered layout. The marker check binds the registered device and the reservation inode, including mount-device renumbering. | `test_bootstrap_reports_spent_before_source_layout_and_offline_checks` and `test_committed_spend_reports_spent_offline_even_without_local_marker` |
+| F6 | The launcher checks a committed spend or a stage-1-bound marker before polling the remote, verifying installed source pins, or opening the registered layout. The marker check binds the registered device and the reservation inode. It also works after mount-device renumbering and when the reservation directory cannot be opened. | `test_bootstrap_reports_spent_before_source_layout_and_offline_checks` and `test_committed_spend_reports_spent_offline_even_without_local_marker` |
 | F2 | The byte-pass receipt attests to `75 raw + 4 superseded (RL-202a §2.4; lead record audit branch 1850d6930 SUPERSESSION-v2.md)` and pins that record by SHA-256. The PR #951 report credits the suite seat's freeze 3 and the lead's adoption. | `test_byte_pass_requires_cumulative_disposition_receipt` |
 
 ## Reader checks before the marker
@@ -35,6 +35,9 @@ identities and timing support.
 - The installed v3.1 suite and hand vectors passed locally, 837 + 9.
   Adjacent synthetic controls, cumulative-gate and reservation tests passed,
   27 in total.
+- The targeted follow-up module passed locally with five tests and one
+  skipped test, including 28 structural-fault subcases. Each subcase
+  refused at stage 1, preflight and stage 2 and remained fresh.
 - The local runner denies creation of the synthetic reservation directory.
   The committed-spend path and the mkdir-denial path exercise production
   code locally. Hosted Linux CI also exercises the marker-present path.

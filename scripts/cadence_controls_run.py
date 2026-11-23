@@ -75,11 +75,15 @@ def _read(root, name):
         os.close(fd)
 
 
+def _require_name(parent, name):
+    matches = [entry for entry in os.listdir(parent) if entry.casefold() == name.casefold()]
+    _demand(matches == [name])
+
+
 def _exact_open(parent, name, flags):
     fd = os.open(name, flags | os.O_NOFOLLOW, dir_fd=parent)
     try:
-        matches = [entry for entry in os.listdir(parent) if entry.casefold() == name.casefold()]
-        _demand(matches == [name])
+        _require_name(parent, name)
         return fd
     except BaseException:
         os.close(fd)
@@ -99,11 +103,9 @@ def _read_started(layout, uid, manifest_sha, stage1_sha):
             child = _exact_open(parent, part, dir_flags)
             os.close(parent)
             parent = child
-        reservation = _exact_open(parent, "RESTRICTED", dir_flags)
-        try:
-            reserved = os.fstat(reservation)
-        finally:
-            os.close(reservation)
+        reserved = os.stat("RESTRICTED", dir_fd=parent, follow_symlinks=False)
+        _require_name(parent, "RESTRICTED")
+        _demand(stat.S_ISDIR(reserved.st_mode))
         fd = _exact_open(parent, "read-started", os.O_RDONLY | os.O_NONBLOCK)
         with os.fdopen(fd, "rb") as stream:
             info = os.fstat(fd)
