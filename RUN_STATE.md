@@ -1052,6 +1052,37 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+560. **Magistrate be405fc9 (headless, Opus 5.5), 2026-11-23 11:53- PST: item 552 CHECK f2-stab-15 L010 (pin B, span cq-f2-stab-15-l010-a1): RECEIPT OK (1/1 leg, MEASURED_OK, restored, feeds stopped, groups absent), ADMITTED; ITEM552 facts recorded for ledger initialization; copied at once; 552 and 559 CLOSED; stability paused until the ctl-01 pilot**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-24T15:30:00-08:00
+on_early_or_refused: Arm nothing (item 552: stability pauses until the ctl-01 pilot). If a lead item issuing ledger initialization or the ctl-01 pilot is on main, follow it. If none is on main by this deadline (item 552's), mail the lead and Ed once that the Mac has sat idle since 11:49 Monday waiting for ledger initialization, and ask whether to resume the item 422 stability ladder (kit 07 L001 on pin A next, rank 1 from kit 14 under item 553) until it lands.
+next_observable: a lead RUN_STATE item on main issuing ledger initialization (RL-197c draft item 2) that binds this item's ITEM552 facts, then the ctl-01 pilot (draft item 3). Quiet relaunches before then write nothing.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795463810, "number": 560, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795463810, "item": 552, "status": "CLOSED"}, {"at_epoch_s": 1795463810, "item": 559, "status": "CLOSED"}], "status": "ISSUED", "supersedes": []}
+```
+
+- **Spawn.** Activation be405fc9 spawned 11:53:24 PST Monday (watchdog attempt 2046, previous exit class generic_error) after the f2-stab-15 L010 span closed (receipt 11:49:40; fence pid 2016 gone; no align-r0 or night label loaded or on disk). No notices pending, no unread mail from Ed, directive list unchanged (standing 587/422/421/417/416/408/405), no standdown request. Canonical at origin/main `6ea0118ea` (ls-remote from /tmp) = local HEAD; no move. Record written from a shallow clone (`jw-wt/mag-be405fc9`).
+- **Item 552 Check: f2-stab-15 L010** (attempt `cq-f2-stab-15-l010-a1`, pin B `6e9d42f1d`; custody `f2stab15-check-be405fc9/check-out.txt`, from `f2stab15-check-template-03c6e63b`, only NEWACT replaced): **RECEIPT OK, 1/1 leg, MEASURED_OK, chain COMPLETE, fault false, admitted.** rc 0, error None; batch_windows []; roster [L010] = leg rows; kit sha `8dceffc2…36a1`, frozen commit `6e9d42f1dd3d308bc9239143d0d634ab965e50e1`, runner_kind cadence-legs-v1.1, mock None. Every step rc 0 (deadline, frozen, night_agents, ac_power, condition13, start-agents/meter/volumes, read_power, display, dwell, plan, soak, L010.a1, restore, stop-volumes, stop-meter, stop-agents, close-volumes). Meter 17,075 polls over 3,415.0 s, 0 bad, 0 USB errors, 0 restarts, 1 start, no crash loop. Span t0 10:52:25 (epoch 1795459945), closed 11:49:40.89: 3,435.9 s against the expected 4,528 s (worst case 5,850).
+- **ITEM552 facts for the lead (ledger initialization binds these):**
+  - span_id `cq-f2-stab-15-l010-a1` (asserted equal to the attempt id)
+  - canonical absolute path `/Users/edr/campaign-out/f2-stab-15/cq-f2-stab-15-l010-a1` (is absolute; realpath equals path)
+  - runner_receipt.json SHA-256 `9cfedfdd46cbe2c59604052ece5cad443b2cd4d0bd1e2b8f22848eebd52571c8` (python hashlib and shasum agree)
+  - exact close: ended.epoch_ns `1795463380890712000`, ended.monotonic_ns `3447718784252666` (epoch_s 1795463380.890712)
+  - restore rc 0; feeds agents, meter and volumes all proven_stopped with rc 0; meter supervisor stop group_absent True, group_census [], returncode 0, was_running True; meter feed stop group reaped True, group_census []. (Top-level `feeds.meter.group` is None on pin B, as item 559 predicted; absence is read from the stop lines.)
+  - foreign-process absence after close: no runner/monitor process group, no root powermetrics, no align-r0 label loaded, no night.lock holder, no desk fence; measurement_mode verify's one FAIL is this activation's own agent processes (codex MCP adapter 5844, npm exec pdf server 5841/5840).
+- **L010 (cold):** complete, g0 released after 135.5 s, decode 512 (cap reached), prefill 2,024, wall 1,310.9 s vs budget 1,378 s, contaminated_redos 0, **admitted**, redo_reasons []; max_busy_cores 2.189, max_gap_s 1.15, os_level_max 0.
+- **Quiet span** 11:37:15.659-11:47:15.669 (600.01 s, mapped from monotonic through the receipt's ended pair; `f2stab15-check-be405fc9/quiet-span-maint.txt`). Maintenance lines inside: 1,649 (dasd 1,642, backupd 6, cloudd 1). Window maintenance log 10:52:44-11:49:40: 32,862 lines. The 11:00 bin (inside the soak, 10:57-11:27) was heavy: softwareupdated 2,586, mobileassetd 2,045, dasd 2,023, cloudd 1,089, XProtectPluginService 584; from 11:20 on, dasd dominant (1,501-1,606 per bin) with cloudd up to 153. Flag for the lead: a software-update/mobile-asset burst during the soak, quiet by the leg; the leg was admitted.
+- **Copied at once.** iCloud `JouleWise-offload/cq-f2-stab-15-l010-a1`, 56 files, round-trip decrypt listed 79 entries; enc sha256 `fbf74f3315acf6f6ee9c172b9e35ba34a8d9f70d1b2ec6d590dfe1b8b91f18f0`, manifest sha256 `bdc1d258f673f371d1a95a4c031de40e00507a872ffa2c306786ab8db98b5553`; brctl caught up 11:55:17 (last-sync 11:54:53 after the 11:54:38 copy); marker `/Users/Shared/JouleWise/desk-copy/cq-f2-stab-15-l010-a1.ok`.
+- **Host after close:** network time Off; ntp freq word 0 (status 0x2081); powermode 0; AC, not charging, InstantAmperage 0; no High Power marker; free disk 175 GiB; /private/tmp 989 entries.
+- **Item 552 CLOSED** (Check clean; facts above). **Item 559 CLOSED.** Stability stays paused (item 552): arm nothing until the lead issues ledger initialization (draft item 2) and the ctl-01 pilot (draft item 3).
+- Directive 587 (standing): no change this activation.
+- No email: a routine Check OK is not a change of state for Ed; the lead reads main.
+
 559. **Magistrate 03c6e63b (headless, Opus 5.5), 2026-11-23 10:23- PST: f2-stab-06 L012 CHECK: RECEIPT OK (1/1 leg, MEASURED_OK, restored), ADMITTED; copied at once; kit 06 complete; item 552 f2-stab-15 L010 launches on pin B with --span-id cq-f2-stab-15-l010-a1 at t0 >= 10:50:01 as the last act (last armed span before the ctl-01 pilot)**
 
 ```pointer

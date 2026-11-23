@@ -1,22 +1,16 @@
 {
   "armed": null,
-  "next_observable": "f2stab15-03c6e63b/run-out.txt shows LAUNCH_RC=0 with the fence (t0 at or after 10:50:01 Mon after three quiet minutes; expected close ~12:07, worst case ~12:29, fence end ~13:13; read the true fence deadline and pid from run-out.txt; check the pid, not the deadline). This activation exits right after the launch. The next activation, after the fence pid is gone and runner_receipt.json exists, Checks attempt cq-f2-stab-15-l010-a1 at /Users/edr/campaign-out/f2-stab-15/cq-f2-stab-15-l010-a1 with f2stab15-check-template-03c6e63b/ (copy to f2stab15-check-NEWACT/, replace NEWACT; LEGS L010; kit sha 8dceffc2...36a1, pin B 6e9d42f1d; asserts batch_windows == [] and span_id == cq-f2-stab-15-l010-a1; prints the ITEM552 lines: span_id, canonical absolute path, full receipt SHA-256, exact close ns (ended.epoch_ns / monotonic_ns), plus feed stops for groups absent), records foreign-process absence from the check's host lines, maps the quiet span to wall time and counts maintenance lines in it, copies at once with the template's offload-run.sh, and records all of it as item 552's Check for the lead (who then issues ledger initialization and the ctl-01 pilot). After L010 arms, arm nothing else until the pilot: stability pauses.",
+  "next_observable": "a lead RUN_STATE item on main issuing ledger initialization (RL-197c draft item 2) that binds this item's ITEM552 facts, then the ctl-01 pilot (draft item 3). Quiet relaunches before then write nothing.",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 559,
+      "item": 560,
       "owner": "magistrate",
       "status": "ISSUED"
     },
     {
       "expires_epoch_s": null,
       "item": 553,
-      "owner": "magistrate",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": 1795554900,
-      "item": 552,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -245,11 +239,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "559",
+  "source_item": "560",
   "source_item_heading_date": "2026-11-23",
   "wait": {
     "deadline_epoch_s": 1795563000,
     "observable": "none",
-    "on_early_or_refused": "Read the verdict first. If f2stab15-03c6e63b/run-out.txt has no LAUNCH_RC line (WAIT/STOP before launch, e.g. not quiet by 13:10), nothing launched: L010 stays unrun and item 552 re-runs in Tuesday's 10:50:01-13:14:59 gap (rank 4 stability may run in between, but nothing after 552 arms). A launcher refusal, or a missing or unproven close, holds ledger initialization and the ctl pilot: record it, mail the lead and Ed, and resume the item 422 stability ladder (kit 07 L001 on pin A next). A position with no attempt stays unrun."
+    "on_early_or_refused": "Arm nothing (item 552: stability pauses until the ctl-01 pilot). If a lead item issuing ledger initialization or the ctl-01 pilot is on main, follow it. If none is on main by this deadline (item 552's), mail the lead and Ed once that the Mac has sat idle since 11:49 Monday waiting for ledger initialization, and ask whether to resume the item 422 stability ladder (kit 07 L001 on pin A next, rank 1 from kit 14 under item 553) until it lands."
   }
 }
