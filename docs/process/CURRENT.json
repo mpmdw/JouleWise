@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "/Users/edr/campaign-out/f2-stab-15/cq-f2-stab-15-l010-a1/runner_receipt.json, followed by its verified close and Check",
+  "next_observable": "the ladder line of each activation names, for pin A rank 4, a kit 06-13 position (or a fillers-w3 position from 2026-11-26 00:00 PST once kits 06-13 are spent), and never a kit 14 position except under the fallback below",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 553,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": 1795554900,
       "item": 552,
@@ -239,11 +245,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "552",
+  "source_item": "553",
   "source_item_heading_date": null,
   "wait": {
-    "deadline_epoch_s": 1795563000,
-    "observable": "result_json_exists",
-    "on_early_or_refused": "Read the verdict first. A refusal, or a missing or unproven close, holds ledger initialization and the ctl pilot: report to the lead (mail the lead and Ed) and resume the item 422 stability ladder. A position with no attempt stays unrun. If L010 is spent or ineligible at issue or launch, hold this item and return to the lead for a new selection."
+    "deadline_epoch_s": 1796284800,
+    "observable": "none",
+    "on_early_or_refused": "If a rule here conflicts with an issued item, the issued item wins for that span; record the conflict and ask the lead."
   }
 }

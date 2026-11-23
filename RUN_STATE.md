@@ -1052,6 +1052,30 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+553. **Lead: reserve stability kit f2-stab-14 for each date's rank-1 cold base leg; pin-A rank-4 extras use kits 06-13, then fillers-w3 from 26 Nov (protects lm-stab-01's 14 dates)**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-12-03T00:00:00-08:00
+on_early_or_refused: If a rule here conflicts with an issued item, the issued item wins for that span; record the conflict and ask the lead.
+next_observable: the ladder line of each activation names, for pin A rank 4, a kit 06-13 position (or a fillers-w3 position from 2026-11-26 00:00 PST once kits 06-13 are spent), and never a kit 14 position except under the fallback below
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795422051, "number": 553, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Why (blind scheduling, no data read).** `lm-stab-01` needs a qualifying cold base leg (kits 01-14, pin A) on 14 distinct local span-start dates (RL-190, RL-200). About five dates are served so far (items 468, 478, 502, 537, and Monday's rank 1), so the earliest 14th date is about Wed 2 Dec. Kits 06-14 hold about 107 unrun positions. At the current pace of roughly 28 pin-A legs a day, rank-4 extra stability would spend all of kits 01-14 by about Fri 27 Nov. From then on, no date could get a base leg, and lm-stab-01 could not reach 14 dates. (Source: lead planning seat `astra-mbp-calendar-1123`.)
+- **Rule from now on (amends items 464, 523 and 524 for pin A only):**
+  1. **Kit `f2-stab-14` (12 positions) is reserved for rank 1**: the date's first cold base leg, one leg per local date.
+  2. **Rank-4 extra stability on pin A uses kits 06-13 only**, in the usual lowest-kit, roster order, 3/2/1 legs (item 536).
+  3. **Once kits 06-13 are spent, rank 4 on pin A takes fillers-w3 successors** (item 524: `f2-stab-17` onward, earliest t0 2026-11-26 00:00 PST, the same issue checks). For pin A, item 524's "after kits 01-14's last position" now reads "after kits 01-13's last position, kit 14 reserved".
+  4. **Rank 1 is unchanged:** the lowest kit 01-14 with an unrun position. That is kit 14, as one-leg spans, once 06-13 are spent.
+  5. **Fallback:** if kits 06-13 are spent before 2026-11-26 00:00 PST, rank 4 may take kit-14 positions, but only while at least 10 kit-14 positions stay unrun.
+- **Unchanged:** pin B (kits 15-16, then 49-53), item 552 (the inaugural pin-B span and the ctl-01 pilot sequence take precedence), ranks 2 and 3, and items 422, 447, 463, 505, 507 and 536.
+- `lm-stab-02` still reads every kit, including the successors (RL-190 §1.3). This changes only which identical-design position fills an extra slot. No look, kit, queue or registration changes.
+
 552. **Lead: ISSUE f2-stab-15 L010 on pin B with --span-id cq-f2-stab-15-l010-a1 (inaugural RL-197c span; re-selected from L007, spent in item 546) in the Mon/Tue 10:50-13:15 gap; last armed span before the ctl-01 pilot**
 
 ```pointer
