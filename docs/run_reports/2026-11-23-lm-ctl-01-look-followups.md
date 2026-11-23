@@ -90,8 +90,10 @@ timestamps and the frozen tiler. It carries any governed per-leg
 disposition into the private calculation after the authenticated read
 rechecks its inputs. This preserves RL-187 §3.1 and RL-202 §4.1, including
 the frozen G0 overlap and the digest-mismatch case. The first implementation
-added a LegInput field that the frozen suite rejected. The final revision
-uses its existing episode slot and keeps the audited record shape.
+changed the audited LegInput shape. The next iteration lost the frozen
+G0 case's observable DC mapping. The final revision passes the disposition
+to the private calculation while retaining the reader's authenticated
+episode, mapping, and original LegInput shape.
 
 Both rounds recorded two verified HIGHs and two verified LOWs, with zero
 verified MEDs. Round 2 is non-decaying under PIPELINE §3. The lead owns

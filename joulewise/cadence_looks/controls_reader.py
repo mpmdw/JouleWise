@@ -491,9 +491,6 @@ def first_read(inputs, stage1):
         episode = _join_native_rails(episode, files["rails"], timing, rail, evidence)
         if dc.selected is not None:
             episode = _attach_dc(episode, dc.selected, decoded)
-        reason = inputs.view_refusals.get(leg_id)
-        if reason is not None:
-            episode = analysis.ViewError(reason)
         positions.append(analysis.LegInput(leg_id, leg.kind, leg.admitted, True, episode, files["script"],
                                            pin["script"]["sha256"]))
     return tuple(positions)

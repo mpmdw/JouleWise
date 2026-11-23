@@ -582,7 +582,8 @@ def _rail_gap_marks(kernel, episode, attribution, parts, leg_id, gap_limits_ns):
     return marks
 
 
-def print_controls(positions, *, kernel, pooled, instrument_manifest_sha256, gap_limits_ns=None):
+def print_controls(positions, *, kernel, pooled, instrument_manifest_sha256, gap_limits_ns=None,
+                   view_refusals=None):
     """Produce the private calculations for all twelve bound positions."""
     positions = tuple(positions)
     if tuple(leg.leg_id for leg in positions) != PILOT + REMAINDER:
@@ -592,6 +593,7 @@ def print_controls(positions, *, kernel, pooled, instrument_manifest_sha256, gap
     if not _hex_pin(instrument_manifest_sha256, 64):
         raise ValueError("instrument_pin")
     rows, controls, marks = [], [], []
+    view_refusals = view_refusals or {}
     fit_points = {name: {} for name in CHANNELS}
     for leg in positions:
         row = {"leg_id": leg.leg_id, "kind": leg.kind}
@@ -602,8 +604,8 @@ def print_controls(positions, *, kernel, pooled, instrument_manifest_sha256, gap
         if leg.episode is None or not leg.g0_released:
             row["disposition"] = "not_dispatched" if not leg.g0_released else "episode_missing"
             continue
-        if isinstance(leg.episode, ViewError):
-            row.update(disposition="not_evaluable", reason=str(leg.episode))
+        if leg.leg_id in view_refusals:
+            row.update(disposition="not_evaluable", reason=view_refusals[leg.leg_id])
             continue
         try:
             view = physical_call_view(leg)
