@@ -9,6 +9,7 @@ import io
 import json
 from pathlib import Path
 import plistlib
+import re
 import shutil
 import tempfile
 from types import SimpleNamespace
@@ -51,11 +52,14 @@ def file_fault(path, fault):
 
 
 def traced_input(fixture, path):
-    if path.is_relative_to(fixture.archive):
-        path = path.relative_to(fixture.archive)
-        if path.parts[:2] in {("sources", "claim-runs"), ("sources", "bound-runs")}:
-            return Path("bundle", *path.parts[3:]).as_posix()
-        return path.as_posix()
+    for archive in fixture.archives:
+        if path.is_relative_to(archive):
+            relative = path.relative_to(archive)
+            if relative.parts[:2] in {("sources", "claim-runs"), ("sources", "bound-runs")}:
+                return Path("bundle", *relative.parts[3:]).as_posix()
+            return relative.as_posix()
+        if path.is_relative_to(journal := Path(str(archive) + ".desk")):
+            return Path("archive.desk", path.relative_to(journal)).as_posix()
     if path.is_relative_to(fixture.root):
         return path.relative_to(fixture.root).as_posix()
     if path.is_relative_to(agreement.ROOT / "configs"):
@@ -130,14 +134,15 @@ class AvailabilityFixture:
                 "withheld_csv": export.parent / withheld, "pack_key": keys / "pack.json",
                 "config_key": keys / agreement.blinding._config_filename(model["config_key"])}
 
-    def export_again(self, destination, private, *, read_registration=False, grouped=True):
+    def export_again(self, destination, private, *, read_registration=False, grouped=True, read_evidence=False):
         pack = {"blinding_group": "bytes", "bytes_pass": 1} if grouped else {"pack_id": SESSION}
         with patch("os.fsync", return_value=None):
             agreement.export_runs.export(self.archive, {}, self.root / "registration", private, destination,
-                                         evidence=self.evidence, pack_registration=None if read_registration else pack)
+                                         evidence=None if read_evidence else self.evidence,
+                                         pack_registration=None if read_registration else pack)
         return self.export_path(destination), private / ("bytes" if grouped else SESSION) / "blinding"
 
-    def compare(self, test, export, keys, scratch, *, stage="fit", expect_kept=None, fit_cli=False):
+    def compare(self, test, export, keys, scratch, *, stage="fit", expect_kept=None, fit_cli=False, expect_exit=None):
         modes = {"fit": "1", "heldout": "2", "blinded": "blinded"}
         try:
             if fit_cli:
@@ -166,6 +171,8 @@ class AvailabilityFixture:
             twin = agreement.load(output) if twin_status == 0 else None
         recorder = agreement.Recorder()
         recorder.exact(stage, "stage", "refusal", primary_status, twin_status)
+        if expect_exit is not None:
+            test.assertEqual((primary_status, twin_status), (expect_exit, expect_exit))
         if primary_status == twin_status == 0:
             if stage == "heldout":
                 twin["cells"] = {model: block for model, block in twin["cells"].items() if model not in bytes_twin.FIT_SET}
@@ -196,9 +203,32 @@ class AvailabilityFixture:
             return 1, None
 
 
+def event_v2_inputs(fixture, *, sparse=False):
+    roster = RequestRoster((RequestDescriptor(0, "synthetic", "prompt_text", "0" * 64, "synthetic", 512),))
+    config = agreement.load(agreement.ROOT / "tests/fixtures/axi_ap_spec/draft_spec_on.json")
+    config["model"]["name"], config["run_id"] = MODEL, fixture.member
+    config["batch_policy"]["request_roster_sha256"] = roster.sha256
+    agreement._write(fixture.bundle / "config.json", config)
+    metadata_path = fixture.bundle / "metadata.json"
+    metadata = agreement.load(metadata_path)
+    agreement._write(metadata_path, {**metadata, "event_semantics_version": "joulewise.events.v2"})
+    agreement._write(fixture.bundle / "summary_metrics.json", {"summary_provenance": {"reducer_version": "0.6.2"}})
+    paths = {"request_roster": fixture.bundle / "request_roster.json",
+             "request_rows": fixture.bundle / "outputs/requests.jsonl",
+             "request_tokens": fixture.bundle / "outputs/request_tokens.jsonl",
+             "response_mirror": fixture.bundle / "outputs/response.txt",
+             "tokens_mirror": fixture.bundle / "outputs/tokens.jsonl"}
+    paths["request_roster"].write_bytes(roster.to_bytes())
+    paths["request_rows"].parent.mkdir(exist_ok=True)
+    for key in ("request_rows", "request_tokens"):
+        paths[key].write_bytes(b"" if sparse else b"{}\n")
+    return paths
+
+
 class BytesAvailabilityTests(unittest.TestCase):
-    def assert_contract_covers_reads(self, actual, phase):
+    def assert_contract_covers_reads(self, actual, phase, *, restoring=False):
         patterns = {pattern for row in CONTRACT.values() if row["phase"] in {phase, "both"}
+                    if restoring or not row.get("restore_only")
                     for pattern in row.get("read_paths", ())}
         uncovered = sorted(path for path in actual if not any(fnmatchcase(path, pattern) for pattern in patterns))
         self.assertEqual(uncovered, [])
@@ -262,30 +292,53 @@ class BytesAvailabilityTests(unittest.TestCase):
             for path in native_paths.values():
                 path.unlink()
 
-            roster = RequestRoster((RequestDescriptor(0, "synthetic", "prompt_text", "0" * 64, "synthetic", 512),))
-            axi = agreement.load(agreement.ROOT / "tests/fixtures/axi_ap_spec/draft_spec_on.json")
-            axi["model"]["name"], axi["run_id"] = MODEL, fixture.member
-            axi["batch_policy"]["request_roster_sha256"] = roster.sha256
-            agreement._write(config_path, axi)
-            agreement._write(metadata_path, {**metadata, "event_semantics_version": "joulewise.events.v2"})
-            agreement._write(fixture.bundle / "summary_metrics.json", {"summary_provenance": {"reducer_version": "0.6.2"}})
+            event_v2 = event_v2_inputs(fixture, sparse=True)
             (fixture.bundle / "events.jsonl").write_bytes(b"")
-            (fixture.bundle / "request_roster.json").write_bytes(roster.to_bytes())
-            outputs = fixture.bundle / "outputs"
-            outputs.mkdir(exist_ok=True)
-            request_files = {outputs / "requests.jsonl", outputs / "request_tokens.jsonl"}
-            mirrors = {outputs / "response.txt", outputs / "tokens.jsonl"}
-            for path in request_files | mirrors:
+            mirrors = {event_v2[key] for key in ("response_mirror", "tokens_mirror")}
+            for path in mirrors:
                 path.touch()
             with trace_primary_inputs(fixture, suppress=mirrors) as opened:
                 fit()
-            event_v2_paths = {traced_input(fixture, path) for path in request_files | mirrors}
-            self.assertTrue(event_v2_paths | {"bundle/request_roster.json"} <= opened)
+            event_v2_paths = {traced_input(fixture, path) for path in event_v2.values()}
+            self.assertTrue(event_v2_paths <= opened)
             self.assert_contract_covers_reads(opened, "analysis")
             reads.update(opened)
             with trace_primary_inputs(fixture, suppress=mirrors):
                 fixture.compare(self, fixture.export, fixture.keys, root, expect_kept=False)
             print(f"\nBYTES contract read trace: {len(reads)} normalized input paths covered", flush=True)
+
+    def test_export_checks_all_authenticated_plan_candidates_before_fallback(self):
+        with tempfile.TemporaryDirectory(prefix="bytes-export-plan-contract-") as directory:
+            root = Path(directory)
+            fixture = AvailabilityFixture(root / "base", "mock")
+            with trace_primary_inputs(fixture) as reads:
+                fixture.export_again(root / "fallback-export", root / "fallback-private", read_registration=True)
+            self.assertIn(f"configs/b6/packs/{SESSION}/registration.json", reads)
+            self.assert_contract_covers_reads(reads, "export")
+
+            body = b'{"stage_graph":[]}\n'
+            first = "pack/plan_tree.json"
+            other = f"repo/configs/campaigns/{SESSION}/plan_tree.json"
+            sources = fixture.archive / "sources"
+            with (sources / "SHA256SUMS").open("a") as ledger:
+                for name in (first, other):
+                    candidate = sources / name
+                    candidate.parent.mkdir(parents=True, exist_ok=True)
+                    candidate.write_bytes(body)
+                    ledger.write(f"{hashlib.sha256(body).hexdigest()}  {name}\n")
+
+            def export(tag):
+                with patch("os.fsync", return_value=None):
+                    return agreement.export_runs.export(fixture.archive, {"plan_tree": json.loads(body)},
+                        fixture.root / "registration", root / f"{tag}-private", root / f"{tag}-export",
+                        evidence=fixture.evidence, pack_registration={"blinding_group": "bytes", "bytes_pass": 1})
+
+            export("clean")
+            for case in (first, other):
+                for fault in CONTRACT["authenticated_plan_trees"]["faults"]:
+                    with self.subTest(plan=case, fault=fault), file_fault(sources / case, fault):
+                        with self.assertRaisesRegex(StorageStop, re.escape(case)):
+                            export(f"{Path(case).parent.name}-{fault}")
 
     def test_run_report_matches_contract_rows(self):
         report = (agreement.ROOT / "docs/run_reports/2026-11-22-bytes-p1m1.md").read_text()
@@ -452,6 +505,71 @@ class BytesAvailabilityTests(unittest.TestCase):
             damaged.mkdir()
             count += fixture.compare(self, fixture.export, fixture.keys, damaged, expect_kept=False, fit_cli=True)
             print(f"\nBYTES last compressed input missing: {count} comparisons, zero above bar", flush=True)
+
+    @unittest.skipUnless(shutil.which("zstd"), "compressed availability regression needs zstd")
+    def test_compressed_restore_requires_metadata_and_copies_all_bundle_files(self):
+        for timing in ("mock", "native"):
+            with self.subTest(timing=timing), tempfile.TemporaryDirectory(prefix="bytes-compressed-tree-") as directory:
+                root = Path(directory)
+                fixture = AvailabilityFixture(root / "base", timing, complete_fit=True)
+                log = fixture.bundle / "logs/controller.log"
+                log.parent.mkdir(exist_ok=True)
+                log.write_bytes(b"synthetic controller note\n")
+                journal = compress_member(fixture.bundle / "events.jsonl", fixture.archive)
+                with trace_primary_inputs(fixture) as reads, readable_run(fixture.bundle, compression_records=journal):
+                    pass
+                self.assertTrue({"bundle/status.json", "bundle/logs/controller.log"} <= reads)
+                self.assert_contract_covers_reads(reads, "analysis", restoring=True)
+                control = root / "control"
+                control.mkdir()
+                count = fixture.compare(self, fixture.export, fixture.keys, control, fit_cli=True, expect_kept=True)
+                original = Path.open
+
+                def deny_log(path, mode="r", *args, **kwargs):
+                    if path == log and mode.startswith("r"):
+                        raise PermissionError(errno.EACCES, "fixture permission denied", str(path))
+                    return original(path, mode, *args, **kwargs)
+
+                denied = root / "denied"
+                denied.mkdir()
+                with patch.object(Path, "open", deny_log):
+                    count += fixture.compare(self, fixture.export, fixture.keys, denied, fit_cli=True, expect_exit=1)
+
+                missing = root / "missing"
+                missing.mkdir()
+                with file_fault(fixture.bundle / "metadata.json", "absent"):
+                    count += fixture.compare(self, fixture.export, fixture.keys, missing, fit_cli=True, expect_exit=1)
+                print(f"\nBYTES {timing} compressed tree: {count} comparisons; both faults refused", flush=True)
+
+    def test_bad_utf8_in_v2_request_file_drops_member_in_both_fit_clis(self):
+        for timing in ("mock", "native"):
+            with self.subTest(timing=timing), tempfile.TemporaryDirectory(prefix="bytes-v2-utf8-") as directory:
+                root = Path(directory)
+                fixture = AvailabilityFixture(root / "base", timing, complete_fit=True)
+                requests = event_v2_inputs(fixture, sparse=True)["request_rows"]
+                control = root / "control"
+                control.mkdir()
+                count = fixture.compare(self, fixture.export, fixture.keys, control, fit_cli=True, expect_kept=True)
+                bad = root / "garbage"
+                bad.mkdir()
+                with file_fault(requests, "garbage"):
+                    count += fixture.compare(self, fixture.export, fixture.keys, bad, fit_cli=True, expect_kept=False)
+                print(f"\nBYTES {timing} v2 request UTF-8: {count} comparisons, zero above bar", flush=True)
+
+    def test_required_phase_event_without_type_drops_member_in_both_fit_clis(self):
+        for timing in ("mock", "native"):
+            with self.subTest(timing=timing), tempfile.TemporaryDirectory(prefix="bytes-phase-event-type-") as directory:
+                root = Path(directory)
+                fixture = AvailabilityFixture(root / "base", timing, complete_fit=True)
+                control = root / "control"
+                control.mkdir()
+                count = fixture.compare(self, fixture.export, fixture.keys, control, fit_cli=True, expect_kept=True)
+                with (fixture.bundle / "events.jsonl").open("ab") as events:
+                    events.write(b'{"phase":"decode"}\n')
+                bad = root / "missing-type"
+                bad.mkdir()
+                count += fixture.compare(self, fixture.export, fixture.keys, bad, fit_cli=True, expect_kept=False)
+                print(f"\nBYTES {timing} missing event type: {count} comparisons, zero above bar", flush=True)
 
     def test_bundle_restored_after_export_supplies_unblinded_science_record(self):
         for timing in ("mock", "native"):

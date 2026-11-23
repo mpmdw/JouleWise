@@ -46,7 +46,16 @@
         "tests.test_bytes_availability.BytesAvailabilityTests.test_duplicate_decode_end_drops_member_in_both_fit_clis": 130.0,
         "tests.test_bytes_availability.BytesAvailabilityTests.test_absent_last_compressed_input_drops_member_without_refusing_fit": 85.0
       },
-      "remainder_weight_seconds": 240.0
+      "remainder_weight_seconds": 280.0
+    },
+    "tests.test_bytes_conditional_availability": {
+      "granularity": "test",
+      "reason": "The two timing bases generate independent synthetic archives and can run on separate CI shards. Each took 31.5 seconds in a concurrent local run.",
+      "declared": {
+        "tests.test_bytes_conditional_availability.ConditionalAvailabilityTests.test_mock_timing_conditional_file_faults": 65.0,
+        "tests.test_bytes_conditional_availability.ConditionalAvailabilityTests.test_native_timing_conditional_file_faults": 65.0
+      },
+      "remainder_weight_seconds": 30.0
     },
     "tests.test_reduce": {
       "granularity": "test",

@@ -170,6 +170,7 @@ class EntryPointTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / 'run'
             source.mkdir()
+            (source / 'metadata.json').write_text('{}')
             (source / 'raw.plist.zst').write_bytes(b'fixture')
             with self.assertRaisesRegex(bytes_twin.StorageStop, 'restore_refused: .*compression.jsonl'):
                 try:
@@ -177,10 +178,12 @@ class EntryPointTests(unittest.TestCase):
                         self.fail('missing custody reached reader')
                 except Exception:
                     self.fail('twin storage stop became a data decision')
-        args = SimpleNamespace(export=[Path('fixture.csv')], export_dir=None,
-                               stage='blinded', stage1_commit=None, manifest=Path('manifest'))
-        with mock.patch.object(bytes_twin, 'read_manifest', return_value={}):
-            self.check_main(bytes_twin, args, 'read_export', 1, stdout=True, error_type=bytes_twin.StorageStop)
+            fixture = Path(tmp) / 'fixture.runs.csv'
+            fixture.touch()
+            args = SimpleNamespace(export=[fixture], export_dir=None, stage='blinded', stage1_commit=None,
+                                   manifest=Path(tmp) / 'manifest.json', key_dir=None)
+            with mock.patch.object(bytes_twin, 'read_manifest', return_value={}):
+                self.check_main(bytes_twin, args, 'read_export', 1, stdout=True, error_type=bytes_twin.StorageStop)
 
     def test_operator_restore_formats_storage_stop(self):
         args = SimpleNamespace(command=['reader', '{run}'], run_dir=Path('run'),

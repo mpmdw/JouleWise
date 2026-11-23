@@ -20,15 +20,15 @@
     "id": "metadata",
     "path": "bundle/metadata.json",
     "phase": "both",
-    "primary": "joulewise/b6/export_runs.py:646,652; joulewise/bytes_analysis.py:994,1026",
+    "primary": "joulewise/b6/export_runs.py:646,652; joulewise/bytes_analysis.py:994,1026; joulewise/desk_restore.py:153\u2013169,208\u2013229",
     "scope": "member",
     "faults": {
-      "absent": "Science export substitutes its empty default; authenticated reference export refuses. Analysis keeps the planned member as unusable before any meter evaluation. Skip a reference archive join.",
+      "absent": "Science export substitutes its empty default; authenticated reference export refuses. With a compressed-only bundle input, verified restoration requires metadata.json or metadata.json.zst and stops the stage if both are absent. Outside restore, analysis records an unusable science member or skips a reference join.",
       "zero": "Science export substitutes its empty default; authenticated reference export refuses. Analysis JSON parse fails and keeps the planned member as unusable. Skip a reference archive join.",
       "half": "Science export substitutes its empty default; authenticated reference export refuses. Analysis JSON parse fails and keeps the planned member as unusable. Skip a reference archive join.",
       "garbage": "Science export substitutes its empty default; authenticated reference export refuses. Analysis JSON parse fails and keeps the planned member as unusable. Skip a reference archive join."
     },
-    "flags": "Recorded codes only for an unusable science member; a reference without a join gets the generic meter request drop reason.",
+    "flags": "Recorded codes only for an unusable science member; a reference without a join gets the generic meter request drop reason. Missing metadata at active restore is StorageStop / restore_refused.",
     "read_paths": [
       "bundle/metadata.json"
     ]
@@ -45,7 +45,7 @@
       "half": "Malformed line raises in science export and makes a science member unusable in analysis. A complete prefix is accepted only when the required phase spans remain.",
       "garbage": "Malformed line raises in science export and makes a science member unusable in analysis."
     },
-    "flags": "Recorded codes only for unavailable science; no attempted-join meter flag. Analysis requires one complete increasing decode and own-idle span. References also require one complete tokenize span. Duplicate or unmatched required markers make that input unavailable.",
+    "flags": "Recorded codes only for unavailable science; no attempted-join meter flag. Analysis requires one complete increasing decode and own-idle span. References also require one complete tokenize span. Duplicate or unmatched required markers make that input unavailable. A matching required-phase event must name its event_type; an absent type makes the member unavailable.",
     "read_paths": [
       "bundle/events.jsonl"
     ]
@@ -104,16 +104,16 @@
   {
     "id": "status",
     "path": "bundle/status.json",
-    "phase": "export",
-    "primary": "joulewise/b6/acceptance.py:474; joulewise/b6/export_runs.py:293\u2013305,647\u2013650",
+    "phase": "both",
+    "primary": "joulewise/b6/acceptance.py:474; joulewise/b6/export_runs.py:293\u2013305,647\u2013650; joulewise/desk_restore.py:109\u2013127,176\u2013195,208\u2013229",
     "scope": "member",
     "faults": {
-      "absent": "Science status can fall back to assessment or metadata. An authenticated collected reference refuses when it loses an inventoried file.",
-      "zero": "Refuse export with StorageStop when the file is an authenticated input.",
-      "half": "Refuse export with StorageStop when the file is an authenticated input.",
-      "garbage": "Refuse export with StorageStop when the file is an authenticated input."
+      "absent": "Science status can fall back to assessment or metadata. An authenticated collected reference refuses when it loses an inventoried file. A missing status file alone does not fail the science restore inventory.",
+      "zero": "Authenticated reference export refuses failed integrity checks. During verified restore, recorded size or digest mismatches refuse. Otherwise copied bytes are opaque to science analysis.",
+      "half": "Authenticated reference export refuses failed integrity checks. During verified restore, recorded size or digest mismatches refuse. Otherwise copied bytes are opaque to science analysis.",
+      "garbage": "Authenticated reference export refuses failed integrity checks. During verified restore, recorded size or digest mismatches refuse. Otherwise copied bytes are opaque to science analysis."
     },
-    "flags": "Reference export StorageStop. Science analysis does not read status.json.",
+    "flags": "Reference export can refuse authenticated source damage. Verified restoration copies a present status.json as an opaque file and checks recorded size or digest. A restore read or integrity failure stops the stage. Science analysis reads no status fields from that copy.",
     "read_paths": [
       "bundle/status.json"
     ]
@@ -192,6 +192,24 @@
     "flags": "StorageStop / restore_refused when a required verified restore cannot authenticate the bundle.",
     "read_paths": [
       "archive.desk/compression.jsonl"
+    ]
+  },
+  {
+    "id": "restore_bundle_inventory",
+    "path": "bundle/logs/controller.log and every regular file in an activated verified restore",
+    "phase": "analysis",
+    "primary": "joulewise/desk_restore.py:109\u2013127,153\u2013195,208\u2013229",
+    "scope": "observed_branch",
+    "restore_only": true,
+    "faults": {
+      "absent": "Restore inventories files that are present. Metadata has a separate required gate. A missing optional log is not part of the copy.",
+      "zero": "Copied verbatim unless a journal size or digest disagrees.",
+      "half": "Copied verbatim unless a journal size or digest disagrees.",
+      "garbage": "Plain files are opaque to the copy; read failures and journal size or digest mismatches stop restoration."
+    },
+    "flags": "StorageStop / restore_refused on unreadable files, inconsistent custody, or invalid restore inventory. No flag is derived by parsing controller text.",
+    "read_paths": [
+      "bundle/*"
     ]
   },
   {
@@ -316,12 +334,12 @@
   },
   {
     "id": "export_registration",
-    "path": "pack registration.json, plan input and resolved plan_tree.json, flag catalog",
+    "path": "pack registration.json (including checkout configs/b6/packs/<pack>/registration.json), plan input, flag catalog",
     "phase": "export",
     "primary": "joulewise/b6/export_runs.py:531\u2013564; joulewise/b6/archive.py:63\u201370; joulewise/b6/acceptance.py:415\u2013443",
     "scope": "conditional_campaign",
     "faults": {
-      "absent": "Use supplied pack/evidence inputs or registered fallback paths; refusal if required pack/evidence is unresolved.",
+      "absent": "Pack discovery can use supplied registration, harvested or checkout registrations and alias candidates. It refuses when required registration is unresolved. Explicit plan and evidence inputs do not bypass authentication of listed plan trees.",
       "zero": "Same as absent.",
       "half": "Same as absent.",
       "garbage": "Same as absent."
@@ -329,10 +347,27 @@
     "flags": "The malformed flag evidence path emits records.malformed_flag_exclusion_possible before export authentication.",
     "read_paths": [
       "sources/pack/registration.json",
-      "sources/pack/plan_tree.json",
-      "sources/repo/configs/campaigns/*/plan_tree.json",
       "sources/repo/configs/b6/packs/*/registration.json",
-      "registration/registration.json"
+      "registration/registration.json",
+      "configs/b6/packs/*/registration.json"
+    ]
+  },
+  {
+    "id": "authenticated_plan_trees",
+    "path": "sources/pack/plan_tree.json and sources/repo/configs/campaigns/<pack>/plan_tree.json",
+    "phase": "export",
+    "primary": "joulewise/b6/export_runs.py:93\u2013105,130\u2013142,556\u2013572; joulewise/b6/archive.py:63\u201370",
+    "scope": "observed_branch",
+    "faults": {
+      "absent": "Every SHA256SUMS-listed candidate is required, even if a byte-identical authenticated alternate, explicit plan, and evidence are available. Unlisted candidates may fall back under normal tree discovery.",
+      "zero": "A listed candidate fails its digest or object validation.",
+      "half": "A listed candidate fails its digest or object validation.",
+      "garbage": "A listed candidate fails its digest or object validation."
+    },
+    "flags": "StorageStop before fallback on any listed candidate failure.",
+    "read_paths": [
+      "sources/pack/plan_tree.json",
+      "sources/repo/configs/campaigns/*/plan_tree.json"
     ]
   },
   {
@@ -782,7 +817,8 @@
     "flags": "request_output_artifact_invalid for structured validation failures. Reducer validation code applies to event-v2 evidence. A failed re-reduction leaves recorded BYTES codes unless an explicit synthetic summary replaces the structured failure.",
     "read_paths": [
       "bundle/outputs/requests.jsonl"
-    ]
+    ],
+    "synthetic_invalid_utf8_drops": true
   },
   {
     "id": "request_tokens",
@@ -799,7 +835,8 @@
     "flags": "request_output_artifact_invalid for structured validation failures. Reducer validation code applies to event-v2 evidence. A failed re-reduction leaves recorded BYTES codes unless an explicit synthetic summary replaces the structured failure.",
     "read_paths": [
       "bundle/outputs/request_tokens.jsonl"
-    ]
+    ],
+    "synthetic_invalid_utf8_drops": true
   },
   {
     "id": "response_mirror",
@@ -833,7 +870,8 @@
     "flags": "request_output_artifact_invalid on a projection mismatch, invalid JSON or forbidden presence. Reducer validation code applies to event-v2 evidence. A failed re-reduction leaves recorded BYTES codes unless an explicit synthetic summary replaces the structured failure.",
     "read_paths": [
       "bundle/outputs/tokens.jsonl"
-    ]
+    ],
+    "synthetic_invalid_utf8_drops": true
   },
   {
     "id": "compressed_member",

@@ -1013,7 +1013,7 @@ def _phase_edges(events, phase):
     for event in events:
         if event.get("phase") != phase:
             continue
-        kind = event.get("event_type")
+        kind = event["event_type"]
         if kind in ("phase_start", "stage_started"):
             starts.append(event)
         elif kind in ("phase_end", "stage_completed"):
@@ -1023,7 +1023,7 @@ def _phase_edges(events, phase):
     return None
 
 
-def member_spans(bundle, *, metadata=None, reference=True):
+def member_spans(bundle, *, metadata=None, reference=True, events=None):
     """Decode-phase and idle-baseline spans of a bundle in the controller's monotonic ns."""
     if metadata is None:
         metadata = read_json(bundle / "metadata.json", {}) or {}
@@ -1033,10 +1033,11 @@ def member_spans(bundle, *, metadata=None, reference=True):
     except (KeyError, TypeError, ValueError):
         return None
 
-    try:
-        events = [json.loads(line) for line in _read_text(bundle / "events.jsonl").splitlines() if line.strip()]
-    except FileNotFoundError:
-        return None
+    if events is None:
+        try:
+            events = _member_events(bundle)
+        except FileNotFoundError:
+            return None
 
     def mapped(event):
         own = event.get("metadata", {}).get("monotonic_ns")
@@ -1060,6 +1061,10 @@ def member_spans(bundle, *, metadata=None, reference=True):
     if decode is None or idle is None or (reference and tokenize is None):
         return None
     return {"decode_ns": decode, "idle_ns": idle, "request_ns": [tokenize[0], decode[1]] if tokenize else None}
+
+
+def _member_events(bundle):
+    return [json.loads(line) for line in _read_text(bundle / "events.jsonl").splitlines() if line.strip()]
 
 
 def load_archive(root):
@@ -1242,6 +1247,8 @@ def _readable_bundle(source, journal):
         return
     with ExitStack() as cleanup:
         try:
+            if not any((source / name).is_file() for name in ("metadata.json", "metadata.json.zst")):
+                raise ValueError("run-dir must name one bundle containing metadata.json[.zst]")
             if not journal.is_file():
                 raise ValueError("compressed run requires compression.jsonl")
             records = {}
@@ -1497,20 +1504,32 @@ def _science_inputs(archive, row, registered_model, *, synthetic=False):
         metadata = read_json(plain / "metadata.json")
         if not metadata or metadata.get("workload_observed", {}).get("output_token_count") != PRINTED_TOKENS:
             raise ValueError("runtime-observed output count must be 512")
-        spans = member_spans(plain, metadata=metadata, reference=False)
-        if spans is None:
-            raise ValueError("member decode or idle span unavailable")
+        try:
+            events = _member_events(plain)
+        except FileNotFoundError as exc:
+            raise ValueError("member decode or idle span unavailable") from exc
         stored = json.loads(_read_text(root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json")))
         # Dispatch can raise before the reducer returns a structured failure.
         version = _check_reducer_dispatch(plain, config, metadata)
-        if synthetic and (stored or {}).get("bytes_synthetic_timing_fixture") is True:
+        synthetic_summary = synthetic and (stored or {}).get("bytes_synthetic_timing_fixture") is True
+        v2 = version.startswith("0.6.")
+        auxiliary_available = _v2_artifacts_available(plain, config, metadata, events) if v2 else True
+        if synthetic_summary and auxiliary_available:
             # The primary returns a structured failure for an absent or partial
             # curve. A text decoding exception escapes before that fallback.
             try:
                 _read_text(plain / "power_trace.csv")
             except FileNotFoundError:
                 pass
+        if not v2:
+            auxiliary_available = _suite_manifest_available(plain)
+        spans = member_spans(plain, metadata=metadata, reference=False, events=events)
+        if spans is None:
+            raise ValueError("member decode or idle span unavailable")
+        if synthetic_summary:
             return spans, _synthetic_science_columns(stored, archive, spans)
+        if not auxiliary_available:
+            raise ValueError("member reduction inputs unavailable")
         native = _native_science_inputs(plain, metadata, version)
         if native is not None and (not row.get("_unblinded") or not is_number(row.get("dur_decode_s"))):
             anchor, energy = decode_anchor_bound(archive, run_id, plain=plain, metadata=metadata, native=native,
@@ -1543,6 +1562,101 @@ def _check_reducer_dispatch(bundle, config, metadata):
     elif version not in ("0.4.1", "0.4.2", "0.5.0", "0.5.1", "0.5.2") or event_v2 or config_v2:
         raise ValueError("bundle reducer version or layout unsupported")
     return version
+
+
+def _suite_manifest_available(bundle):
+    path = bundle / "suite_manifest.json"
+    if not path.is_file():
+        return True
+    try:
+        manifest = read_json(path)
+    except (OSError, ValueError):
+        return False
+    return (isinstance(manifest, dict) and manifest.get("schema_version") in ("suite_manifest.v1", "suite_manifest.v2")
+            and isinstance(manifest.get("items"), list) and bool(manifest["items"]))
+
+
+def _v2_roster_bytes(bundle):
+    try:
+        raw = (bundle / "request_roster.json").read_bytes()
+        roster = json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError):
+        return None
+    if (not isinstance(roster, dict) or set(roster) != {"schema_version", "requests"}
+            or roster["schema_version"] != "joulewise.request_roster.v1"
+            or not isinstance(roster["requests"], list) or not roster["requests"]):
+        return None
+    keys = {"request_ordinal", "request_input_id", "prompt_source", "prompt_sha256", "output_policy_name",
+            "requested_output_tokens"}
+    identifiers = set()
+    for ordinal, row in enumerate(roster["requests"]):
+        if not isinstance(row, dict) or set(row) != keys:
+            return None
+        name, digest = row["request_input_id"], row["prompt_sha256"]
+        tokens, policy = row["requested_output_tokens"], row["output_policy_name"]
+        if (type(row["request_ordinal"]) is not int or row["request_ordinal"] != ordinal
+                or not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]*", name)
+                or name in identifiers or row["prompt_source"] not in ("prompt_text", "token_ids", "dataset_item")
+                or not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)
+                or not isinstance(policy, str) or not policy
+                or (tokens is not None and (type(tokens) is not int or tokens < 0))):
+            return None
+        identifiers.add(name)
+    canonical = (json.dumps(roster, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
+    return raw if canonical == raw else None
+
+
+def _v2_output_rows(path):
+    # A malformed JSON row is a structured validation failure. Invalid UTF-8
+    # escapes the primary JSONL reader and cannot reach the synthetic override.
+    try:
+        lines = _read_text(path).splitlines()
+    except OSError:
+        return None
+    try:
+        rows = [json.loads(line) for line in lines if line]
+    except json.JSONDecodeError:
+        return None
+    return rows if all(isinstance(row, dict) for row in rows) else None
+
+
+def _v2_artifacts_available(bundle, config, metadata, events):
+    batch = config.get("batch_policy")
+    if not isinstance(batch, dict) or not isinstance(config.get("speculation"), dict):
+        return False
+    roster = _v2_roster_bytes(bundle)
+    event_keys = {"event_type", "phase", "timestamp_s", "message", "metadata"}
+    if roster is None or any(not isinstance(event, dict) or set(event) != event_keys
+                             or not is_number(event["timestamp_s"]) for event in events):
+        return False
+    outputs = bundle / "outputs"
+    requests = _v2_output_rows(outputs / "requests.jsonl")
+    if requests is None:
+        return False
+    tokens = _v2_output_rows(outputs / "request_tokens.jsonl")
+    if tokens is None:
+        return False
+    response_mirror, tokens_mirror = outputs / "response.txt", outputs / "tokens.jsonl"
+    expected = batch.get("requested_batch_size")
+    mirrors_match = True
+    if expected == 1:
+        if response_mirror.exists():
+            response = requests[0].get("response_text") if len(requests) == 1 else None
+            try:
+                actual = response_mirror.read_bytes()
+            except OSError:
+                mirrors_match = False
+            else:
+                mirrors_match = isinstance(response, str) and actual == response.encode("utf-8")
+        if tokens_mirror.exists():
+            mirror = _v2_output_rows(tokens_mirror)
+            projection = [(row.get("output_token_ordinal"), row.get("timestamp_s"), row.get("token_id")) for row in tokens]
+            mirrors_match = (mirror is not None and mirrors_match
+                             and [(row.get("index"), row.get("timestamp_s"), row.get("token_id")) for row in mirror] == projection)
+    elif response_mirror.exists() or tokens_mirror.exists():
+        mirrors_match = False
+    return (mirrors_match and len(requests) == expected and isinstance(metadata.get("runtime"), dict)
+            and hashlib.sha256(roster).hexdigest() == batch.get("request_roster_sha256"))
 
 
 def _native_science_inputs(bundle, metadata, version):
