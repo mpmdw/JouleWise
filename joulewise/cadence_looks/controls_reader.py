@@ -7,19 +7,23 @@ from hashlib import sha256
 import json
 from math import ceil, isfinite
 import struct
+import warnings
 
 from joulewise.adapters.powermetrics import RAIL_MANIFEST
 from joulewise.align.apple.episode_bundle import join_episode_trace
 from joulewise.align.apple.sampler import (
     NS_PER_SECOND as NS, _restore_stamp, monotonic_ns, seconds_ns, stamp_mapping,
 )
-from joulewise.align.records import ClockMapping, Episode, PowerTrace, from_json
+from joulewise.align.records import ClockMapping, Episode, PowerTrace, _build, from_json
 from joulewise.external import km003c_parse as meter
-from joulewise.schemas import BenchmarkConfig
+from joulewise.schemas import BenchmarkConfig, ConfigKeyWarning
 
 from . import controls_analysis as analysis
 from .qualification_manifest import _decode
-from .controls_time_fields import RAIL_COLUMNS, TimeFieldError, project_json, rail_rows, stream_fields
+from .controls_time_fields import (
+    EMPTY_ARRAY, OPAQUE_NUMBER, RAIL_COLUMNS, SKIP, RecordFields, TimeFieldError,
+    project_json, rail_rows, stream_fields,
+)
 
 
 METHOD = "km003c_raw_monotonic_pairs.v1"
@@ -30,11 +34,26 @@ ELIGIBLE = frozenset(("meter_absent", *FAILURES[1:]))
 RAILS = frozenset(("cpu_power", "gpu_power", "ane_power"))
 STAMP_FIELDS = dict.fromkeys(("epoch_ns", "monotonic_before_ns", "monotonic_after_ns",
                               "wall_resolution_ns", "monotonic_resolution_ns"))
-EPISODE_FIELDS = {
-    **dict.fromkeys(("schema", "episode_id", "clock_domain", "start_ns", "end_ns")),
-    "hardware": {"paired_clock_stamps_ns": [STAMP_FIELDS], "boot_id": None},
-    "boot_id": None,
-}
+TOOL_FIELDS = RecordFields(
+    **dict.fromkeys(("start_ns", "end_ns", "args_bytes", "result_bytes", "logged", "state_changed")),
+    name=SKIP, state_before_sha256=SKIP, state_after_sha256=SKIP,
+)
+TURN_FIELDS = RecordFields(
+    **dict.fromkeys(("index", "start_ns", "end_ns", "context_tokens", "prefill_tokens",
+                     "decode_tokens", "hidden_tokens", "first_token_ns", "logged")),
+    tool_calls=[TOOL_FIELDS],
+)
+EPISODE_FIELDS = RecordFields(
+    **dict.fromkeys(("schema", "episode_id", "clock_domain", "start_ns", "end_ns", "condition")),
+    **dict.fromkeys(("task_pair", "agent_model", "endpoint", "seed"), SKIP),
+    hardware={"paired_clock_stamps_ns": [STAMP_FIELDS], "boot_id": None},
+    turns=[TURN_FIELDS], flags=[None], power_traces=EMPTY_ARRAY, clock_mappings=EMPTY_ARRAY,
+    main_task_score=SKIP, side_task_success=SKIP,
+    monitor_verdicts=[RecordFields(monitor_model=SKIP, visibility=None,
+                                   suspicion=OPAQUE_NUMBER, prompt_sha256=SKIP)],
+    router_log=RecordFields(model=SKIP, num_experts=None, top_k=None, layers=[SKIP],
+                            phase=[None], experts=[[[OPAQUE_NUMBER]]]),
+)
 METADATA_FIELDS = {
     "run_id": None,
     "config_sha256": None,
@@ -135,6 +154,12 @@ def _one_identity(values):
 
 def episode_timing(episode_raw, metadata):
     view = project_json(episode_raw, EPISODE_FIELDS)
+    try:
+        # Use the installed record constructor on the blind envelope. Scores,
+        # router observations and non-timing hardware values are skipped or masked.
+        _build(Episode, view)
+    except (AttributeError, KeyError, TypeError, ValueError, OverflowError) as error:
+        raise TimeFieldError("invalid native episode envelope") from error
     hardware = view["hardware"]
     episode_id = view["episode_id"]
     start, end = view["start_ns"], view["end_ns"]
@@ -147,8 +172,7 @@ def episode_timing(episode_raw, metadata):
                 or row["monotonic_before_ns"] > row["monotonic_after_ns"] for row in stamp_rows)):
         raise TimeFieldError("invalid episode timing")
     return EpisodeTiming(episode_id, view["clock_domain"], start, end, stamp_rows,
-                         _one_identity((view.get("boot_id"), hardware.get("boot_id"),
-                                        metadata.get("boot_id"))))
+                         _one_identity((hardware.get("boot_id"), metadata.get("boot_id"))))
 
 
 def binding_projection(episode, config, metadata, *, run_id, config_sha256):
@@ -161,10 +185,24 @@ def binding_projection(episode, config, metadata, *, run_id, config_sha256):
     rate = project_json(config, {"sampling": {"power_hz": None}})["sampling"]["power_hz"]
     if type(rate) not in (float, int) or not isfinite(rate) or rate <= 0 or round(NS / rate) <= 0:
         raise TimeFieldError("invalid nominal rail cadence")
-    return episode_timing(episode, metadata), round(NS / rate), metadata.get("uncertainty_evidence")
+    period = round(NS / rate)
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", ConfigKeyWarning)
+            typed = BenchmarkConfig.from_mapping(_decode(config))
+        if round(NS / typed.sampling.power_hz) != period:
+            raise ValueError("typed rail cadence")
+    except (KeyError, TypeError, ValueError, OverflowError) as error:
+        raise TimeFieldError("invalid native bundle config") from error
+    return episode_timing(episode, metadata), period, metadata.get("uncertainty_evidence")
 
 
 def _rail_mapping(timing, evidence):
+    anchor = (evidence or {}).get("clock_anchor", {})
+    if anchor.get("status") == "bounded":
+        bound = anchor.get("effective_clock_anchor_bound_s")
+        if type(bound) not in (int, float) or not isfinite(bound * NS):
+            raise TimeFieldError("invalid native rail clock bound")
     mapping, flags = stamp_mapping(
         tuple(_restore_stamp(row) for row in timing.stamp_rows),
         episode_domain=timing.clock_domain, evidence=evidence,
@@ -234,19 +272,19 @@ def blind_stream(path, payload):
     header, trailer = view["header"], view["trailer"]
     if header is None or header.get("schema") != "joulewise.km003c_stream.v1":
         raise TimeFieldError("not a native meter stream")
+    if header.get("status") not in ("streaming", "absent"):
+        raise TimeFieldError("invalid native meter status")
+    if type(header.get("rate_idx")) is not int or header["rate_idx"] not in meter.STEP_MS:
+        raise TimeFieldError("invalid native meter rate")
     polls = view["polls"]
-    if header.get("status") != "streaming":
-        return StreamTiming(path, header, trailer, False, None, ())
     batches = [row for row in polls if row.get("seq")]
-    if not batches:
-        return StreamTiming(path, header, trailer, False, None, ())
     if (any(type(row.get("rx")) is not int or "p_shape" in row for row in polls)
             or any(type(row.get("tx")) is not int or type(row.get("n")) is not int
                    or row["n"] != len(row["seq"]) for row in batches)
             or any(row.get("n") and not row.get("seq") for row in polls)):
         raise TimeFieldError("malformed native meter poll")
-    if type(header.get("rate_idx")) is not int or header["rate_idx"] not in meter.STEP_MS:
-        return StreamTiming(path, header, trailer, True, None, ())
+    if header["status"] != "streaming" or not batches:
+        return StreamTiming(path, header, trailer, False, None, ())
     batches.sort(key=lambda row: row["rx"])
     samples = meter.sample_times(header, batches)
     try:
@@ -390,9 +428,6 @@ def first_read(inputs, stage1):
         certificate = inputs.certificate(leg_id)
         if timing.episode_id != leg.episode_id or rail.evidence() != certificate["rails"]:
             raise ReaderBindingError("certificate rail or episode identity")
-        config = BenchmarkConfig.from_mapping(_decode(files["config"]))
-        if round(NS / config.sampling.power_hz) != period:
-            raise ReaderBindingError("typed rail cadence")
         span_id = position["span_id"]
         if span_id not in cache:
             decoded = {}

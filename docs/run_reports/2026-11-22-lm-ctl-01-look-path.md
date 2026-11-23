@@ -114,8 +114,11 @@ and its exact count intact.
 
 ## Prospective cumulative bundle disposition
 
-The lead resolved the four archived v2 expected-code assertions. RL-202a
-§2.4 gives `meter_absent` when no receipt-listed stream in the span is
+The non-builder suite seat recorded the disposition of the four archived v2
+expected-code assertions in freeze 3. The release lead adopted it on the
+audit branch at `1850d6930`. [SUPERSESSION-v2.md](https://github.com/mpmdw/JouleWise/blob/1850d6930/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/ctl-01/look-path/SUPERSESSION-v2.md)
+
+RL-202a §2.4 gives `meter_absent` when no receipt-listed stream in the span is
 streaming with samples. It gives `not_bracketed` when sampled streams exist
 outside the leg's candidate window. A missing or wrong-code disposition
 refuses fresh with `INPUT_CHANNELS`. An eligible disposition names the
@@ -138,8 +141,8 @@ projection against the same observations with only the expected code
 changed for the affected legs. Any other failure, missing result, repeated
 result or unexpected historical pass blocks the cumulative bundle gate.
 The required result is v1 29/29, all 26 unaffected v2 cases, v3 20/20, and
-all four exact mismatch proofs. Report it as **75/79 raw, with four
-superseded assertions**. The independent installed byte pass and the
+all four exact mismatch proofs. Report it as **75 raw + 4 superseded**.
+The independent installed byte pass and the
 bound-host blind preflight retain their separate gates.
 
 The targeted local replay observed exit 1 at the original v2 comparator

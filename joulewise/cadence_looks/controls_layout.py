@@ -366,19 +366,24 @@ def claim(private, public, public_record, redirect):
         return restricted
     except BaseException as error:
         try:
-            if _observation(private, MARKER_NAME) is not None or not made:
-                raise ValueError("claim durability or ownership not established")
-            if restricted is not None:
-                for name in os.listdir(restricted):
-                    if name not in ("stdout", "stderr"):
-                        raise ValueError("unexpected claim setup artifact")
-                    os.unlink(name, dir_fd=restricted)
-                os.fsync(restricted)
-            os.rmdir(PRIVATE_NAME, dir_fd=private)
-            os.fsync(private)
+            if made and _observation(private, MARKER_NAME) is None:
+                if restricted is not None:
+                    for name in os.listdir(restricted):
+                        if name not in ("stdout", "stderr"):
+                            raise ValueError("unexpected claim setup artifact")
+                        os.unlink(name, dir_fd=restricted)
+                    os.fsync(restricted)
+                os.rmdir(PRIVATE_NAME, dir_fd=private)
+                os.fsync(private)
         except (OSError, ValueError):
-            raise GateRefusal("HALF_MADE", status=4, special=True) from error
+            pass  # The remaining directory determines the durable state.
         finally:
             if restricted is not None:
                 os.close(restricted)
+        try:
+            reservation = _observation(private, PRIVATE_NAME)
+        except OSError:
+            reservation = None
+        if reservation is not None and stat.S_ISDIR(reservation.st_mode):
+            raise GateRefusal("HALF_MADE", status=4, special=True) from error
         raise GateRefusal("CLAIM_SETUP") from error

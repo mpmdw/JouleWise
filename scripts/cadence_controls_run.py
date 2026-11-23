@@ -7,6 +7,7 @@ import importlib.machinery
 import json
 import os
 from pathlib import Path
+import re
 import stat
 import subprocess
 import sys
@@ -18,6 +19,11 @@ SOURCE_INDEX = CONTROL + "lm-ctl-01.sources.json"
 LAUNCHER = "scripts/cadence_controls_run.py"
 ORIGIN = "https://github.com/mpmdw/JouleWise.git"
 OPERATIONS = ("validate-final", "stage1", "preflight", "stage2", "status")
+LOOK = "lm-ctl-01"
+
+
+class Spent(Exception):
+    """A local, committed spend or a stage-1-bound read-start marker."""
 
 
 def _demand(predicate):
@@ -69,6 +75,66 @@ def _read(root, name):
         os.close(fd)
 
 
+def _exact_open(parent, name, flags):
+    fd = os.open(name, flags | os.O_NOFOLLOW, dir_fd=parent)
+    try:
+        matches = [entry for entry in os.listdir(parent) if entry.casefold() == name.casefold()]
+        _demand(matches == [name])
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def _read_started(layout, uid, manifest_sha, stage1_sha):
+    """Inspect only the durable marker and the identity of its reservation."""
+    path = layout["path"]
+    _demand(path.startswith("/") and "\\" not in path)
+    parts = path.split("/")[1:]
+    _demand(all(part not in ("", ".", "..") for part in parts))
+    dir_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    parent = os.open("/", dir_flags)
+    try:
+        for part in parts:
+            child = _exact_open(parent, part, dir_flags)
+            os.close(parent)
+            parent = child
+        reservation = _exact_open(parent, "RESTRICTED", dir_flags)
+        try:
+            reserved = os.fstat(reservation)
+        finally:
+            os.close(reservation)
+        fd = _exact_open(parent, "read-started", os.O_RDONLY | os.O_NONBLOCK)
+        with os.fdopen(fd, "rb") as stream:
+            info = os.fstat(fd)
+            _demand(stat.S_ISREG(info.st_mode) and stat.S_IMODE(info.st_mode) == 0o600
+                    and info.st_uid == uid and info.st_nlink == 1 and info.st_dev == reserved.st_dev)
+            raw = stream.read(8193)
+        marker = dict(look_id=LOOK, manifest_sha256=manifest_sha, stage1_sha256=stage1_sha,
+                      device=layout["device"], inode=reserved.st_ino)
+        # The registered device is durable across mount renumbering. The
+        # reservation inode and same-filesystem relationship must still match.
+        return raw == json.dumps(marker, sort_keys=True, separators=(",", ":")).encode()
+    finally:
+        os.close(parent)
+
+
+def _check_local_spend(events, manifest, manifest_sha):
+    for event in events:
+        if event.get("kind") != "stage1" or event.get("manifest_sha256") != manifest_sha:
+            continue
+        stage1_sha = event.get("stage1_sha256")
+        if type(stage1_sha) is not str or re.fullmatch("[0-9a-f]{64}", stage1_sha) is None:
+            continue
+        try:
+            started = _read_started(manifest["release_layout"]["private"], manifest["execution"]["uid"],
+                                    manifest_sha, stage1_sha)
+        except (AttributeError, KeyError, OSError, TypeError, ValueError):
+            continue
+        if started:
+            raise Spent()
+
+
 class VerifiedModule(importlib.abc.Loader):
     def __init__(self, source, origin):
         self.source = source
@@ -108,13 +174,25 @@ class RegisteredModules(importlib.abc.MetaPathFinder):
 
 def _registration(root):
     tip = _git(root, "rev-parse", "--verify", "refs/remotes/origin/main^{commit}").decode().strip()
-    _demand(tip == _public_tip())
     ledger = json.loads(_git(root, "show", f"{tip}:{CONTROL}LOOKS.json"), object_pairs_hook=_unique)
-    row, = (row for row in ledger["looks"] if row["look_id"] == "lm-ctl-01")
-    _demand(row["manifest_path"] == MANIFEST and row["status"] == "registered")
+    events = [event for event in ledger.get("events", [])
+              if type(event) is dict and event.get("look_id") == LOOK]
+    if any(event.keys() == {"look_id", "kind", "manifest_sha256", "stage1_sha256"}
+           and event["kind"] in ("first_ctl_read", "published")
+           and all(type(event.get(key)) is str and re.fullmatch("[0-9a-f]{64}", event[key])
+                   for key in ("manifest_sha256", "stage1_sha256"))
+           for event in events):
+        raise Spent()
+    row, = (row for row in ledger["looks"] if type(row) is dict and row.get("look_id") == LOOK)
     committed = _git(root, "show", f"{tip}:{MANIFEST}")
     _demand(_digest(committed) == row["sha256"])
     manifest = json.loads(committed, object_pairs_hook=_unique)
+    # The local evidence can only refuse execution. Authorizing a fresh read
+    # still requires the public tip, source pins and full layout validation.
+    _check_local_spend(events, manifest, row["sha256"])
+    _demand(ledger["schema"] == "joulewise.cadence_look_ledger.v1"
+            and row["manifest_path"] == MANIFEST and row["status"] == "registered")
+    _demand(tip == _public_tip())
     launcher_pin = manifest["pins"]["print_code/launcher"]
     _demand(_digest(_read(root, LAUNCHER)) == launcher_pin
             and _digest(_git(root, "show", f"{tip}:{LAUNCHER}")) == launcher_pin)
@@ -136,6 +214,9 @@ def main(argv):
         sys.path.insert(0, str(root))
         sys.meta_path.insert(0, RegisteredModules(root, inventory))
         from joulewise.cadence_looks.controls_run import main as run
+    except Spent:
+        os.write(2, b"REFUSE SPENT\n")
+        return 3
     except Exception:
         os.write(2, b"REFUSE PREFLIGHT FREEZE\n")
         return 2

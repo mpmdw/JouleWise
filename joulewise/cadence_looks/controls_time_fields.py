@@ -26,6 +26,13 @@ _TOKEN = re.compile(r"""[ \t\n\r]*(?:
 _TAIL_WS = re.compile(r"[ \t\n\r]*\Z")
 MAX_DEPTH = 64
 NESTED = object()                    # a member whose value is an object or an array: never converted
+EMPTY_ARRAY = object()
+SKIP = object()
+OPAQUE_NUMBER = object()
+
+
+class RecordFields(dict):
+    """A typed record whose decoder rejects unknown fields."""
 
 
 class _Bad(Exception):
@@ -99,15 +106,18 @@ def _tokens(s):
             return
 
 
-def _skip_value(it, first, depth):
+def _skip_value(it, first, depth, *, strict=False):
     kind, text = first
     if kind in ("str", "lit", "num"):
+        if strict and kind == "lit" and text not in ("true", "false", "null"):
+            raise _Bad()
         return
     if kind != "punct" or text not in "{[":
         raise _Bad()
     if depth > MAX_DEPTH:
         raise TimeFieldError("a JSON line nests deeper than the reader follows")
     close = "}" if text == "{" else "]"
+    seen = set()
     nxt = next(it, None)
     if nxt == ("punct", close):
         return
@@ -115,10 +125,15 @@ def _skip_value(it, first, depth):
         if close == "}":
             if nxt is None or nxt[0] != "str" or next(it, None) != ("punct", ":"):
                 raise _Bad()
+            if strict:
+                name = _unstring(nxt[1])
+                if name in seen:
+                    raise _Bad()
+                seen.add(name)
             nxt = next(it, None)
         if nxt is None:
             raise _Bad()
-        _skip_value(it, nxt, depth + 1)
+        _skip_value(it, nxt, depth + 1, strict=strict)
         sep = next(it, None)
         if sep == ("punct", close):
             return
@@ -129,7 +144,7 @@ def _skip_value(it, first, depth):
 
 def scan_line(s):
     """The top-level members of one JSON line as ``json.loads`` would accept it, WITHOUT converting any value:
-    ``{key: (kind, raw text)}`` with kind "str", "num" or "lit", or ``{key: (NESTED, None)}`` for an object or array.
+    ``{key: (kind, raw text)}`` with kind "str", "num" or "lit", or ``{key: (NESTED, opener)}`` for an object or array.
     A repeated key keeps its last value, as ``json.loads`` does. Returns None when ``json.loads`` would refuse the
     line or its value is not a JSON object (the decoder then keeps it as an error line and reads no sample from it)."""
     it = _tokens(s)
@@ -151,7 +166,7 @@ def scan_line(s):
                 return None
             if val[0] == "punct":
                 _skip_value(it, val, 1)
-                out[key] = (NESTED, None)
+                out[key] = (NESTED, val[1])
             else:
                 out[key] = val
             sep = next(it, None)
@@ -232,6 +247,8 @@ def stream_fields(payload, name):
             if header is None or trailer is not None:
                 raise TimeFieldError("poll outside native stream anchors")
             poll = _pick(members, POLL_KEYS)
+            if "smc" in members and members["smc"] != (NESTED, "{"):
+                raise TimeFieldError("non-object native poll smc")
             if "p" in members:
                 pk, ptext = members["p"]
                 if pk is NESTED:
@@ -247,12 +264,27 @@ def stream_fields(payload, name):
             "polls": polls, "errors": errors}
 
 
-def _project(it, token, fields, depth):
+def _project(it, token, fields, depth, *, strict):
     if depth > MAX_DEPTH:
         raise _Bad()
+    if fields is EMPTY_ARRAY:
+        if token != ("punct", "[") or next(it) != ("punct", "]"):
+            raise _Bad()
+        return []
+    if fields is SKIP:
+        _skip_value(it, token, depth, strict=strict)
+        return None
+    if fields is OPAQUE_NUMBER:
+        if token[0] != "num":
+            raise _Bad()
+        return 0
+    if token == ("lit", "null") and isinstance(fields, RecordFields):
+        return None
     if fields is None:
         kind, value = token
         if kind not in ("str", "num", "lit"):
+            raise _Bad()
+        if strict and kind == "lit" and value not in ("true", "false", "null"):
             raise _Bad()
         return _convert(kind, value)
     if isinstance(fields, list):
@@ -263,7 +295,7 @@ def _project(it, token, fields, depth):
         if item == ("punct", "]"):
             return result
         while True:
-            result.append(_project(it, item, fields[0], depth + 1))
+            result.append(_project(it, item, fields[0], depth + 1, strict=strict))
             separator = next(it)
             if separator == ("punct", "]"):
                 return result
@@ -285,9 +317,11 @@ def _project(it, token, fields, depth):
         seen.add(name)
         value = next(it)
         if name in fields:
-            result[name] = _project(it, value, fields[name], depth + 1)
+            result[name] = _project(it, value, fields[name], depth + 1, strict=strict)
+        elif isinstance(fields, RecordFields):
+            raise _Bad()
         else:
-            _skip_value(it, value, depth + 1)
+            _skip_value(it, value, depth + 1, strict=strict)
         separator = next(it)
         if separator == ("punct", "}"):
             return result
@@ -296,11 +330,11 @@ def _project(it, token, fields, depth):
         item = next(it)
 
 
-def project_json(payload, fields):
+def project_json(payload, fields, *, strict=False):
     """Convert only scalars on the allowlist; lex past every other value."""
     try:
         tokens = _tokens(payload.decode("utf-8"))
-        value = _project(tokens, next(tokens), fields, 0)
+        value = _project(tokens, next(tokens), fields, 0, strict=strict)
         if next(tokens, None) is not None:
             raise _Bad()
         return value

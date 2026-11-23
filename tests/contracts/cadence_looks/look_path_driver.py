@@ -198,7 +198,8 @@ def install(world, bench, fault, legacy):
                                     kernel_sha256=dict(zip(book.KERNEL_ROLES, book.AUDITED_KERNEL, strict=True)),
                                     suite_sha256={name: digest((repo/book.SUITE/name).read_bytes())
                                                   for name in book.SUITE_NAMES},
-                                    v3_1_count=846, installed_bundle_cases=79, h_output_bytes_equal=True))
+                                    v3_1_count=846, installed_bundle_cases=book.INSTALLED_BUNDLE_RESULT,
+                                    supersession_sha256=book.SUPERSESSION_SHA256, h_output_bytes_equal=True))
     receipt_sha = digest((repo/book.BYTE_RECEIPT).read_bytes())
     add_event(repo, "byte_pass", manifest_sha256=manifest_sha, receipt_sha256=receipt_sha, hand_vectors_passed=True)
     add_event(repo, "receipt", revision=revision, manifest_sha256=manifest_sha)
@@ -222,9 +223,14 @@ def _production_modules(repo):
     launcher = util.module_from_spec(spec)
     loader.exec_module(launcher)
     launcher._public_tip = lambda: git(repo, "rev-parse", book.REF)
-    inventory = launcher._registration(repo)
+    try:
+        inventory = launcher._registration(repo)
+    except launcher.Spent:
+        os.write(2, b"REFUSE SPENT\n")
+        return False
     sys.path.insert(0, str(repo))
     sys.meta_path.insert(0, launcher.RegisteredModules(repo, inventory))
+    return True
 
 
 def run(operation, world, bench, fault):
@@ -258,7 +264,8 @@ def run(operation, world, bench, fault):
     if fault == "installed_kernel_drift":
         path = repo/manifest.CODE_PATHS["print_code/attribution"]
         put(path, path.read_bytes() + b"\n")
-    _production_modules(repo)
+    if not _production_modules(repo):
+        return 3
     from joulewise.cadence_looks import controls_inputs as inputs, controls_layout as layout, controls_reader as reader
     from joulewise.cadence_looks import controls_run as worker
     from joulewise.cadence_looks.controls_book import Authority, Book
@@ -287,6 +294,8 @@ def run(operation, world, bench, fault):
 
     def mkdir(path, *args, **kwargs):
         nonlocal claim_parent
+        if path == layout.PRIVATE_NAME and fault == "mkdir_denied":
+            raise PermissionError("synthetic reservation mkdir denial")
         result = os_mkdir(path, *args, **kwargs)
         if path == layout.PRIVATE_NAME:
             claim_parent = kwargs["dir_fd"]

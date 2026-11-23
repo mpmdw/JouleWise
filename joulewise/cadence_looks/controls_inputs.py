@@ -217,7 +217,7 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
     if dispatched:
         script = file("script", "script-work.json")
         files["script"] = script
-        work = project_json(_read(root / script["path"], script), WORK_FIELDS)
+        work = project_json(_read(root / script["path"], script), WORK_FIELDS, strict=True)
         _require(result["script_record_sha256"] == script["sha256"]
                  and work["schema"] == "joulewise.cadence_script_work.v1" and work["leg_id"] == leg_id
                  and work["leg_spec_sha256"] == canonical_spec_sha and work["script"] == spec["script"]
