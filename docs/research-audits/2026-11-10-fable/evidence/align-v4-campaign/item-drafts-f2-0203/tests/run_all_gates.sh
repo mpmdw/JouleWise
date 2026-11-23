@@ -9,7 +9,8 @@ python3 -B f2-inst-02/tests/test_gates.py
 python3 -B f2-inst-03/tests/test_gates.py
 python3 -B tests/test_close_selection.py f2-inst-02
 python3 -B tests/test_close_selection.py f2-inst-03
-python3 -B tests/test_hp_gates.py
+repo_root="$(git rev-parse --show-toplevel)"
+(cd "$repo_root" && python3 -B -m unittest tests.test_hp02_successor_items)
 python3 -B tests/verify_build.py "$1" "$2"
 python3 -B tests/test_staging.py "${3:-$1}"
 date -u '+Verification finished %Y-%m-%dT%H:%M:%SZ'

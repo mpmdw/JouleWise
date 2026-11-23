@@ -12,6 +12,25 @@ right after item 167 below. [`CANONICAL.md`](CANONICAL.md) is the tool map:
 the one current tool or document per job. [`docs/ARCHIVE.md`](docs/ARCHIVE.md)
 says how to get back files removed from `main` in the 2026-11-06 prune.
 
+**2026-11-20 hp-02 successor builder handoff [AGENT].** The gate now follows the
+frozen state machine. The lead preserved exact issue binding and authorized the
+corrected Q2 spec freeze at `eafae0cb9`. All 374,900 frozen assertions and all
+six original fixtures passed on synthetic inputs. Independent delta execution
+and lead acceptance precede issue.
+[Gate-machine adoption report](docs/run_reports/2026-11-20-hp02-gate-machine.md).
+
+**2026-11-18 qualification draft handoff [AGENT].** Six unissued items
+for Nov 20–22 and two qualification-pin stability fillers bind the PR #812
+merge commit `6e9d42f1dd3d308bc9239143d0d634ab965e50e1`. All 38 frozen
+paths match the reviewed PR head. Qualification remains HOLD_FOR_FIT_FREEZE.
+Before qual-01-s01, the lead lands the RL-181 registration with these kit
+hashes on main, records exact-pin admission, stages the sequenced attempt
+ledger and supplies the latest pre-qualification attempt’s close Check if
+its older receipt lacks a span id. Before s02, the lead records the RL-172a
+soak comparison and RL-181 §4(a) q0 leg-type hand-read. The first native run
+on this pin remains a lead-controlled RL-179 F-11 prerequisite.
+[Draft handoff](docs/run_reports/2026-11-18-qual-items-merged.md)
+
 **Qualification registration build (2026-11-18, [AGENT]).** The
 `lm-qual-01` scientific registration and matching ledger row are on
 `align/2026-11-18-lm-qual-01-registered` for Tier 2 review. Audit round 1

@@ -1,0 +1,865 @@
+{
+  "schema": "hp02.review-fixtures.v1",
+  "synthetic_only": true,
+  "description": "Each row overlays the common invented observations. All legacy expectations apply only to the exact embedded hp_gate plus pick_arg, never the outer host commands. The legacy harness provides a synthetic same-date qual solely for isolating unrelated checks. Each successor expectation is a contract vector for a future builder.",
+  "base": {
+    "clock": "2026-11-21T13:15:00-08:00",
+    "local_zone": "America/Los_Angeles",
+    "pin": "dd206025abb30fd5c07515cd4b34b3e653174810",
+    "kit_sha256": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66",
+    "queue_sha256": "6489297e89e0cf02fe8d0f4050fe6f0492e175724d4902173fd2d7e7b5d54286",
+    "queue_hash_admitted": true,
+    "span": "hp-02-s01",
+    "case_kind": "all leg IDs unrun, same-pin smoke and independent delta admitted",
+    "typed_issue": "issued by fixture lead",
+    "look_attestation": "named issuer, checked complete execution register and responsible operator for this kit at issue and again at both gates: not run",
+    "hp01_t0_dates": [
+      "2026-11-15"
+    ],
+    "latest_close_check": "ok, exact latest synthetic receipt, fence gone, AC0, no marker, every feed stopped, matching empty pgid and case-insensitive foreign census",
+    "typed_safety": "valid, in scope, all current preflight fields backed",
+    "copy": "verified typed marker, copy stopped",
+    "eligible_session": false,
+    "eligible_counted": false,
+    "finite_ready": [],
+    "stability": "first already done, additional available",
+    "dated_pending": [],
+    "R1": "post-close Check recorded",
+    "admitted_planner": "default if clear, otherwise alternate if clear; physical bound fits",
+    "named_stops": [],
+    "attestations_as_of": "each case clock at issue/Start/Run unless varied",
+    "line_2": "valid pin-specific disposition in these invented cases",
+    "host": "fixture-host",
+    "date_inventory_complete": true,
+    "hp_run_history": [],
+    "close_reference": {
+      "kind": "synthetic operational Check",
+      "id": "fixture-close-17",
+      "host": "fixture-host",
+      "sequence": 17,
+      "ended_seconds_before_now": 1200,
+      "fence_gone": true,
+      "receipt": "OK",
+      "restores_read_back": true,
+      "feeds_proven_stopped": {
+        "agents": true,
+        "meter": true,
+        "volumes": true
+      },
+      "groups": [
+        {
+          "synthetic_group_id": "fixture-group-1",
+          "start_identity": "fixture-start-1",
+          "receipt_stop": "proven",
+          "independent_census": "empty"
+        }
+      ],
+      "foreign_agent_census_casefold": [],
+      "foreign_process_census": [],
+      "hp_mode_after": 0,
+      "marker_present_or_link": false,
+      "host_lock_free": true
+    },
+    "look_reference": {
+      "kind": "synthetic issuer attestation",
+      "scope": "lm-hp-01",
+      "kit": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66",
+      "responsible_seat": "fixture issuing desk",
+      "checked_through": "case clock",
+      "all_execution_routes_covered": true,
+      "status": "not_run",
+      "pending_conflict": false
+    },
+    "copy_reference": {
+      "kind": "synthetic verified copy",
+      "predecessor": "fixture-close-17",
+      "plaintext_manifest_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "ciphertext_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "ciphertext_size_bytes": 321,
+      "provider_completion_and_readback": "fixture verified size=321",
+      "transfer_stopped": true
+    }
+  },
+  "fixture-Q2": {
+    "description": "symbolic prospective admitted data, for fixtures only",
+    "not_before": "2026-11-20",
+    "expires_at": "2026-11-26T00:00:00-08:00",
+    "roster": "same 3+4+5, all unrun in this synthetic world",
+    "pin": "dd206025abb30fd5c07515cd4b34b3e653174810",
+    "kit_sha256": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66"
+  },
+  "cases": [
+    {
+      "id": "positive-control",
+      "observations": {},
+      "legacy_env": {},
+      "legacy_stdout_prefix": "HP02 GATES PASS",
+      "expected_successor": "ELIGIBLE",
+      "reason": "All current evidence present. Legacy fixtures also supply every retired observation."
+    },
+    {
+      "id": "clear-date-no-qualification",
+      "observations": {
+        "qualification_today": false
+      },
+      "legacy_env": {
+        "QUAL_DATE": "",
+        "QUAL_RECORD": "",
+        "QUAL_CLEAN": "no"
+      },
+      "legacy_stdout_prefix": "WAIT: a clean qualification",
+      "expected_successor": "ELIGIBLE",
+      "reason": "The local date is clear, latest synthetic clean close was a product filler."
+    },
+    {
+      "id": "friday-old-queue",
+      "observations": {},
+      "legacy_env": {},
+      "legacy_stdout_prefix": "STOP: date/band/argument changed",
+      "expected_successor": "NEED_FRESH_QUEUE",
+      "reason": "Old queue not_before is Saturday even though Friday is scientifically eligible. Legacy qual is set to Friday here to isolate the selector.",
+      "clock": "2026-11-20T13:15:00-08:00"
+    },
+    {
+      "id": "friday-admitted-successor",
+      "observations": {
+        "queue": "fixture-Q2",
+        "qualification_today": false
+      },
+      "legacy_env": {
+        "QUAL_DATE": "",
+        "QUAL_RECORD": ""
+      },
+      "legacy_stdout_prefix": "WAIT: a clean qualification",
+      "expected_successor": "ELIGIBLE",
+      "reason": "A separately admitted finite unrun-only fixture queue is in force Friday. No actual Q2 was issued.",
+      "clock": "2026-11-20T13:15:00-08:00"
+    },
+    {
+      "id": "item-24h",
+      "observations": {
+        "item_age_s": 86400
+      },
+      "legacy_env": {
+        "ISSUED_EPOCH": 1795209300
+      },
+      "legacy_stdout_prefix": "VOID: item/queue expiry",
+      "expected_successor": "ELIGIBLE",
+      "reason": "Same bindings, at the old exclusive age limit."
+    },
+    {
+      "id": "kit-seven-days",
+      "observations": {
+        "kit_age_s": 604800
+      },
+      "legacy_env": {
+        "KIT_ISSUED_EPOCH": 1794690900
+      },
+      "legacy_stdout_prefix": "VOID: seven-day kit expiry",
+      "expected_successor": "ELIGIBLE",
+      "reason": "Kit age and committed queue expiry are independent."
+    },
+    {
+      "id": "campaign-close-299s",
+      "observations": {
+        "close_age_s": 299
+      },
+      "legacy_env": {
+        "LAST_CLOSE_KIND": "campaign",
+        "LATEST_CLOSE_EPOCH": 1795295401
+      },
+      "legacy_stdout_prefix": "WAIT: latest-close interval",
+      "expected_successor": "ELIGIBLE",
+      "reason": "Every close line has passed and the copy stopped."
+    },
+    {
+      "id": "other-close-1199s",
+      "observations": {
+        "close_age_s": 1199
+      },
+      "legacy_env": {
+        "LATEST_CLOSE_EPOCH": 1795294501
+      },
+      "legacy_stdout_prefix": "WAIT: latest-close interval",
+      "expected_successor": "ELIGIBLE",
+      "reason": "Other-kind close, same proof."
+    },
+    {
+      "id": "latest-close-now",
+      "observations": {
+        "close_age_s": 0
+      },
+      "legacy_env": {
+        "LAST_CLOSE_KIND": "campaign",
+        "LATEST_CLOSE_EPOCH": 1795295700,
+        "PRIOR_CLOSE_EPOCH": 1795295700
+      },
+      "legacy_stdout_prefix": "WAIT: latest-close interval",
+      "expected_successor": "ELIGIBLE",
+      "reason": "Zero typed gap, receipt and fence both closed."
+    },
+    {
+      "id": "rank-session",
+      "observations": {
+        "eligible_session": true
+      },
+      "legacy_env": {
+        "SESSION_READY": "yes"
+      },
+      "legacy_stdout_prefix": "CEDE: higher rung",
+      "expected_successor": "CEDE_READY",
+      "reason": "Registered READY effective now."
+    },
+    {
+      "id": "rank-counted",
+      "observations": {
+        "eligible_counted": true
+      },
+      "legacy_env": {
+        "COUNTED_READY": "yes"
+      },
+      "legacy_stdout_prefix": "CEDE: higher rung",
+      "expected_successor": "CEDE_COUNTED",
+      "reason": "Counted entry can arm now."
+    },
+    {
+      "id": "rank-first-stability",
+      "observations": {
+        "stability": "first-eligible",
+        "stability_kit": "f2-stab-01",
+        "first_eligible_stability_pool": "f2-stab-01..14"
+      },
+      "legacy_env": {
+        "F2_READY": "no"
+      },
+      "legacy_stdout_prefix": "HP02 GATES PASS",
+      "expected_successor": "CEDE_RANK_1",
+      "reason": "Old item names the inst-01/02/03 census only; its gate otherwise misses the first stability leg and passes."
+    },
+    {
+      "id": "rank-finite",
+      "observations": {
+        "finite_ready": [
+          "inst-03",
+          "inst-01",
+          "inst-02"
+        ]
+      },
+      "legacy_env": {
+        "F2_READY": "yes"
+      },
+      "legacy_stdout_prefix": "CEDE: higher rung",
+      "expected_successor": "CEDE_INST_01",
+      "reason": "Rank 2 order is inst-01 then -02 then -03, across eligible entries."
+    },
+    {
+      "id": "rank-finite-02",
+      "observations": {
+        "finite_ready": [
+          "inst-03",
+          "inst-02"
+        ]
+      },
+      "legacy_env": {
+        "F2_READY": "yes"
+      },
+      "legacy_stdout_prefix": "CEDE: higher rung",
+      "expected_successor": "CEDE_INST_02",
+      "reason": "-01 exhausted or ineligible."
+    },
+    {
+      "id": "rank-finite-03",
+      "observations": {
+        "finite_ready": [
+          "inst-03"
+        ]
+      },
+      "legacy_env": {
+        "F2_READY": "yes"
+      },
+      "legacy_stdout_prefix": "CEDE: higher rung",
+      "expected_successor": "CEDE_INST_03",
+      "reason": "-02 exhausted or ineligible."
+    },
+    {
+      "id": "rank-extra-stability",
+      "observations": {
+        "stability": "further-eligible",
+        "stability_kit": "f2-stab-02"
+      },
+      "legacy_env": {
+        "F2_READY": "no"
+      },
+      "legacy_stdout_prefix": "HP02 GATES PASS",
+      "expected_successor": "ELIGIBLE",
+      "reason": "Old inst-only census happens to yield the correct outcome after the first stability leg."
+    },
+    {
+      "id": "rank-post-R1-F0",
+      "observations": {
+        "F0": "would-pass-retired-tests"
+      },
+      "legacy_env": {
+        "F0_ELIGIBLE": "yes"
+      },
+      "legacy_stdout_prefix": "CEDE: F0",
+      "expected_successor": "ELIGIBLE",
+      "reason": "R1 post-close recorded. An F0 entry has left the ladder."
+    },
+    {
+      "id": "rank-post-R1-no-F0-reason",
+      "observations": {
+        "F0": "retired"
+      },
+      "legacy_env": {
+        "F0_REASON": ""
+      },
+      "legacy_stdout_prefix": "STOP: unsafe F0",
+      "expected_successor": "ELIGIBLE",
+      "reason": "No invented spacing/cap reason for a retired entry."
+    },
+    {
+      "id": "rank-unknown",
+      "observations": {
+        "priority_census": null
+      },
+      "legacy_env": {
+        "PRIORITY_RECORD": ""
+      },
+      "legacy_stdout_prefix": "STOP: priority",
+      "expected_successor": "WAIT_EVIDENCE",
+      "reason": "Unknown higher-rung state."
+    },
+    {
+      "id": "pair-equality",
+      "observations": {
+        "eligible_counted": false,
+        "dated_pending": [
+          {
+            "date": "2026-11-21",
+            "t0_floor": "2026-11-21T14:00:00-08:00",
+            "spans": [
+              "q-A",
+              "q-B"
+            ],
+            "first_to_second_s": 20589,
+            "last_span_bound_s": 15000
+          }
+        ],
+        "hp_to_next_s": 18110
+      },
+      "legacy_env": {
+        "NEXT_COUNTED_EPOCH": 1795313810
+      },
+      "legacy_stdout_prefix": "CEDE: protected counted start",
+      "expected_successor": "ELIGIBLE",
+      "reason": "A can start at 18:16:50 and B at 23:59:59. B may finish tomorrow. Old guard adds an extra 300 s here."
+    },
+    {
+      "id": "pair-plus-one",
+      "observations": {
+        "eligible_counted": false,
+        "dated_pending": [
+          {
+            "date": "2026-11-21",
+            "t0_floor": "2026-11-21T14:00:00-08:00",
+            "spans": [
+              "q-A",
+              "q-B"
+            ],
+            "first_to_second_s": 20590,
+            "last_span_bound_s": 15000
+          }
+        ],
+        "hp_to_next_s": 18110
+      },
+      "legacy_env": {
+        "NEXT_COUNTED_EPOCH": 0
+      },
+      "legacy_stdout_prefix": "HP02 GATES PASS",
+      "expected_successor": "CEDE_DATED",
+      "reason": "With no exact next reservation supplied, the old scalar permits B at 00:00:00. B would lose its date."
+    },
+    {
+      "id": "look-ran",
+      "observations": {
+        "look_attestation": "ran"
+      },
+      "legacy_env": {
+        "HP_LOOK_RUN": "yes"
+      },
+      "legacy_stdout_prefix": "VOID: lm-hp-01",
+      "expected_successor": "NOT_ADMITTED",
+      "reason": "Only authorised negative status admits. Rank 4 may be considered."
+    },
+    {
+      "id": "look-unknown",
+      "observations": {
+        "look_attestation": "unknown"
+      },
+      "legacy_env": {
+        "HP_LOOK_RUN": "unknown"
+      },
+      "legacy_stdout_prefix": "STOP: missing/failed",
+      "expected_successor": "WAIT_EVIDENCE",
+      "reason": "No affirmative dated no-run record."
+    },
+    {
+      "id": "look-pointer-only",
+      "observations": {
+        "look_attestation": null
+      },
+      "legacy_env": {
+        "HP_LOOK_RECORD": "synthetic-missing-filename"
+      },
+      "legacy_stdout_prefix": "HP02 GATES PASS",
+      "expected_successor": "WAIT_EVIDENCE",
+      "reason": "A string and a no flag alone pass the old fragment. They cannot establish the fact."
+    },
+    {
+      "id": "hp01-date",
+      "observations": {
+        "hp01_t0_dates": [
+          "2026-11-21"
+        ]
+      },
+      "legacy_env": {
+        "HP01_T0_DATES": "2026-11-21"
+      },
+      "legacy_stdout_prefix": "VOID: hp-01 leg",
+      "expected_successor": "INELIGIBLE_DATE",
+      "reason": "Synthetic hp-01 leg with the same local t0-date."
+    },
+    {
+      "id": "dirty-block-predecessor",
+      "observations": {
+        "hp_prior_check": "dirty",
+        "span": "hp-02-s02",
+        "hp_run_history": [
+          "s01:dirty"
+        ]
+      },
+      "legacy_env": {
+        "PREDECESSOR_CLEAN": "no"
+      },
+      "legacy_stdout_prefix": "VOID: predecessor",
+      "expected_successor": "HOLD_KIT",
+      "reason": "For s02/s03 the preceding HP span failed. No leapfrog or automatic retry."
+    },
+    {
+      "id": "unproven-group",
+      "observations": {
+        "receipt_group": "not proven stopped",
+        "pgid_census": "empty"
+      },
+      "legacy_env": {},
+      "legacy_stdout_prefix": "HP02 GATES PASS",
+      "expected_successor": "HOLD_CLOSE",
+      "reason": "A caller asserts GROUPS_ABSENT=yes over a contradictory receipt. Item 442 forbids that."
+    },
+    {
+      "id": "newer-close-ambiguous",
+      "observations": {
+        "last_close_identity": "ambiguous"
+      },
+      "legacy_env": {
+        "LATEST_CLOSE_RECORD": ""
+      },
+      "legacy_stdout_prefix": "STOP: latest-close",
+      "expected_successor": "WAIT_EVIDENCE",
+      "reason": "Do not select an older clean close."
+    },
+    {
+      "id": "foreign-agent",
+      "observations": {
+        "case_insensitive_census": [
+          "Claude.app"
+        ]
+      },
+      "legacy_env": {},
+      "legacy_stdout_prefix": "HP02 GATES PASS",
+      "expected_successor": "HOLD_HOST",
+      "reason": "Old fragment trusts booleans. A fresh mixed-case foreign-agent hit is a refusal."
+    },
+    {
+      "id": "missing-restore",
+      "observations": {
+        "typed_restore": null
+      },
+      "legacy_env": {
+        "HOST_RESTORE_OK": null
+      },
+      "legacy_stdout_prefix": "STOP: missing/failed",
+      "expected_successor": "HOLD_HOST",
+      "reason": "Present or unchecked restore is insufficient."
+    },
+    {
+      "id": "marker-unowned",
+      "observations": {
+        "host_marker": "unowned"
+      },
+      "legacy_env": {
+        "HOST_RESTORE_OK": "no"
+      },
+      "legacy_stdout_prefix": "STOP: missing/failed",
+      "expected_successor": "HOLD_HOST",
+      "reason": "All work held, pinned restore path subject to ownership and lock constraints."
+    },
+    {
+      "id": "copy-no-proof",
+      "observations": {
+        "copy": "bare-ok",
+        "wait_s": 10
+      },
+      "legacy_env": {
+        "COPY_TYPED_OK": "no"
+      },
+      "legacy_stdout_prefix": "STOP: missing/failed",
+      "expected_successor": "WAIT_COPY",
+      "reason": "Bare string does not verify an upload. This is still inside the bounded copy interval."
+    },
+    {
+      "id": "copy-600-stopped",
+      "observations": {
+        "copy": "unverified",
+        "wait_s": 600,
+        "copy_process": "stopped"
+      },
+      "legacy_env": {
+        "COPY_TYPED_OK": "no"
+      },
+      "legacy_stdout_prefix": "STOP: missing/failed",
+      "expected_successor": "ELIGIBLE_WITH_COPY_DEBT",
+      "reason": "No success marker is minted. Keep debt, originals and page schedule."
+    },
+    {
+      "id": "copy-600-running",
+      "observations": {
+        "copy": "unverified",
+        "wait_s": 600,
+        "copy_process": "running"
+      },
+      "legacy_env": {
+        "COPY_TYPED_OK": "no"
+      },
+      "legacy_stdout_prefix": "STOP: missing/failed",
+      "expected_successor": "HOLD_FOREIGN_LOAD",
+      "reason": "Elapsed time never proves the copy stopped."
+    },
+    {
+      "id": "watcher-24h",
+      "observations": {
+        "watcher": "stale"
+      },
+      "legacy_env": {
+        "WATCH_UNTIL_EPOCH": 1795295700
+      },
+      "legacy_stdout_prefix": "STOP: watcher",
+      "expected_successor": "ELIGIBLE",
+      "reason": "Alarm-only watcher. All actual instrumentation and safety proofs present."
+    },
+    {
+      "id": "line9",
+      "observations": {
+        "count_debt": "not applicable to HP"
+      },
+      "legacy_env": {
+        "LINE9_OK": null
+      },
+      "legacy_stdout_prefix": "STOP: missing/failed",
+      "expected_successor": "ELIGIBLE",
+      "reason": "No fictitious line 9 or campaign ordinal."
+    },
+    {
+      "id": "queue-last-second",
+      "observations": {},
+      "legacy_env": {},
+      "legacy_stdout_prefix": "STOP: date/band/argument changed",
+      "expected_successor": "ELIGIBLE",
+      "reason": "Old date selector still masks the last valid queue second. Alternate plan clears the blackout.",
+      "clock": "2026-11-22T23:59:59-08:00"
+    },
+    {
+      "id": "queue-at-expiry",
+      "observations": {},
+      "legacy_env": {},
+      "legacy_stdout_prefix": "VOID: item/queue expiry",
+      "expected_successor": "NEED_FRESH_QUEUE",
+      "reason": "Item/stager exclusive end. Pinned next alone is permissive at equality.",
+      "clock": "2026-11-23T00:00:00-08:00"
+    },
+    {
+      "id": "queue-after-expiry",
+      "observations": {},
+      "legacy_env": {},
+      "legacy_stdout_prefix": "VOID: item/queue expiry",
+      "expected_successor": "NEED_FRESH_QUEUE",
+      "reason": "Pinned next also reports expiry at +1 s.",
+      "clock": "2026-11-23T00:00:01-08:00"
+    },
+    {
+      "id": "new-queue-after-expiry",
+      "observations": {
+        "queue": "fixture-Q2"
+      },
+      "legacy_env": {},
+      "legacy_stdout_prefix": "VOID: item/queue expiry",
+      "expected_successor": "ELIGIBLE",
+      "reason": "Prospective fresh finite hash, correct roster, dated before t0. Old embedded epoch still refuses.",
+      "clock": "2026-11-23T00:00:01-08:00"
+    },
+    {
+      "id": "unadmitted-queue",
+      "observations": {
+        "queue_hash_admitted": false
+      },
+      "legacy_env": {},
+      "legacy_stdout_prefix": "HP02 GATES PASS",
+      "expected_successor": "WAIT_BINDING",
+      "reason": "The old fragment is scoped to booleans. An unlisted digest fails at either gate."
+    },
+    {
+      "id": "missing-safety-record",
+      "observations": {
+        "typed_restore": "bare-yes",
+        "typed_safety": null
+      },
+      "legacy_env": {},
+      "legacy_stdout_prefix": "HP02 GATES PASS",
+      "expected_successor": "HOLD_HOST",
+      "reason": "String or true flag over an absent typed record cannot release the host."
+    },
+    {
+      "id": "restore-failure",
+      "observations": {
+        "close_restore": "unproven",
+        "external_recovery": "fails"
+      },
+      "legacy_env": {
+        "HOST_RESTORE_OK": "no"
+      },
+      "legacy_stdout_prefix": "STOP: missing/failed",
+      "expected_successor": "HALT_AND_PAGE",
+      "reason": "After unproven close, hold all; one safe pinned recovery and full readback; on second failure halt and page Ed and lead. No retry of a span."
+    },
+    {
+      "id": "restore-recovered",
+      "observations": {
+        "close_restore": "unproven",
+        "external_recovery": "proven",
+        "other_refusal": "still-open"
+      },
+      "legacy_env": {
+        "PREDECESSOR_CLEAN": "no"
+      },
+      "legacy_stdout_prefix": "VOID: predecessor",
+      "expected_successor": "HOLD_KIT",
+      "reason": "Close recovery clears only the specific host restore stop. Other refusal/group or revoked records still bind."
+    },
+    {
+      "id": "real-plan-refusal",
+      "observations": {
+        "pin_plan": {
+          "default": "refuse",
+          "alternate": "refuse"
+        }
+      },
+      "legacy_env": {},
+      "legacy_stdout_prefix": "HP02 GATES PASS",
+      "expected_successor": "WAIT_PIN",
+      "reason": "Contract injection of both pinned plans refusing. Record/refuse or take next eligible rung; never pass an unchecked argument."
+    },
+    {
+      "id": "night-hp",
+      "observations": {},
+      "legacy_env": {},
+      "legacy_stdout_prefix": "STOP: date/band/argument changed",
+      "expected_successor": "ELIGIBLE",
+      "reason": "Work extends past retired 00:30. Explicit alternate window plus valid finite queue.",
+      "clock": "2026-11-21T23:30:00-08:00"
+    },
+    {
+      "id": "rank-changed-before-run",
+      "observations": {
+        "phase": "Run",
+        "finite_ready": [
+          "inst-03"
+        ]
+      },
+      "legacy_env": {
+        "F2_READY": "yes"
+      },
+      "legacy_stdout_prefix": "CEDE: higher rung",
+      "expected_successor": "CEDE_INST_03",
+      "reason": "Previously successful Start does not carry over."
+    },
+    {
+      "id": "previous-hp-already-ran",
+      "observations": {
+        "hp_run_history": [
+          "s01:complete"
+        ]
+      },
+      "legacy_env": {},
+      "legacy_stdout_prefix": "HP02 GATES PASS",
+      "expected_successor": "SKIP_SPENT",
+      "reason": "Do not repeat the roster or reuse an output across a renewed queue."
+    },
+    {
+      "id": "marker-dangling-link",
+      "observations": {
+        "host_marker": "dangling symlink"
+      },
+      "legacy_env": {},
+      "legacy_stdout_prefix": "HP02 GATES PASS",
+      "expected_successor": "HOLD_HOST",
+      "reason": "Legacy outer Start tests -L; the shell fragment alone cannot prove absence. Repeat entry safety at Run."
+    },
+    {
+      "id": "fence-live-at-run",
+      "observations": {
+        "phase": "Run",
+        "fence_gone": false
+      },
+      "legacy_env": {},
+      "legacy_stdout_prefix": "HP02 GATES PASS",
+      "expected_successor": "WAIT_FENCE",
+      "reason": "A changed fence invalidates Start and forbids recovery while live."
+    },
+    {
+      "id": "look-changed-at-run",
+      "observations": {
+        "phase": "Run",
+        "look_attestation": "ran"
+      },
+      "legacy_env": {
+        "HP_LOOK_RUN": "yes"
+      },
+      "legacy_stdout_prefix": "VOID: lm-hp-01",
+      "expected_successor": "NOT_ADMITTED",
+      "reason": "A newer execution record at Run supersedes the earlier no-run record."
+    },
+    {
+      "id": "restore-only-recovered",
+      "observations": {
+        "close_restore": "unproven",
+        "external_recovery": "proven",
+        "other_refusal": "unknown"
+      },
+      "legacy_env": {
+        "HOST_RESTORE_OK": "yes"
+      },
+      "legacy_stdout_prefix": "HP02 GATES PASS",
+      "expected_successor": "WAIT_EVIDENCE",
+      "reason": "Pinned recovery success plus AC0 cannot clear another unresolved close or group."
+    },
+    {
+      "id": "mismatched-proof",
+      "observations": {
+        "typed_restore": {
+          "identity": "fixture-close-16",
+          "proven": true
+        }
+      },
+      "legacy_env": {},
+      "legacy_stdout_prefix": "HP02 GATES PASS",
+      "expected_successor": "HOLD_HOST",
+      "reason": "Valid proof for the wrong receipt is insufficient."
+    },
+    {
+      "id": "predecessor-check-missing",
+      "observations": {
+        "span": "hp-02-s03",
+        "hp_run_history": [
+          "s01:complete",
+          "s02:unknown"
+        ],
+        "hp_prior_check": null
+      },
+      "legacy_env": {
+        "PREDECESSOR_RECORD": ""
+      },
+      "legacy_stdout_prefix": "VOID: predecessor",
+      "expected_successor": "WAIT_EVIDENCE",
+      "reason": "No skipping s02, even if an intervening filler closed clean."
+    },
+    {
+      "id": "further-stab-while-hp-held",
+      "observations": {
+        "stability": "further-eligible",
+        "look_attestation": "ran"
+      },
+      "legacy_env": {
+        "HP_LOOK_RUN": "yes"
+      },
+      "legacy_stdout_prefix": "VOID: lm-hp-01",
+      "expected_successor": "SELECT_RANK_4",
+      "reason": "Planner-level decision. Only HP is ineligible; no F0 fallback."
+    },
+    {
+      "id": "counted-rollback-only",
+      "observations": {
+        "rl180_two_counted_hits": true,
+        "batch_overlaps_hp": true
+      },
+      "legacy_env": {},
+      "legacy_stdout_prefix": "HP02 GATES PASS",
+      "expected_successor": "ELIGIBLE",
+      "reason": "RL-180 only changes counted candidates. The HP plan, close and all dated contention checks independently pass."
+    },
+    {
+      "id": "copy-at-599",
+      "observations": {
+        "copy": "unverified",
+        "wait_s": 599,
+        "copy_process": "stopped"
+      },
+      "legacy_env": {
+        "COPY_TYPED_OK": "no"
+      },
+      "legacy_stdout_prefix": "STOP: missing/failed",
+      "expected_successor": "WAIT_COPY",
+      "reason": "Boundary for an unfinished copy below the 600-second bound."
+    },
+    {
+      "id": "queue-changed-at-run",
+      "observations": {
+        "phase": "Run",
+        "fresh_queue_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+        "queue_hash_admitted": false
+      },
+      "legacy_env": {},
+      "legacy_stdout_prefix": "HP02 GATES PASS",
+      "expected_successor": "WAIT_BINDING",
+      "reason": "Start read the expected queue; the later byte stream is a different digest. Fragment sees no hash and outer legacy Run only repeats the fence."
+    },
+    {
+      "id": "expiry-crossed-at-run",
+      "clock": "2026-11-23T00:00:00-08:00",
+      "observations": {
+        "phase": "Run",
+        "start_phase_clock": "2026-11-22T23:59:59-08:00"
+      },
+      "legacy_env": {},
+      "legacy_stdout_prefix": "VOID: item/queue expiry",
+      "expected_successor": "NEED_FRESH_QUEUE",
+      "reason": "A previously eligible Start under a corrected picker cannot survive this exclusive queue boundary."
+    },
+    {
+      "id": "rank1-spent-for-date",
+      "observations": {
+        "rank1_pool": "f2-stab-01..14",
+        "rank1_already_done": true,
+        "stability": "further-eligible",
+        "stability_kit": "f2-stab-15"
+      },
+      "legacy_env": {
+        "F2_READY": "no"
+      },
+      "legacy_stdout_prefix": "HP02 GATES PASS",
+      "expected_successor": "ELIGIBLE",
+      "reason": "An available further stability leg does not displace rank-three HP after the counted-date and other checks pass."
+    }
+  ],
+  "merge_rule": "Overlay observations on base. Overrides including null supersede lower-level example records for the named fact. Legacy-only support values are never evidence of successor eligibility. For unrun-only queue examples all data are synthetic. The default item is s01; named s02/s03 specimens replace its block history."
+}
