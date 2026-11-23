@@ -1052,6 +1052,95 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+552. **Lead: ISSUE f2-stab-15 L010 on pin B with --span-id cq-f2-stab-15-l010-a1 (inaugural RL-197c span; re-selected from L007, spent in item 546) in the Mon/Tue 10:50-13:15 gap; last armed span before the ctl-01 pilot**
+
+```pointer
+owner: magistrate
+wait: result_json_exists
+deadline: 2026-11-24T15:30:00-08:00
+on_early_or_refused: Read the verdict first. A refusal, or a missing or unproven close, holds ledger initialization and the ctl pilot: report to the lead (mail the lead and Ed) and resume the item 422 stability ladder. A position with no attempt stays unrun. If L010 is spent or ineligible at issue or launch, hold this item and return to the lead for a new selection.
+next_observable: /Users/edr/campaign-out/f2-stab-15/cq-f2-stab-15-l010-a1/runner_receipt.json, followed by its verified close and Check
+```
+
+```item
+{"expires_epoch_s": 1795554900, "issued_epoch_s": 1795420728, "number": 552, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Re-selection of RUN_STATE 543's route (RL-197c section 3).** The PR #943 run-report draft named f2-stab-15 L007. Item 546 has since spent L007-L009 as ordinary gap fillers without `--span-id`, so the lowest eligible unrun position of kit 15 is now **L010** (queue `cq-f2-stab-15` seq `10`). Nothing else in the draft changes.
+- **Issue exactly L010 of f2-stab-15 on pin B** `6e9d42f1dd3d308bc9239143d0d634ab965e50e1`, in the 10:50:01-13:14:59 gap (items 463 and 464, no window argument), on Monday 23 Nov or, if Monday's gap is missed, Tuesday 24 Nov. It ranks above stability in that gap (items 541, 543). Recheck at actual issue and launch that L010 is still unrun and eligible. Use the item 463 pin-B filler dispatch and the item 507 soak check. The only leg is cold under RL-200 section 2.
+- **Arm with `--span-id cq-f2-stab-15-l010-a1`**, equal to the typed attempt ID, and **without `--attempt-ledger`** (RL-197c). The create-once output directory basename equals that attempt ID: `/Users/edr/campaign-out/f2-stab-15/cq-f2-stab-15-l010-a1`.
+- **This is the last armed span before the counted ctl-01 pilot.** Stability legs before this arm continue as usual. After it arms, arm nothing else until the pilot: stability pauses. The lead issues ledger initialization (draft item 2) as soon as this Check is on main, then the pilot (draft item 3).
+- **Close and Check.** Run the ordinary close and Check. Verify and record the receipt's embedded span ID, canonical absolute path, full SHA-256 and exact close ns, together with restore, feeds stopped, groups absent and foreign-process absence. The lead binds those facts into item 2. Copy at once as usual.
+- **Kit:** `docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/qual-pin/f2-stab-15.v1.1.json`, SHA-256 `8dceffc2e1a10a03d25c6c06487756fe37f8f5a1c57d52e242a64faabcbc36a1`. **Queue:** `docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-1leg/f2-stab-15.json` at audit `8f3366c75`, SHA-256 `1adf8673916f1f7675478665b7fcb80cf56d3647d298fb16032a864d613ca8a2`. Seq `10`, span `f2-stab-15-l010`, roster `L010`, attempt `1`, not before `2026-11-17`, exclusive expiry `2026-12-08T12:35:29-08:00`.
+
+Dispatch record (`issued_epoch_s` equals this item's typed header):
+
+```json
+{
+  "schema": "joulewise.cadence_span_dispatch.v1",
+  "attempt_id": "cq-f2-stab-15-l010-a1",
+  "campaign_id": "f2-stab-15",
+  "kit_sha256": "8dceffc2e1a10a03d25c6c06487756fe37f8f5a1c57d52e242a64faabcbc36a1",
+  "frozen_pin": "6e9d42f1dd3d308bc9239143d0d634ab965e50e1",
+  "roster": ["L010"],
+  "kit_positions": [10],
+  "issued_epoch_s": 1795420728,
+  "arg": null,
+  "batch_windows": []
+}
+```
+
+**Run block.** Bind `PIN_B_CHECKOUT`, `PIN_B_PYTHON`, `AUDIT_EVIDENCE_ROOT` (the root holding the kit and queue paths above), `B_OUTPUT`, `DISK_PATH`, `CUSTODY_ROOT` and `MAGISTRATE_PID` as in the item 463 pin-B dispatch. Check pin-B eligibility and the item 507 soak at actual t0. Item 463 omits the window argument and uses the actual-t0 plan deadline plus 900 s. Launch once, as the last act.
+
+```bash
+(
+  set -euo pipefail
+  : "${PIN_B_CHECKOUT:?}" "${PIN_B_PYTHON:?}" "${AUDIT_EVIDENCE_ROOT:?}" "${B_OUTPUT:?}"
+  : "${DISK_PATH:?}" "${CUSTODY_ROOT:?}" "${MAGISTRATE_PID:?}"
+  b_attempt=cq-f2-stab-15-l010-a1
+  b_base="$AUDIT_EVIDENCE_ROOT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign"
+  b_kit="$b_base/f2-stab/qual-pin/f2-stab-15.v1.1.json"
+  b_queue="$b_base/fillers-w2/queues-1leg/f2-stab-15.json"
+  test "$(git -C "$PIN_B_CHECKOUT" rev-parse HEAD)" = 6e9d42f1dd3d308bc9239143d0d634ab965e50e1
+  b_status=$(git --no-optional-locks -C "$PIN_B_CHECKOUT" status --porcelain)
+  test -z "$b_status"
+  test "${B_OUTPUT##*/}" = "$b_attempt"
+  test ! -e "$B_OUTPUT"
+  test ! -L "$B_OUTPUT"
+  b_kit_sha=$(shasum -a 256 "$b_kit")
+  b_queue_sha=$(shasum -a 256 "$b_queue")
+  test "${b_kit_sha%% *}" = 8dceffc2e1a10a03d25c6c06487756fe37f8f5a1c57d52e242a64faabcbc36a1
+  test "${b_queue_sha%% *}" = 1adf8673916f1f7675478665b7fcb80cf56d3647d298fb16032a864d613ca8a2
+  "$PIN_B_PYTHON" -I -B "$PIN_B_CHECKOUT/scripts/cadence_queue.py" validate-kit "$b_kit" --repo "$PIN_B_CHECKOUT"
+  "$PIN_B_PYTHON" -I -B "$PIN_B_CHECKOUT/scripts/cadence_queue.py" validate-queue "$b_queue" --kits-root "$AUDIT_EVIDENCE_ROOT"
+  "$PIN_B_PYTHON" -I -B -c '
+import json, sys
+from datetime import datetime
+from zoneinfo import ZoneInfo
+with open(sys.argv[1]) as source:
+    queue = json.load(source)
+now = datetime.now(ZoneInfo("America/Los_Angeles"))
+if now.date().isoformat() < "2026-11-17" or now >= datetime.fromisoformat(queue["expires_at"]):
+    raise SystemExit("pin-B queue is outside its authorized dates")
+' "$b_queue"
+  b_plan=$("$PIN_B_PYTHON" -I -B "$PIN_B_CHECKOUT/scripts/cadence_legs_runner.py" plan \
+    --kit "$b_kit" --legs L010 --t0 "$(date +%s)")
+  b_deadline=$(printf '%s\n' "$b_plan" | "$PIN_B_PYTHON" -I -B -c '
+import json, sys
+plan = json.load(sys.stdin)
+if not plan["blackout_clear"] or plan["batch_windows"] != []:
+    raise SystemExit("pin-B actual-t0 plan did not clear")
+print(plan["launch_deadline_epoch_s"] + 900)
+')
+  "$PIN_B_PYTHON" -I -B "$PIN_B_CHECKOUT/scripts/launch_cadence_span.py" launch \
+    --repo "$PIN_B_CHECKOUT" --python-bin "$PIN_B_PYTHON" --kit "$b_kit" --legs L010 \
+    --output "$B_OUTPUT" --disk-path "$DISK_PATH" --custody-root "$CUSTODY_ROOT" \
+    --magistrate-pid "$MAGISTRATE_PID" --deadline "$b_deadline" --span-id "$b_attempt"
+)
+```
+
+Source: PR #943 head `7998539b6`, `docs/run_reports/2026-11-22-ctl01-issue-path.md` section "1. ISSUE — inaugural pin-B leg", with L007 replaced by L010 and seq 7 by seq 10. The initializer (PR #955) merged as `38e962ad48204698a570b811651c4d315fe5d9d1`.
+
 551. **Magistrate 1a819996 (headless, Opus 5.5), 2026-11-22 23:02-23:10 PST: f2-stab-05 L012 CHECK: RECEIPT OK (1/1 leg, MEASURED_OK, restored), ADMITTED; kit 05 complete; copied at once; f2-stab-06-l001 ISSUED at rank 4 on pin A (1: only one leg fits before the 02:00 band), ARG 02:00-02:35, launches as the last act**
 
 ```pointer

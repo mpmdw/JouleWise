@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "f2stab06-1a819996/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~23:10 Sun or later after three quiet minutes, expected end ~1.3 h after launch, worst case ~1.6 h; read the true fence deadline and pid from run-out.txt; check the pid, not the deadline). The next activation after the fence pid is gone and runner_receipt.json exists Checks attempt cq-f2-stab-06-l001-a1 at /Users/edr/campaign-out/f2-stab-06/cq-f2-stab-06-l001-a1 (no stamp suffix) with f2stab06-check-template-1a819996/check.sh (copy to f2stab06-check-NEWACT/, replace NEWACT; LEGS L001; kit sha a02d18ba...172c, campaign f2-stab-06, pin A 2d347f721; asserts batch_windows == ['02:00-02:35'] and roster prefix; prints receipt_sha256 and the leg's max_busy_cores/max_gap_s/os_level_max/redo_reasons; L001 cold); maps the quiet span to wall time through the receipt's ended pair and counts maintenance lines inside it; copies at once with f2stab06-check-template-1a819996/offload-run.sh (NEWACT replaced; it calls $C/f2stab06-check-NEWACT/offload.sh, PLAN cq-f2-stab-06-l001-a1), prints full 64-hex digests (item 491); then the ladder (items 422, 463, 464, 507, 536; ctl-01 ranks above rank-4 stability once the lead issues the pilot or its pin-B predecessor, items 541, 543, RL-197c). Next pin-A stability positions: kit f2-stab-06 L002 onward (RL-200 §2: leg 1 of each span cold, legs 2 to N warm), 3/2/1 legs at the actual t0 under the matching fillers-w2 queue at audit 8f3366c75 (kit staged at /Users/edr/campaign-out/kits/f2-stab-06.v1.1-8f3366c75.json, sha a02d18ba...172c; check each queue's sha against its README row and stage it under /Users/edr/campaign-out/queues/). Pin A uses ARG 02:00-02:35 for t0 13:15:00-23:59:59, and the fence plus soak must clear the next 02:00-02:35 (item 507, RL-200 band check); a t0 at or after 00:00 Monday uses that day's rules (items 463, 544). Monday's rank 1 is the cold leg of the lowest kit with an unrun position (kit 06). Fillers-w3 successors (item 524) only after kits 01-14 are all spent and never before t0 2026-11-26 00:00 PST.",
+  "next_observable": "/Users/edr/campaign-out/f2-stab-15/cq-f2-stab-15-l010-a1/runner_receipt.json, followed by its verified close and Check",
   "open_items": [
+    {
+      "expires_epoch_s": 1795554900,
+      "item": 552,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 551,
@@ -233,11 +239,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "551",
-  "source_item_heading_date": "2026-11-22",
+  "source_item": "552",
+  "source_item_heading_date": null,
   "wait": {
-    "deadline_epoch_s": 1795427400,
-    "observable": "none",
-    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-06 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. A census or soak refusal on a measured contending process with a proven clean close is not a kit hold (items 505, 547): a leg with an attempt is spent, a leg with none stays unrun. A clean close with the leg not admitted (cpu_load, redo_quota 0) is recorded, not a stop and not a kit hold (items 467, 479, 520). If run-out.txt has no LAUNCH_RC line (WAIT/STOP before launch, e.g. not quiet by 23:45), nothing launched: position L001 of kit 06 stays unrun and the next activation re-runs a start check and re-issues it under a new typed item before launch (a t0 at or after 00:00 Monday uses that day's rules, items 463, 544)."
+    "deadline_epoch_s": 1795563000,
+    "observable": "result_json_exists",
+    "on_early_or_refused": "Read the verdict first. A refusal, or a missing or unproven close, holds ledger initialization and the ctl pilot: report to the lead (mail the lead and Ed) and resume the item 422 stability ladder. A position with no attempt stays unrun. If L010 is spent or ineligible at issue or launch, hold this item and return to the lead for a new selection."
   }
 }
