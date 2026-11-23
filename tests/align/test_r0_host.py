@@ -1322,15 +1322,16 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                     self.assertEqual(cycles, [])
 
     def test_window_flags_proven_cpu_from_worker_seen_only_at_an_interior_snapshot(self):
-        from datetime import datetime
+        from datetime import datetime, timezone
 
+        # The 30 s table proves absence for both printed birth times.
         for birth, cpu, flagged in ((35, "0:01.80", [45, 60]),
-                                    (20, "0:01.80", [45]),
+                                    (20, "0:01.80", [45, 60]),
                                     (35, "0:00.50", [])):
             with self.subTest(birth=birth, cpu=cpu), tempfile.TemporaryDirectory() as tmp:
                 guard, clock, advance, _ = self.admission()
                 run = guard.run
-                wall = datetime(2026, 11, 6, 18, 0).timestamp()
+                wall = datetime(2026, 11, 6, 18, 0, tzinfo=timezone.utc).timestamp()
                 guard.wall_clock_ns = lambda: int((wall + clock.now) * 1e9)
 
                 def command(argv, **kwargs):
@@ -1354,7 +1355,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                 self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in rule_flags(guard)], flagged)
                 if 60 in flagged:
                     evidence = rule_flags(guard)[-1]["busy"][0]
-                    self.assertAlmostEqual(evidence["cpu_s_per_s"], 1.8 / (60 - birth))
+                    self.assertAlmostEqual(evidence["cpu_s_per_s"], 1.8 / (60 - max(30, birth)))
                     self.assertIn("lower bound", evidence["basis"])
 
     def run_synthetic_host_cli(self, configured, guard, host):
