@@ -172,7 +172,7 @@
    "joulewise/desk_restore.py"
   ],
   "not_scanned_reasons": {
-   "r1_smoke_existing_dependency": "Unchanged R0/R1 engineering and registration dependencies of the pre-night R1 smoke. Full alignment/R0 census reconciliation belongs to RL-86/w1-p2c before live use; this declaration is not a fresh review of their refusal sites.",
+   "r1_smoke_existing_dependency": "R1 rehearsal driver, kit and runtime: run on rehearsal nights and at the desk only; produce slots and no confirmatory member; not censused, RL-93",
    "v4_desk": "the v4 session desk program (prepare, arm checks, install, desk); it runs before the night job starts and after the harvest, and its holds are the v4 registration's own. The hazard driver takes only _probe_meter_live from it, which has no census site; the refusal is the driver's listed refuse|meter (RL-86)",
    "alignment_workload": "the align_episode workload and its imports: runs inside v4 members from W1 on; not yet censused (19 modules, 155 keys at 535bf9cee); census owed, RL-86",
    "retired": "retired ARM/T0 path: block 5 does not run it (the HAZARD branch dispatches away)",
@@ -189,7 +189,7 @@
    "scripts/align_r1_followup_kit.py": "r1_smoke_existing_dependency",
    "scripts/align_r1_rehearsal.py": "r1_smoke_existing_dependency",
    "joulewise/align/apple/r1_runtime.py": "r1_smoke_existing_dependency",
-   "joulewise/align/apple/v4_registration.py": "r1_smoke_existing_dependency",
+   "joulewise/align/apple/v4_registration.py": "v4_desk",
    "scripts/align_r1_part_c.py": "r1_part_c_evaluator",
    "scripts/align_r1_part_c_evidence.py": "r1_part_c_evaluator",
    "scripts/align_r0_checks.py": "desk",
