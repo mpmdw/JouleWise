@@ -64,14 +64,6 @@ def load_suite():
     return suite
 
 
-def load_probe():
-    """The named-case runner beside this file, for its v3.2 census stand-in (``census_stand_in``)."""
-    spec = importlib.util.spec_from_file_location("partc_probe", Path(__file__).resolve().parent / "partc_audit_probe.py")
-    probe = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(probe)
-    return probe
-
-
 def run():
     s = load_suite()
     generated = {name: 0 for name in INVENTORY}
@@ -87,8 +79,7 @@ def run():
         s.issue_model_source()
         s.endpoint_code()
         with s.kit_source(finder), s.compact_control(), patch.object(
-                s.rt, "registered_s6", return_value={"slots": {"S6": 1.}, "s6_tuning": {}}), \
-                load_probe().census_stand_in(s):
+                s.rt, "registered_s6", return_value={"slots": {"S6": 1.}, "s6_tuning": {}}):
             base = work / "base"
             assert not s.control(base), "the clean control lost a descriptor binding"
         pc, EvidenceFailure = s.pc, s.evidence.EvidenceFailure

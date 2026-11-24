@@ -749,22 +749,29 @@ def derive(segment, kind, claim, soak):
 
 
 def repair_synthetic_control(case, segment, kind, receipt):
-    if not (segment / "load_journal.json").is_file():
-        write(segment / "load_journal.json", {"cpu_busy_cores": [], "cpu_busy_t_s": [],
-                                                "census": [], "errors": [], "exclude_roots": []})
     offset = EPOCH[kind]
-    if kind in (P,S):
-        # The capture pair is one quiet admission unit in the issued driver.
-        # Generate a full per-second load journal using only a fake ps result.
+    path = segment / "load_journal.json"
+    if kind == "idle":
+        load = read(path)
+        opening, = load["census"]
+        load["census"].append({**deepcopy(opening), "label": "end",
+                               "t_s": opening["t_s"] + receipt["duration_s"]})
+        path.write_bytes(fixture.json_bytes(load))
+    else:
+        # Frozen Segment gives LoadJournal its own PID and snapshots either side of dispatch.
+        quiet = kind in (P, S)
+        pid, command, pcpu = (101, "synthetic-worker", 0.0) if quiet else (12, "synthetic", 0.1)
         now = [float(offset)]
-        table = NSpace(returncode=0, stdout="101 1 0.0 synthetic-worker\n",stderr="")
-        journal = rt.contract.LoadJournal(exclude_roots=(),runner=lambda *a,**kw:table,clock=lambda:now[0])
+        table = NSpace(returncode=0, stdout=f"{pid} 1 {pcpu} {command}\n", stderr="")
+        journal = rt.contract.LoadJournal((pid,), runner=lambda *a, **kw: table, clock=lambda: now[0])
         journal.snapshot("start")
-        for second in range(1801):
-            now[0] = float(offset+second)
-            journal.sample()
+        if quiet:
+            for second in range(1801):
+                now[0] = float(offset + second)
+                journal.sample()
+        now[0] = float(offset + 1800)
         journal.snapshot("end")
-        write(segment / "load_journal.json",{**journal.fields(),"exclude_roots":[],"errors":[]})
+        write(path, {**journal.fields(), "exclude_roots": list(journal.exclude_roots), "errors": []})
     times = iter((float(offset),float(offset+120)))
     answer = NSpace(returncode=0, stdout="Now drawing from 'AC Power'\n -InternalBattery-0 80%; charged;")
     battery = rt.BatteryJournal(lambda argv: answer, lambda: next(times), segment / "battery.jsonl")

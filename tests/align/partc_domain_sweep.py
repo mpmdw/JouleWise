@@ -1,7 +1,6 @@
 """Generated sweeps for Part C's temporal containment (R1) and raw-domain schemas (R2).
 
-Lead fix round r2 of 2026-11-22. One clean synthetic attempt is built with the frozen differential suite's own
-control (with the census both points carry, ``partc_audit_probe.census_stand_in``). Then:
+Lead fix round r2 of 2026-11-22. The frozen differential suite builds one clean synthetic control.
 
 - TEMPORAL: for every timestamped source the evaluator reduces, one row shifted outside the member's bound
   interval, one stamp repeated, and, where a count or tail minimum is judged, the tail (or head) dropped. The
@@ -128,7 +127,6 @@ def duplicate_key(raw_object, key, value):
 
 def run():
     s = load("partc_suite", SUITE)
-    probe = load("partc_probe", HERE / "partc_audit_probe.py")
     generated = {name: 0 for name in (*TEMPORAL, *R3_CLASSES, *SCHEMA)}
     refused = {name: 0 for name in generated}
     failures = []
@@ -142,7 +140,7 @@ def run():
         s.issue_model_source()
         s.endpoint_code()
         with s.kit_source(finder), s.compact_control(), patch.object(
-                s.rt, "registered_s6", return_value={"slots": {"S6": 1.}, "s6_tuning": {}}), probe.census_stand_in(s):
+                s.rt, "registered_s6", return_value={"slots": {"S6": 1.}, "s6_tuning": {}}):
             base = work / "base"
             assert not s.control(base), "the clean control lost a descriptor binding"
         pc, EvidenceFailure = s.pc, s.evidence.EvidenceFailure

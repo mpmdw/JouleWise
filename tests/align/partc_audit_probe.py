@@ -30,8 +30,7 @@ ID is not the one its opening stamp derives (`x-g-session-id-plus-one`).
 Fix round r2 (wide audit round 1 of 2026-11-22) adds ``R2``: the FO and IN reproductions F1 to F11, each damaged
 case with its paired control. Its four rule classes are R1 temporal containment (CPU samples, census, soak tail and
 load, battery rows), R2 raw-domain schemas (busy cores, process tables and PIDs, endpoint identities, finish
-reasons), R3 the complete census and R4 the runtime config resolved once. Until suite v3.2 is issued, the v3.1 clean
-fixture lacks census points that frozen ``Segment.run`` writes; ``census_stand_in`` adds them, and only them.
+reasons), R3 the complete census and R4 the runtime config resolved once.
 
     python3.13 -IB tests/align/partc_audit_probe.py [case ...]      (JW_PARTC_REPO selects the tree under test)
 
@@ -157,11 +156,6 @@ R3 = {
     "roots-empty": ("quiet_load", "exclude_roots"),
 }
 EXPECTED.update(R3)
-# Until the lead issues suite v3.2, its v3.1 clean fixture has no closing census on the soak and no census on
-# D_bank or X_G. These are the points frozen ``Segment.run`` writes, added here only where the fixture lacks
-# them (wide audit FO ``census_cardinality.py``'s complete case); on v3.2 this changes nothing.
-CENSUS_ORIGIN = {"idle": 0.0, "d-bank-benign-s1": 6000.0, "x-g": 8000.0}
-ADDED = []                  # (kind, what) of every census point or excluded PID the stand-in added
 DIRECT = ("step-d-member-wall-over-bracket", "episode-stamps-reversed")
 AUDIT_2 = ("control", "interval-header-zero-rows", "raw-runner-fault", "raw-turn-budget-flag", "last-turn-unclosed",
            "other-run-id", "duplicate-predecessor", "predecessor-timeout", "extra-stop-flag", "gate-before-entry",
@@ -180,42 +174,6 @@ def member_wall(s, wall, opened=4_001_000_000_000, closed=4_002_000_000_000):
             "outputs/align_episode.json": json.dumps({"hardware": {"paired_clock_stamps_ns": stamps}}).encode(),
             "outputs/align_turns.jsonl": b""}
     s.pc._check_member_window(bound, {"slot_detail": {"member_wall_s": wall}}, data)
-
-
-def complete_census(s, segment, kind, receipt):
-    """The v3.2 stand-in, only where the v3.1 fixture lacks what frozen ``Segment`` writes: both census points
-    on the soak, D_bank and X_G, and on every member the one excluded PID ``Segment.__init__`` passes
-    (``(os.getpid(),)``; the runtime process of the member's own census)."""
-    import copy
-
-    path = segment / "load_journal.json"
-    load = s.read(path)
-    changed = False
-    if kind in CENSUS_ORIGIN and [point["label"] for point in load["census"]] != ["start", "end"]:
-        opening = copy.deepcopy(load["census"][0]) if load["census"] else {
-            "label": "start", "t_s": CENSUS_ORIGIN[kind],
-            "processes": [{"pid": 12, "ppid": 1, "pcpu": 0.1, "comm": "synthetic"}]}
-        closing = {**copy.deepcopy(opening), "label": "end", "t_s": opening["t_s"] + 1800}
-        ADDED.extend((kind, point["label"]) for point in (opening, closing) if point not in load["census"])
-        load["census"] = receipt["census"] = [opening, closing]
-        changed = True
-    if load.get("exclude_roots") == [] and load["census"]:
-        load["exclude_roots"] = [load["census"][0]["processes"][0]["pid"]]
-        ADDED.append((kind, "exclude_roots"))
-        changed = True
-    if changed:
-        s.write(path, load)
-
-
-def census_stand_in(s):
-    """Patch the suite's member close so every clean attempt carries the complete census (v3.2 stand-in)."""
-    close = s.fixture.write_terminal
-
-    def complete(segment, kind, receipt, sha):
-        complete_census(s, segment, kind, receipt)
-        return close(segment, kind, receipt, sha)
-
-    return patch.object(s.fixture, "write_terminal", complete)
 
 
 def load_suite():
@@ -803,7 +761,6 @@ def run(argv):
                 edits, verdicts, stdout_lines = [], [], []
 
                 def close(segment, kind, receipt, sha):
-                    complete_census(s, segment, kind, receipt)
                     if kind == changed:
                         mutate(name, kind, segment, receipt)
                         edits.append(kind)

@@ -2293,7 +2293,6 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
     """
 
     SUITE = Path(__file__).resolve().parent / "align" / "test_partc_frozen_differential.py"
-    SUITE_RUNNER = Path(__file__).resolve().parent / "align" / "partc_suite_census.py"
     SELECTOR = (r"audit-|predecessor-30b/v3/raw/runs/[^/]+/power_trace\.csv/file/|orphan-tokenize|empty-final-phase"
                 r"|runner\.error|0\.flags/set-turn_budget_reached")
     PINS = ("b2e01464d6d4fbf2901ff4d4154df9455104a12a", "2d02a6f0e42b7ac7a51ea5d5830867eea9ff2911")
@@ -2309,10 +2308,8 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
             self.skipTest("the pinned R1 commits are not in this object database")
         env = {**os.environ, "JW_PARTC_CASE": self.SELECTOR, "JW_PARTC_WORKERS": "1", "JW_PARTC_REPO": str(root),
                "PYTHONDONTWRITEBYTECODE": "1"}
-        # The suite file runs byte for byte; the runner adds only the census points the v3.1 clean fixture lacks
-        # (R3; a no-op on the lead's v3.2 fixture).
         with TemporaryDirectory() as tmp:
-            proc = subprocess.run([sys.executable, "-IB", str(self.SUITE_RUNNER)], cwd=tmp,
+            proc = subprocess.run([sys.executable, "-IB", str(self.SUITE)], cwd=tmp,
                                   env={**env, "TMPDIR": tmp}, capture_output=True, text=True)
         output = proc.stdout + proc.stderr
         self.assertEqual(proc.returncode, 0, output[-3000:])
