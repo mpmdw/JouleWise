@@ -110,12 +110,19 @@ class EntryPointTests(unittest.TestCase):
                     self.check_main(harvest_b6_session, args, 'export', 5)
 
     def test_bytes_analysis_main_reports_stop(self):
-        args = SimpleNamespace(export=Path('export'), records=None, manifest=Path('manifest'),
-                               stage='blinded', out=Path('out'), key_dir=None,
-                               predictions=None, stage1_commit=None)
-        with mock.patch.object(bytes_analyze.ba, 'read_json', return_value={}), \
-             mock.patch.object(bytes_analyze.ba, 'validate_manifest', return_value={}):
-            self.check_main(bytes_analyze, args, '_reduce', 1)
+        from tests.bytes_commitment_support import empty_synthetic_export
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            fixture = empty_synthetic_export(root)
+            _, repo, _, commit = fixture.captured()
+            args = SimpleNamespace(export=fixture.exports, records=None, manifest=fixture.manifest,
+                                   stage='blinded', out=root / 'out', key_dir=None,
+                                   predictions=None, stage1_commit=None, no_key_probe=False,
+                                   export_seal_repo=Path(repo), export_seal_commit=commit)
+            with mock.patch.object(bytes_analyze.ba, 'read_json', return_value={}), \
+                 mock.patch.object(bytes_analyze.ba, 'validate_manifest', return_value={}):
+                self.check_main(bytes_analyze, args, '_reduce', 1)
 
     def test_v5_harvest_main_reports_stop(self):
         self.check_main(harvest_v5_g2b_window, SimpleNamespace(), 'harvest', 3)

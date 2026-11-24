@@ -1,9 +1,11 @@
-"""Local Git objects and metadata only; no study data, network or model weights."""
-import hashlib
+"""Private synthetic export and commitment fixtures for the real BYTES CLIs."""
 import contextlib
+import csv
+import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 from unittest import mock
@@ -12,6 +14,154 @@ ROOT = Path(__file__).resolve().parents[1]
 PIN = '18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71'
 ORIGIN_REF = 'refs/remotes/origin/records/2026-11-bytes-stage1'
 REMOTE_REF = 'refs/heads/records/2026-11-bytes-stage1'
+
+
+def copy_cli_checkout(destination):
+    """Copy the executable modules and their registered inputs into an isolated checkout."""
+    shutil.copytree(ROOT / 'joulewise', destination / 'joulewise')
+    shutil.copytree(ROOT / 'configs/bytes', destination / 'configs/bytes')
+    shutil.copytree(ROOT / 'configs/campaign_policies', destination / 'configs/campaign_policies')
+    scripts = destination / 'scripts'
+    scripts.mkdir()
+    for name in ('bytes_analyze.py', 'bytes_twin.py', 'bytes_commitment.py'):
+        shutil.copyfile(ROOT / 'scripts' / name, scripts / name)
+
+
+class SyntheticExport:
+    """Give a synthetic export layout a private Git capture and fit release."""
+
+    def __init__(self, manifest, exports, *, checkout=ROOT, tag=''):
+        from joulewise.b6 import bytes_integrity
+
+        self.integrity = bytes_integrity
+        self.manifest = Path(manifest).resolve()
+        self.root = self.manifest.parent
+        self.exports = sorted({Path(path).resolve() for path in exports})
+        self.checkout = Path(checkout).resolve()
+        self.campaign = json.loads(self.manifest.read_text())
+        archives = [Path(session['archive']).resolve() for session in self.campaign['sessions']]
+        if (self.campaign.get('synthetic') is not True
+                or any(not path.is_relative_to(self.root) for path in [*self.exports, *archives])):
+            raise ValueError('synthetic BYTES fixture requires a generated export')
+        identity = hashlib.sha256(os.fsencode(str((self.checkout, self.exports, tag)))).hexdigest()[:20]
+        self.work = self.root / '.bytes-seal-fixtures' / identity
+        self.repo = self.work / 'git'
+        self.private = self.root / 'private-keys'
+        self.fit_names = {'pack.json', bytes_integrity._key_name('neg8_reference')}
+        self.fit_names.update(bytes_integrity._key_name(model['config_key'])
+                              for model in self.campaign['models'] if model['role'] == 'fit')
+        if not (self.repo / bytes_integrity.NAME).exists():
+            self.capture()
+
+    def capture(self):
+        # The registration/policy paths in an isolated mutant must resolve to
+        # its checkout. Every subprocess still runs the unmodified verifier.
+        with mock.patch.object(self.integrity, 'ROOT', self.checkout):
+            sidecars = [p for directory in self.exports for p in directory.rglob('*.session.json')]
+            if sidecars and all(json.loads(path.read_text())['blinding'].get('group') == 'bytes'
+                                for path in sidecars):
+                self.integrity.capture(self.repo, self.manifest, self.exports, self.private)
+            else:
+                self.capture_legacy(sidecars)
+
+    def capture_legacy(self, sidecars):
+        """Seal deliberately unsplit synthetic controls used by the agreement tests."""
+        # First derive the archive census from a fit-only projection through
+        # the production capture. Then bind the actual legacy tables that
+        # the compatibility cases exercise, leaving that census intact.
+        fit_cells = {cell for model in self.campaign['models'] if model['role'] == 'fit'
+                     for cell in model['cell_ids']}
+        private = self.work / 'legacy-records'
+        bindings = private / 'bytes/blinding-sessions'
+        bindings.mkdir(parents=True)
+        projection = self.work / 'legacy-fit-visible'
+        projection.mkdir()
+        source = self.private / 'bytes/blinding'
+        digests = {name: hashlib.sha256((source / name).read_bytes()).hexdigest() for name in self.fit_names}
+        for path in sidecars:
+            session = path.name.removesuffix('.session.json')
+            (bindings / (session + '.json')).write_text(json.dumps({'session_id': session, 'key_sha256': digests}))
+            sidecar = json.loads(path.read_text())
+            sidecar['blinding']['key_sha256'] = digests
+            (projection / path.name).write_text(json.dumps(sidecar))
+            table_name = session + '.runs.csv'
+            with path.with_name(table_name).open(newline='') as stream, (projection / table_name).open('w', newline='') as out:
+                rows = csv.DictReader(stream)
+                writer = csv.DictWriter(out, rows.fieldnames)
+                writer.writeheader()
+                writer.writerows(row for row in rows if row['role'] in self.integrity.REFERENCE_ROLES
+                                 or set(row['cell_ids'].split(';')) <= fit_cells)
+        commit = self.integrity.capture(self.repo, self.manifest, [projection], private)
+        document = self.integrity.verify(self.repo, commit, phase='captured')
+        tables = {f'tables:{index}': self.integrity._root(path, 'tables')
+                  for index, path in enumerate(self.exports)}
+        old_roots = {name for name, scope in document['roots'].items() if scope['kind'] == 'tables'}
+        members = self.integrity._membership(tables)
+        document['roots'] = {**{name: scope for name, scope in document['roots'].items() if name not in old_roots}, **tables}
+        entries = [row for row in document['files'] if row['root'] not in old_roots]
+        document['files'] = sorted(entries + self.integrity._entries(members), key=lambda row: (row['root'], row['path']))
+        document['table_files'] = sorted(str(path) for path in members.values() if path.name.endswith('.runs.csv'))
+        self.integrity._publish(self.repo, document)
+
+    def captured(self):
+        document = json.loads((self.repo / self.integrity.NAME).read_bytes())
+        # The working manifest follows the latest phase. Each CLI consumes
+        # one phase at the same point as the desk's workflow.
+        if document['phase'] != 'captured':
+            raise ValueError('synthetic export has already released fit keys')
+        return self.integrity.options(self.repo, git(self.repo, 'rev-parse', 'HEAD'))
+
+    def finalized(self, key_dir=None):
+        document = json.loads((self.repo / self.integrity.NAME).read_bytes())
+        commit = git(self.repo, 'rev-parse', 'HEAD')
+        if document['phase'] == 'finalized':
+            return self.integrity.options(self.repo, commit), Path(document['roots']['release']['path'])
+        if key_dir is None:
+            raise ValueError('synthetic export needs a fit release before admission')
+        key_dir = Path(key_dir)
+        allowed = self.fit_names | {'release.json'}
+        if {path.name for path in key_dir.iterdir()} - allowed:
+            # Older fixtures release all generated keys. Stage a private fit
+            # subset without changing their stage-2 key location.
+            subset = self.work / 'fit-release'
+            subset.mkdir()
+            for name in sorted(self.fit_names):
+                shutil.copyfile(key_dir / name, subset / name)
+            key_dir = subset
+        with mock.patch.object(self.integrity, 'ROOT', self.checkout):
+            commit = self.integrity.finalize(self.repo, commit, key_dir)
+        return self.integrity.options(self.repo, commit), key_dir
+
+
+def empty_synthetic_export(root):
+    """Publish a valid empty session for tests of CLI error reporting."""
+    from joulewise.b6 import bytes_integrity
+
+    manifest = root / 'manifest.json'
+    exports = root / 'export'
+    if manifest.exists():
+        return SyntheticExport(manifest, [exports])
+    archive = root / 'archive'
+    (archive / 'derived').mkdir(parents=True)
+    roster = archive / 'derived/roster.json'
+    roster.write_text('{"members": []}\n')
+    (archive / 'harvest.json').write_text(json.dumps({
+        'outputs': {'derived/roster.json': hashlib.sha256(roster.read_bytes()).hexdigest()}}))
+    exports.mkdir()
+    manifest.write_text(json.dumps({'synthetic': True, 'models': [],
+                                    'sessions': [{'session_id': 'synthetic', 'archive': str(archive)}]}))
+    binding = root / 'private-keys/bytes/blinding-sessions'
+    binding.mkdir(parents=True)
+    digests = {name: hashlib.sha256(b'{}\n').hexdigest()
+               for name in ('pack.json', bytes_integrity._key_name('neg8_reference'))}
+    keys = root / 'fit-keys'
+    keys.mkdir()
+    for name in digests:
+        (keys / name).write_bytes(b'{}\n')
+    (binding / 'synthetic.json').write_text(json.dumps({'session_id': 'synthetic', 'key_sha256': digests}))
+    (exports / 'synthetic.session.json').write_text(json.dumps({'blinding': {'group': 'bytes', 'key_sha256': digests}}))
+    (exports / 'synthetic.runs.csv').write_text('run_id,role,cell_ids\n')
+    return SyntheticExport(manifest, [exports])
 
 
 def activity_json(commit):
@@ -80,7 +230,12 @@ def fixture_options(root, predictions=None):
         receipt = repo / 'docs/bytes/stage1/push-receipt.json'
         commit = json.loads(receipt.read_text())['stage1_commit']
         path = repo / 'docs/bytes/stage1/predictions.json'
-    return commitment_args(repo, path, receipt, commit)
+    seal = []
+    if not (Path(root) / 'manifest.json').exists():
+        # Admission-only tests still verify an actual private export commit.
+        export = Path(root).resolve() / '.admission-export'
+        seal, _ = empty_synthetic_export(export).finalized(export / 'fit-keys')
+    return [*seal, *commitment_args(repo, path, receipt, commit)]
 
 
 def commit_journal(repo):
@@ -91,7 +246,44 @@ def commit_journal(repo):
         git(repo, 'commit', '--only', '-qm', 'Synthetic admission journal', '--', name)
 
 
-def commitment_command(command):
+def _seal_cli(script, argv, tag):
+    if '--export-seal-repo' in argv or '--manifest' not in argv:
+        return argv
+    manifest = Path(argv[argv.index('--manifest') + 1])
+    if script.name == 'bytes_twin.py':
+        exports = [argv[argv.index('--export-dir') + 1]]
+    else:
+        start = argv.index('--export') + 1
+        end = next((i for i in range(start, len(argv)) if argv[i].startswith('--')), len(argv))
+        exports = argv[start:end]
+    desk = SyntheticExport(manifest, exports, checkout=script.resolve().parents[1], tag=tag)
+    stage = argv[argv.index('--stage') + 1]
+    key_index = argv.index('--key-dir') + 1 if '--key-dir' in argv else None
+    key_dir = Path(argv[key_index]) if key_index is not None else desk.root / 'released-keys/bytes/blinding'
+
+    if stage == 'blinded' and '--stage1-commit' not in argv:
+        return [*argv, *desk.captured()]
+    if stage in {'fit', '1'} and key_dir.is_dir() and not any(key_dir.iterdir()):
+        if key_index is None:
+            argv += ['--key-dir', str(key_dir)]
+        return [*argv, *desk.captured(), '--no-key-probe']
+    options, released = desk.finalized(key_dir)
+    if stage in {'fit', '1', 'all'}:
+        if key_index is not None:
+            argv[key_index] = str(released)
+        else:
+            argv += ['--key-dir', str(released)]
+    elif stage == 'heldout' and key_index is None:
+        argv += ['--key-dir', str(key_dir)]
+    return [*argv, *options]
+
+
+def synthetic_cli_args(script, arguments, *, seal_tag=''):
+    """Prepare an in-process CLI invocation with the same private export fixture."""
+    return _seal_cli(ROOT / 'scripts' / script, list(map(str, arguments)), seal_tag)
+
+
+def commitment_command(command, *, seal_tag=''):
     """Patch ROOT only in test processes, never add a production bypass for R-04."""
     args = list(map(str, command))
     if '-c' in args:
@@ -99,9 +291,17 @@ def commitment_command(command):
     script = next((i for i, a in enumerate(args) if a.endswith('.py')), None)
     if script is None:
         return args
-    if '--commitment-repo' not in args and (Path(args[script]).name not in {'bytes_analyze.py', 'bytes_twin.py'}
-                                            or '--export-seal-repo' in args):
+    path = Path(args[script])
+    if path.name in {'bytes_analyze.py', 'bytes_twin.py'}:
+        args[script + 1:] = _seal_cli(path, args[script + 1:], seal_tag)
+    if '--commitment-repo' not in args:
         return args
+    if path.name in {'b6_release_subset.py', 'b6_unblind.py'} and '--export-seal-repo' not in args:
+        repo = Path(args[args.index('--commitment-repo') + 1])
+        root = repo.parent.parent
+        desk = SyntheticExport(root / 'manifest.json', [root / 'export'], checkout=path.resolve().parents[1])
+        options, _ = desk.finalized()
+        args += options
     return [*args[:script], str(Path(__file__).resolve()), '--run-cli', *args[script:]]
 
 
@@ -111,13 +311,6 @@ def synthetic_checkout(options):
     from scripts import bytes_commitment as bc
     args = list(map(str, options))
     with contextlib.ExitStack() as stack:
-        if '--export-seal-repo' not in args:
-            # Legacy arithmetic fixtures directly test reader behavior below the seal.
-            from scripts import bytes_analyze, bytes_twin
-            stack.enter_context(mock.patch.object(bytes_analyze, '_check_export', create=True))
-            stack.enter_context(mock.patch.object(bytes_twin, '_check_export', create=True))
-            if hasattr(bc, 'bytes_integrity'):
-                stack.enter_context(mock.patch.object(bc.bytes_integrity, 'verify'))
         if '--commitment-repo' not in args:
             yield
             return
@@ -144,5 +337,7 @@ if __name__ == '__main__':
         if Path(script).name in {'bytes_analyze.py', 'bytes_twin.py', 'bytes_commitment.py'}:
             import importlib
             module = importlib.import_module('scripts.' + Path(script).stem)
+            if Path(module.__file__).resolve() != Path(script).resolve():
+                raise RuntimeError('synthetic CLI checkout resolved the wrong executable')
             raise SystemExit(module.main(arguments))
         runpy.run_path(script, run_name='__main__')

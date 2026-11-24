@@ -25,17 +25,18 @@ from joulewise import bytes_analysis as ba
 from joulewise.external import km003c_parse as kp
 from scripts import bytes_analyze
 from tests.git_fixture import init_git_fixture
-from tests.bytes_commitment_support import commitment_command
+from tests.bytes_commitment_support import commitment_command, synthetic_cli_args
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests/fixtures/bytes"
 
 
-def setUpModule():
-    # Estimator fixtures in this module exercise the readers beneath the seal.
-    patcher = patch.object(bytes_analyze, '_check_export')
-    patcher.start()
-    unittest.addModuleCleanup(patcher.stop)
+def sealed_main(args):
+    from tests.bytes_commitment_support import synthetic_checkout
+
+    args = synthetic_cli_args('bytes_analyze.py', args)
+    with synthetic_checkout(args):
+        return bytes_analyze.main(args)
 
 
 class NumericTestCase(unittest.TestCase):
@@ -921,14 +922,13 @@ class ProductionArchiveTests(NumericTestCase):
                 self.assertAlmostEqual(row["meter"]["gross_j"], 2 * row["rails_j"], delta=integration_bar)
             _write_json(root/"manifest.json",manifest)
             with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(bytes_analyze.main(["--export",str(root/"export"),"--manifest",str(root/"manifest.json"),
+                self.assertEqual(sealed_main(["--export",str(root/"export"),"--manifest",str(root/"manifest.json"),
                     "--stage","fit","--out",str(root/"fit")]),0)
                 prediction_bytes = (root/"fit/predictions.json").read_bytes()
-                from tests.bytes_commitment_support import fixture_options, synthetic_checkout
+                from tests.bytes_commitment_support import fixture_options
                 options = fixture_options(root, root/"fit/predictions.json")
-                with synthetic_checkout(options):
-                    self.assertEqual(bytes_analyze.main(["--export",str(root/"export"),"--manifest",str(root/"manifest.json"),
-                        "--stage","heldout",*options,"--predictions",str(root/"fit/predictions.json"),"--out",str(root/"heldout")]),0)
+                self.assertEqual(sealed_main(["--export",str(root/"export"),"--manifest",str(root/"manifest.json"),
+                    "--stage","heldout",*options,"--predictions",str(root/"fit/predictions.json"),"--out",str(root/"heldout")]),0)
             self.assertEqual((root/"fit/predictions.json").read_bytes(),prediction_bytes)
             self.assertEqual(len(ba.read_json(root/"heldout/h1.json")),360)
             self.assertEqual(len(ba.read_json(root/"heldout/h2.json")),12)
@@ -1425,12 +1425,12 @@ class Addendum4RegressionTests(NumericTestCase):
             args = ["--export",str(root/"export"),"--manifest",str(root/"manifest.json")]
             with contextlib.redirect_stdout(io.StringIO()), patch.object(ba,"archive_records",side_effect=AssertionError("blinded opened archive")), \
                     patch.object(ba,"_session_streams",side_effect=AssertionError("blinded opened meter")):
-                self.assertEqual(bytes_analyze.main(args+["--stage","blinded","--out",str(root/"blind")]),0)
+                self.assertEqual(sealed_main(args+["--stage","blinded","--out",str(root/"blind")]),0)
             blind = ba.read_json(root/"blind/model_estimates.json")
             self.assertTrue(blind)
             self.assertTrue(all(p["boundary"]=="rails" and p["status"]=="computed" for p in blind))
             with contextlib.redirect_stderr(io.StringIO()), patch.object(ba,"_session_streams",side_effect=AssertionError("unreleased meter")):
-                self.assertEqual(bytes_analyze.main(args+["--stage","fit","--out",str(root/"unreleased")]),1)
+                self.assertEqual(sealed_main(args+["--stage","fit","--out",str(root/"unreleased")]),1)
             release_keys(root,manifest,"fit")
             # Native full parsing is forbidden at fit. Instrument the actual
             # sample unpacker, so no held-out power may even be decoded.
@@ -1462,22 +1462,22 @@ class Addendum4RegressionTests(NumericTestCase):
                     self.assertEqual(stream.fit.stats,full.fit.stats)
                 return streams
             with contextlib.redirect_stdout(io.StringIO()), patch.object(ba,"_session_streams",side_effect=filtered):
-                self.assertEqual(bytes_analyze.main(args+["--stage","fit","--out",str(root/"fit")]),0)
+                self.assertEqual(sealed_main(args+["--stage","fit","--out",str(root/"fit")]),0)
             frozen = ba.read_json(root/"fit/predictions.json")
             self.assertEqual(frozen["bytes_analysis_sha256"],hashlib.sha256(Path(ba.__file__).read_bytes()).hexdigest())
             self.assertEqual(len(frozen["neg8_inputs"]),2)
             self.assertTrue(all(p["role"]=="fit" for p in frozen["fit_points"]))
             fit_names = {m["model"] for m in manifest["models"] if m["role"]=="fit"}
             self.assertEqual({r["model"] for r in frozen["tier_fit_inputs"]},fit_names)
-            from tests.bytes_commitment_support import fixture_options, synthetic_checkout
+            from tests.bytes_commitment_support import fixture_options
             options = fixture_options(root, root/"fit/predictions.json")
             predict = [*options,"--predictions",str(root/"fit/predictions.json")]
-            with contextlib.redirect_stderr(io.StringIO()), patch.object(ba,"_session_streams",side_effect=AssertionError("heldout meter before release")), synthetic_checkout(options):
-                self.assertEqual(bytes_analyze.main(args+predict+["--stage","heldout","--out",str(root/"blocked")]),1)
+            with contextlib.redirect_stderr(io.StringIO()), patch.object(ba,"_session_streams",side_effect=AssertionError("heldout meter before release")):
+                self.assertEqual(sealed_main(args+predict+["--stage","heldout","--out",str(root/"blocked")]),1)
             commitment = (root/"fit/predictions.json").read_bytes()
             release_keys(root,manifest,"all")
-            with contextlib.redirect_stdout(io.StringIO()), synthetic_checkout(options):
-                self.assertEqual(bytes_analyze.main(args+predict+["--stage","heldout","--out",str(root/"held")]),0)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(sealed_main(args+predict+["--stage","heldout","--out",str(root/"held")]),0)
             self.assertEqual((root/"fit/predictions.json").read_bytes(),commitment)
             self.assertEqual(ba.read_json(root/"held/unavailable.json"),[])
             self.assertEqual(len(ba.read_json(root/"held/h1.json")),360)
@@ -1670,8 +1670,8 @@ class Addendum7RegressionTests(NumericTestCase):
             r["role"] = roles[r["model"]]
         with tempfile.TemporaryDirectory() as directory, patch.object(ba, "load_records", side_effect=released), contextlib.redirect_stdout(io.StringIO()):
             root = Path(directory)
-            _write_json(root / "manifest.json", self.manifest)
-            self.assertEqual(bytes_analyze.main(["--export", str(self.root / "export"), "--manifest", str(root / "manifest.json"),
+            _write_json(self.root / "manifest.json", self.manifest)
+            self.assertEqual(sealed_main(["--export", str(self.root / "export"), "--manifest", str(self.root / "manifest.json"),
                 "--stage", "all", "--out", str(root / "out")]), 0)
             for row in ba.read_json(root / "out/fit_pass_estimates.json"):
                 if row["model"] == fit_target:
@@ -2342,6 +2342,8 @@ manifest = f.archive_campaign(root, non_claim=False, release="none", subpack_ses
 class Q2CommitmentCLIChainTests(unittest.TestCase):
     def test_changed_module_evaluates_original_commitment_and_labels_rebuild(self):
         """An evaluator changed after the registered commitment still evaluates its original lines."""
+        from tests.bytes_commitment_support import copy_cli_checkout
+
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             manifest = archive_campaign(root, non_claim=False, release="all")
@@ -2352,15 +2354,7 @@ class Q2CommitmentCLIChainTests(unittest.TestCase):
             for case in ("comment", "fit-line"):
                 with self.subTest(case=case):
                     tree = root / case
-                    shutil.copytree(ROOT / "joulewise", tree / "joulewise")
-                    (tree / "scripts").mkdir()
-                    for script in ("bytes_analyze.py", "bytes_commitment.py"):
-                        shutil.copyfile(ROOT / "scripts" / script, tree / "scripts" / script)
-                    # This isolated code checkout must carry the authenticated
-                    # registered predictor input, just as the real checkout does.
-                    (tree / "configs/bytes").mkdir(parents=True)
-                    shutil.copyfile(ROOT / "configs/bytes/bytes_manifest.json",
-                                    tree / "configs/bytes/bytes_manifest.json")
+                    copy_cli_checkout(tree)
                     source = clean_source + "\n# Q2 comment-only provenance change.\n"
                     if case == "fit-line":
                         # A deliberately defective central line uses the existing upper
@@ -3028,19 +3022,25 @@ class ReviewInputTests(unittest.TestCase):
 
     def test_twelve_in_place_session_exports_match_single_directory_cli(self):
         import importlib.util
+        from tests.bytes_commitment_support import fixture_options
+
         spec = importlib.util.spec_from_file_location('review_campaign', FIXTURES / 'campaign.py')
         fixture = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(fixture)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            manifest = fixture.archive_campaign(root, subpack_sessions=True)
+            manifest = fixture.archive_campaign(root, non_claim=False, subpack_sessions=True)
             manifest_path = root / 'manifest.json'
             _write_json(manifest_path, manifest)
-            def analyze(exports, out):
-                command = [sys.executable, '-B', 'scripts/bytes_analyze.py', '--manifest', str(manifest_path),
-                           '--export', *map(str, exports), '--stage', 'all', '--out', str(out)]
-                result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
+            def run(exports, stage, out, options=()):
+                command = [sys.executable, '-B', ROOT / 'scripts/bytes_analyze.py', '--manifest', manifest_path,
+                           '--export', *exports, '--stage', stage, '--out', out, *options]
+                result = subprocess.run(commitment_command(command), cwd=ROOT, text=True, capture_output=True)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+            def analyze(exports, out):
+                run(exports, 'fit', out)
+                run(exports, 'heldout', out, fixture_options(root, out / 'predictions.json'))
             analyze([root / 'export'], root / 'single')
             exports = []
             for session in manifest['sessions']:
@@ -3075,12 +3075,8 @@ class ReviewInputTests(unittest.TestCase):
             for stage in ('blinded', 'heldout'):
                 with self.subTest(stage=stage):
                     out = root / ('copied-analysis-' + stage)
-                    from tests.bytes_commitment_support import fixture_options
                     extra = fixture_options(root, root / 'single/predictions.json')
-                    command = [sys.executable, '-B', 'scripts/bytes_analyze.py', '--manifest', str(manifest_path),
-                               '--export', *map(str, supplied), '--stage', stage, *extra, '--out', str(out)]
-                    result = subprocess.run(commitment_command(command), cwd=ROOT, text=True, capture_output=True)
-                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    run(supplied, stage, out, extra)
                     records = ba.load_records(supplied, manifest, stage=stage,
                                               stage1_commit='a' * 40 if stage == 'blinded' else None)
                     missing = [r for r in records if 'bytes.withheld_missing' in r['flags']]

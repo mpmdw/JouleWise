@@ -1530,13 +1530,12 @@ def run_both(root, manifest, *, verify_fit_rerun=False):
     private = root / "private-keys/bytes/blinding"
     released = root / "released-keys/bytes/blinding"
     assert list(released.iterdir()) == []
-    from joulewise.b6 import bytes_integrity
+    from tests.bytes_commitment_support import SyntheticExport
+
     export = root / "export"
-    capture_options, fit_options, probe = [], [], []
-    if (private.parent / "blinding-sessions").is_dir():
-        captured = bytes_integrity.capture(export, root / "manifest.json", [export], root / "private-keys")
-        capture_options = bytes_integrity.options(export, captured)
-        probe = ["--no-key-probe"]
+    desk = SyntheticExport(root / "manifest.json", [export])
+    capture_options = desk.captured()
+    probe = ["--no-key-probe"]
     analysis = [sys.executable, str(ROOT / "scripts/bytes_analyze.py"),
                 "--export", str(root / "export"), "--manifest", str(root / "manifest.json")]
     twin = [sys.executable, str(ROOT / "scripts/bytes_twin.py"),
@@ -1567,8 +1566,7 @@ def run_both(root, manifest, *, verify_fit_rerun=False):
                 *(blinding._config_filename(m["config_key"]) for m in manifest["models"] if m["role"] == "fit")}
     for name in sorted(fit_keys):
         shutil.copyfile(private / name, released / name)
-    if capture_options:
-        fit_options = bytes_integrity.options(export, bytes_integrity.finalize(export, captured, released))
+    fit_options, released = desk.finalized(released)
     analysis += fit_options
     twin += fit_options
     run("a-fit", analysis + ["--stage", "fit", "--key-dir", str(released), "--out", str(o / "a-fit")],
@@ -1618,11 +1616,6 @@ def run_both(root, manifest, *, verify_fit_rerun=False):
 
 
 def setUpModule():
-    # Direct entry calls in this module probe reader internals. Subprocess
-    # campaigns use the real seal whenever they have grouped export bindings.
-    patcher = mock.patch.object(bt, '_check_export')
-    patcher.start()
-    unittest.addModuleCleanup(patcher.stop)
     WORK["dir"] = tempfile.TemporaryDirectory(prefix="bytes-agreement-")
     WORK["root"] = Path(WORK["dir"].name)
 
@@ -1706,7 +1699,7 @@ class CompressedRefusalTests(unittest.TestCase):
                     "--key-dir", str(keys), "--stage", "1", "--out", str(output)]
             for session in self.manifest["sessions"]:
                 argv += ["--archive", session["archive"]]
-            result = subprocess.run(ample_space_command(argv), cwd=ROOT, capture_output=True, text=True)
+            result = subprocess.run(ample_space_command(argv, seal_tag=variant), cwd=ROOT, capture_output=True, text=True)
             print(f"\ncompressed probe {variant}: analysis=restore_refused "
                   f"twin_exit={result.returncode} refusal={result.stdout.startswith('refused: ')}",
                   flush=True)
@@ -1776,7 +1769,8 @@ class CompressedRefusalTests(unittest.TestCase):
             for session in self.manifest['sessions']:
                 programs[1] += ['--archive', session['archive']]
             for command in programs:
-                result = subprocess.run(ample_space_command(command), cwd=ROOT, capture_output=True, text=True)
+                result = subprocess.run(ample_space_command(command, seal_tag="journal-less"),
+                                        cwd=ROOT, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
                 self.assertIn('restore_refused:', result.stdout + result.stderr)
                 self.assertIn('compression.jsonl', result.stdout + result.stderr)
@@ -1821,8 +1815,10 @@ class AgreementTests(unittest.TestCase):
             return {**original(archive), "session_flags": []}
         import contextlib
         import io
+        from tests.bytes_commitment_support import synthetic_cli_args
+
         with mock.patch.object(bt, "load_archive", side_effect=run_only), contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(bt.main(argv), 0)
+            self.assertEqual(bt.main(synthetic_cli_args("bytes_twin.py", argv)), 0)
         legacy = Recorder()
         compare_cells(legacy, "fit", load(root / "out/a-fit/fit_pass_estimates.json"), load(output))
         self.assertTrue(legacy.above(), "old run-only flags must fail the exact agreement bar")
@@ -1865,8 +1861,10 @@ class AgreementTests(unittest.TestCase):
                     argv += ["--archive", item["archive"]]
                 import contextlib
                 import io
+                from tests.bytes_commitment_support import synthetic_cli_args
+
                 with mock.patch.object(bt, "_member", side_effect=legacy_member), contextlib.redirect_stdout(io.StringIO()):
-                    self.assertEqual(bt.main(argv), 0)
+                    self.assertEqual(bt.main(synthetic_cli_args("bytes_twin.py", argv)), 0)
                 legacy = Recorder()
                 compare_cells(legacy, "fit", load(root / "out/a-fit/fit_pass_estimates.json"), load(output))
                 hits = [r for r in legacy.above() if r["key"] == "B_kind:anchor"]
@@ -1964,28 +1962,24 @@ class AgreementTests(unittest.TestCase):
         source = (ROOT / "scripts/bytes_twin.py").read_text()
         expression = 'request_energy + request_battery["battery_gross_j"]'
         self.assertEqual(source.count(expression), 1)
-        # The twin's stage-2 guard runs the bytes_commitment.py beside its own file
-        # (RL-7a, 276d05201), so the mutant gets the production guard beside it, by
-        # symlink, and the campaign's synthetic commitment options, exactly as
-        # run_both gives the unmutated twin. Without them the guard refuses before
-        # the twin computes, and NEG-8 would pass or fail without being compared.
-        mutant_dir = root / "neg8-mutant/bin"
-        mutant_dir.mkdir(parents=True)
-        (mutant_dir / "bytes_commitment.py").symlink_to(ROOT / "scripts/bytes_commitment.py")
-        mutant = mutant_dir / "bytes_twin.py"
+        from tests.bytes_commitment_support import copy_cli_checkout, fixture_options
+
+        checkout = root / "neg8-mutant"
+        copy_cli_checkout(checkout)
+        mutant = checkout / "scripts/bytes_twin.py"
         mutant.write_text(source.replace(expression, "request_energy"))
         manifest = load(root / "manifest.json")
         output = root / "no-reference-battery.json"
-        from tests.bytes_commitment_support import fixture_options
         command = [sys.executable, str(mutant), "--export-dir", str(root / "export"),
                    "--manifest", str(root / "manifest.json"), "--stage", "2",
                    "--key-dir", str(root / "heldout-keys/bytes/blinding"), "--out", str(output)]
         for session in manifest["sessions"]:
             command += ["--archive", session["archive"]]
         command += fixture_options(root, root / "out/a-fit/predictions.json")
-        result = subprocess.run(ample_space_command(command), cwd=ROOT, capture_output=True, text=True)
+        result = subprocess.run(ample_space_command(command), cwd=checkout, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         wrong = load(output)
+        self.assertIsNotNone(wrong)
         original = load
         with mock.patch(__name__ + ".load", side_effect=lambda p: wrong if Path(p) == root / "out/t-2.json" else original(p)):
             above = compare_campaign(root).above()
