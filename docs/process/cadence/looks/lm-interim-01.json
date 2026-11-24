@@ -883,7 +883,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "48b2db84912948607b4b2f581886b359bc3b1e20c315d339d8d83b59b83517e6"
+        "sha256": "a8107f26d60848a914189441ff87dc5d5ecae8ac0ad834c3b65b0018aca5c09a"
       },
       {
         "path": "joulewise/desk_compress.py",

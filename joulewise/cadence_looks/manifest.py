@@ -47,6 +47,7 @@ INTERIM_LOOK_ID = "lm-interim-01"
 LEDGER_SCHEMA = "joulewise.cadence_span_ledger.v1"
 LOOK_LEDGER_SCHEMA = "joulewise.cadence_look_ledger.v1"
 LOOK_LEDGER_PATH = "docs/process/cadence/looks/LOOKS.json"
+LOOK_PUBLIC_ROOT = "public"
 FILLER_KIT_REGISTRY = "docs/process/cadence/looks/filler-kit-registry.json"
 FILLER_SERIES = ("f2-inst-", "f2-stab-", "r1-partc-f0-")      # every id of a filler series, registered or not
 LOOK_LEDGER_STATUSES = ("draft", "committed", "stage1_committed", "run", "frozen", "superseded", "failed", "interrupted")
@@ -1194,7 +1195,7 @@ LOOK_FILES = {
 }
 ARCHIVES_DIR = "archives"
 ARCHIVE_SUFFIXES = {"archive": ".tar", "manifest": ".SHA256SUMS", "marker": ".marker.json"}
-_RESERVED_NAMES = ("public.json", "restricted")     # the reservation step's names, never another file's
+_RESERVED_NAMES = ("public.json", "restricted", "sealed", "custody")
 _LAYOUT_SPAN = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._-]*")
 
 
@@ -1518,7 +1519,8 @@ def validate_look_ledger(doc, repo=None):
         if "execution_host" in row and not _text(row["execution_host"]):
             problems.append(f"{where}.execution_host: a host id")
         if "public_root" in row and not _relative_directory(row["public_root"]):
-            problems.append(f"{where}.public_root: a canonical repository-relative directory")
+            problems.append(f"{where}.public_root: expected a canonical repository-relative directory, "
+                            f"got {row['public_root']!r}")
         if "custody_root" in row and not (
                 _text(row["custody_root"]) and Path(row["custody_root"]).is_absolute()):
             problems.append(f"{where}.custody_root: an absolute directory")
@@ -1766,6 +1768,19 @@ def _freeze2_naming(repo, row, raw):
     return common["ruling"]
 
 
+def _freeze2_execution_matches(repo, commit, row):
+    rc, raw, _ = _git(repo, "show", f"{commit}:{LOOK_LEDGER_PATH}")
+    if rc:
+        return False
+    try:
+        executed = _look_row(validate_look_ledger(json.loads(raw)), row["look_id"])
+    except (TypeError, ValueError):
+        return False
+    bindings = ("sha256", "stage1_sha256", "public_root", "custody_root", "execution_host")
+    return executed["status"] == "stage1_committed" and all(
+        key in executed and executed[key] == row.get(key) for key in bindings)
+
+
 def freeze2_authority(repo, *, expected_coefficients_sha256=None):
     """Authenticate the public freeze against one main commit and return its public evidence. The commit is
     origin/main as fetched now (RL-184 section 2.3; merge audit on c3a0dd9f8, finding 3): a failed fetch of main,
@@ -1780,9 +1795,17 @@ def freeze2_authority(repo, *, expected_coefficients_sha256=None):
         return raw
 
     ledger = validate_look_ledger(json.loads(main_bytes(LOOK_LEDGER_PATH)))
-    row = _look_row(ledger, "lm-interim-01")
-    if row["status"] not in ("run", "frozen") or not _relative_directory(row.get("public_root")):
+    row = _look_row(ledger, INTERIM_LOOK_ID)
+    if row["status"] not in ("run", "frozen"):
         raise ManifestError(["freeze 2: the public report is not committed on origin/main"])
+    root = row.get("public_root")
+    if root is None:
+        raise ManifestError([f"freeze 2: missing public root for the {row['look_id']}/PUBLIC.json route"])
+    path = f"{root}/{row['look_id']}/PUBLIC.json"
+    if any(part.casefold() in _RESERVED_NAMES for part in root.split("/")):
+        raise ManifestError([f"freeze 2: reserved component in report route {path!r}"])
+    if root != LOOK_PUBLIC_ROOT:
+        raise ManifestError([f"freeze 2: allowed public root is {LOOK_PUBLIC_ROOT!r}, report route is {path!r}"])
     directory = "docs/process/cadence/looks"
     if row["manifest_path"] != f"{directory}/{row['look_id']}.json":
         raise ManifestError(["freeze 2: unexpected public manifest path"])
@@ -1798,7 +1821,10 @@ def freeze2_authority(repo, *, expected_coefficients_sha256=None):
     schema_raw = main_bytes(pin["path"])
     if hashlib.sha256(schema_raw).hexdigest() != pin["sha256"]:
         raise ManifestError(["freeze 2: the mainline public schema differs from its pin"])
-    path = f'{row["public_root"]}/{row["look_id"]}/PUBLIC.json'
+    # The report names the exact execution commit. Before reading the report, authenticate the route
+    # against a matching stage-1 row in the fetched main commit's ledger history.
+    if not any(_freeze2_execution_matches(repo, commit, row) for commit in _ledger_history_commits(repo, main)):
+        raise ManifestError([f"freeze 2: main's history does not authenticate the execution row for {path!r}"])
     raw = main_bytes(path)
     if hashlib.sha256(raw).hexdigest() != row["output_sha256"]:
         raise ManifestError(["freeze 2: the mainline public report differs from its ledger pin"])
@@ -1812,13 +1838,8 @@ def freeze2_authority(repo, *, expected_coefficients_sha256=None):
     execution_commit = public["commit"]
     if _git(repo, "merge-base", "--is-ancestor", execution_commit, main)[0]:
         raise ManifestError(["freeze 2: the execution commit is not in main's history"])
-    rc, ledger_raw, _ = _git(repo, "show", f"{execution_commit}:{LOOK_LEDGER_PATH}")
-    if rc:
-        raise ManifestError(["freeze 2: the execution commit does not carry the look ledger"])
-    executed = _look_row(validate_look_ledger(json.loads(ledger_raw)), row["look_id"])
-    bindings = ("sha256", "stage1_sha256", "public_root", "custody_root", "execution_host")
-    if executed["status"] != "stage1_committed" or any(executed.get(key) != row.get(key) for key in bindings):
-        raise ManifestError(["freeze 2: the execution commit does not authenticate the published look"])
+    if not _freeze2_execution_matches(repo, execution_commit, row):
+        raise ManifestError([f"freeze 2: the execution commit does not authenticate the published look for {path!r}"])
     source = "yes"
     if public["twin_agrees"] != "yes":
         if not row.get("ruling"):
@@ -1850,13 +1871,17 @@ def execution_host():
     return "hw1:" + hashlib.sha256(material).hexdigest()
 
 
-def _ledger_history_rows(repo, look_id, head):
-    """Every preserved row of this look on HEAD or any remote-tracking history, newest first."""
-    rc, out, err = _git(repo, "log", "--full-history", "--format=%H", head, "--remotes", "--", LOOK_LEDGER_PATH)
+def _ledger_history_commits(repo, *revisions):
+    rc, out, err = _git(repo, "log", "--full-history", "--format=%H", *revisions, "--", LOOK_LEDGER_PATH)
     if rc != 0:
         raise ManifestError([f"the history of {LOOK_LEDGER_PATH} cannot be read ({err[:120]})"])
+    return out.decode().split()
+
+
+def _ledger_history_rows(repo, look_id, head):
+    """Every preserved row of this look on HEAD or any remote-tracking history, newest first."""
     rows_out = []
-    for commit in out.decode().split():
+    for commit in _ledger_history_commits(repo, head, "--remotes"):
         rc, raw, _ = _git(repo, "show", f"{commit}:{LOOK_LEDGER_PATH}")
         try:
             rows = json.loads(raw).get("looks") if rc == 0 else None
