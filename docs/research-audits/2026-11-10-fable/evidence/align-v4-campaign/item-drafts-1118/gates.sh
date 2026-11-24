@@ -103,6 +103,7 @@ filled() {
 freeze2_gate() {
   filled "${FREEZE2_COEF_SHA256:-}" || { echo 'WAIT: HOLD_FOR_FIT_FREEZE'; return 1; }
   "$PY" -I -B -S - "$AUTH_REPO" "$FREEZE2_COEF_SHA256" <<'PY'
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -114,19 +115,31 @@ repo, expected = sys.argv[1:]
 if not re.fullmatch(r"[0-9a-f]{64}", expected):
     sys.exit("STOP: malformed issued freeze-2 public hash")
 
-# Bind the PR #795 public verifier for ordinary yes and RL-184 naming after owner delivery.
-# build_items.py renders these literals as part of the common gate in all six items.
-provider_commit = None
-provider_paths = ()
+# PR #795 reviewed public verifier. The measurement runner has its own pin.
+provider_commit = "6f81504db0c50ced6ef488d13afab0bf2662ec5b"
+provider_paths = (
+    "scripts/cadence_look_manifest.py",
+    "joulewise/__init__.py",
+    "joulewise/schemas.py",
+    "joulewise/axi_decode_config.py",
+    "joulewise/idle_admission.py",
+    "joulewise/validation.py",
+    "joulewise/cadence_looks/__init__.py",
+    "joulewise/cadence_looks/manifest.py",
+    "joulewise/cadence_looks/interim_release.py",
+    "joulewise/cadence_looks/custody_pins.py",
+    "joulewise/cadence_looks/schema_check.py",
+)
 cli = "scripts/cadence_look_manifest.py"
 if (not provider_commit or not re.fullmatch(r"[0-9a-f]{40}", provider_commit)
         or cli not in provider_paths):
     sys.exit("WAIT: HOLD_FOR_FIT_FREEZE (reviewed public verifier pin pending)")
 
-os.environ["GIT_NO_REPLACE_OBJECTS"] = "1"
+git_env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+git_env["GIT_NO_REPLACE_OBJECTS"] = "1"
 
 def git(*args):
-    return subprocess.check_output(["git", "-C", repo, *args], stderr=subprocess.DEVNULL)
+    return subprocess.check_output(["git", "-C", repo, *args], stderr=subprocess.DEVNULL, env=git_env)
 
 try:
     if git("rev-parse", "--verify", provider_commit + "^{commit}").decode().strip() != provider_commit:
@@ -134,11 +147,16 @@ try:
     with tempfile.TemporaryDirectory(prefix="freeze2-code-") as stage:
         for path in provider_paths:
             entry = git("ls-tree", "-z", "--full-tree", provider_commit, "--", path)
-            if not re.fullmatch(rb"100(?:644|755) blob [0-9a-f]{40}\t" + re.escape(os.fsencode(path)) + b"\x00", entry):
+            regular = re.fullmatch(rb"100(?:644|755) blob ([0-9a-f]{40})\t" + re.escape(os.fsencode(path)) + b"\x00", entry)
+            if not regular:
                 sys.exit(f"STOP: freeze-2 provider requires a regular code blob at {path}")
             dest = Path(stage, path)
             dest.parent.mkdir(exist_ok=True, parents=True)
             dest.write_bytes(git("cat-file", "blob", provider_commit + ":" + path))
+            staged = dest.read_bytes()
+            blob_id = hashlib.sha1(f"blob {len(staged)}\0".encode() + staged).hexdigest()
+            if blob_id.encode() != regular[1]:
+                sys.exit(f"STOP: freeze-2 staged code differs from the pinned blob at {path}")
 
         script = Path(stage, cli)
         print("FREEZE2_CODE", provider_commit, file=sys.stderr, flush=True)

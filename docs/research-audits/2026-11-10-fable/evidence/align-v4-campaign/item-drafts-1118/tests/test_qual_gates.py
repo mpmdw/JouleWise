@@ -16,8 +16,8 @@ import sys
 from zoneinfo import ZoneInfo
 HERE=Path(__file__).resolve().parents[1]; META=json.loads((HERE/'items.json').read_text()); BASE=Path(sys.argv[1]).resolve(); TZ=ZoneInfo('America/Los_Angeles')
 sys.path.insert(0, str(HERE/'tools'))
-from pinned import pinned
-from test_freeze2_public_arm import DIGEST, PublicHistory, commit as fixture_commit, with_test_pin
+from pinned import ROOT, pinned
+from test_freeze2_public_arm import DIGEST, PublicHistory, commit as fixture_commit, deliver_provider
 
 NS=1_000_000_000
 checks=failures=0
@@ -36,8 +36,9 @@ def run_item(item,shell,source_tree):
     src=(HERE/'gates.sh').read_text().split('# BEGIN TESTABLE GATES\n')[1].split('# END TESTABLE GATES')[0]
     assert gates==src  # Test exactly the final emitted functions.
     home=BASE/(item['item']+'-'+shell); home.mkdir(); root=home/'mock-root'; wt=home/'worktree-root'; markers=home/'markers'
-    world = PublicHistory(home / 'public-history')
+    world = PublicHistory(home / 'public-history', ROOT)
     auth = world.auth
+    deliver_provider(ROOT, auth)
     for entry in META['items']:
         path = world.publisher / entry['queue_path']
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -53,7 +54,6 @@ def run_item(item,shell,source_tree):
     recent={'sequence':2,'span_id':'f0-synthetic','close_receipt':str(latest_receipt)}
     staged=home/'staged'; staged.mkdir()
     gates=gates.replace('/Users/edr/campaign-out',str(root)).replace('/Users/edr/code/jw-wt',str(wt)).replace('/Users/Shared/JouleWise/desk-copy',str(markers))
-    gates = with_test_pin(gates, world.code)
     defaults=dict(REPO=str(source_tree),AUTH_REPO=str(auth),PIN=META['pin'],KIT_SHA=item['kit_sha'],QUEUE_PATH=item['queue_path'],QUEUE_SHA=item['queue_sha'],
         ATTEMPT_LEDGER=str(ledger),NONCAMPAIGN_COPY_OK='yes',NONCAMPAIGN_COPY_CLOSE_NS=(now-1200)*NS,NONCAMPAIGN_COPY_RECEIPT=str(latest_receipt),NONCAMPAIGN_COPY_RECORD='synthetic latest Check/copy proof',HOST_RESTORE_OK=1,GROUPS_ABSENT=1,LAST_CLOSE_KIND='other',
         FEEDS_STOPPED=1,FOREIGN_PROCESSES_ABSENT=1,CLOSE_PROOF_RECEIPT=str(latest/'runner_receipt.json'),
@@ -223,12 +223,12 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
     run('C.4 malformed boot STOP',overrides={'BATCH_SYSCTL':'invalid'},command=batch_only,want=False,contains='unreadable boot time')
     run('issued public hash unfilled WAIT',fill_changes={'FREEZE2_COEF_SHA256':None},want=False,contains='HOLD_FOR_FIT_FREEZE')
     run('issued public hash malformed STOP',fill_changes={'FREEZE2_COEF_SHA256':'invalid'},want=False,contains='malformed issued')
-    run('public hash differs from issue',fill_changes={'FREEZE2_COEF_SHA256':'0'*64},want=False,contains='issued coefficient digest')
-    for case, reason in (('no','no effective public decision'), ('missing-report','HOLD_FOR_FIT_FREEZE'),
-                         ('execution-binding','execution binding')):
+    refusal = 'REFUSE freeze 2 public authority'
+    run('public hash differs from issue',fill_changes={'FREEZE2_COEF_SHA256':'0'*64},want=False,contains=refusal)
+    for case in ('no','missing-report','execution-binding'):
         world.set_heads(world.publish(case, parent=world.main), commit)
         world.fetch()
-        run('public freeze refuses '+case,want=False,contains=reason)
+        run('public freeze refuses '+case,want=False,contains=refusal)
     world.set_heads(world.main, commit)
     world.fetch()
     for key in ('COLD_SEAT_RECORD','LINE2_RECORD'):

@@ -3,6 +3,16 @@
 This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.
 
+## 2026-11-24 qualification freeze-2 provider bind
+
+P1 [AGENT], user-selected for draft PR #835 after #795 merged. The bind
+and six base-date item renders are ready for exact-head CI and the lead's
+Astra replay. The provider owner and lead own the reserved-report lookup
+finding. The lead owns staging, selection and authentication of a renewed
+queue, effective freeze-2 authority on main, issue, and native gates.
+Qualification remains HOLD_FOR_FIT_FREEZE. No phase exit-checklist row
+closes. [Builder report](docs/run_reports/2026-11-24-pr835-freeze2-bind.md)
+
 ## 2026-11-18 qualification drafts at the PR #812 merge pin
 
 P1 [AGENT], user-selected Tier 0 on the Nov 20 qualification critical path.
