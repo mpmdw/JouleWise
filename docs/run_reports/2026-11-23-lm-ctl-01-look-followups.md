@@ -368,3 +368,31 @@ JSON validation.
 The orphan-marker race remains an open LOW follow-up. Independent
 Tier 2 executing review, the installed byte pass and bound-host blind
 preflight remain lead gates before reservation.
+
+## 2026-11-24 round 6 executing audit
+
+The independent execution of revision 10 on `42cb28171` reported
+three VERIFIED HIGHs, zero MEDs and one VERIFIED LOW. The frozen
+suite drift allegation was refuted. The existing spec requires all
+three structural and blinding guarantees. The replacement
+regressions produced 11 assertion failures on unchanged production
+code at the audited head.
+
+| Finding | Root cause | Regression |
+| --- | --- | --- |
+| HIGH. Invalid router expert ID first failed after the marker | impl-bug. The blind constructor saw placeholder IDs before the parser had checked their domains. Compare integer tokens lexically against the structural expert count, then project typed placeholders. | The exact two-expert, ID 100 fixture refuses at all three entry points. Equal-width boundary, negative index and field-order cases exercise the lexical predicate. A legal ID closes the matched fixture. |
+| HIGH. Reversed request timestamps certified negative DC uncertainty | impl-bug. The meter fit accepted reversed endpoints and the certificate checked only its upper bound. Check the order of every recorded request and require nonnegative uncertainty. | Rebound 63-sample fallback polls, a single reversed poll and an injected invalid fit. The ordered control with identical sample bytes certifies 22,000,001 ns and qualifies. |
+| HIGH. Both blind gates projected observed battery bits | fix-regression. Diagnostics used a selector that retained Boolean values. Use a typed opaque selector for observed Boolean fields, including ancillary metadata, result diagnostics and episode outcomes. | Toggle charging and associated diagnostic bits in the two rebound controls. The guard sees the same typed placeholders in both blind operations. |
+| LOW. Orphan marker can appear during a denied mkdir | Existing impl-bug follow-up. | The prior disposition remains open. Ordinary setup, collision, cleanup and spend regressions remain in the hosted suite. |
+
+The router and poll refusals give exit 2, empty stdout and
+`REFUSE PREFLIGHT INPUT_CHANNELS` at stage 1, standalone preflight
+and direct stage 2. Every refusal remained fresh, with no reservation,
+marker, claim, publication or value read. The revision 10 field
+matrices and exact receipt regression pass. The four frozen
+manifests verify and the frozen trees match PR #951 byte for byte.
+Local v3.1 passed 846/846. Final-head CI is linked from
+[draft PR #957](https://github.com/mpmdw/JouleWise/pull/957).
+
+Independent Tier 2 executing review, installed byte pass and the
+bound-host blind preflight remain lead gates before reservation.

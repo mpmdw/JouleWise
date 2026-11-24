@@ -28,7 +28,7 @@ def wrong_type(schema):
         return wrong_type(schema.fields)
     if isinstance(schema, wire.TokenForms):
         return {} if "{" not in schema.variants else False
-    return [] if schema is wire.BOOLEAN else False
+    return [] if schema in (wire.BOOLEAN, wire.OPAQUE_BOOLEAN) else False
 
 
 def numeric_boundary(schema):
@@ -64,7 +64,7 @@ def sample(schema):
         return []
     if schema is wire.OPAQUE_OBJECT or isinstance(schema, wire.KeyedFields):
         return {}
-    if schema is wire.BOOLEAN:
+    if schema in (wire.BOOLEAN, wire.OPAQUE_BOOLEAN):
         return True
     if schema in (wire.STRING, wire.OPAQUE_STRING, wire.OPAQUE_NONBLANK_STRING, wire.OPAQUE_STRING_OR_INTEGER):
         return "synthetic"

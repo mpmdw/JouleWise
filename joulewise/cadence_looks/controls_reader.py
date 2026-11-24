@@ -22,10 +22,12 @@ from . import controls_analysis as analysis
 from . import controls_metadata as metadata_wire
 from .qualification_manifest import _decode
 from .controls_time_fields import (
-    BOOLEAN, EMPTY_ARRAY, INT64, INTEGER, NUMBER, OPAQUE_FINITE_NUMBER, OPAQUE_INTEGER, OPAQUE_NONBLANK_STRING,
+    BOOLEAN, EMPTY_ARRAY, INT64, INTEGER, NUMBER, OPAQUE_BOOLEAN, OPAQUE_FINITE_NUMBER, OPAQUE_INTEGER,
+    OPAQUE_NONBLANK_STRING,
     OPAQUE_NONNEGATIVE_NUMBER, OPAQUE_OBJECT, OPAQUE_PERCENT, OPAQUE_STRING, OPAQUE_STRING_OR_INTEGER,
     RAIL_COLUMNS, STRING,
-    ExtensionRecord, KeyedFields, Nullable, RequiredRecordFields, TaggedFields, TimeFieldError, TokenForms, WireRecord,
+    DependentRecord, ExtensionRecord, KeyedFields, Nullable, OpaqueIndex, RequiredRecordFields, TaggedFields,
+    TimeFieldError, TokenForms, WireRecord,
     project_json, rail_rows, stream_fields,
 )
 
@@ -40,7 +42,7 @@ STAMP_FIELDS = RequiredRecordFields.fromkeys(("epoch_ns", "monotonic_before_ns",
                                              "wall_resolution_ns", "monotonic_resolution_ns"), INT64)
 TOOL_FIELDS = RequiredRecordFields(
     start_ns=INT64, end_ns=INT64, args_bytes=INTEGER, result_bytes=INTEGER,
-    logged=BOOLEAN, state_changed=Nullable(BOOLEAN), name=OPAQUE_STRING,
+    logged=OPAQUE_BOOLEAN, state_changed=Nullable(OPAQUE_BOOLEAN), name=OPAQUE_STRING,
     state_before_sha256=Nullable(OPAQUE_STRING), state_after_sha256=Nullable(OPAQUE_STRING),
 )
 TURN_FIELDS = RequiredRecordFields(
@@ -119,7 +121,7 @@ HARDWARE_FIELDS = WireRecord(
          mlx_version=Nullable(OPAQUE_STRING), mlx_lm_version=Nullable(OPAQUE_STRING),
          model_artifact_identity=Nullable(ARTIFACT_IDENTITY)),
      "task_diagnostics": RequiredRecordFields(
-         give_hint=Nullable(BOOLEAN), main_task_score=Nullable(OPAQUE_FINITE_NUMBER),
+         give_hint=Nullable(OPAQUE_BOOLEAN), main_task_score=Nullable(OPAQUE_FINITE_NUMBER),
          evaluation_outputs=OPAQUE_OBJECT, flags=[OPAQUE_STRING], tool_schemas=[OPAQUE_OBJECT])},
     {"boot_id": Nullable(STRING), "thermal": THERMAL_RECORD, "ac_powermode": AC_POWERMODE, "token_budget": TOKEN_BUDGET},
 )
@@ -130,11 +132,14 @@ EPISODE_FIELDS = RequiredRecordFields(
     seed=OPAQUE_INTEGER,
     hardware=HARDWARE_FIELDS,
     turns=[TURN_FIELDS], flags=[OPAQUE_STRING], power_traces=EMPTY_ARRAY, clock_mappings=EMPTY_ARRAY,
-    main_task_score=Nullable(OPAQUE_FINITE_NUMBER), side_task_success=Nullable(BOOLEAN),
+    main_task_score=Nullable(OPAQUE_FINITE_NUMBER), side_task_success=Nullable(OPAQUE_BOOLEAN),
     monitor_verdicts=[RequiredRecordFields(monitor_model=OPAQUE_STRING, visibility=STRING,
                                            suspicion=OPAQUE_PERCENT, prompt_sha256=OPAQUE_STRING)],
-    router_log=Nullable(RequiredRecordFields(model=OPAQUE_STRING, num_experts=INTEGER, top_k=INTEGER,
-                                             layers=[OPAQUE_INTEGER], phase=[STRING], experts=[[[OPAQUE_INTEGER]]])),
+    router_log=Nullable(DependentRecord(
+        "num_experts", lambda limit: {"experts": [[[OpaqueIndex(limit)]]]},
+        model=OPAQUE_STRING, num_experts=INTEGER, top_k=INTEGER,
+        layers=[OPAQUE_INTEGER], phase=[STRING], experts=[[[OPAQUE_INTEGER]]],
+    )),
 )
 PRODUCER_CLOCK_STAMP = RequiredRecordFields.fromkeys((
     "epoch_s", "monotonic_before_s", "monotonic_after_s", "wall_resolution_s", "monotonic_resolution_s",
@@ -190,7 +195,7 @@ IDLE_DRIFT_FIELDS = WireRecord(
     {"status": OPAQUE_STRING},
     {**dict.fromkeys(("method", "reason", "pre_artifact", "post_artifact", "calibration_status"), OPAQUE_STRING),
      **dict.fromkeys(("pre_sample_count", "post_sample_count"), OPAQUE_INTEGER),
-     **dict.fromkeys(("pre_idle_window_suspect", "post_idle_window_suspect"), BOOLEAN),
+     **dict.fromkeys(("pre_idle_window_suspect", "post_idle_window_suspect"), OPAQUE_BOOLEAN),
      **dict.fromkeys(("pre_power_w_mean", "run_observed_envelope_w", "effective_bound_w"), OPAQUE_FINITE_NUMBER),
      "calibration_guard_w": Nullable(OPAQUE_FINITE_NUMBER),
      **dict.fromkeys(("calibration_artifact_sha256", "calibration_cell_id"), Nullable(OPAQUE_STRING))},
@@ -224,8 +229,8 @@ ADAPTER_FIELDS = WireRecord({}, {
     ),
 })
 EXTRA_FIELDS = ExtensionRecord({}, {
-    "node_cleanup": [OPAQUE_OBJECT], "cooldown_cap_hit": BOOLEAN,
-    "environment_admission_failed": BOOLEAN, "clock_step_suspect": BOOLEAN,
+    "node_cleanup": [OPAQUE_OBJECT], "cooldown_cap_hit": OPAQUE_BOOLEAN,
+    "environment_admission_failed": OPAQUE_BOOLEAN, "clock_step_suspect": OPAQUE_BOOLEAN,
     "preceding_member_end_s": Nullable(OPAQUE_FINITE_NUMBER),
     "preceding_gap_s": Nullable(OPAQUE_FINITE_NUMBER), "idle_start_s": OPAQUE_FINITE_NUMBER,
 })
@@ -590,6 +595,8 @@ def blind_stream(path, payload):
                    or row["n"] != len(row["seq"]) for row in batches)
             or any(row.get("n") and not row.get("seq") for row in polls)):
         raise TimeFieldError("malformed native meter poll")
+    if any("tx" in row and row["tx"] > row["rx"] for row in polls):
+        raise TimeFieldError("reversed native meter request interval")
     if header["status"] != "streaming" or not batches:
         return StreamTiming(path, header, trailer, False, None, ())
     batches.sort(key=lambda row: row["rx"])
@@ -661,10 +668,14 @@ def _candidate(stream, timing):
             failures.add("anchor_unusable")
         if fit and offset is not None:
             rtt = meter.FIT_MAX_RTT_MS if fit["filtered"] else fit["request_rtt_ms_max"]
+            if not isfinite(rtt) or rtt < 0:
+                raise TimeFieldError("invalid native meter request duration")
             step_ns = meter.STEP_MS[stream.header["rate_idx"]] * 1_000_000
             spread = abs((end_raw - end_mono) - (start_raw - start_mono))
             excess = max(0, -Fraction(fit["excess_latency_ms_min"]))
             width = spread + 1_000_000 + step_ns + ceil(1_000_000 * (excess + Fraction(rtt)))
+            if width < 0:
+                raise TimeFieldError("negative native meter uncertainty")
             if width > CAP_NS:
                 failures.add("half_width_over_cap")
     if ((start_mono is not None and start_mono > timing.start_ns)

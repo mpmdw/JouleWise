@@ -32,6 +32,7 @@ NESTED = object()                    # a member whose value is an object or an a
 EMPTY_ARRAY = object()
 SKIP = object()
 BOOLEAN = object()
+OPAQUE_BOOLEAN = object()
 STRING = object()
 INTEGER = object()
 INT64 = object()
@@ -53,6 +54,22 @@ class RecordFields(dict):
 
 class RequiredRecordFields(RecordFields):
     """A record whose native serializer always emits every field."""
+
+
+class DependentRecord(RequiredRecordFields):
+    """A closed record with fields selected by a structural integer sibling."""
+
+    def __init__(self, parameter, specialize, **fields):
+        super().__init__(fields)
+        self.parameter = parameter
+        self.specialize = specialize
+
+
+class OpaqueIndex:
+    """An integer index checked against its exclusive limit without conversion."""
+
+    def __init__(self, limit):
+        self.limit = str(max(limit, 0))
 
 
 class WireRecord(RecordFields):
@@ -396,6 +413,17 @@ def stream_fields(payload, name):
             "polls": polls, "errors": errors}
 
 
+def _probe_record(it, token, selector, depth, *, strict):
+    captured = []
+
+    def capture():
+        for field_token in it:
+            captured.append(field_token)
+            yield field_token
+
+    return _project(capture(), token, selector, depth, strict=strict), iter(captured)
+
+
 def _project(it, token, fields, depth, *, strict):
     if depth > MAX_DEPTH:
         raise _Bad()
@@ -421,16 +449,25 @@ def _project(it, token, fields, depth, *, strict):
         _skip_value(it, token, depth, strict=True, finite=True)
         return {}
         return None
-    if fields is BOOLEAN:
+    if fields in (BOOLEAN, OPAQUE_BOOLEAN):
         if token not in (("lit", "false"), ("lit", "true")):
             raise _Bad()
-        return token[1] == "true"
+        return fields is BOOLEAN and token[1] == "true"
     if fields is STRING:
         if token[0] != "str":
             raise _Bad()
         return _convert(*token)
     if fields is OPAQUE_STRING_OR_INTEGER and token[0] == "str":
         return None
+    if isinstance(fields, OpaqueIndex):
+        kind, text = token
+        if kind != "num" or not (text == "-0" or text.isascii() and text.isdecimal()):
+            raise _Bad()
+        digits = "0" if text == "-0" else text
+        limit = fields.limit
+        if (len(digits), digits) >= (len(limit), limit):
+            raise _Bad()
+        return 0
     if fields in (INTEGER, INT64, OPAQUE_INTEGER, OPAQUE_NONNEGATIVE_INTEGER, OPAQUE_STRING_OR_INTEGER):
         if token[0] != "num" or any(marker in token[1] for marker in ".eE"):
             raise _Bad()
@@ -462,18 +499,17 @@ def _project(it, token, fields, depth, *, strict):
             raise _Bad()
         return "opaque"
     if isinstance(fields, TaggedFields):
-        captured = []
-
-        def capture_row():
-            for row_token in it:
-                captured.append(row_token)
-                yield row_token
-
-        tag = _project(capture_row(), token, {fields.tag: STRING}, depth, strict=strict).get(fields.tag)
-        projection = fields.fields.get(tag)
+        view, replay = _probe_record(it, token, {fields.tag: STRING}, depth, strict=strict)
+        projection = fields.fields.get(view.get(fields.tag))
         if projection is None:
             raise _Bad()
-        return _project(iter(captured), token, projection, depth, strict=strict)
+        return _project(replay, token, projection, depth, strict=strict)
+    if isinstance(fields, DependentRecord):
+        selector, replay = _probe_record(it, token, {fields.parameter: INTEGER}, depth, strict=strict)
+        if fields.parameter not in selector:
+            raise _Bad()
+        projection = RequiredRecordFields(fields, **fields.specialize(selector[fields.parameter]))
+        return _project(replay, token, projection, depth, strict=strict)
     if isinstance(fields, DigestFields):
         digest = sha256()
 

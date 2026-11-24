@@ -1,7 +1,7 @@
 """Closed ancillary record projections for the pinned ctl-01 bundle writer."""
 
 from .controls_time_fields import (
-    BOOLEAN, OPAQUE_FINITE_NUMBER, OPAQUE_INTEGER, OPAQUE_STRING,
+    OPAQUE_BOOLEAN, OPAQUE_FINITE_NUMBER, OPAQUE_INTEGER, OPAQUE_STRING,
     Nullable, RequiredRecordFields, TokenForms, WireRecord,
 )
 
@@ -9,7 +9,7 @@ from .controls_time_fields import (
 NULL_TEXT = Nullable(OPAQUE_STRING)
 NULL_INT = Nullable(OPAQUE_INTEGER)
 NULL_NUMBER = Nullable(OPAQUE_FINITE_NUMBER)
-NULL_BOOL = Nullable(BOOLEAN)
+NULL_BOOL = Nullable(OPAQUE_BOOLEAN)
 
 BATTERY_OBSERVATION = RequiredRecordFields(
     **dict.fromkeys(("schema", "policy_id", "phase", "stderr", "raw_stdout_sha256", "raw_path"), OPAQUE_STRING),
@@ -21,7 +21,7 @@ BATTERY_OBSERVATION = RequiredRecordFields(
                      "voltage_mv", "temperature_raw", "current_capacity_pct", "apple_raw_current_capacity_mah",
                      "apple_raw_max_capacity_mah"), NULL_INT),
     **dict.fromkeys(("external_connected", "is_charging", "fully_charged"), NULL_BOOL),
-    **dict.fromkeys(("passed", "timed_out", "probe_error"), BOOLEAN),
+    **dict.fromkeys(("passed", "timed_out", "probe_error"), OPAQUE_BOOLEAN),
     **dict.fromkeys(("argv", "property_lines", "reasons"), [OPAQUE_STRING]),
     update_age_s=NULL_NUMBER,
 )
@@ -39,7 +39,7 @@ IDLE_BASELINE = RequiredRecordFields(
 )
 THERMAL_STATE = RequiredRecordFields(
     timestamp_s=OPAQUE_FINITE_NUMBER, temperature_c=NULL_NUMBER, thermal_pressure=NULL_TEXT, fan_state=NULL_TEXT,
-    metadata=WireRecord({}, {"source": OPAQUE_STRING, "temperature_c_available": BOOLEAN}),
+    metadata=WireRecord({}, {"source": OPAQUE_STRING, "temperature_c_available": OPAQUE_BOOLEAN}),
 )
 SUITE = RequiredRecordFields(
     **dict.fromkeys(("suite_id", "suite_profile", "suite_revision", "manifest_sha256", "source_file_sha256",
@@ -49,7 +49,7 @@ SUITE = RequiredRecordFields(
 PROCESS_GROUP_TEARDOWN = RequiredRecordFields(
     **dict.fromkeys(("status", "isolation_mode", "termination_signal", "census_method"), OPAQUE_STRING),
     **dict.fromkeys(("spawn_observed", "kill_escalated", "census_completed", "survivors_detected", "leader_reaped"),
-                     BOOLEAN),
+                     OPAQUE_BOOLEAN),
     **dict.fromkeys(("direct_child_pid", "process_group_id"), NULL_INT),
     **dict.fromkeys(("spawn_argv", "sampler_argv", "errors"), [OPAQUE_STRING]),
     **dict.fromkeys(("termination_grace_s", "census_timeout_s"), OPAQUE_FINITE_NUMBER),
@@ -80,7 +80,7 @@ GUARD_BASE = {
     "hid_idle_s": NULL_NUMBER, "screensaver_delay_s": NULL_INT,
 }
 POST_RUN_OBSERVATION = WireRecord(
-    {"capture_skipped": BOOLEAN, "captured_at_s": NULL_NUMBER},
+    {"capture_skipped": OPAQUE_BOOLEAN, "captured_at_s": NULL_NUMBER},
     {**GUARD_BASE, "skip_reason": OPAQUE_STRING, "display": RequiredRecordFields(**DISPLAY_BASE, **ASLEEP_COUNTS),
      "errors": WireRecord({}, dict.fromkeys(GUARD_ERRORS, OPAQUE_STRING)), "power": ENVIRONMENT_POWER,
      "adapter_power_observation": ADAPTER_POWER, "capture_duration_s": OPAQUE_FINITE_NUMBER,
@@ -94,7 +94,7 @@ ENVIRONMENT = WireRecord(
      **dict.fromkeys(("low_power_mode", "display_sleep_prevented"), NULL_BOOL),
      **dict.fromkeys(("memory_free_percent", "memory_pressure_percent", "uptime_s", "load_average_1m",
                       "load_average_5m", "load_average_15m", "captured_at_s", "settle_s"), NULL_NUMBER),
-     "capture_skipped": BOOLEAN, "capture_scope": OPAQUE_STRING, "env_capture_duration_s": OPAQUE_FINITE_NUMBER,
+     "capture_skipped": OPAQUE_BOOLEAN, "capture_scope": OPAQUE_STRING, "env_capture_duration_s": OPAQUE_FINITE_NUMBER,
      "memory": RequiredRecordFields(
          swap_usage=Nullable(RequiredRecordFields.fromkeys(("total", "used", "free"), OPAQUE_STRING)),
          **dict.fromkeys(("page_size_bytes", "pages_free", "pageins", "pageouts", "pages_occupied_by_compressor",
@@ -106,7 +106,7 @@ ENVIRONMENT = WireRecord(
      "clock_sync": RequiredRecordFields(status=OPAQUE_STRING, timed_running=NULL_BOOL, timed_probe_error=NULL_TEXT),
      "python_packages": RequiredRecordFields.fromkeys(
          ("mlx", "mlx-lm", "transformers", "mlx-metal", "tokenizers"),
-         WireRecord({"present": BOOLEAN, "version": NULL_TEXT}, {"error": OPAQUE_STRING})),
+         WireRecord({"present": OPAQUE_BOOLEAN, "version": NULL_TEXT}, {"error": OPAQUE_STRING})),
      "errors": WireRecord({}, dict.fromkeys((
          *GUARD_ERRORS, "pmset_batt", "pmset", "pmset_assertions", "memory_pressure", "vm_stat", "sysctl_hw_memsize",
          "sysctl_vm_swapusage", "ioreg_framebuffer_pipes", "sysctl_kern_boottime", "pgrep_timed", "pmset_therm",
@@ -121,21 +121,21 @@ ENVIRONMENT_SNAPSHOT = WireRecord(
     {key: ENVIRONMENT[key] for key in ENVIRONMENT.required - CAPTURE_FIELDS},
     {key: ENVIRONMENT[key] for key in (*CAPTURE_FIELDS, "skip_reason")},
 )
-ENVIRONMENT_FINDING = TokenForms({"str": OPAQUE_STRING, "lit": Nullable(BOOLEAN)})
+ENVIRONMENT_FINDING = TokenForms({"str": OPAQUE_STRING, "lit": Nullable(OPAQUE_BOOLEAN)})
 ENVIRONMENT_EVALUATION = RequiredRecordFields(
     **dict.fromkeys(("schema_version", "snapshot_sha256", "findings_sha256"), OPAQUE_STRING),
-    eligible=BOOLEAN, findings=[RequiredRecordFields(
+    eligible=OPAQUE_BOOLEAN, findings=[RequiredRecordFields(
         code=OPAQUE_STRING, field=OPAQUE_STRING, status=OPAQUE_STRING,
         actual=ENVIRONMENT_FINDING, required=ENVIRONMENT_FINDING)],
     load_average_evidence=RequiredRecordFields(
-        **dict.fromkeys(("load_average_1m", "load_average_5m", "load_average_15m"), NULL_NUMBER), admission_gate=BOOLEAN),
+        **dict.fromkeys(("load_average_1m", "load_average_5m", "load_average_15m"), NULL_NUMBER), admission_gate=OPAQUE_BOOLEAN),
 )
 IDLE_EXTENSION_BINDING = RequiredRecordFields(
-    schema_version=OPAQUE_STRING, policy_version=OPAQUE_STRING, claim_bearing=BOOLEAN, sha256=OPAQUE_STRING,
+    schema_version=OPAQUE_STRING, policy_version=OPAQUE_STRING, claim_bearing=OPAQUE_BOOLEAN, sha256=OPAQUE_STRING,
 )
 CAMPAIGN_POLICY = WireRecord(
     {**dict.fromkeys(("schema_version", "policy_id", "policy_version", "profile", "sha256", "source"), OPAQUE_STRING),
-     "calibration_bracketing": RequiredRecordFields(require_bracket=BOOLEAN, calibration_bracket_max_drift_s=NULL_NUMBER)},
+     "calibration_bracketing": RequiredRecordFields(require_bracket=OPAQUE_BOOLEAN, calibration_bracket_max_drift_s=NULL_NUMBER)},
     {"idle_admission_extension": IDLE_EXTENSION_BINDING},
 )
 CAMPAIGN_PREFLIGHT = RequiredRecordFields(
@@ -143,15 +143,15 @@ CAMPAIGN_PREFLIGHT = RequiredRecordFields(
                     "initial_findings_sha256"), OPAQUE_STRING),
     snapshot=ENVIRONMENT_SNAPSHOT, evaluation=ENVIRONMENT_EVALUATION,
     arm_quiet_mode=RequiredRecordFields(
-        requested=BOOLEAN, countdown_s=NULL_INT, command=Nullable([OPAQUE_STRING]), command_returncode=NULL_INT,
-        verified_by_reprobe=BOOLEAN),
+        requested=OPAQUE_BOOLEAN, countdown_s=NULL_INT, command=Nullable([OPAQUE_STRING]), command_returncode=NULL_INT,
+        verified_by_reprobe=OPAQUE_BOOLEAN),
     override=Nullable(RequiredRecordFields(
         **dict.fromkeys(("schema_version", "snapshot_sha256", "findings_sha256", "reason", "approver", "timestamp",
-                         "source", "classification"), OPAQUE_STRING), claim_eligible=BOOLEAN)),
-    enforced=BOOLEAN, admitted=BOOLEAN,
+                         "source", "classification"), OPAQUE_STRING), claim_eligible=OPAQUE_BOOLEAN)),
+    enforced=OPAQUE_BOOLEAN, admitted=OPAQUE_BOOLEAN,
 )
 CPU_ADMISSION = RequiredRecordFields(
-    schema_version=OPAQUE_STRING, decision=OPAQUE_STRING, admitted=BOOLEAN, conditions=[OPAQUE_STRING],
+    schema_version=OPAQUE_STRING, decision=OPAQUE_STRING, admitted=OPAQUE_BOOLEAN, conditions=[OPAQUE_STRING],
     sample_count=OPAQUE_INTEGER, cpu_busy_ratio_p95=NULL_NUMBER, processor_combined_power_w_p95=NULL_NUMBER,
     criteria=RequiredRecordFields(cpu_busy_ratio_p95_max=OPAQUE_FINITE_NUMBER,
                                  processor_combined_power_w_p95_max=OPAQUE_FINITE_NUMBER,
@@ -162,16 +162,16 @@ ENVIRONMENT_ADMISSION = WireRecord(
     {**dict.fromkeys(("schema_version", "policy_version", "on_fail"), OPAQUE_STRING),
      "attempts": [WireRecord(
          {"attempt": OPAQUE_INTEGER, "start_s": OPAQUE_FINITE_NUMBER, "end_s": OPAQUE_FINITE_NUMBER,
-          "baseline": IDLE_BASELINE, "admitted": BOOLEAN},
-         {"gpu_admitted": NULL_BOOL, "cpu_admission": CPU_ADMISSION, "cpu_admission_enforced": BOOLEAN})],
+          "baseline": IDLE_BASELINE, "admitted": OPAQUE_BOOLEAN},
+         {"gpu_admitted": NULL_BOOL, "cpu_admission": CPU_ADMISSION, "cpu_admission_enforced": OPAQUE_BOOLEAN})],
      "per_run_environment_evaluation": RequiredRecordFields(
          **ENVIRONMENT_EVALUATION, snapshot=ENVIRONMENT_SNAPSHOT),
-     "critical_environment_passed": BOOLEAN, "reference_provenance_present": BOOLEAN,
+     "critical_environment_passed": OPAQUE_BOOLEAN, "reference_provenance_present": OPAQUE_BOOLEAN,
      "decision": NULL_TEXT, "claim_reason": NULL_TEXT},
     {"idle_admission_extension": IDLE_EXTENSION_BINDING, "failure": OPAQUE_STRING,
      "retry_backoff": RequiredRecordFields.fromkeys(("requested_s", "start_s", "end_s"), OPAQUE_FINITE_NUMBER),
      "guard_observations": [WireRecord(
-         {**GUARD_BASE, "phase": OPAQUE_STRING, "capture_skipped": BOOLEAN,
+         {**GUARD_BASE, "phase": OPAQUE_STRING, "capture_skipped": OPAQUE_BOOLEAN,
           "errors": WireRecord({}, dict.fromkeys(GUARD_ERRORS, OPAQUE_STRING))},
          {"display": RequiredRecordFields(**DISPLAY_BASE, **ASLEEP_COUNTS), "power": ENVIRONMENT_POWER,
           "adapter_power_observation": ADAPTER_POWER, "skip_reason": OPAQUE_STRING, "collector_error": OPAQUE_STRING})]},

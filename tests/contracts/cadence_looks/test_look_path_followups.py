@@ -117,6 +117,32 @@ def extension_metadata():
     }
 
 
+def routed_expert(expert, count=2):
+    return {"model": "synthetic", "num_experts": count, "top_k": 1, "layers": [0],
+            "phase": ["decode"], "experts": [[[expert]]]}
+
+
+def fallback_meter_requests(lines, rtt_ns):
+    header, *polls, trailer = lines
+    step_ns = reader.meter.STEP_MS[json.loads(header)["rate_idx"]] * 1_000_000
+    packet_chars = 2 * blind.SAMPLE_BYTES
+    packets, result = [], [header]
+    for raw in polls:
+        poll = json.loads(raw)
+        assert poll["k"] == "b" and len(poll["p"]) == packet_chars * poll["n"]
+        for index in range(poll["n"]):
+            packets.append(poll["p"][packet_chars * index:packet_chars * (index + 1)])
+            if len(packets) == reader.meter.RESPONSE_CAP:
+                rx = poll["rx"] - (poll["n"] - 1 - index) * step_ns
+                result.append(registrar.manifest.canonical(
+                    dict(poll, p="".join(packets), n=len(packets), rx=rx, tx=rx - rtt_ns)))
+                packets.clear()
+    if packets:
+        result.append(registrar.manifest.canonical(
+            dict(poll, p="".join(packets), n=len(packets), tx=poll["rx"] - rtt_ns)))
+    return [*result, registrar.manifest.canonical(dict(json.loads(trailer), polls=len(result) - 1))]
+
+
 def add_diagnostic_flag(document):
     document["flags"].append("task.synthetic_telemetry.power_w=91827.375")
 
@@ -719,6 +745,84 @@ class LookPathFollowupTests(TestCase):
                         with self.assertRaises(blind.TimeFieldError):
                             blind.project_json(registrar.manifest.canonical({kind: changed}), schema, strict=True)
 
+    def test_round6_router_and_request_faults_refuse_fresh(self):
+        scaffold = self.stage_scaffold("r6-scaffold")
+        for name, role, fault in (
+            ("wide-expert", "episode", lambda ep: ep.update(router_log=routed_expert(100))),
+            ("reversed-fallback-rtt", "stream-order", lambda rows: fallback_meter_requests(rows, -100_000_000)),
+            ("reversed-single-poll", "stream", lambda _, poll: poll.update(tx=poll["rx"] + 1)),
+        ):
+            with self.subTest(name=name):
+                world, bench = self.prepare("r6-" + name, role=role, fault=fault)
+                self.assert_refuses_at_blind_gates(world, bench, scaffold)
+
+    def test_round6_router_expert_domain_is_lexical_and_order_independent(self):
+        schema = reader.EPISODE_FIELDS["router_log"]
+        convert = blind._convert
+
+        def guard(kind, token):
+            if (kind, token) == ("num", "19"):
+                self.fail("blind projection converted a selected expert")
+            return convert(kind, token)
+
+        with patch.object(blind, "_convert", side_effect=guard):
+            raw = registrar.manifest.canonical(routed_expert(19, 20))
+            self.assertEqual(blind.project_json(raw, schema, strict=True)["experts"], [[[0]]])
+        for expert, count in ((100, 2), (2, 2), (20, 20), (-1, 2), (0, 0)):
+            with self.subTest(expert=expert, count=count), self.assertRaises(blind.TimeFieldError):
+                blind.project_json(registrar.manifest.canonical(routed_expert(expert, count)), schema, strict=True)
+        self.assertEqual(blind.project_json(b'{"experts":[[[-0]]],"num_experts":1,'
+                                           b'"model":"synthetic","top_k":1,"phase":["decode"],"layers":[0]}',
+                                           schema, strict=True)["experts"], [[[0]]])
+
+    def test_round6_matched_router_and_meter_controls_pass(self):
+        def configure(world):
+            mutate(world, "episode", lambda ep: ep.update(router_log=routed_expert(1)))
+            mutate(world, "stream-order", lambda rows: fallback_meter_requests(rows, 1_000_000))
+
+        world, bench = self.prepare("r6-matched", configure=configure)
+        for operation in ("stage1", "commit-stage1", "preflight"):
+            self.assertEqual(self.invoke(world, bench, operation), (0, b"", b""))
+        certificate = registrar.read(self.private(bench) / "certificates" / "L002.json")
+        self.assertEqual((certificate["dc_code"], certificate["H_ns"]), ("ok", 22_000_001))
+        self.assert_fresh(world, bench)
+        self.assertEqual(self.invoke(world, bench, "stage2", "synthetic_reservation"), (0, b"", b""))
+        report = registrar.read(self.private(bench) / "SYNTHETIC-RESERVATION" / "controls.json")
+        self.assertEqual(report["aligned_power"]["qualified"], "yes")
+
+    def test_round6_negative_derived_half_width_refuses(self):
+        span, _, bundle = FROZEN["location"](self.pristine, "L002")
+        path = FROZEN["meter"](span)
+        payload = b"\n".join(fallback_meter_requests(path.read_bytes().splitlines(), 1_000_000))
+        stream = reader.blind_stream(str(path), payload)
+        episode = reader.episode_timing((bundle / "outputs/align_episode.json").read_bytes(),
+                                        registrar.read(bundle / "metadata.json"))
+        fit = {**stream.fit, "filtered": False, "request_rtt_ms_max": -100.0}
+        with self.assertRaises(blind.TimeFieldError):
+            reader.select_dc(episode, [reader.StreamTiming(stream.path, stream.header, stream.trailer,
+                                                           stream.present, fit, stream.host_ns)])
+
+    def test_round6_battery_observations_are_opaque_at_both_blind_gates(self):
+        for is_charging in (True, False):
+            def observations(world):
+                battery = wire_matrix.sample(reader.metadata_wire.BATTERY_OBSERVATION)
+                battery.update(is_charging_raw="Yes" if is_charging else "No", is_charging=is_charging,
+                               external_connected=not is_charging, fully_charged=is_charging, passed=not is_charging)
+                mutate(world, "metadata", lambda doc: doc.update(battery_float={"pre": battery, "post": battery}))
+
+                sample = dict(wire_matrix.sample(inputs.BATTERY_SAMPLE), ac=is_charging)
+                runtime = dict(wire_matrix.sample(inputs.BATTERY_RESULT), first=sample, last=sample)
+                diagnostics = dict(battery=runtime, pm_nominal=is_charging)
+                mutate(world, "result", lambda result: result.update(diagnostics))
+                mutate(world, "leg-record", lambda copy: copy["result"].update(diagnostics))
+
+            with self.subTest(is_charging=is_charging):
+                world, bench = self.prepare(f"r6-charge-{is_charging}", configure=observations)
+                self.assertEqual(self.invoke(world, bench, "stage1", "guard_battery_observations"), (0, b"", b""))
+                self.assertEqual(self.invoke(world, bench, "commit-stage1"), (0, b"", b""))
+                self.assertEqual(self.invoke(world, bench, "preflight", "guard_battery_observations"), (0, b"", b""))
+                self.assert_fresh(world, bench)
+
     def test_v10_metadata_extension_faults_refuse_at_every_entry_point(self):
         scaffold = self.stage_scaffold("v10-extension-scaffold")
 
@@ -917,6 +1021,8 @@ class LookPathFollowupTests(TestCase):
             if isinstance(schema, blind.TaggedFields):
                 name, fields = next(iter(schema.fields.items()))
                 return {**sample(fields), schema.tag: name}
+            if isinstance(schema, blind.DependentRecord):
+                return {**sample(dict(schema)), schema.parameter: 1}
             if isinstance(schema, dict):
                 return {key: sample(value) for key, value in schema.items()}
             if isinstance(schema, list):
@@ -925,7 +1031,7 @@ class LookPathFollowupTests(TestCase):
                 return {}
             if schema is blind.EMPTY_ARRAY:
                 return []
-            if schema is blind.BOOLEAN:
+            if schema in (blind.BOOLEAN, blind.OPAQUE_BOOLEAN):
                 return True
             if schema in (blind.STRING, blind.OPAQUE_STRING, blind.OPAQUE_NONBLANK_STRING,
                           blind.OPAQUE_STRING_OR_INTEGER):

@@ -19,8 +19,8 @@ from .custody_pins import PinRefusal, safe_relative
 from .description_inputs import PinnedInput
 from .qualification_manifest import _decode
 from .controls_time_fields import (
-    BOOLEAN, EMPTY_ARRAY, INT64, INTEGER, NUMBER, OPAQUE_FINITE_NUMBER, OPAQUE_INTEGER, OPAQUE_NONNEGATIVE_INTEGER,
-    OPAQUE_STRING, STRING,
+    BOOLEAN, EMPTY_ARRAY, INT64, INTEGER, NUMBER, OPAQUE_BOOLEAN, OPAQUE_FINITE_NUMBER, OPAQUE_INTEGER,
+    OPAQUE_NONNEGATIVE_INTEGER, OPAQUE_STRING, STRING,
     DigestFields, Nullable, RecordFields, RequiredRecordFields, TaggedFields, TimeFieldError, WireRecord, project_json,
 )
 
@@ -80,10 +80,10 @@ RESULT_OPTIONAL = {
     "decode_cap_reached": BOOLEAN, "episode_flags": [OPAQUE_STRING], "incomplete_reasons": [OPAQUE_STRING],
     "ac_powermode": Nullable(AC_POWERMODE), "quiet_spans_ns": [[INT64]], "g0_shape": OPAQUE_STRING,
     "g0_reference_source": Nullable(OPAQUE_STRING), "os_level_max": Nullable(OPAQUE_INTEGER),
-    "pm_nominal": Nullable(BOOLEAN),
+    "pm_nominal": Nullable(OPAQUE_BOOLEAN),
 }
 BATTERY_SAMPLE = RequiredRecordFields(epoch_s=OPAQUE_FINITE_NUMBER, soc_pct=OPAQUE_INTEGER,
-                                      state=Nullable(OPAQUE_STRING), ac=BOOLEAN, raw=OPAQUE_STRING)
+                                      state=Nullable(OPAQUE_STRING), ac=OPAQUE_BOOLEAN, raw=OPAQUE_STRING)
 BATTERY_RESULT = RequiredRecordFields(
     samples=OPAQUE_INTEGER, valid_samples=OPAQUE_INTEGER, drain_pct_per_h=Nullable(OPAQUE_FINITE_NUMBER),
     drain_unavailable_reason=Nullable(OPAQUE_STRING),

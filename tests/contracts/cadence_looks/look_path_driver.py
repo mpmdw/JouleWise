@@ -300,6 +300,26 @@ def run(operation, world, bench, fault):
         json.loads, fields._convert = guarded_loads, guarded_convert
         inputs.project_json = reader.project_json = guarded_project
 
+    if fault == "guard_battery_observations":
+        original_project = reader.project_json
+
+        def guarded_battery(raw, projection, **kwargs):
+            view = original_project(raw, projection, **kwargs)
+            if projection is reader.METADATA_FIELDS and "battery_float" in view:
+                for row in (view["battery_float"]["pre"], view["battery_float"]["post"]):
+                    assert row is None or all(row[key] is False for key in (
+                        "is_charging", "external_connected", "fully_charged", "passed",
+                    )), "an observed boolean entered the blind projection"
+            if projection is inputs.RUNTIME_RESULT_FIELDS and "battery" in view:
+                for key in ("first", "last"):
+                    row = view["battery"][key]
+                    assert row is None or row["ac"] is False, "an observed AC bit entered the blind projection"
+                nominal = view.get("pm_nominal")
+                assert nominal is False or nominal is None, "an observed thermal bit entered the blind projection"
+            return view
+
+        inputs.project_json = reader.project_json = guarded_battery
+
     if operation == "project":
         authority = Authority(Book(repo))
         binding, source, _ = worker._binding(authority, private)
