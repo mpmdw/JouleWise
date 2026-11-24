@@ -380,3 +380,24 @@ Local checks used Python 3.13 under `taskpolicy -c utility` and synthetic inputs
 `RUN_STATE.md` and `TASK_QUEUE.md` retain their PR-base blobs. The wide audit's MED and LOW items remain with the lead for subsequent work. The next review should use the pushed head and the round-two synthetic regressions.
 
 The first hosted run exposed an older interior-only worker fixture that expected the first-observed counter to govern at the second window. The fixture now checks the flag supported by the complete 30 s table, including when the printed start predates that table.
+
+## 2026-11-23 wide-audit round 3 repair for PR #824
+
+The round-two confirmation audit of `52805409d87957cf338d035f26de5b8e152cbf1a` blocked on one HIGH and one LOW. Both reproductions were rerun on that head before the repair. They matched the audit's outcomes case for case.
+
+| Finding | Regression | Result |
+| --- | --- | --- |
+| HIGH: a worker born at 46.1 s printed start 46 s. The 61 s read proved a zero opening at 46.000000 s. The wall clock then gained 150 µs before the 76 s closing read, which converted the start again to 45.999850 s and dropped the 30.000150 s span. 1.50 CPU-s published in report and inventory mode, and so did 1.51 CPU-s with a 0.5 s accounting read. | `test_audit_r3_wall_gain_after_a_birth_is_listed_keeps_its_opening` (52 runs: both reproductions, both modes) and `test_a_wall_step_after_an_opening_is_proven_can_only_add_flags` (1,000 runs) | PASS |
+| LOW: the advisory forecast read `04:45:00 -0800` as UTC. | `test_softwareupdate_forecast_accepts_whitespace_before_the_offset` | PASS |
+
+The repair fixes the class. A zero-counter opening proven for a process identity is a monotonic instant, and no later read recomputes or discards it. A sampled absence was already the read's own midpoint. A printed start second is now converted once by each series read that lists the identity, using that read's wall offset, and the conversion is kept. The exact check at a closing read uses the latest opening proven by then that is not after the read. A later wall step, gain or loss, can only add an opening, so it can only make the verdict stricter. Openings more than 30 s before the last judged read are dropped, because no later closing read can use them. Each rule window converts the start once, with the wall offset of the window's first read that lists the identity, and no later read recomputes it. Identities present at the series' first read keep their first-observed baseline.
+
+The forecast accepts whitespace between the seconds and an explicit offset. Unzoned lines still read as UTC, as documented.
+
+The property sweep's expectation uses only true times. It crosses four opening kinds with five daemon cadences, two sizes, thirteen wall steps and two step positions. The opening kinds are a resident sample pair, a sampled absence, a PID held by another process, and a printed start with the last absence 30.1 s before closing. The cadences are 0.5, 2, 7.5, 15 and 30 s. The sizes are 1.49 and 1.50 CPU-s. The wall steps are none, ±1 µs, ±150 µs, ±10 ms, ±0.49 s, ±0.51 s and ±2 s. The step falls just after the proving read or just before the closing read. With a stable clock, the exact windows equal the expectation and the verdict matches it.
+
+After a step, every expected window is still reported at its closing read. Any added window is a printed start dated later by at most the loss. A step above 0.5 s withholds the run with a clock flag. On `52805409d`'s `r0_host.py`, the sweep failed 60 subtests. All 60 were printed-start openings at 1.50 CPU-s under a gain, at every magnitude, cadence and position. The ported reproductions failed 14 subtests, and the forecast test failed for three spaced stamps.
+
+Local checks used Python 3.13 under `taskpolicy -c utility`, `TZ=UTC` and synthetic inputs. The focused run covered `tests.align.test_r0_host` (151 tests, one native-capture skip), the sweep, `tests.align.test_r0_checks` and `tests.hazards.test_contention` (86 tests, three live skips). The census fault matrix test and frozen v3 run in hosted CI, per the lead's test budget. Frozen v3 remains byte-identical at SHA-256 `afd360c29d390f7d39400e1363a25add5c13ace71bca55c80d11ec0ceb4e5009`. Under a local `TZ=America/Los_Angeles`, four `R0QuietIntervalTest` cases fail identically with and without this repair. Their fixture builds its wall clock from a naive local time, and they pass under UTC. They were left unchanged.
+
+`RUN_STATE.md` and `TASK_QUEUE.md` retain their PR-base blobs. The remaining MED and LOW items stay with the lead.

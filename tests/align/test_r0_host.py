@@ -639,6 +639,22 @@ class R0HostTest(unittest.TestCase):
                                                           tail_bytes=len(scan) + 100)["last_finished"],
                              "2026-11-07T12:45:00+00:00")
 
+    def test_softwareupdate_forecast_accepts_whitespace_before_the_offset(self):
+        # Audit r3 compare_forecast.py: "04:45:00 -0800" was read as UTC and
+        # forecast 16:45 UTC instead of 18:45 UTC.
+        from datetime import datetime
+        start, deadline = datetime(2026, 11, 7, 6, 0), datetime(2026, 11, 7, 20, 0)
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "install.log"
+            for stamp in ("2026-11-07 04:45:00-0800", "2026-11-07 04:45:00 -0800", "2026-11-07 04:45:00  -08:00",
+                          "2026-11-07T04:45:00\t-08", "2026-11-07 12:45:00 Z", "2026-11-07 12:45:00 +0000"):
+                with self.subTest(stamp=stamp):
+                    log.write_text(f"{stamp} host softwareupdated[1635]: softwareupdated: Posting "
+                                   "com.apple.softwareupdate.AutoBackgroundScanFinished notification\n")
+                    result = softwareupdate_scan_forecast(start, deadline, log_path=log)
+                    self.assertEqual((result["status"], result["last_finished"], result["predicted"]),
+                                     ("forecast", "2026-11-07T12:45:00+00:00", ["2026-11-07T18:45:00+00:00"]))
+
     def test_smc_receipt_reads_per_phase_jitter_and_refuses_actual_hole(self):
         for hole in (False, True):
             with self.subTest(hole=hole), tempfile.TemporaryDirectory() as tmp:
@@ -3078,6 +3094,181 @@ class R0FinalVerdictTest(unittest.TestCase):
                     self.assertTrue(all(flag.get("kind") is None for flag in model.guard.contention_flags), result)
                 else:
                     self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+
+    def birth_slew_fixture(self, size, shift_ns, ticks, *, slow_read_at=None):
+        """Audit r3 birth_slew.py. A worker born at 46.1 s prints start 46 s;
+        the 45.5 s read proves it absent and the 61 s read lists it first.
+        The wall clock gains ``shift_ns`` linearly between 61 and 76 s. With
+        ``slow_read_at`` that accounting read lasts 0.5 s."""
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        def rows(now):
+            if now >= 46.1:
+                early = min(1, max(0, (now - 50) / 4))
+                late = min(1, max(0, (now - 68) / 4))
+                yield (fixture.PID, 46, round(60 * early + (size - 60) * late), fixture.WORKER,
+                       "/fixture/mdworker_shared")
+
+        class Slewed(self.series_fixture(ticks, rows)):
+            def wall_ns(self):
+                portion = min(1, max(0, (self.now - 61) / 15))
+                return fixture.EPOCH * 10**9 + round(self.now * 10**9) + round(shift_ns * portion)
+
+            def run(self, argv, **kwargs):
+                result = super().run(argv, **kwargs)
+                if tuple(argv) == contention.PS_ARGV and self.now == slow_read_at:
+                    self.now += 0.5
+                return result
+
+        return Slewed
+
+    def test_audit_r3_wall_gain_after_a_birth_is_listed_keeps_its_opening(self):
+        # Audit r3 birth_slew.py and birth_slew_timed.py. 52805409d converted
+        # the printed start again at the 76 s closing read; after a 150 us
+        # gain that opening moved to 45.999850 s, the 30.000150 s span was
+        # dropped, and 1.50 (and, with the half-second read, 1.51) CPU-s
+        # published in report and inventory mode.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        plain = [(mode, shift, size, end, None) for mode in ("host", "inventory")
+                 for shift in (0, 150_000, -150_000) for size in (149, 150, 151) for end in (76, 107)]
+        timed = [(mode, shift, size, 107, 75.75) for mode in ("host", "inventory")
+                 for shift in (0, 150_000) for size in (149, 150, 151, 152)]
+        for mode, shift, size, end, slow_read_at in plain + timed:
+            ticks = [45.5, 61.0, 75.75 if slow_read_at else 76.0, 91.5, 107.0]
+            name = f"{mode}_{shift}_{size}_{end}" + ("_timed" if slow_read_at else "")
+            with self.subTest(case=name):
+                result, model = self.run_model(
+                    fixture.Case(name, end=end, schedule=mode),
+                    self.birth_slew_fixture(size, shift, ticks, slow_read_at=slow_read_at))
+                if size == 149:
+                    self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+                    continue
+                self.assertEqual((result["rc"], result["published"]), (2, False), result)
+                # The receipt keeps the printed start second's proof exactly
+                # 30 s before the closing midpoint, even where a rule window
+                # flagged the worker first. A loss converts it later at 76 s,
+                # never earlier; a gain cannot move it.
+                proofs = [round(window["start_monotonic_s"] * 1e9)
+                          for receipt in self.series_receipts(model.guard)
+                          for window in receipt.get("exact_windows", ())
+                          if window["end_monotonic_s"] == 76.0
+                          and any(row["basis"] == "CPU since the printed start second" for row in window["busy"])]
+                self.assertTrue(proofs, model.guard.contention_flags)
+                for start_ns in proofs:
+                    self.assertGreaterEqual(start_ns, 46_000_000_000)
+                    self.assertLessEqual(start_ns, 46_000_000_000 + max(0, -shift))
+                if size == 150 and not slow_read_at:
+                    # At the tie no rule window flags: the exact check alone refuses.
+                    self.assertTrue(any(flag.get("kind") == "exact_30s" for flag in model.guard.contention_flags),
+                                    model.guard.contention_flags)
+                if mode == "host":
+                    self.assertEqual(result["recorded"], result["guard_count"])
+
+    def test_a_wall_step_after_an_opening_is_proven_can_only_add_flags(self):
+        # Lead r3 property: wall-step sign x magnitude (1 us to 2 s) x daemon
+        # cadence (0.5 to 30 s) x opening kind x position after the proof.
+        # The counter reaches SIZE 0.05 s before the closing read C (no read
+        # lies in between), so the opening exactly 30 s before C decides the
+        # 1.50 CPU-s tie and every rule window spans at least 30 s (no rule
+        # flag at 1.49 or 1.50). The expectation uses true times only.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        # kind: grid anchor, closing C, birth, printed start second, proof read.
+        # resident: sample pair. absence/reused: the 45.5 s read lists no such
+        # identity (reused: another process holds the PID). birth: the last
+        # absence (45.9 s) is 30.1 s before C; the printed 46 s is exactly 30 s.
+        kinds = {"resident": (46.0, 76.0, None, None), "absence": (45.5, 75.5, 45.8, 45),
+                 "reused": (45.5, 75.5, 45.8, 45), "birth": (45.9, 76.0, 46.1, 46)}
+        steps = [0] + [sign * magnitude for magnitude in (1_000, 150_000, 10_000_000, 490_000_000,
+                                                          510_000_000, 2_000_000_000) for sign in (1, -1)]
+        dwell_ns = 30 * 10**9
+
+        def ns(seconds):
+            return round(seconds * 1e9)  # the fixture's monotonic stamps
+
+        for kind, (anchor, close, birth, printed) in kinds.items():
+            jump = close - 0.05
+            for cadence in (0.5, 2, 7.5, 15, 30):
+                # From the opening read (15.5 to 16 s after startup's last) to
+                # at least one later closing read, so later reads judge too.
+                grid = {round(anchor + cadence * k, 3) for k in range(200)}
+                ticks = sorted({t for t in grid if t <= close + max(cadence, 3) + 1} | {close})
+                samples = [0, 15, 30, *ticks]
+                self.assertFalse([t for t in samples if jump <= t < close])
+                proof = anchor if kind != "birth" else next(t for t in ticks if t >= birth)
+                for size in (149, 150):
+                    def counter(now, size=size, birth=birth, jump=jump):
+                        if birth is None:
+                            return 230 + (size if now >= jump else 0)  # resident with earlier CPU
+                        if now < birth:
+                            return None
+                        # 0.01 CPU-s at birth (under the limit even 0.4 s
+                        # after the start second), the rest at the jump.
+                        return size if now >= jump else 1
+
+                    def rows(now, counter=counter, kind=kind):
+                        cpu = counter(now)
+                        if cpu is not None:
+                            yield (fixture.PID, -100 if kind == "resident" else printed, cpu, fixture.WORKER,
+                                   "/fixture/mdworker_shared")
+                        elif kind == "reused":
+                            yield fixture.PID, -100, 7, "ordinary", "/fixture/ordinary"
+
+                    expected = set()
+                    for j, stop in enumerate(samples):
+                        cpu = counter(stop)
+                        if cpu is None:
+                            continue
+                        openings = [(ns(at), counter(at) or 0) for at in samples[:j]]
+                        if printed is not None:
+                            openings.append((printed * 10**9, 0))
+                        expected.update((at, ns(stop)) for at, base in openings
+                                        if 0 <= ns(stop) - at <= dwell_ns and cpu - base >= 150)
+                    self.assertEqual(bool(expected), size == 150)
+                    for step_ns in steps:
+                        for position, step_at in (("early", proof + 0.01), ("late", close - 0.01)):
+                            if step_ns == 0 and position == "late":
+                                continue
+
+                            class Stepped(self.series_fixture(ticks, rows)):
+                                def wall_ns(self, step_ns=step_ns, step_at=step_at):
+                                    return super().wall_ns() + (step_ns if self.now >= step_at else 0)
+
+                            label = dict(kind=kind, cadence=cadence, size=size, step_ns=step_ns, position=position)
+                            with self.subTest(**label):
+                                result, model = self.run_model(
+                                    fixture.Case(f"{kind}_{cadence}_{size}_{step_ns}_{position}", end=ticks[-1]),
+                                    Stepped)
+                                exact = {(ns(w["start_monotonic_s"]), ns(w["end_monotonic_s"]))
+                                         for receipt in self.series_receipts(model.guard)
+                                         for w in receipt.get("exact_windows", ())
+                                         if any(row["pid"] == fixture.PID for row in w["busy"])}
+                                later_ns = max(0, -step_ns)
+                                # Never discarded: each expected proof is reported
+                                # at its closing, a printed start at most |loss| later.
+                                for at, stop in expected:
+                                    self.assertTrue(any(s == stop and at <= a <= at + later_ns for a, s in exact),
+                                                    (at, stop, sorted(exact)))
+                                # Only conservative additions: a loss can date a
+                                # printed start later by at most its size.
+                                for at, stop in exact - expected:
+                                    self.assertIsNotNone(printed, (at, stop))
+                                    self.assertTrue(printed * 10**9 < at <= printed * 10**9 + later_ns, (at, stop))
+                                    self.assertLessEqual(stop - at, dwell_ns)
+                                clock = [f for f in model.guard.contention_flags if f.get("kind") == "wall_clock"]
+                                if abs(step_ns) > 500_000_000:
+                                    self.assertEqual((result["rc"], result["published"]), (2, False), result)
+                                    self.assertTrue(clock, result)
+                                    continue
+                                self.assertEqual(clock, [], result)
+                                if step_ns == 0:
+                                    self.assertEqual(exact, expected, result)
+                                if exact:
+                                    self.assertEqual((result["rc"], result["published"]), (2, False), result)
+                                else:
+                                    self.assertEqual((result["rc"], result["published"], result["flags"]),
+                                                     (0, True, []), result)
 
 
 class R0AccountingTimezoneTest(unittest.TestCase):

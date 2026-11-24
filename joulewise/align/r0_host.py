@@ -32,6 +32,13 @@ measured by the read that listed it. A window in which the wall and
 monotonic clocks move apart by more than WALL_DIVERGENCE_LIMIT_NS is
 flagged, which withholds publication, so no unflagged window relies on a
 conversion across a wall step.
+
+A zero-counter opening, once a series read proves it, is a monotonic
+instant and stays proven. A sampled absence is the read's own midpoint. A
+printed start second is converted once by each read that lists the process,
+and the exact check at a later read uses every conversion proven by then.
+A wall step after a proof, gain or loss, therefore never moves or removes an
+opening. It can only add one, so it can only make the verdict stricter.
 """
 from __future__ import annotations
 
@@ -256,17 +263,28 @@ def _exact_window_evidence(earlier, later):
     return measured, absent
 
 
-def _birth_window_evidence(current, initial_identities, dwell_ns):
-    """The printed start second supplies a zero counter even between samples."""
+def _birth_window_evidence(current, births, dwell_ns):
+    """The printed start second supplies a zero counter even between samples.
+
+    ``births`` maps an identity absent from the series' first read to its
+    proven openings: monotonic ns -> midpoint of the first series read whose
+    own wall offset converted the printed start to that instant. ``current``
+    can use every opening proven by then, so a wall step after a proof (gain
+    or loss) adds an opening and never moves or removes one. The latest
+    opening not after ``current`` gives the shortest, most conservative span.
+    """
     windows = {}
+    closing_ns = current.midpoint_ns
     for identity, row in current.rows.items():
-        if identity in initial_identities or not row["contaminant"]:
+        if not row["contaminant"]:
             continue
-        born = _birth_floor_ns(row, current)
-        if 0 <= current.midpoint_ns - born <= dwell_ns:
-            evidence = _exact_cpu_evidence(identity, row, 0, "CPU since the printed start second")
-            if evidence:
-                windows.setdefault(born, []).append(evidence)
+        proven = [born for born, proved_ns in births.get(identity, {}).items()
+                  if proved_ns <= closing_ns and born <= closing_ns]
+        if not proven or closing_ns - max(proven) > dwell_ns:
+            continue
+        evidence = _exact_cpu_evidence(identity, row, 0, "CPU since the printed start second")
+        if evidence:
+            windows.setdefault(max(proven), []).append(evidence)
     return windows.items()
 
 
@@ -456,6 +474,10 @@ class QuietGuard:
         self._cpu_probe_lock = threading.Lock()
         self._snapshots = []
         self._initial_identities = frozenset()
+        # (pid, start) -> {opening monotonic ns: midpoint of the series read
+        # that proved it}, for identities absent from the series' first read.
+        # An entry is dropped only once no later closing read can use it.
+        self._birth_openings = {}
         self._admission_snapshots = []
         self._admission_previous_over = {}
         self._process_observations = []
@@ -591,6 +613,13 @@ class QuietGuard:
                             "contaminant": rows[identity]["contaminant"] or previous.rows[identity]["contaminant"]})
             else:
                 self._initial_identities = frozenset(rows)
+            # This read converts each newcomer's printed start second with
+            # its own wall offset. Keep that opening in monotonic time. A
+            # later read's different offset adds its own opening beside it.
+            for identity, row in rows.items():
+                if identity not in self._initial_identities:
+                    self._birth_openings.setdefault(identity, {}).setdefault(
+                        _birth_floor_ns(row, snapshot), snapshot.midpoint_ns)
             self._pending["wall_clock_backwards"] |= backwards
             self._snapshots.append(snapshot)
             if census_summary is not None:
@@ -894,7 +923,7 @@ class QuietGuard:
             cutoff = min(self._snapshots[0].started.monotonic_ns, samples[0].started.monotonic_ns)
             self._process_observations = [read for read in self._process_observations if _read_finished_ns(read) >= cutoff]
 
-    def _exact_windows(self, receipt, snapshots, end, dwell_ns, flagged):
+    def _exact_windows(self, receipt, snapshots, births, end, dwell_ns, flagged):
         current = snapshots[end]
         closing_ns = current.midpoint_ns
         zero_windows = []
@@ -926,7 +955,7 @@ class QuietGuard:
                 busy.extend(measured)
             if absent:
                 zero_windows.append((opening.midpoint_ns, absent, None))
-        for opening_ns, evidence in _birth_window_evidence(current, self._initial_identities, dwell_ns):
+        for opening_ns, evidence in _birth_window_evidence(current, births, dwell_ns):
             sampled_ns = next((sample.midpoint_ns for sample in reversed(snapshots[:end])
                                if sample.midpoint_ns <= opening_ns), snapshots[0].midpoint_ns)
             zero_windows.append((opening_ns, evidence, sampled_ns))
@@ -948,6 +977,7 @@ class QuietGuard:
         with self._snapshot_lock:
             snapshots = list(self._snapshots)
             observations = list(self._process_observations)
+            births = {identity: dict(proofs) for identity, proofs in self._birth_openings.items()}
             pending, self._pending = self._pending, self._empty_pending()
             background_failure = self._background_failure
         if pending["census"]:
@@ -956,9 +986,10 @@ class QuietGuard:
             receipt.setdefault("background_census", []).extend(pending["census"])
         if pending["wall_clock_backwards"]:
             receipt["wall_clock_backwards"] = True
-        opening = None
+        opening = closed_ns = None
         try:
             for end in range(self._judged_end + 1, len(snapshots)):
+                closed_ns = snapshots[end].midpoint_ns
                 # The newest opening at least INTERVAL_S before this end: the
                 # window slides by one snapshot, so its opening never passes
                 # the previous end and every stretch is judged.
@@ -982,7 +1013,7 @@ class QuietGuard:
                         flagged.update((row["pid"], row["start"]) for row in endpoint_busy + lifetime_busy)
                 # The exact check at this sample, against every earlier sample
                 # at most INTERVAL_S before it and the printed start seconds.
-                busy.extend(self._exact_windows(receipt, snapshots, end, dwell_ns, flagged))
+                busy.extend(self._exact_windows(receipt, snapshots, births, end, dwell_ns, flagged))
                 if long_interval is not None:
                     receipt["long_interval"] = True
                     raise Refused(
@@ -1008,6 +1039,16 @@ class QuietGuard:
             with self._snapshot_lock:
                 del self._snapshots[:opening]
             self._judged_end -= opening
+        if closed_ns is not None:
+            # Every later closing read ends after this one, so an opening
+            # more than INTERVAL_S before it can never qualify again.
+            with self._snapshot_lock:
+                for identity, proofs in list(self._birth_openings.items()):
+                    kept = {born: at for born, at in proofs.items() if closed_ns - born <= dwell_ns}
+                    if kept:
+                        self._birth_openings[identity] = kept
+                    else:
+                        del self._birth_openings[identity]
         # Completed windows precede a later failed census or stale tail.
         if background_failure:
             # This copy belongs to the snapshots judged above. A later latch
@@ -1176,17 +1217,17 @@ def softwareupdate_scan_forecast(start, deadline, *, log_path=Path("/var/log/ins
         if deadline < start:
             raise ValueError("deadline precedes start")
         latest = None
+        # An explicit offset may follow the seconds directly or after spaces.
         pattern = re.compile(
-            r"(?P<stamp>\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d(?:Z|[+-]\d\d(?::?\d\d)?)?"
-            r"|[A-Z][a-z]{2}\s+\d{1,2}\s+\d\d:\d\d:\d\d).*AutoBackgroundScanFinished")
+            r"(?:(?P<iso>\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d)(?:\s*(?P<zone>Z|[+-]\d\d(?::?\d\d)?))?"
+            r"|(?P<syslog>[A-Z][a-z]{2}\s+\d{1,2}\s+\d\d:\d\d:\d\d)).*AutoBackgroundScanFinished")
         for line in _log_tail(log_path, tail_bytes).splitlines():
             match = pattern.search(line)
             if not match:
                 continue
-            stamp = match.group("stamp")
-            parsed = utc(datetime.fromisoformat(stamp)
-                      if stamp[0].isdigit() else
-                      datetime.strptime(f"{start.year} {stamp}", "%Y %b %d %H:%M:%S"))
+            parsed = utc(datetime.fromisoformat(match["iso"] + (match["zone"] or ""))
+                         if match["iso"] else
+                         datetime.strptime(f"{start.year} {match['syslog']}", "%Y %b %d %H:%M:%S"))
             if latest is None or parsed > latest:
                 latest = parsed
         window = [start.isoformat(), deadline.isoformat()]
