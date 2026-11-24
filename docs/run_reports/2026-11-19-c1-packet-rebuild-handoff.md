@@ -1795,3 +1795,117 @@ both through one `committed_d134_digest` helper that uses
 `init_git_fixture`. The maintenance module and both oracle tests pass
 locally. The run's other shards had passed or were still running when the
 push cancelled it.
+
+That round's final CI (`45393337179`, on `f00464dcc`) passed 20 of 21 jobs. Shard 12's review-coverage check
+listed GitHub's synthetic merge of the PR with the moved base. Both sides
+touch review-required paths, so that merge differs from both parents and
+no row can name it in advance. The lead chose L4 below to resolve it.
+
+## Round 18 · lead class closure (round 10): one pack admission at every stage
+
+Audit 9 checked head `f00464dcc` and verified a HIGH. With the first
+`episodes-a` dispatch config staged as a link to its identical file under
+`stages/episodes-a`, build and install exited 0, direct arm admitted, and
+both host checkpoints were reached. The campaign then refused with
+`launch_binding_mismatch`. I reran the audit's reproduction first and
+got the same results.
+
+The lead ruled that rounds 8 and 9 are one class: admission that is
+inconsistent across stages. The ruling set four items, L1 to L4.
+
+**L4 first: the base merged in.** `909465f32` is an ordinary `--no-ff`
+merge of `ops/2026-11-11-w1-presign` (`ecf718b4d`) into this branch, not a
+force push. Fable 5.2 executed a cold, non-author review of it and
+returned ADMIT. The merge tree equals `git merge-tree` of its parents:
+- 44 PR-only and 35 base-only paths are byte-identical to their side;
+- the two both-changed paths are exact 3-way merges;
+- the ledger is the exact 80-row union;
+- the six base-side test modules pass, 102 tests.
+
+The paper is
+`docs/align/reviews/2026-11-24-c1-r18-merge-fable-executing-review.md`
+(`5034e072…`). Its row was added in `afe82aca9`, as for `c84df94bf`. A
+local rerun of the shard 12 coverage listing gives 51 commits since
+`fda9b380d` on review-required paths, all reviewed. The coverage check
+itself is unchanged.
+
+The spec was committed first, as `33584f30e`. On the merged code every
+mutation was admitted by at least one stage. The link outside the roots
+and the byte change were refused at build but admitted by the launch
+binding.
+
+| Item | Commit | Named regression | Result |
+| --- | --- | --- | --- |
+| L1/L2: round 9's dispatched-config link, now refused at build as `pack_inadmissible`, and refused again by the launch binding | `452994f2e` | `test_r18_pack_admission_is_the_same_at_every_stage` (round 9 case) | PASS |
+| L1: round 8's directory link, now refused at the first stage | `452994f2e` | `test_audit8_directory_link_in_the_pack_refuses_at_build` | PASS |
+| L3: the matrix and the copied control. The mutations are a file link and a directory link inside the pack, a link outside the roots, a link to an identical repository file, a stray, a mode change, a byte change, a FIFO and the round 8 and 9 reproductions. Each is refused at build, at install and direct arm when a packet exists, and by the launch binding, with no host checkpoint. The control is admitted end to end and by the launch binding. | `452994f2e` | `test_r18_pack_admission_is_the_same_at_every_stage` | PASS |
+| L2: a stray at finalization, now refused at build | `452994f2e` | `test_c2a_finalizer_cannot_pin_a_stray_present_at_finalization` | PASS |
+| L4: review row for the merge | `afe82aca9` | the shard 12 coverage listing, reproduced locally | 51/51 reviewed |
+
+- **L1 and L2: one predicate.** `window_lineage.admit_pack` is it.
+  - `_pack_files` walks the pack's physical directory without following
+    links. Any link (in or out of the roots, to a file or a directory) and
+    any non-regular entry refuses.
+  - Next come the pinned plan tree and its config inventory, then each
+    dispatched config (inside the pack, regular, its committed inventory
+    row).
+  - Last is the whole-pack D-134 digest (`pack_tree_digest`), which must
+    equal `pack_sha256`. That covers strays, missing files and byte or
+    mode changes.
+  - Every refusal is `pack_inadmissible`.
+- **Who calls it.** C1 prepare records `pack_tree_digest`. C1 preflight
+  calls `admit_pack` after its other checks, on the configs the runner
+  hands the launch binding, so build, install and direct arm all run it.
+  `authenticate_campaign` calls the same predicate whenever the lineage
+  records a pack digest, which C1 preflight guarantees, and keeps no pack
+  check of its own on that path. Lineages without a digest keep the old
+  path unchanged. Those are non-C1 packs, whose measurement views are
+  built from links, so the walk would refuse them all. The round 17
+  verified-walk digest is gone.
+- **Two refusals keep older reasons.** A link outside the roots and a
+  byte change are refused at build by the finalizer's existing fence and
+  pin checks ("escapes R/S", "prepared output changed"). At install,
+  frozen rows require the consumers' existing walk messages. Both are
+  still refused at the first stage, and the launch binding gives
+  `pack_inadmissible`.
+- **Spare inventory.** C1 staging relocated spare configs into the pack
+  but never inventoried them. A spare retry dispatches its spare set
+  through the same launch binding, so every spare retry would have been
+  refused at launch. Staging now inventories members and spares by one
+  rule, and preflight admits exactly what launch admits.
+- **Existing tests updated.**
+  - `test_window_lineage`: the controller route now refuses a flipped
+    config byte at its pre-slot launch binding, as `pack_inadmissible`,
+    before the later "revision_five" calibration match. The verdict is
+    unchanged, still before any bundle directory.
+  - Round 16's pack-digest cases and audit 7's stale digest expect
+    `pack_inadmissible`.
+  - The D-134 oracle test shows that the link form has no pack digest.
+
+**NEEDS_SPEC: L1 against the frozen tape.** The frozen row
+`staging-link-and-copy/link` (README: "Present the genuine kit via
+in-view links and then via equal copies. Both admit.") stages the pack's
+`collection_plan.json` as a link to the identical repository file. L1
+refuses every link in a pack, so that row is now refused at build.
+Exactly one of the 94 decisions differs, decision 90:
+- observed: `{"arm":"refuse","build":2,"case":"staging-link-and-copy/link","cli":2,"host_arm":0,"host_cli":0}`;
+- expected: admit end to end.
+
+The frozen runner stops at the first difference, so the local replay
+checked decisions 1 to 89 and stopped at 90. A scratch comparison of
+decisions 90 to 94, using the frozen runner's own `integrations` and
+`run_integration` and changing no frozen file, shows the other four
+byte-identical. The nine frozen files are unchanged. The lead can
+choose either way:
+- re-freeze that row as refused at build, a tape change;
+- narrow L1 to admit an in-view link to an identical repository file.
+  That would also re-admit round 8's directory link, which L1 reverses.
+
+Local checks, within the lead's test budget:
+- All 49 non-frozen `test_c1_closure` tests pass, in three processes.
+- The replay and the tail comparison together show only the one row above.
+- `test_window_lineage` (52), `test_bytes_h_session` (36),
+  `test_align_pilot_session` (16) and `test_run_campaign_max_blocks` (22)
+  pass.
+- `tests.align.test_v4_next_arm_packet` (69), `tests.align.test_v4_series_e2e` (11) and `tests.test_arm_readiness` (75) pass at `afe82aca9`.
+- The census is clean, with seven new predicate rows.

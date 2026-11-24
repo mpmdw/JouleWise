@@ -249,13 +249,23 @@ state at `--series-commit`, with:
     renders them;
   - the bracket session, read through the driver's own `lineage_identity`;
   - the pack id and the plan tree digest;
-  - `pack_sha256`, which `staged_pack_sha256` recomputes from the staged
-    pack bytes with D-134's committed-pack framing. It walks the pack with
-    the consumers' own verified walk (`Roots.walk`). That walk follows a
-    file or directory link inside the verified roots and refuses one that
-    leaves them, and it skips an unpinned staged name, which the consumers
-    refuse as unlisted. C1 prepare records the same value, so a stale or
-    missing digest refuses;
+  - `pack_sha256`, through the one pack predicate,
+    `window_lineage.admit_pack`. A pack holds only regular files and
+    directories. A link of any kind refuses: inside or outside the
+    verified roots, to a file or to a directory. So does any other
+    non-regular entry, such as a FIFO. Then:
+    - the plan tree must be the pinned one;
+    - each dispatched config must be a regular pack file whose bytes are its
+      committed inventory row;
+    - the pack's D-134 digest (`pack_tree_digest`: paths, modes, lengths
+      and SHA-256s) must equal `pack_sha256`, so a stray, a missing file or
+      a byte or mode change refuses.
+
+    C1 prepare records that digest. Build, install and direct arm all run
+    the predicate through preflight, and the launch binding
+    (`authenticate_campaign`) runs the same call on the lineage's copy, so
+    the earliest stage refuses, always as `pack_inadmissible`. Spare sets
+    are inventoried like members, since a spare retry dispatches them;
   - `repo_head` and `measurement_head`, as the execution commit;
   - the runs roots, as the chain's bindings;
   - the attempt, window plan id and custody root, as the prepared session
