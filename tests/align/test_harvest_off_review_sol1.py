@@ -119,7 +119,8 @@ class CustodyWitnesses(ReviewBase):
             if packed != 0:
                 return
             source.rename(self.root / 'kept')
-            restored = runner.main(['unpack', '--offload', str(self.root / 'offload')])
+            restored = runner.main(['unpack', '--offload', str(self.root / 'offload'), '--window-id', 'W1',
+                                    '--receipt-out', str(self.root / 'receipt.json')])
         self.assertNotEqual(restored, 0, 'CLI pack and unpack both succeeded with no record binding')
 
     def test_record_bound_serial_mbp_and_pooled_air_equal_all_177_files(self):
@@ -231,8 +232,10 @@ class EligibilityWitnesses(ReviewBase):
         packet = t2.build()
         self.assertNotIn('pilot', t1.record['sources'])
         self.assertNotIn('exclusions', t1.record['sources'])
-        self.assertEqual(next(r for r in packet['series_history'] if r.get('window_id') == 'T1')['status'], 'final')
-        self.assertIs(series.bind_packet(self.root, 'T3', packet, authenticated_by_rebuild=True), packet)
+        self.assertEqual(next(r for r in packet['series_history'] if r.get('window_id') == 'T1')['status'],
+                         'provisional')
+        with self.assertRaisesRegex(ValueError, 'R17: window k final eligibility'):
+            series.bind_packet(self.root, 'T3', packet, authenticated_by_rebuild=True)
         self.assertFalse(evaluate(t2, packet)['admitted'],
                          'the arm rebuild admitted T3 while T1 and T2 are both provisional')
 

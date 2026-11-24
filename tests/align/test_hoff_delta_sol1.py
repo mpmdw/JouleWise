@@ -316,7 +316,8 @@ class FinalityWitnesses(Scratch):
             'extra_checks': {'thermal': {'model_windows': {'tiny/C1': {
                 'U1': {'status': 'pass'}, 'U2': {'status': 'pass'}, 'U3': {'status': 'pass'}}},
                 'members': [{'id': 'member', 'excluded': False, 'calibration_exclusions': []}]}}}))
-        return SimpleNamespace(session_root=self.root, pilot=None, window_id='C1')
+        return SimpleNamespace(session_root=self.root, pilot=None, window_id='C1',
+                               unpack_receipt=None, finalized_sha256=None)
 
     def test_final_command_must_refuse_an_incomplete_pilot_adjudication(self):
         args = self.final_session(status='running_off_mbp')
