@@ -1052,6 +1052,33 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+562. **Magistrate fe96d29a (headless, Opus 5.5), 2026-11-23 19:25- PST: item 561 RL-197c ledger initialization CHECK OK: sequence 1 = cq-f2-stab-15-l010-a1 (dispatch 552), ledger sha256 bebdff13...ee19, sidecar 59b01bc2...ed8a; last arm still 552; 561 CLOSED; arm nothing until the lead issues the ctl-01 pilot**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-24T20:00:00-08:00
+on_early_or_refused: Arm nothing until a lead item on main issues the ctl-01 pilot (RL-197c draft item 3); only a launcher appends to the ledger from here. If the pilot item is on main, follow it. If none is on main by this deadline (item 561's expiry), mail the lead and Ed once that the ledger has been initialized since 19:27 Monday and the Mac is idle, and ask whether to resume the item 422 stability ladder (kit 07 L001 on pin A next, rank 1 from kit 14 under item 553).
+next_observable: a lead RUN_STATE item on main issuing the ctl-01 pilot (RL-197c draft item 3) against /Users/edr/night-custody/magistrate/attempt-ledger.json (sha256 bebdff13...ee19). Quiet relaunches before then write nothing.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795490887, "number": 562, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795490887, "item": 561, "status": "CLOSED"}], "status": "ISSUED", "supersedes": []}
+```
+
+- **Spawn.** Activation fe96d29a spawned 19:25:22 PST Monday (watchdog attempt 2091, previous exit class generic_error). No notices pending, no unread mail from Ed, directive list unchanged (standing 587/422/421/417/416/408/405), no standdown request. Origin main `484e220eb` (item 561) was one ahead of the canonical root `7f6c138ab`; with no `com.joulewise.night*` or align-r0 label loaded or on disk and item 561 carrying no host hold, the canonical root was moved by `pull --ff-only` to `484e220eb` (RUN_STATE and CURRENT.json only; the resident supervisor is not stale). Record written from the clone `jw-wt/mag-be405fc9`.
+- **Last arm reconfirmed: 552** (`cq-f2-stab-15-l010-a1`). No later dispatch item on main; nothing under `/Users/edr/campaign-out` newer than its receipt except its own directory; no desk fence (`desk_fence.json` absent), so no live fence.
+- **Fresh census 19:26:54 (epoch 1795490814), the four checked flags:** host restore holds (network time Off, powermode 0, kernel frequency word 0, no High Power marker, AC, not charging, InstantAmperage 0; the receipt's restore rc 0 was verified in item 560); feeds stopped and process groups absent (no km003c_monitor/hazard_monitor/run_cadence/launch_cadence/cadence_legs_runner process, no root powermetrics, no night.lock holder, the receipt's stop lines verified in item 560); foreign processes absent (no night or align-r0 label loaded or on disk; measurement_mode verify's one FAIL is this activation's own agent processes, codex MCP adapter 15016/15020 and npm pdf server 15017, as in item 560). Free disk 175 GiB.
+- **Checkouts.** `INIT_CHECKOUT=/Users/edr/code/jw-wt/init-38e962ad` (detached, clean, `38e962ad48204698a570b811651c4d315fe5d9d1`; `scripts/init_attempt_ledger.py` sha256 `bc3319ede72c07156c51ef3288b7fab61c92328144156bb19f9c4a7090df57bb`); `CTL_CHECKOUT=/Users/edr/code/jw-wt/ctl-f45e22e4` (detached, clean, `f45e22e4efa6b48dd05f099f39eb62246e324177`, still clean after the proof); `PYTHON_BIN=/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/.venv/bin/python` (552's); `CUSTODY_ROOT=/Users/edr/night-custody/magistrate` with 552's existing `.desk-fence.lock`.
+- **Item 561 block, run once verbatim** (custody `ledger-init-fe96d29a/run-block.sh`, output `run-out.txt`): 19:27:11 (epoch 1795490831), rc 0, initializer digest equal to the file's.
+- **CHECK OK.**
+  - Ledger `/Users/edr/night-custody/magistrate/attempt-ledger.json`, 165 bytes, sha256 `bebdff138f0e47d55f984baff9feb2723955171421bfa77e529075c2b07dee19`: exactly one row, `{"span_id": "cq-f2-stab-15-l010-a1", "close_receipt": "/Users/edr/campaign-out/f2-stab-15/cq-f2-stab-15-l010-a1/runner_receipt.json", "sequence": 1}`.
+  - Sidecar `/Users/edr/night-custody/magistrate/attempt-ledger.json.first-row.json`, 589 bytes, sha256 `59b01bc296b4bf3ec2ab42bde742fcd4dd200c840957266839187a9db4b9ed8a`: ruling RL-197c, run_state_item 561, span_id and close_receipt as issued, receipt_sha256 `9cfedfdd46cbe2c59604052ece5cad443b2cd4d0bd1e2b8f22848eebd52571c8` (receipt re-hashed: unchanged), close_ns 1795463380890712000, close_proof exactly the three lines (span id, close ns, receipt path), ledger_sha256 equal to the ledger's sha256, initializer_commit `38e962ad48204698a570b811651c4d315fe5d9d1`.
+  - No staged temporary file left in the custody root; no desk fence after the run.
+- **Last arm is still 552.** Item 561 CLOSED. The lead can issue the counted ctl-01 pilot (draft item 3); per item 561's lead note the pinned planner admits a pilot t0 until 21:27:30 tonight. Only a launcher appends to the ledger from here. Arm nothing until that item is on main.
+- Directive 587 (standing): no change this activation.
+- No email: ledger initialization is not an arm, stand-down or question for Ed; the lead reads main.
+
 561. **Lead: ISSUE RL-197c ledger initialization (sequence 1) from item 560's verified close of cq-f2-stab-15-l010-a1 (dispatch 552); ctl-01 pilot follows**
 
 ```pointer
