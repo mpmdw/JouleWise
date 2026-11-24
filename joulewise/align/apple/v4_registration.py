@@ -1473,37 +1473,28 @@ def campaign_marker_refusal(measurement_root, tree):
                                  'launch_binding_mismatch after arm')
 
 
-def staged_pack_sha256(pack_root, read=None):
-    """The D-134 pack digest of the staged pack bytes this attempt launches.
+def staged_pack_sha256(roots, pins=None):
+    """The D-134 pack digest of the pack bytes this attempt launches.
 
     This is the framing of ``arm_readiness.committed_pack_tree_sha256``. Each
-    regular file under the pack is sorted by relative path and framed as its
-    path, mode (``100755`` when executable), length and SHA-256. The bytes
-    come from the pack itself, not a git object, so C1 prepare (as
-    ``pack_digest``) and preflight compute the same value. A file link
-    frames its target, which is what every consumer reads. A directory link
-    or a special entry refuses. ``read(relative)`` may supply verified bytes.
+    file is sorted by its logical path under the pack and framed as path,
+    mode, length and SHA-256. The files come from the verified walk
+    (``Roots.walk``), the walk the consumers use, so a file or directory
+    link is followed when it stays inside the verified roots and refused
+    when it leaves them. Given the staged pins, a staged name that is not
+    pinned is skipped: the consumers' own walk refuses an unlisted staged
+    file. C1 prepare (as ``pack_digest``, with no pins yet) and preflight
+    compute the same value from the same bytes.
     """
     from joulewise.arm_readiness import PACK_DIGEST_DOMAIN
 
-    root = Path(os.path.realpath(pack_root))
     entries = []
-    for parent, directories, files in os.walk(root):  # never descends through a link
-        for name in directories:
-            if os.path.islink(path := os.path.join(parent, name)):
-                raise ValueError(f'C1 pack holds a directory link: {path}')
-        for name in files:
-            path = Path(parent) / name
-            try:
-                status = path.stat()
-            except OSError as exc:
-                raise ValueError(f'C1 pack entry is unreadable: {path}: {exc}') from exc
-            if not stat.S_ISREG(status.st_mode):
-                raise ValueError(f'C1 pack holds a special entry: {path}')
-            relative = path.relative_to(root)
-            raw = read(relative) if read is not None else path.read_bytes()
-            entries.append((relative.as_posix().encode('utf-8'),
-                            b'100755' if status.st_mode & 0o111 else b'100644', raw))
+    for name, mode, path in roots.walk(roots.stage / PACK):
+        if mode == '040000':
+            continue
+        if pins is not None and (PACK / name).as_posix() not in pins:
+            continue
+        entries.append((name.encode('utf-8'), mode.encode('ascii'), path.read_bytes()))
     framed = bytearray(PACK_DIGEST_DOMAIN)
     for relative, mode, raw in sorted(entries, key=lambda entry: entry[0]):
         framed += relative + b'\0' + mode + b'\0' + str(len(raw)).encode() + b'\0' + digest(raw).encode() + b'\n'
@@ -1522,7 +1513,7 @@ def digest_fields(value, path=()):
             yield from digest_fields(child, path + (index,))
 
 
-def check_launch_records(view, tree_raw, night, state, reserved, execution_commit):
+def check_launch_records(view, tree_raw, night, state, reserved, execution_commit, staged_pack):
     """Bind the launch identity, digests and locations the driver takes from the night plan.
 
     The driver publishes the window lineage and routes its records from the
@@ -1551,10 +1542,8 @@ def check_launch_records(view, tree_raw, night, state, reserved, execution_commi
         identity = driver.lineage_identity(hazard)  # what the lineage publisher writes
     except (KeyError, TypeError) as exc:
         raise ValueError(f'C1 night plan lacks its launch identity: {exc!r}') from exc
-    pack_root = view.root / PACK
-    # The lineage persists this digest as the plan carries it, so it must be
-    # the digest of the bytes this attempt stages, recomputed through the fence.
-    staged_pack = staged_pack_sha256(pack_root, read=lambda relative: view.locate(pack_root / relative).read_bytes())
+    # The lineage persists pack_sha256 as the plan carries it, so it must be the
+    # digest of the bytes this attempt stages (staged_pack, the verified walk).
     rows = (
         ('hazard_window.pack.window_id', identity['window_id'], reserved['window_id']),
         ('hazard_window.pack.pack_plan_id', identity['plan_id'], reserved['plan_id']),
@@ -1660,7 +1649,7 @@ def prepared_closure(authority, verified_roots, handoff, read):
     verify_chain(view, handoff, ledger, tree, digest(tree_raw), night)
     # Last, so every earlier refusal keeps its own reason.
     check_launch_records(view, tree_raw, night, state, selections.get('reservation'),
-                         handoff['execution_commit'])
+                         handoff['execution_commit'], staged_pack_sha256(verified_roots, pins=pins))
     check_write_roots(verified_roots.stage, night, state)
     closure = {'schema': SCHEMA, 'repo': tree_identity(authority, handoff['execution_commit']),
                'stage_files': pins, 'ledger': ledger}

@@ -492,9 +492,10 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
         if c1:
             from joulewise.align.apple import v4_registration as c1_closure
             # The C1 pack is staged, not a git checkout: record the digest of the
-            # staged bytes, which preflight recomputes before reservation.
+            # staged bytes (the verified walk), which preflight recomputes.
+            c1_roots = c1_closure.Roots(handoff['repo'], handoff['stage'])
             options = {'controls_root': stage / 'controls', 'c1_inputs': runtime_inputs,
-                       'pack_digest': c1_closure.staged_pack_sha256}
+                       'pack_digest': lambda _pack_root: c1_closure.staged_pack_sha256(c1_roots)}
         record = plan.write_window_plan(inputs, now=now, **options)
     except plan.WindowPlanError as exc:
         # A missing/stale calibration ledger or another record condition is a

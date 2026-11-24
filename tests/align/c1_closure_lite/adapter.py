@@ -166,6 +166,10 @@ class Attempt:
         """This attempt's custody root (prepare's custody_root input)."""
         return self.work / 'attempt-custody'
 
+    def install_root(self):
+        """The session root install writes (the prepared session's session_root)."""
+        return self.work / 'install'
+
     def reserved_value(self, flag, default):
         """The value the tree's reservation passes for ``flag``, as rendered."""
         for stage in self.tree['stage_graph']:
@@ -382,7 +386,7 @@ class Attempt:
                      'evidence_root_id': self.reserved_value('--evidence-root-id', 'fixture-evidence')}}}
         self.edit_night(self.night_data)
         late = {self.night.relative_to(self.stage): series.raw_json(self.night_data)}
-        self.state = {'session_root': str(self.work / 'install'), 'measurement_root': str(self.view), 'source_measurement_root': str(self.repo),
+        self.state = {'session_root': str(self.install_root()), 'measurement_root': str(self.view), 'source_measurement_root': str(self.repo),
                       'plan_path': str(self.night), 'plan_sha256': closure.digest(series.raw_json(self.night_data)),
                       'v4_series': {'window_id': 'W1' if self.fixture == 'session_downgrade' else 'C1'},
                       'inputs': {'custody_root': custody_root, 'attempt': 1, 'plan_id': plan_id}}
@@ -524,7 +528,7 @@ class Attempt:
         return stack
 
     def install(self, entered):
-        self.session = self.work / 'install'
+        self.session = self.install_root()
         self.session.mkdir()
         opts = self.host_args()
         opts.pop('battery_log')

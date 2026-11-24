@@ -209,6 +209,14 @@ def non_exact(raw):
 
 
 class PublicInputAttempt(adapter.Attempt):
+    session_dir = None
+
+    def custody_path(self):
+        return self.session_dir / 'custody' if self.session_dir else super().custody_path()
+
+    def install_root(self):
+        return self.session_dir / 'install' if self.session_dir else super().install_root()
+
     def prepare_public_inputs(self, files):
         manifest = adapter.put(self.work, 'public/manifest.json', files)
         adapter.put(self.git_dir, adapter.LEDGER, self.ledger)
@@ -228,6 +236,13 @@ class PublicInputAttempt(adapter.Attempt):
             for previous, current in ((old_view, self.view), (old_stage, self.stage)):
                 if path.is_relative_to(previous):
                     self.bindings[key] = str(current / path.relative_to(previous))
+        # As in production, the prepared session directory holds every root the
+        # launch writes: runs roots, logs, backups, custody and the install root.
+        self.session_dir = target
+        for key in closure.WRITE_ROOT_BINDINGS:
+            path = Path(self.bindings[key])
+            if path.is_relative_to(self.work) and not path.is_relative_to(target):
+                self.bindings[key] = str(target / path.relative_to(self.work))
         declare = closure.declare_outputs
         with patch.object(closure, 'declare_outputs',
                           side_effect=lambda repo, stage, files: declare(repo, stage, set(files) | set(paths))):
@@ -405,7 +420,7 @@ class C1ClosureTests(unittest.TestCase):
         from joulewise.align.apple import powermode
         with patch.object(powermode, 'host_marker_path', side_effect=AssertionError('host')) as host:
             with self.assertRaisesRegex(session.PacketKitMismatch, detail):
-                session.install(attempt.work / 'install', now=lambda: adapter.NOW, c1_handoff=attempt.handoff_file)
+                session.install(attempt.install_root(), now=lambda: adapter.NOW, c1_handoff=attempt.handoff_file)
             record = session.arm_checks(attempt.view, attempt.plan, now=lambda: adapter.NOW,
                                         c1_handoff=attempt.handoff_file)
         self.assertFalse(record['admitted'])
@@ -1391,10 +1406,9 @@ class C1ClosureTests(unittest.TestCase):
         self.assertEqual(digests, [committed_pack_tree_sha256(reference / 'pack')] * 2)
         self.assert_admitted_on_both_routes(linked)
         with self.subTest(case='a directory link leaving the verified roots still refuses'):
-            outside = self.attempt(make_attempt=type('Outside', (LinkedDirectoryAttempt,), {'outside': True}))
-            code, _ = outside.build()
-            self.assertEqual(code, 2, outside.build_error)
-            self.assertIn('escapes R/S', outside.build_error)
+            # Prepare's own output declaration walks the fence, so it refuses first.
+            with self.assertRaisesRegex(ValueError, 'escapes R/S'):
+                self.attempt(make_attempt=type('Outside', (LinkedDirectoryAttempt,), {'outside': True}))
 
     def test_r16_staged_pack_digest_is_the_committed_d134_digest(self):
         """The recomputed pack digest is D-134's committed digest of the same bytes, in both forms."""
@@ -1413,7 +1427,7 @@ class C1ClosureTests(unittest.TestCase):
                              'user.email=invented@invalid', 'commit', '-qm', 'invented pack']):
                     subprocess.run(['git', '-C', str(reference), *argv], check=True, capture_output=True)
                 committed = committed_pack_tree_sha256(reference / 'pack')
-                self.assertEqual(closure.staged_pack_sha256(staged), committed)
+                self.assertEqual(closure.staged_pack_sha256(closure.Roots(attempt.repo, attempt.stage)), committed)
                 self.assertEqual(adapter.staged_pack_digest(staged), committed)
                 night = closure.decode(attempt.night.read_bytes())
                 self.assertEqual(night['hazard_window']['pack']['pack_sha256'], committed)
