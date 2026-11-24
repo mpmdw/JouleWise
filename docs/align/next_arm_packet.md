@@ -213,12 +213,25 @@ state at `--series-commit`, with:
   capture writer's argument, custody-deadline and ledger gates, the runner's
   policy, log, waiver, analysis-manifest, order, config and duplicate-ID
   gates, and the SHADE task's own offline resolver. The reservation must
-  carry `--execute`. Consumers must agree: each capture's `--power-policy`
+  carry `--execute`. It reserves the frozen C1 window. Its `--window-id`,
+  the frozen plan's `window_id` and any window identity in the tree all
+  name `C1`, its evidence root matches that identity, and its runs root is
+  the window's claim runs root. The reservation writer itself refuses a
+  `--window-id` that differs from the window its frozen plan declares
+  (`calibration_reservation_input_invalid`, `plan_window_mismatch`).
+  Consumers must agree: each capture's `--power-policy`
   equals the policy the reservation records (desk epoch, then desk T1, then
   `POWER_POLICY`). Its `--sampler-binary` selects the reservation's sampler,
   which preflight compares by path without opening either file. Its
   session, attempt and custody locator match its reserved slot. Every
-  capture and campaign stage reads the reservation's head-pin file. The
+  capture and campaign stage reads the reservation's head-pin file. Each
+  capture is a live bracket capture. It uses the frozen protocol's pulse
+  count and finite, positive sampler-ready and rollover timeouts, and it
+  carries no test-only option. A collection stage takes no `--dry-run` and
+  no block limit. A `--max-blocks` below 1 refuses with the runner's own
+  `--max-blocks must be >= 1`, and any other value with the runner's
+  HAZARD_PACK refusal. An `--instrument-power-policy` equals the reserved
+  policy. The
   reservation's pre-reserve readiness also runs read-only, with no lease or
   append, on the canonical starting ledger and the exact parsed
   `--head-pin`. A SHADE workload without a cache binding refuses. A

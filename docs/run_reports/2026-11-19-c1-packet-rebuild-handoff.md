@@ -1347,3 +1347,123 @@ Open, all LOW:
   named case.
 - The head-pin agreement compares files, so a byte-identical pin copy at
   another path is refused. That fails closed and matches the rule.
+
+## Round 13 · audit 4, the reserved window and the swept arguments
+
+Audit 4 checked head `a624b3533` and found two items admitted before host
+entry. In H1, changing only the reservation's `--window-id` to `C2` let build,
+install and arm admit, and the writer appended `window_id=C2` beside
+`plan_id=align-v4-c1`. In M1, `--max-blocks 0` let both routes admit, and the
+campaign then exited 2 before its first member. Under PIPELINE §3 the cases
+were committed first, as spec
+`1b2eb2c85dae2f42a9166f33637ae833d42b8158`. The production code at
+`a624b3533` gave these results:
+- The `C2` window was admitted, with one host checkpoint per route, and the
+  writer replay exited 0.
+- `--max-blocks 0` was admitted.
+- Eight of the nine sweep arguments were admitted.
+- The other plan ID already refused (`calibration_plan_hash_mismatch`).
+- The shifted runs root already refused, but only through custody
+  containment.
+
+| Finding | Commit | Named regression | Result |
+| --- | --- | --- | --- |
+| H1: `--window-id C2` with `plan_id=align-v4-c1` (the audit's reproduction), on both routes and in the writer itself; another plan ID | `5e1bac541` | `test_audit4_h1_reservation_window_is_the_frozen_c1_window` | PASS |
+| M1: `--max-blocks 0`, with the campaign's own message | `5e1bac541` | `test_audit4_m1_max_blocks_below_one_refuses_before_host` | PASS |
+| Sweep: nine rendered arguments a consumer rejects or that disagree with the plan; a matched-policy control | `5e1bac541` | `test_r13_arguments_a_consumer_rejects_or_that_disagree_with_the_plan` | PASS |
+| Sweep: a tree window identity naming another window or evidence root; a matching control | `5e1bac541`, `4f5f1fda6` | `test_r13_reservation_matches_the_frozen_window_identity` (spec `7de9fe499`) | PASS |
+
+Each H1, M1 and identity negative case asserts builder exit 2. It also
+asserts install exit 2 with `packet_kit_mismatch`, a direct-arm refusal, zero
+host-checkpoint entries on both routes and an unchanged starting ledger. The
+sweep cases assert builder exit 2 with the named detail. Both identity
+negatives admitted on the `a624b3533` preflight, each with one host
+checkpoint per route.
+
+- **H1.** Preflight's reservation branch now requires all of the following:
+  - `--window-id C1`;
+  - a frozen plan whose `window_id` is `C1`;
+  - a tree `window_identity.window_id` that, if present, is `C1`;
+  - an `--evidence-root-id` equal to the identity's;
+  - a `--runs-root` that is the window's claim runs root.
+
+  `verify_frozen_plan` takes the window. When the plan declares a
+  `window_id`, the writer's `main` refuses any other `--window-id` with
+  `calibration_reservation_input_invalid` (`plan_window_mismatch`) before it
+  appends, and preflight calls the same gate. The writer case replays
+  `reservation.main` on the rendered argv in the closed environment, with
+  only the host identity measurement stubbed. It exits 2, and the ledger is
+  unchanged. `consumer_check` now appends a refusal's context reason to its
+  message.
+- **M1.** For a value below 1, preflight calls the runner's own
+  `campaign_block_limit`, so the message is `--max-blocks must be >= 1`. Any
+  other block limit also refuses. A C1 launch authorization has purpose
+  HAZARD_PACK, and before the first member the runner refuses any block
+  limit that lacks G2B_SHAKEDOWN authorization.
+- **Census.** There is one new `verify_frozen_plan` row
+  (`NUMBER_INTEGRITY`), and the scan is clean.
+
+The sweep compared every reservation, capture and campaign option that the
+rendered C1 chain can carry with the checks in each consumer's `main`.
+Preflight now refuses each of these:
+- a reservation runs root other than the claim runs root;
+- a reservation evidence root or tree window identity that disagrees;
+- a capture with `--derivation-only`;
+- a capture with any of the seven test-only options;
+- a capture `--pulse-count` other than the frozen protocol's 59;
+- capture sampler-ready or rollover timeouts that are not finite and
+  positive;
+- a campaign `--dry-run`;
+- any campaign `--max-blocks`;
+- a campaign `--instrument-power-policy` other than the reserved policy. On
+  HAZARD the controller only flags a policy label mismatch, so without this
+  check the campaign would run against a policy the reservation didn't
+  record.
+
+Swept and not in the class:
+- **Capture `--arm-countdown-s` and `--sleep-display-before-capture`.** The
+  renderer owns both. A template that carries either refuses at render, and
+  the renderer appends 0 for pre and 20 for post.
+- **Campaign `--max-failures`.** The renderer always sets it to the stage's
+  `expected_count`. Staging ties that count to the dispatched order, which
+  has 11 members for the kit's first collection stage. The runner's `< 1`
+  refusal would need an empty frozen order, and install already refuses a
+  changed kit as `packet_kit_mismatch`.
+- **Campaign `--arm-countdown-s` below 0.** The runner's own `parse_args`
+  refuses it, and preflight runs that parse.
+- **Campaign `--environment-override`.** On HAZARD an environment-preflight
+  error becomes a flag record, override included. Its hashes bind the live
+  snapshot.
+- **Capture `--display-arm-binary`.** On HAZARD a display-arm failure is a
+  flag.
+- **Capture `--output-root` basename.** The capture checks it only under
+  launch lineage, which the committed acceptance config does not require.
+  The custody locator agreement already binds the output root and attempt
+  to the reserved slot.
+- **Reservation.** Every check in `main` already runs at preflight: frozen
+  plan, inputs, pre-reserve readiness, custody deadline and ledger. The
+  session kind, the uncommitted-pin and crash-authorization test options,
+  and `--verify-only` already refuse.
+- **Campaign derivation route.** It reads no other argument.
+
+No commit this round changes a number-bearing path, so the round adds no
+review row. Local checks, within the lead's test budget:
+- 22 tests pass. These are the four round-13 tests, the round-12 acceptance
+  cases, the earlier named regressions, the closed-environment class and the
+  137-case duplicate-option sweep.
+- At `5e1bac541`, `tests.align.test_v4_next_arm_packet` (69),
+  `test_v4_series_e2e` (11), `tests.test_bracket_binding_cli` (19) and
+  `tests.test_calibration_ledger` (95, one skipped) pass. The only later
+  production change is the refusal message.
+- The census scan is clean.
+- The nine frozen files match `SUITE.sha256` and are unchanged since
+  `a624b3533`.
+
+Hosted CI runs the 94-case frozen replay (`test_frozen_lite_decisions`)
+and the full suites.
+
+Open, all LOW:
+- Two of the seven test-only capture options and one of the four timeout
+  forms are exercised.
+- The writer's window assertion needs a plan that declares `window_id`.
+  The C1 kit plan declares `C1`.
