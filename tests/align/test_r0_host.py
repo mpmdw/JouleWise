@@ -2636,20 +2636,28 @@ class R0AdvisoryAdmissionTest(unittest.TestCase):
 
     def test_wall_clock_divergence_flags_a_window_only_above_half_a_second(self):
         # A quiet host. The wall clock steps at 10 s, inside the 0-30 s window.
+        # The window rule flags only above 0.5 s. Since lead K1 the series'
+        # stability precondition withholds every step above 1 ms first, as
+        # clock_unstable; a 0.5 ms step publishes.
         from tests.align import test_r0_vs_l3_differential as fixture
 
-        for step_s, flagged in ((0.49, False), (-0.49, False), (0.51, True), (-0.51, True)):
+        for step_s, flagged in ((0.0005, None), (-0.0005, None), (0.49, False), (-0.49, False),
+                                (0.51, True), (-0.51, True)):
             with self.subTest(step_s=step_s):
                 result, model = self.run_model(fixture.Case(f"step_{step_s}", end=40), self.stepped(10, step_s))
                 clock = [f for f in model.guard.contention_flags if f.get("kind") == "wall_clock"]
-                if flagged:
-                    self.assertEqual((result["rc"], result["status"], result["published"]), (2, "refused", False))
-                    self.assertEqual([(f["interval"]["start_monotonic_s"], f["interval"]["end_monotonic_s"])
-                                      for f in clock], [(0.0, 30.0), (0.0, 40.0)])
-                    self.assertIn(f"wall clock moved {abs(step_s):g} s", result["reason"])
-                else:
+                if flagged is None:
                     self.assertEqual((result["rc"], result["status"], result["published"], result["flags"]),
                                      (0, "pass", True, []), result)
+                else:
+                    self.assertEqual((result["rc"], result["status"], result["published"]), (2, "refused", False))
+                    self.assertIn("clock_unstable", result["reason"])
+                    self.assertIn(f"{abs(step_s) * 1e6:.3f} µs", result["reason"])
+                if flagged:
+                    self.assertEqual([(f["interval"]["start_monotonic_s"], f["interval"]["end_monotonic_s"])
+                                      for f in clock], [(0.0, 30.0), (0.0, 40.0)])
+                    self.assertTrue(all(f"wall clock moved {abs(step_s):g} s" in f["flag"] for f in clock))
+                else:
                     self.assertEqual(clock, [])
                 self.assertEqual(result["recorded"], result["guard_count"])
 
@@ -2932,7 +2940,13 @@ class R0FinalVerdictTest(unittest.TestCase):
                             self.assertEqual((result["rc"], result["published"]), (2, False), result)
                             closing = 75.7 + read_ms / 2000
                             if mode != "resident":
-                                self.assertIn((45.8 + read_ms / 2000, closing, fixture.PID),
+                                # A fresh PID's zero is the start of the arguments
+                                # table read with the 45.8 s sample, which lists no
+                                # such PID. Where another process holds the PID that
+                                # table proves nothing; the accounting read's
+                                # midpoint is the zero.
+                                zero = 45.8 + (read_ms / 1000 if mode == "fresh" else read_ms / 2000)
+                                self.assertIn((round(zero, 6), round(closing, 6), fixture.PID),
                                               self.exact_proofs(model.guard), result)
                             self.assertTrue(any(stop == closing and pid == fixture.PID
                                                 for _, stop, pid in self.verdict_flag_keys(model.guard)), result)
@@ -2941,8 +2955,8 @@ class R0FinalVerdictTest(unittest.TestCase):
                                              (0, True, []), result)
 
     def exact_proofs(self, guard):
-        """(start, end, pid) of every exact-check proof in the series receipts."""
-        return {(window["start_monotonic_s"], window["end_monotonic_s"], row["pid"])
+        """(start, end, pid) of every exact-check proof in the series receipts, to the microsecond."""
+        return {(round(window["start_monotonic_s"], 6), round(window["end_monotonic_s"], 6), row["pid"])
                 for receipt in self.series_receipts(guard) for window in receipt.get("exact_windows", ())
                 for row in window["busy"]}
 
@@ -3102,12 +3116,16 @@ class R0FinalVerdictTest(unittest.TestCase):
 
             with self.subTest(size=size):
                 result, model = self.run_model(fixture.Case(f"wall_step_{size}", end=76.3), Shifted)
+                # The 300 ms step withholds every run as clock_unstable (lead
+                # K1). The rule window still uses the absence: 1.60 CPU-s
+                # over 30.5 s is flagged, 1.49 is not.
+                self.assertEqual((result["rc"], result["published"]), (2, False), result)
+                self.assertIn("clock_unstable", result["reason"])
                 if size == 160:
-                    self.assertEqual((result["rc"], result["published"]), (2, False), result)
                     self.assertIn((45.8, 76.3), self.verdict_flags(model.guard))
                     self.assertTrue(all(flag.get("kind") is None for flag in model.guard.contention_flags), result)
                 else:
-                    self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+                    self.assertEqual(result["flags"], [], result)
 
     def birth_slew_fixture(self, size, shift_ns, ticks, *, slow_read_at=None):
         """Audit r3 birth_slew.py. A worker born at 46.1 s prints start 46 s;
@@ -3246,14 +3264,17 @@ class R0FinalVerdictTest(unittest.TestCase):
 
         return QuietWorker
 
-    def test_audit_r3_quiet_worker_publishes_after_a_wall_loss(self):
+    def test_audit_r3_quiet_worker_after_a_wall_loss_withholds_as_clock_unstable(self):
         # Audit r3 (3e37db72a): a worker using at most 1.482 CPU-s in any
         # 30 s, observed at 0.01 CPU-s at 46.25 s, was refused after a
         # 450 ms wall loss at 70 s: the closing read converted its printed
         # start again and inferred a zero at 46.45 s. A 6 ms gradual loss
         # (true 30 s maximum 1.49985 CPU-s) and a 450 ms loss between birth
-        # and the first sighting (lifetime check) refused too. Every quiet
-        # worker publishes; 0.051 of a core (1.53 CPU-s per 30 s) refuses.
+        # and the first sighting (lifetime check) refused too. Round 4 made
+        # every quiet worker publish. Under lead K1 each of these clocks
+        # moves by more than 1 ms, so every run withholds as clock_unstable.
+        # With a stable clock every quiet worker publishes and 0.051 of a
+        # core (1.53 CPU-s per 30 s) refuses.
         from tests.align import test_r0_vs_l3_differential as fixture
 
         cases = [(shape, shift, rate) for shape in ("timed",)
@@ -3269,10 +3290,290 @@ class R0FinalVerdictTest(unittest.TestCase):
                 with self.subTest(case=name):
                     result, _ = self.run_model(fixture.Case(name, end=107, schedule=mode),
                                                self.quiet_worker_fixture(shape, shift, rate))
-                    if rate > 50_000:
+                    if shift:
+                        self.assertEqual((result["rc"], result["published"]), (2, False), result)
+                        self.assertIn("clock_unstable", result["reason"])
+                    elif rate > 50_000:
                         self.assertEqual((result["rc"], result["published"]), (2, False), result)
                     else:
                         self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+
+    def clock_witness_fixture(self, path, pid_kind, load_cs, magnitude_ns=450_000_000):
+        """Audit r4 clock_witness.py, busy family.
+
+        PID 7421 is absent from the accounting read at 45.450-46.050 s and
+        from the arguments table read with it at 46.050-46.060 s. It is born
+        at 46.10 s and first listed by the accounting read at 61.000-61.010
+        s, whose arguments table follows until 61.040 s. One thread uses
+        0.60 CPU-s from 50 s and the rest of ``load_cs`` from 68 s. The
+        closing accounting read spans 75.999-76.001 s. ``path`` places a
+        wall change of ``magnitude_ns``: "duringArgs" at 61.025 s (inside
+        the arguments read after the first sighting), "lossBefore" (a gain
+        that ends inside the absence read, before birth), "lossAfter" and
+        "lateGain" at 68 s, "tinyInArgs" (10 us over 20 ms inside that
+        arguments read) or "flat". TIME is rendered as Darwin ps does.
+        """
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        ns = 10**9
+        absent_start, birth, first, close = 45_450_000_000, 46_100_000_000, 61_000_000_000, 76_000_000_000
+
+        def offset(t):
+            return {"flat": 0, "lossBefore": magnitude_ns if t < 45_800_000_000 else 0,
+                    "lossAfter": -magnitude_ns if t >= 68 * ns else 0,
+                    "lateGain": magnitude_ns if t >= 68 * ns else 0,
+                    "duringArgs": magnitude_ns if t >= first + 25_000_000 else 0,
+                    "tinyInArgs": min(max(0, t - first - 11_000_000), 20_000_000) // 2000}[path]
+
+        def overlap(t, start, size):
+            return min(max(0, t - start), size)
+
+        class Witness(fixture.Fixture):
+            def __init__(self, case, root):
+                super().__init__(case, root)
+                self.ticks = [45.45, 61.0, 75.999, 91.55]
+
+            def wall_ns(self):
+                t = round(self.now * ns)
+                return fixture.EPOCH * ns + t + offset(t)
+
+            def processes(self):
+                t = round(self.now * ns)
+                rows = fixture.Fixture.processes(self)
+                if t >= birth:
+                    cpu_ns = overlap(t, 50 * ns, 600_000_000) + overlap(t, 68 * ns, load_cs * 10_000_000 - 600_000_000)
+                    rows.append((fixture.PID, (birth + offset(birth)) // ns, (cpu_ns // 1000 + 5000) // 10000,
+                                 fixture.WORKER, "/fixture/mdworker_shared"))
+                elif pid_kind == "reuse" and t < absent_start + 300_000_000:
+                    rows.append((fixture.PID, -100, 7, "ordinary", "/fixture/ordinary"))
+                return rows
+
+            def move(self, end):
+                if self.case.schedule == "inventory" and end == 45 and "inventory" in self.work_started:
+                    end = self.case.end
+                while self.ticks and self.ticks[0] <= end:
+                    self.now = self.ticks.pop(0)
+                    self.apply_tree()
+                    self.timer.pulse()
+                self.now = end
+                self.apply_tree()
+
+            def run(self, argv, **kwargs):
+                t = round(self.now * ns)
+                result = super().run(argv, **kwargs)
+                accounting, arguments = tuple(argv) == contention.PS_ARGV, tuple(argv) == prewindow.PS_ARGV
+                if accounting and t == absent_start:
+                    self.now = 46.05
+                elif arguments and t == 46_050_000_000:
+                    self.now = 46.06
+                elif accounting and t == first:
+                    self.now = 61.01
+                elif arguments and t == 61_010_000_000:
+                    self.now = 61.04
+                elif accounting and t == close - 1_000_000:
+                    self.now += .002
+                elif arguments and t == close + 1_000_000:
+                    self.now += .001
+                return result
+
+        return Witness
+
+    def test_audit_r4_clock_witnesses_and_the_stable_clock_control(self):
+        # Audit r4 (51a50a1aa) clock_witness.py. A 450 ms gain inside the
+        # arguments read after the first sighting entered the birth
+        # conversion, dated the start 45.550 s, and 1.51 CPU-s published in
+        # both modes; a 10 us slew there published the 1.50 tie. Lead K1:
+        # any change above 1 ms withholds as clock_unstable. K2: no offset
+        # measured after the sighting's accounting read converts the start,
+        # and the arguments table at 46.05 s that lists no PID 7421 is a zero
+        # of its own (1.50 CPU-s within 29.95 s). With a stable clock (none,
+        # 10 us, 0.5 ms, or exactly 1 ms) 1.49 CPU-s publishes and 1.50 and
+        # 1.51 refuse.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        cases = [(path, 450_000_000) for path in ("duringArgs", "lateGain", "lossBefore", "lossAfter")]
+        cases += [("flat", 0), ("tinyInArgs", 0)]
+        cases += [(path, 500_000) for path in ("duringArgs", "lateGain", "lossBefore", "lossAfter")]
+        for mode in ("host", "inventory"):
+            for path, magnitude in cases + [("lateGain", 1_000_000), ("lateGain", 1_001_000)]:
+                for pid_kind in ("fresh", "reuse"):
+                    for load in (149, 150, 151):
+                        if magnitude in (1_000_000, 1_001_000) and (pid_kind, load) != ("fresh", 149):
+                            continue
+                        name = f"{mode}_{path}_{magnitude}_{pid_kind}_{load}"
+                        with self.subTest(case=name):
+                            result, model = self.run_model(
+                                fixture.Case(name, end=107, schedule=mode),
+                                self.clock_witness_fixture(path, pid_kind, load, magnitude))
+                            if magnitude > 1_000_000:
+                                self.assertEqual((result["rc"], result["published"]), (2, False), result)
+                                self.assertIn("clock_unstable", result["reason"])
+                                self.assertIn(f"{magnitude / 1000:.3f} µs", result["reason"])
+                            elif load == 149:
+                                self.assertEqual((result["rc"], result["published"], result["flags"]),
+                                                 (0, True, []), result)
+                            else:
+                                self.assertEqual((result["rc"], result["published"]), (2, False), result)
+                                self.assertNotIn("clock_unstable", result["reason"])
+                                self.assertIn((46.05, 76.0, fixture.PID), self.exact_proofs(model.guard), result)
+
+    def test_audit_r4_excursion_between_reads_is_withheld_not_published(self):
+        # Audit r4 gentle_excursion.py. The wall gains at 500 ppm from 38.050 s
+        # and loses it again by 53.950 s (peak 3.975 ms), between the reads
+        # at 38 and 54 s, so every read measures a zero offset. The worker is
+        # born at 45.9965 s while the wall reads 46.0005 s and prints start
+        # 46. Two 12-thread bursts more than 30 s apart bound its true use
+        # to 1.482 CPU-s in any 30 s; its counter reads 1.50 at 76 s. The
+        # reads are those of a stable clock with a worker born in second 46,
+        # whose 1.50 CPU-s within 30 s is a real tie (KNOWN LIMITATION
+        # R0-CLOCK). The clock-stability precondition sees a zero range and
+        # cannot report clock_unstable. R0 withholds on the exact check; it
+        # never publishes. A stable clock publishes.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        ns = 10**9
+        segments = [(45_996_700_000, 45_998_200_000, 12), (50 * ns, 50_342_000_000, 1),
+                    (68 * ns, 69_122_000_000, 1), (75_998_300_000, 75_999_800_000, 12)]
+
+        def cpu(t):
+            return sum(n * max(0, min(b, t) - a) for a, b, n in segments)
+
+        ends = {t + d for a, b, _ in segments for t in (a, b) for d in (0, 30 * ns)}
+        self.assertEqual(max(cpu(t) - cpu(t - 30 * ns) for t in ends), 1_482_000_000)
+        self.assertEqual(cpu(76 * ns), 1_500_000_000)
+        birth = 45_996_500_000
+
+        for mode in ("host", "inventory"):
+            for path in ("flat", "gentle", "flatTimed", "gentleTimed"):
+                for pid_kind in ("fresh", "reuse"):
+                    timed = path.endswith("Timed")
+                    ticks = [t - .005 if timed else t for t in (38, 54, 76, 91)]
+                    starts = {round(t * ns) for t in ticks}
+
+                    def offset(t, path=path):
+                        return 0 if path.startswith("flat") else max(0, min(t - 38_050_000_000, 53_950_000_000 - t)) // 2000
+
+                    class Excursion(fixture.Fixture):
+                        def __init__(self, case, root, ticks=ticks):
+                            super().__init__(case, root)
+                            self.ticks = list(ticks)
+
+                        def wall_ns(self, offset=offset):
+                            t = round(self.now * ns)
+                            return fixture.EPOCH * ns + t + offset(t)
+
+                        def processes(self, offset=offset, pid_kind=pid_kind):
+                            t = round(self.now * ns)
+                            rows = fixture.Fixture.processes(self)
+                            if t >= birth:
+                                rows.append((fixture.PID, (birth + offset(birth)) // ns, (cpu(t) // 1000 + 5000) // 10000,
+                                             fixture.WORKER, "/fixture/mdworker_shared"))
+                            elif pid_kind == "reuse" and t < 45_800_000_000:
+                                rows.append((fixture.PID, -100, 7, "ordinary", "/fixture/ordinary"))
+                            return rows
+
+                        def move(self, end):
+                            if self.case.schedule == "inventory" and end == 45 and "inventory" in self.work_started:
+                                end = self.case.end
+                            while self.ticks and self.ticks[0] <= end:
+                                self.now = self.ticks.pop(0)
+                                self.apply_tree()
+                                self.timer.pulse()
+                            self.now = end
+                            self.apply_tree()
+
+                        def run(self, argv, timed=timed, starts=starts, **kwargs):
+                            t = round(self.now * ns)
+                            if timed and tuple(argv) == contention.PS_ARGV and t in starts:
+                                self.now = (t + 5_000_000) / ns  # the table is captured mid-read
+                                result = super().run(argv, **kwargs)
+                                self.now = (t + 10_000_000) / ns
+                                return result
+                            result = super().run(argv, **kwargs)
+                            if timed and tuple(argv) == prewindow.PS_ARGV and t - 10_000_000 in starts:
+                                self.now = (t + 5_000_000) / ns
+                            return result
+
+                    name = f"{mode}_{path}_{pid_kind}"
+                    with self.subTest(case=name):
+                        result, model = self.run_model(fixture.Case(name, end=107, schedule=mode), Excursion)
+                        ranges = [r["wall_offset_range_us"] for r in self.series_receipts(model.guard)
+                                  if "wall_offset_range_us" in r]
+                        self.assertTrue(ranges and set(ranges) == {0.0}, ranges)
+                        if path.startswith("flat"):
+                            self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+                        else:
+                            self.assertEqual((result["rc"], result["published"]), (2, False), result)
+                            self.assertNotIn("clock_unstable", result["reason"])
+                            self.assertTrue(any(f.get("kind") == "exact_30s" for f in model.guard.contention_flags))
+
+    def test_audit_r4_identical_observations_refuse_in_both_modes(self):
+        # Audit r4 indistinguishable.py. Round 2's stable 1.50 tie (born at
+        # 46.1 s, printed 46) and a single-thread quiet worker born at
+        # 45.58 s while the wall was 450 ms ahead (printed 46; the offset
+        # returns to zero before the next read) give identical process
+        # tables, sampled wall and monotonic times, counters and flags. The
+        # quiet worker's true maximum is 1.470 CPU-s in any 30 s. Both refuse
+        # in both modes: R0 refuses, never publishes, in the ambiguous case
+        # (KNOWN LIMITATION R0-CLOCK).
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        ns = 10**9
+        quiet = [(45_650_000_000, 30_000_000), (51 * ns, 570_000_000), (70 * ns, 870_000_000),
+                 (75_800_000_000, 30_000_000)]
+        segments = [(start, start + length) for start, length in quiet]
+        ends = {t + d for segment in segments for t in segment for d in (0, 30 * ns)}
+        self.assertEqual(max(sum(max(0, min(e, at) - max(s, at - 30 * ns)) for s, e in segments) for at in ends),
+                         1_470_000_000)
+        ticks = [45.5, 61.0, 76.0, 91.5, 107.0]
+
+        def recording(base):
+            class Recorded(base):
+                def __init__(self, case, root):
+                    super().__init__(case, root)
+                    self.seen = []
+
+                def wall_ns(self):
+                    wall = super().wall_ns()
+                    self.seen.append(("wall", round(self.now * ns), wall))
+                    return wall
+
+                def run(self, argv, **kwargs):
+                    result = super().run(argv, **kwargs)
+                    if tuple(argv) in (tuple(prewindow.PS_ARGV), tuple(contention.PS_ARGV)):
+                        self.seen.append(("table", round(self.now * ns), tuple(argv), result.stdout))
+                    return result
+            return Recorded
+
+        busy = self.birth_slew_fixture(150, 0, ticks)
+
+        class QuietTwin(busy):
+            def wall_ns(self):
+                now = round(self.now * ns)
+                return (fixture.EPOCH * ns + now
+                        + (450_000_000 * min(12 * ns, max(0, 59 * ns - now)) // (12 * ns) if now >= 45_550_000_000 else 0))
+
+            def processes(self):
+                rows = fixture.Fixture.processes(self)
+                t = round(self.now * ns)
+                if t >= 45_580_000_000:
+                    used = sum(min(max(t - start, 0), length) for start, length in quiet)
+                    rows.append((fixture.PID, (45_580_000_000 + 450_000_000) // ns, (used // 1000 + 5000) // 10000,
+                                 fixture.WORKER, "/fixture/mdworker_shared"))
+                return rows
+
+        for mode in ("host", "inventory"):
+            for end in (76, 107):
+                outcomes = {}
+                for label, base in (("busy", busy), ("quiet", QuietTwin)):
+                    with self.subTest(mode=mode, end=end, worker=label):
+                        result, model = self.run_model(fixture.Case(f"{mode}_{end}", end=end, schedule=mode),
+                                                       recording(base))
+                        self.assertEqual((result["rc"], result["published"]), (2, False), result)
+                        self.assertNotIn("clock_unstable", result["reason"])
+                        outcomes[label] = (model.seen, result["flags"], model.guard.contention_flags)
+                with self.subTest(mode=mode, end=end, identical=True):
+                    self.assertEqual(outcomes["busy"], outcomes["quiet"])
 
     def test_publication_matches_an_independent_workload_model(self):
         # Lead r4 S4(c). Each worker has a true birth and a true CPU curve;
@@ -3292,7 +3593,8 @@ class R0FinalVerdictTest(unittest.TestCase):
         # and the first sighting ("pre") or between the first sighting and C
         # ("post"); daemon cadence 0.5 to 30 s.
         #
-        # Rules. Clock: a change above 0.5 s withholds (divergence flag).
+        # Rules. Clock: a change above 1 ms withholds as clock_unstable (lead
+        # K1); above 0.5 s the window divergence flag is recorded as well.
         # Otherwise R0 refuses iff contention is true and provable from the
         # series' reads alone (S2), else it publishes. Provable means either
         # two reads of the worker at most 30 s apart whose counters differ by
@@ -3376,8 +3678,9 @@ class R0FinalVerdictTest(unittest.TestCase):
                                                        for tb, b in zip(reads, counts))
                         # The rule never proves contention that did not happen.
                         self.assertTrue(truth or not provable, (kind, cadence, load, clock))
+                        unstable = clock is not None and abs(clock[1]) > 1_000_000
                         diverged = clock is not None and abs(clock[1]) > 500_000_000
-                        if load == "busy" and not diverged:
+                        if load == "busy" and not unstable:
                             self.assertTrue(provable, (kind, cadence, clock))
 
                         def rows(now, counter=counter, kind=kind, printed=printed):
@@ -3395,10 +3698,11 @@ class R0FinalVerdictTest(unittest.TestCase):
                         label = dict(kind=kind, cadence=cadence, load=load, clock=clock)
                         with self.subTest(**label):
                             result, model = self.run_model(fixture.Case(f"{kind}_{load}", end=ticks[-1]), Clocked)
-                            if diverged:
+                            if unstable:
                                 self.assertEqual((result["rc"], result["published"]), (2, False), result)
-                                self.assertTrue([f for f in model.guard.contention_flags
-                                                 if f.get("kind") == "wall_clock"], result)
+                                self.assertIn("clock_unstable", result["reason"])
+                                self.assertEqual(bool([f for f in model.guard.contention_flags
+                                                       if f.get("kind") == "wall_clock"]), diverged, result)
                             elif truth and provable:
                                 self.assertEqual((result["rc"], result["published"]), (2, False), result)
                             else:

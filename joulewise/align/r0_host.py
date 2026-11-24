@@ -44,6 +44,14 @@ claimed only if it holds for every birth time inside it. The exact check
 and the lifetime check use the same bound. Every counter reading stays a
 lower bound for everything inferred after it: an absence after a reading,
 or a later reading of the same start second, proves nothing.
+
+KNOWN LIMITATION R0-CLOCK. R0 assumes a stable wall clock: if wall - mono
+varies by more than 1 ms over the series, it withholds (clock_unstable).
+Within a stable clock, verdicts within one centisecond of 1.50 CPU-s, and
+workloads whose sampled observations are identical, are not
+distinguishable; R0 refuses, never publishes, in the ambiguous case. The
+precondition sees only the offsets its reads measure, so a wall excursion
+that returns between two reads is indistinguishable from a stable clock.
 """
 from __future__ import annotations
 
@@ -232,6 +240,10 @@ def _born_after(row, read, monotonic_ns, reference):
 
 # Wall and monotonic time may drift apart by slew within a window, not more.
 WALL_DIVERGENCE_LIMIT_NS = 500_000_000
+# The series' clock-stability precondition (lead K1): every series read's
+# wall - monotonic offset within 1 ms of every other, or R0 withholds as
+# clock_unstable. Network time is off on a measurement host.
+CLOCK_STABILITY_LIMIT_NS = 1_000_000
 
 
 def _wall_divergence_ns(reads):
@@ -278,17 +290,21 @@ def _stamp_offsets_ns(read):
 class _BirthBound:
     """Where a process the series first saw at ``sighted`` was born, in monotonic ns.
 
-    It was born after the last series read that did not list it
-    (``absent``) and before the first that did (``sighted``). Its printed
-    start second can only narrow that bracket. It is converted once, when
-    the process is first seen, with the largest wall offset either bracket
-    read measured, because the birth lies between them. That is the
-    earliest instant any offset in the bracket allows, so a clock change
-    between the reads cannot date the birth late. No later read converts it
-    again. ``printed_ns`` is that conversion; it narrows only from inside
-    the bracket.
+    It was born after the last series sample that did not list it and
+    before the first accounting read that did (``sighted``). That sample's
+    absence is its accounting table (at the read's midpoint, as E1 places
+    samples) or, later, the arguments table read with it, when that lists
+    no process with the PID (from the table's start). The absence is an
+    independent zero. The printed start second can only narrow the bracket
+    from inside it. It is converted once, when the process is first seen,
+    with the largest wall offset measured from the absence sample to the end
+    of the sighting's accounting read; no offset measured after that read
+    enters. No later read converts it again. ``printed_ns`` is that
+    conversion. The series' clock-stability precondition bounds only the
+    offsets its reads measure; R0 assumes the offset at birth lies within
+    them (KNOWN LIMITATION R0-CLOCK).
     """
-    absent_midpoint_ns: int
+    absent_ns: int
     absent_started_ns: int
     sighted_midpoint_ns: int
     sighted_finished_ns: int
@@ -297,9 +313,9 @@ class _BirthBound:
     @property
     def zero_ns(self):
         """The exact check's zero: the earliest birth the samples allow."""
-        if self.absent_midpoint_ns < self.printed_ns < self.sighted_midpoint_ns:
+        if self.absent_ns < self.printed_ns < self.sighted_midpoint_ns:
             return self.printed_ns
-        return self.absent_midpoint_ns
+        return self.absent_ns
 
     @property
     def lifetime_floor_ns(self):
@@ -309,11 +325,15 @@ class _BirthBound:
         return self.absent_started_ns
 
 
-def _birth_bound(row, absent, sighted):
-    return _BirthBound(absent.midpoint_ns, absent.started.monotonic_ns, sighted.midpoint_ns,
-                       sighted.finished.monotonic_ns,
-                       int(row["start_epoch_s"]) * 1_000_000_000
-                       - max(_stamp_offsets_ns(absent) + _stamp_offsets_ns(sighted)))
+def _birth_bound(row, absent, absent_args, sighted):
+    absent_ns, absent_started_ns = absent.midpoint_ns, absent.started.monotonic_ns
+    if absent_args is not None and row["pid"] not in absent_args.pids:
+        absent_ns = max(absent_ns, absent_args.started_ns)
+        absent_started_ns = max(absent_started_ns, absent_args.started_ns)
+    offsets = _stamp_offsets_ns(absent) + [stamp.wall_ns - stamp.monotonic_ns
+                                           for stamp in (sighted.started, sighted.finished)]
+    return _BirthBound(absent_ns, absent_started_ns, sighted.midpoint_ns, sighted.finished.monotonic_ns,
+                       int(row["start_epoch_s"]) * 1_000_000_000 - max(offsets))
 
 
 def _birth_window_evidence(current, births, dwell_ns):
@@ -331,7 +351,7 @@ def _birth_window_evidence(current, births, dwell_ns):
             continue
         zero_ns = bound.zero_ns
         if 0 <= closing_ns - zero_ns <= dwell_ns:
-            basis = ("CPU since an accounting read proved absence" if zero_ns == bound.absent_midpoint_ns
+            basis = ("CPU since a complete process table proved absence" if zero_ns == bound.absent_ns
                      else "CPU since the printed start second")
             evidence = _exact_cpu_evidence(identity, row, 0, basis)
             if evidence:
@@ -413,7 +433,8 @@ def _overlap_cpu_evidence(opening, current, reads, *, endpoint_elapsed_ns, birth
             start_bound = max(window_start, birth.lifetime_floor_ns)
         else:
             previous = next((read for i, read in reversed(accounting) if i < first_index), None)
-            offsets = _stamp_offsets_ns(first) + (_stamp_offsets_ns(previous) if previous is not None else [])
+            offsets = [stamp.wall_ns - stamp.monotonic_ns for stamp in (first.started, first.finished)]
+            offsets += _stamp_offsets_ns(previous) if previous is not None else []
             floor = int(first_row["start_epoch_s"]) * 1_000_000_000 - max(offsets)
             reliable_start = (abs(_wall_offset_ns(first) - opening_offset) <= 1_000_000_000
                               and floor <= first.finished.monotonic_ns)
@@ -553,6 +574,10 @@ class QuietGuard:
         # (pid, start) -> _BirthBound, fixed by the series read that first
         # listed an identity its first read did not. Never recomputed.
         self._birth_bounds = {}
+        # The arguments table read with the newest series sample, and the
+        # lowest and highest wall - monotonic offset of every series read.
+        self._series_args = None
+        self._wall_offsets = None
         self._admission_snapshots = []
         self._admission_previous_over = {}
         self._process_observations = []
@@ -644,11 +669,11 @@ class QuietGuard:
         with self._cpu_probe_lock:
             snapshot, args = self._read_cpu_snapshot(include_host=not admission)
             with self._snapshot_lock:
-                self._remember_cpu_snapshot(snapshot, census_summary=census_summary, admission=admission)
+                self._remember_cpu_snapshot(snapshot, census_summary=census_summary, admission=admission, args=args)
                 self._process_observations.extend((snapshot, args))
         return snapshot
 
-    def _remember_cpu_snapshot(self, snapshot, *, census_summary, admission):
+    def _remember_cpu_snapshot(self, snapshot, *, census_summary, admission, args=None):
         rows = snapshot.rows
         previous_read = self._process_observations[-1] if self._process_observations else None
         sighted = previous_read.contenders if isinstance(previous_read, _ArgumentsRead) else frozenset()
@@ -686,13 +711,18 @@ class QuietGuard:
                             "pid": identity[0], "start": identity[1],
                             "command": rows[identity]["command"], "reason": "counter regressed",
                             "contaminant": rows[identity]["contaminant"] or previous.rows[identity]["contaminant"]})
-                # A newcomer was born between the previous series read, which
-                # did not list it, and this one. Fix its bound now, once.
+                # A newcomer was born between the previous series sample, which
+                # did not list it, and this read. Fix its bound now, once.
                 for identity, row in rows.items():
                     if identity not in self._initial_identities and identity not in self._birth_bounds:
-                        self._birth_bounds[identity] = _birth_bound(row, previous, snapshot)
+                        self._birth_bounds[identity] = _birth_bound(row, previous, self._series_args, snapshot)
             else:
                 self._initial_identities = frozenset(rows)
+            self._series_args = args
+            offsets = _stamp_offsets_ns(snapshot)
+            if self._wall_offsets is not None:
+                offsets += self._wall_offsets
+            self._wall_offsets = (min(offsets), max(offsets))
             self._pending["wall_clock_backwards"] |= backwards
             self._snapshots.append(snapshot)
             if census_summary is not None:
@@ -878,6 +908,7 @@ class QuietGuard:
             if not stopped:
                 raise Refused("census indeterminate: background sampler did not stop within the join bound")
             self._require_background_clear()
+            self._require_stable_clock(receipt)
         except Exception as exc:
             raise self._record_refusal(receipt, exc) from exc
 
@@ -900,12 +931,32 @@ class QuietGuard:
             self._cpu_interval(receipt)
             self._require_fresh_background(self._now(), latest)
             self._require_background_clear()
+            self._require_stable_clock(receipt)
         except Exception as exc:
             raise self._record_refusal(receipt, exc) from exc
         if self.receipts:
             self.receipts[-1]["publication_census"] = receipt
         else:
             self.receipts.append(receipt)
+
+    def _require_stable_clock(self, receipt):
+        """Withhold unless every series read saw the same wall - monotonic offset, within 1 ms.
+
+        A birth's printed start second converts to monotonic time only as
+        well as the offset at birth is known. R0 assumes it lies within the
+        range the series' reads measured. An excursion that returns between
+        two reads leaves no trace in them and is not detected (KNOWN
+        LIMITATION R0-CLOCK in the module docstring).
+        """
+        with self._snapshot_lock:
+            offsets = self._wall_offsets
+        if offsets is None:
+            return
+        spread_ns = offsets[1] - offsets[0]
+        receipt["wall_offset_range_us"] = spread_ns / 1000
+        if spread_ns > CLOCK_STABILITY_LIMIT_NS:
+            raise Refused(f"clock_unstable: wall - monotonic offset varied by {spread_ns / 1000:.3f} µs "
+                          f"over the series' reads (limit {CLOCK_STABILITY_LIMIT_NS / 1000:g} µs)")
 
     def _require_fresh_background(self, now, latest):
         if latest is None:

@@ -461,3 +461,43 @@ Local checks used Python 3.13 under `taskpolicy -c utility`, `TZ=UTC` and synthe
 - `tests.align.test_r0_checks` and `tests.hazards.test_contention`: 86 tests passed with three live skips.
 
 The census fault matrix test and frozen v3 run in hosted CI, per the lead's test budget. Frozen v3 is byte-identical at SHA-256 `afd360c29d390f7d39400e1363a25add5c13ace71bca55c80d11ec0ceb4e5009`. `RUN_STATE.md` and `TASK_QUEUE.md` retain their PR-base blobs. The remaining MED and LOW items stay with the lead.
+
+## 2026-11-24 closing edit for PR #824 (lead K1–K5)
+
+The round-4 confirmation audit of `51a50a1aa98fa2682a63b3684cd6c08b9388d870` blocked on two witnesses:
+
+- A 450 ms wall gain inside the arguments read after the first accounting sighting entered the birth conversion. A provable 1.51 CPU-s window then published in both modes. A 10 µs slew there published the 1.50 tie.
+- A 500 ppm excursion (peak 3.975 ms) refused a worker whose true 30 s maximum was 1.482 CPU-s. The excursion returned to zero between the reads.
+
+The audit also showed a 1.470 CPU-s workload whose sampled observations are identical to round 2's mandatory busy 1.50 tie. The audit's scripts reproduced the false publication on that head before this edit.
+
+**KNOWN LIMITATION R0-CLOCK.** "R0 assumes a stable wall clock: if wall − mono varies by more than 1 ms over the series, it withholds (`clock_unstable`). Within a stable clock, verdicts within one centisecond of 1.50 CPU-s, and workloads whose sampled observations are identical, are not distinguishable; R0 refuses, never publishes, in the ambiguous case."
+
+Changes in `joulewise/align/r0_host.py`:
+
+- **K1, clock stability.** Every series read's wall − monotonic offsets (accounting start, end and the end of its arguments table) feed one running range. At the final verdict, `finish()` and `verify_publication()` withhold with `clock_unstable: wall - monotonic offset varied by N µs over the series' reads (limit 1000 µs)` when that range exceeds 1 ms. The check runs after any census or sampler refusal, so those keep their own reasons. Every receipt records `wall_offset_range_us`. The window divergence flag above 0.5 s is unchanged.
+- **K2, inside a stable clock.** The birth conversion uses only offsets measured from the absence sample to the end of the first sighting's accounting read. No offset measured after that read enters. The arguments table read with the absence sample is an independent, later zero when it lists no process with the PID, starting at that table's start. A table listing another holder of the PID proves nothing.
+
+**K3 tests** (`tests/align/test_r0_host.py`):
+
+- `test_audit_r4_clock_witnesses_and_the_stable_clock_control` (124 runs, both modes, fresh and reused PID). Every 450 ms change withholds as `clock_unstable` with its range in µs. This covers the gain inside the post-sighting arguments read, a loss before birth, and a gain or loss at 68 s. With no change, a 10 µs slew, 0.5 ms, or exactly 1 ms, 1.49 CPU-s publishes, and 1.50 and 1.51 refuse on the zero at 46.05 s. 1.001 ms withholds.
+- `test_audit_r4_identical_observations_refuse_in_both_modes`. The round-2 tie and its 1.470 CPU-s twin give identical tables, clocks and flags, and both refuse in both modes.
+- `test_audit_r4_excursion_between_reads_is_withheld_not_published`. The excursion withholds in both modes and never publishes, and the stable clock publishes.
+
+**K3(b) differs from the ruling's wording.** It withholds through the exact check, not as `clock_unstable`. Every read in that run measures a zero offset, and the test asserts the zero range. The only trace of the excursion is the printed start second, and that is exactly what a stable clock with a worker born in second 46 would print. Its observations are therefore those of a real 1.50 tie: the second case of R0-CLOCK, not something the precondition can see. The audit's 450 ms excursions that return between reads ("pulse", "rampBack") behave the same way.
+
+On `51a50a1aa`'s `r0_host.py`, the new witness tests failed 114 subtests, and the identical-pair test passed, as it does now.
+
+**Existing tests that follow K1.**
+
+- A step above 1 ms now withholds as `clock_unstable` in: the half-second window-rule test (±0.49 s and ±0.51 s, plus ±0.5 ms that publishes), the rule-window wall-step test (300 ms), the round-3 quiet-worker replays (450 ms and 6 ms, renamed `test_audit_r3_quiet_worker_after_a_wall_loss_withholds_as_clock_unstable`), and the 3,920-run sweep. In the sweep, changes of 10 ms, 0.49, 0.51 and 2 s now withhold, and 1 µs and 150 µs keep the S2 rule.
+- The round-2 turnover test now finds a fresh PID's zero at the arguments table read with the 45.8 s sample. Its reused-PID case keeps the accounting midpoint.
+
+**K5.** No committed R0 rehearsal or fixture record contains sampler receipts or per-read wall and monotonic stamps. No tracked file outside the Python sources contains `wall_clock_divergence_s`, `wall_ns` or `monotonic_ns`, so K1 cannot change a recorded verdict. Every frozen v3 fixture keeps a constant wall offset, within float rounding below 1 µs. No restricted data was opened.
+
+Local checks used Python 3.13 under `taskpolicy -c utility`, `TZ=UTC` and synthetic inputs:
+
+- `tests.align.test_r0_host`: 156 tests passed with one native-capture skip. The census fault matrix test was skipped locally.
+- `tests.align.test_r0_checks` and `tests.hazards.test_contention`: 86 tests passed with three live skips.
+
+Frozen v3 and the census fault matrix run in hosted CI. Frozen v3 is byte-identical at SHA-256 `afd360c29d390f7d39400e1363a25add5c13ace71bca55c80d11ec0ceb4e5009`. `RUN_STATE.md` and `TASK_QUEUE.md` retain their PR-base blobs.
