@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "the lead's span-2 issue on main (cq-ctl-01-s02-a1), binding this PASS file sha256 and queue sha256 c65f9c8b…7c18",
+  "next_observable": "/Users/edr/campaign-out/cl-ctl-01/cq-ctl-01-s02-a1/runner_receipt.json with fence PID gone, then the magistrate's verified close, automatic desk disposition, copy proof and twelve-position accounting on main.",
   "open_items": [
+    {
+      "expires_epoch_s": 1795665600,
+      "item": 568,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 567,
@@ -251,11 +257,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "567",
+  "source_item": "568",
   "source_item_heading_date": null,
   "wait": {
-    "deadline_epoch_s": 1795515600,
-    "observable": "none",
-    "on_early_or_refused": "If the span-2 issue is not on main by this deadline, arm nothing on this route and follow item 565's pointer."
+    "deadline_epoch_s": 1795705500,
+    "observable": "result_json_exists",
+    "on_early_or_refused": "Read the verdict immediately. On timing cede, replan within authority. On refusal, fault, changed predecessor, unproven close or missing receipt at deadline, hold ctl, preserve evidence and alert the lead. Refer an appended row without receipt to the research lead."
   }
 }
