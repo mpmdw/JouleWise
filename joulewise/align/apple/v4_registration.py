@@ -823,6 +823,7 @@ def declared_pins(repo, stage):
 
 LEDGER = 'runs/calibration_observation_ledger.jsonl'
 PACK = Path('configs/campaigns/align-v4-c1')
+C1_WINDOW = 'C1'
 # The pinned campaign runner probes at most six ancestors of a resolved
 # config directory. Keep its last probe inside S without editing the runner.
 C1_DISPATCH = Path('members/dispatch')
@@ -1125,7 +1126,8 @@ def consumer_check(consumer, call):
         result = call()
     except CalibrationLedgerError as exc:
         code = exc.code.value if exc.code else 'refused'
-        raise ValueError(f'C1 {consumer} refuses: {code}') from exc
+        reason = (exc.context or {}).get('reason')
+        raise ValueError(f'C1 {consumer} refuses: {code}' + (f' ({reason})' if reason else '')) from exc
     if isinstance(result, tuple) and result and isinstance(result[0], RefusalCode):
         context = result[1] if len(result) > 1 and result[1] else None
         detail = f' {json.dumps(context, sort_keys=True, default=str)}' if context else ''
@@ -1246,6 +1248,18 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
                 view.locate(path)
             if view.locate(args.plan) != view.locate(view.root / PACK / 'collection_plan.json'):
                 raise ValueError('reservation selects a different C1 collection plan')
+            # The session records this window beside the frozen plan's ID.
+            frozen_window = decode(view.locate(args.plan).read_bytes()).get('window_id')
+            identity = tree.get('window_identity') or {}
+            if (args.window_id != C1_WINDOW or frozen_window != C1_WINDOW
+                    or identity.get('window_id') not in (None, C1_WINDOW)):
+                raise ValueError(f'C1 reservation must reserve the frozen C1 window: --window-id '
+                                 f'{args.window_id!r}, frozen plan window {frozen_window!r}')
+            if identity.get('evidence_root_id') not in (None, args.evidence_root_id):
+                raise ValueError('C1 reservation evidence root differs from the frozen window identity')
+            if os.path.normpath(view.root / args.runs_root) != os.path.normpath(bindings['claim_runs_root']):
+                raise ValueError(f"C1 reservation runs root differs from the window's claim runs root: "
+                                 f"{args.runs_root}")
             if not args.execute or args.verify_only:
                 # Without --execute the reservation validates and exits 0 without
                 # reserving; the capture then finds no session.
@@ -1255,7 +1269,7 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
             deadline = consumer_check('reservation', lambda: ledger.CustodyDeadline(
                 args.custody_budget_s, args.custody_deadline_epoch_s, telemetry_stream=None))
             consumer_check('reservation', lambda: reservation.verify_frozen_plan(
-                args.plan, plan_id=args.plan_id, plan_sha256=args.plan_sha256))
+                args.plan, plan_id=args.plan_id, plan_sha256=args.plan_sha256, window_id=args.window_id))
             # The HAZARD reservation measures both identity vectors on the host
             # at launch. Each field is a stand-in here; the validator judges
             # every prepared input: session, runs root, slots and custody.
@@ -1281,6 +1295,24 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
                 raise ValueError('C1 capture resolved to the wrong slot')
             if args.rederive_from is not None or args.output is not None:
                 raise ValueError('C1 capture must be a live bracket capture')
+            if args.derivation_only:
+                raise ValueError('C1 capture is a bracket capture; --derivation-only needs a derivation session')
+            test_only = [name for name, present in (
+                ('--sampler-direct-for-test', args.sampler_direct_for_test),
+                ('--battery-probe-fixture-for-test', args.battery_probe_fixture_for_test is not None),
+                ('--battery-probe-duration-for-test', args.battery_probe_duration_for_test != 0),
+                ('--time-scale-for-test', args.time_scale_for_test != 1),
+                ('--projection-cell-budget-for-test', args.projection_cell_budget_for_test is not None),
+                ('--identity-epoch-json-for-test', args.identity_epoch_json_for_test is not None),
+                ('--test-writer-crash-authorization', args.test_writer_crash_authorization is not None)) if present]
+            if test_only:
+                raise ValueError('C1 capture carries a test-only capture option: ' + ', '.join(test_only))
+            if args.pulse_count != fiducial.PULSE_COUNT:
+                raise ValueError(f"C1 capture --pulse-count {args.pulse_count} differs from the frozen "
+                                 f"protocol's pulse count {fiducial.PULSE_COUNT}")
+            for option in ('sampler_ready_timeout_s', 'rollover_timeout_s'):
+                if not (math.isfinite(getattr(args, option)) and getattr(args, option) > 0):
+                    raise ValueError(f"C1 capture --{option.replace('_', '-')} must be finite and positive")
             check_ledger(view.locate(args.ledger), pin, starting=starting)
             same_head_pin('capture', args.head_pin)
             for field in ('identity_epoch_json', 't1_bindings_json', 'plan',
@@ -1323,8 +1355,18 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
                 # runner would refuse that stage before collection.
                 if (args.cli_cmd or args.backup is not None or args.check_prompt_hashes
                         or args.whole_window_verdict or args.record_supersession
-                        or args.shakedown_gate is not None):
+                        or args.shakedown_gate is not None or args.dry_run):
                     raise ValueError('unsupported C1 campaign mode')
+                if args.max_blocks is not None:
+                    if args.max_blocks < 1:
+                        # The runner's own first check gives its own message.
+                        runner.campaign_block_limit(args.max_blocks, None, (), ())
+                    # A C1 launch authorization has purpose HAZARD_PACK, for which
+                    # the runner refuses any block limit before the first member.
+                    raise ValueError('--max-blocks requires G2B_SHAKEDOWN authorization')
+                if args.instrument_power_policy not in (None, reserved_policy):
+                    raise ValueError(f'C1 campaign instrument power policy differs from the reserved policy: '
+                                     f'{args.instrument_power_policy!r} != {reserved_policy!r}')
                 selections['policy'] = view.locate(args.campaign_policy)
                 # The runner's own loaders on the exact bytes it will read.
                 runner.load_campaign_policy(args.campaign_policy)

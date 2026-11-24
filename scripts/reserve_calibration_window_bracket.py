@@ -266,10 +266,14 @@ def _parser(*, ledger_default=DEFAULT_LEDGER_PATH, head_pin_default=DEFAULT_HEAD
     return parser
 
 
-def verify_frozen_plan(path: Path | None, *, plan_id: str, plan_sha256: str) -> None:
+def verify_frozen_plan(
+    path: Path | None, *, plan_id: str, plan_sha256: str, window_id: str | None = None
+) -> None:
     """Refuse a frozen plan whose exact bytes, plan ID or SHA-256 differ.
 
-    The reservation and the C1 arm preflight both call this gate.
+    A plan that declares its window also binds ``--window-id``: the session
+    cannot record another window beside this plan. The reservation and the
+    C1 arm preflight both call this gate.
     """
 
     if path is None:
@@ -285,6 +289,13 @@ def verify_frozen_plan(path: Path | None, *, plan_id: str, plan_sha256: str) -> 
         or hashlib.sha256(plan_raw).hexdigest() != plan_sha256
     ):
         raise CalibrationLedgerError(RefusalCode.PLAN_HASH_MISMATCH)
+    declared_window = plan_value.get("window_id")
+    if window_id is not None and declared_window is not None and declared_window != window_id:
+        raise CalibrationLedgerError(
+            RefusalCode.RESERVATION_INPUT_INVALID,
+            context={"reason": "plan_window_mismatch", "plan_window_id": declared_window,
+                     "window_id": window_id},
+        )
 
 
 def _declared_slot_sources(
@@ -532,7 +543,8 @@ def main(argv: list[str] | None = None) -> int:
                 detail="HAZARD reservation skipped the committed-pin check and the historical "
                        "custody pass",
             )
-        verify_frozen_plan(args.plan, plan_id=args.plan_id, plan_sha256=args.plan_sha256)
+        verify_frozen_plan(args.plan, plan_id=args.plan_id, plan_sha256=args.plan_sha256,
+                           window_id=args.window_id)
         declared, slots, session_identity, normalized_slots = reservation_inputs(args, epoch, t1)
         if not args.execute and not args.verify_only:
             output = {
