@@ -25660,3 +25660,114 @@ Research lead (Fable 5.2), Mon Nov 23 21:55 PST 2026 (from `date`). RL-203 to RL
 > - Suite v3.2 SHA-256 `a21d28f24aeb49b665e840e96a096b9e0f38ad3258476723e21fd95996bdc750`; pinned shard counts 0–15: `1560 1641 1588 1612 1530 1499 1537 1602 1553 1640 1612 1639 1595 1582 1562 1548` (25,300 cases, direct at `532654cf0`, 0 FALSE_PASS / WRONG_VERDICT / HARNESS_ERROR, issuer seat `astra-partc-suite-v32-1123`). RL-209 steps 1–3 rest on that seat's CHANGES-v3.2.md (diff confined to the clean-control builder; 25,083 v3.1 expectations byte-unchanged; 217 added, cited to the frozen writer). Step 4 not owed (RL-215 Q1).
 > - Shard 2: RL-215 retires direct v3.2 as the signing gate, so the lost-shard question moves to the v4 legacy run in CI's sixteen shards; a missing shard there is not a zero.
 > - `legacy/normalized_v32.py` lead edit per Q3 (the 40 IDs print INAPPLICABLE, not counted) and Q5 (PARITY_DIFFERENCE prints and blocks nothing; a must-refuse ID the archive admits is FALSE_PASS): SHA-256 `0990b486…d62c` → `4824c5361fb0fa031a9c6683d06d34058d317e573b3c556c4d99c26ad840f740`, re-recorded in `SUITE-v4.sha256`. No other suite byte changed.
+
+# RL-216. #809 Part C, what the build round left: the four descriptor `shift` IDs stay "must refuse" on the native path, and the archive's `unattested` pass on them is pinned by ID, not counted as a false pass; `launch-config` is the kit's refusal at its start, and its two v4 expectations are re-expected to that stage; in an archive a path is a label and is not compared; the builder's four decisions stand. No round is added
+
+**Question.** Which rule governs the four `max_position_embeddings/shift` IDs: RL-189 §1.4 with Q2, or Q5's gate (R1). Which stage and record the four config-form cases test (R2). What a moved archive that holds both outer soak files must show (R3). The builder's four NEEDS_SPEC decisions (R4).
+
+- **R1. RL-189 §1.4 and Q2 govern. Q5's "on either path" was too wide for these four IDs and is amended.** Their "must refuse" is D4, which compares the claim with a descriptor the ledger binds (RLD:22110, 22129). An archive has no ledger, and its outcome is ruled: pass, printed `native_limit: unattested` (RLD:22124).
+- **The archive cannot refuse this field, and the pinned v4 table already requires the pass.** `assess_descriptor` gives WRONG_VERDICT unless the archive passes with all four members `unattested`, on all sixteen `return-descriptor` cases (V4:3336-3338).
+  - Under `shift` the member claims 40,961 over a recorded cap of 40,960 with a consistent manifest (V4:1753-1754, 2101-2106). `consistent-40961` writes that same claim for the member (V4:2139-2146), and its archive must pass.
+  - `mirror-40961-claim-40960` on X-G must pass in the archive with X-G at 40,960 and its three peers at 40,961 (V4:2137-2138). So members that disagree are not a ground either.
+- **The oracle refuses them on the native-only witness.** It reads the mirror itself (V4:608-622). The builder's settlement print gives one mismatch label for all four: `native context limits.max_position_embeddings`. That is Q2's fourth branch, not common evidence.
+- **Q5's gate sentence now reads:** no `must refuse` ID admitted natively; none admitted by the archive except these four under the three conditions below; the six mandatory positives pass; no operand or harness error.
+- **The four are checked, not waived.** Each is settled `archive_unattested` only if all three hold:
+  1. Native: `other_failure` with `admission_recompute` among its reasons.
+  2. Archive: `pass`, no reason, and `native_limit` equal to `unattested` for all four members.
+  3. Oracle: refuses, with the label above.
+  - One condition failing on one ID is a FALSE_PASS. Any other `must refuse` ID the archive admits is a FALSE_PASS, as before.
+- **They are not `may pass`.** A native pass on any of them stays a false pass. RL-189 is not amended. LN:71 is not edited: the runner's printed word for the four is settled by the job, as for the nine.
+
+- **R2. The two v4 expectations are wrong and are re-expected. All four cases test the kit's start.** The IDs, the class and the reason `issued_inputs` stay, and `cases-v4.tsv` keeps its bytes.
+- **The witness cannot exist.** The pinned launcher keeps only the soak child's exit status (SM2:523-526, 453). The child prints its finding to its own stdout log (SM2:636-638, 417). The suite hands the candidate two modules (V4:42), and neither runs in the launcher's parent before the soak.
+- **The two pairs ask opposite things of one input.** The generated pair fails on any idle dispatch (V4:3523). The history pair issues the same two argument forms (V4:3516-3517; V4H:696-697) and must reach Part C's own refusal after the soak (V4:952; V4H:96-97).
+- **The kit's start is enough for evidence.** `_runtime_config` runs before the kit's row 0 and before any dispatch (PC:5009-5013). I ran both forms at `3239f9ce2`: one idle dispatch, no member dispatch, no kit ledger, `issued_inputs` in both Part C copies, and nothing in `runner_receipt.json` but exit statuses.
+  - A soak dispatched under a form R4 refuses is never bound: the same registered argv reaches the kit, which refuses before it reads the soak.
+  - No damaged run is admitted at either stage. The earlier stage saves one soak of a smoke.
+- **The form is not a host fault.** The argv comes from the registered `inputs.json` (SM2:340; RH:2165-2179), fixed at signing. A refusal in the soak child would also leave this fault with no Part C publication.
+- **The re-expected test, the same for `equals` and `repeat`.** REFUSED needs all of:
+  1. Exactly one idle dispatch.
+  2. No member dispatch.
+  3. The launcher returns 2, and `runner_receipt.json` has `rc` 2 and `parts` equal to `{"C": false}`.
+  4. `smoke.json` equals `smoke_part_c.json`, with verdict `other_failure`, `pass` false and `issued_inputs` in `evidence_failures`.
+  5. `part-c.stdout.log` holds a finding with reason `issued_inputs` and field `--config`.
+  - Anything else is WRONG_VERDICT.
+- **EI:257 is read with this ruling:** "before first dispatch" is the kit's first dispatch, and "MISSING before soak" is withdrawn. The class is built: it is R4 (PC:4967-4995). No check is added to `judged_invoke`, the soak child or the launcher. The history pair and `history/config-separate` are unchanged.
+- **A tested body exists.** `R2-test_partc_writer_v4.py` in my seat directory changes `assess_launch_config` only (`R2-assess_launch_config.diff`) and hashes to `59dd71280204b9cd4c9aadaa7e28005ce49b66650070826fe55cda77fe88cef7`. Run through the suite's own entry at `3239f9ce2`, both cases print REFUSED and the inventory still matches `cases-v4.tsv`. The lead may apply it or write its own; the five conditions are the ruling.
+
+- **R3. In an archive a path is a label.** No path in `soak_row.json` or `soak_reference.json` is resolved, tested for existence or compared with where the archive lies.
+- **What RL-185 §1.3 item 6 takes from the ledger is native.** "Resolves to row 1's segment" and the stdout digest both name row 1 (RLD:20765, 20767). An archive has no ledger and none is invented (RLD:20613). These are not a fifth branch beside Q2's four. They are the ledger.
+- **"Compared as native" means these common predicates, all on content:**
+  - the names and attempt 0 in both files, `output_dir` a string equal to `source_output`, and the row's `result` equal to the saved receipt, whole (PE:476-488);
+  - outer-open, outer-close and outer-next (EI:249-251; PC:4720-4727);
+  - the row's load verdict and both files' statistics against the held journal (PC:4736-4753);
+  - the segment bound to its archived custody manifest.
+- **The asked case: replay does not refuse it.** A moved archive's own location is never the one recorded, so replay has no fact that says which attempt a path names. The native path refuses it `fresh_soak` (PE:573-576). The suite's history replays already run on a moved copy whose row names the first location (V4H:785-791).
+- **What ties an archived soak to its attempt is its bytes:** the receipt pair, the terminal bracket, the next member's start, and the members judged against the statistics of that journal (PC:5119-5120). A substituted soak that passes all of those is outside what a replay can see. `binding: archived_custody` is the label for that limit, and a replay is never a Part C (RLD:20613).
+- **At `3239f9ce2`, on the v4 clean control, I saw:** in place, pass; moved with the original removed, pass; moved under another run-root name, pass; both strings rewritten alike, pass; the row's string rewritten alone, `fresh_soak`. No suite case rewrites both strings alike.
+
+- **R4 (a). Accepted.** An archive with one outer file and not the other is `other_failure / evidence_unverifiable`, naming the absent file.
+  - The frozen launcher writes the row, then may refuse, then writes the reference (SM:336-341). A row with no reference is a refused soak, after which no kit starts. A reference with no row is a shape no run writes. No healthy archive is refused.
+  - It is the edge between Q2's two ruled cases, not a new branch. I saw both directions refuse and the neither case pass at `3239f9ce2`.
+- **(b). Accepted.** A member's offset set is the hull, over its paired stamps, of `[epoch − monotonic_after, epoch − monotonic_before]` in the record's integer ns. The two declared resolutions are not added.
+  - It is the bracket the frozen `stamp_mapping` takes (SP:96-97). That function charges resolution to an attribution bound (SP:102), not to an order.
+  - The pinned one-nanosecond cases (`tick-window/lower-minus`, `upper-plus`) refuse only without widening.
+  - **Its limit.** The synthetic clock declares 1 ns, and a real host may declare a coarser wall clock (CK:51-52). A healthy run then stays feasible only while the member's CPU origin is one free unknown under inequalities. I did not check that in `_check_callbacks`. Q4's net holds: a clock refusal on the stored replay comes to me with the check name (RLD:25630).
+- **(c). Accepted. It is R3.**
+- **(d). Accepted.** A missing field refuses with the reason the table gives that class's `missing` operation, on both paths. `drain` and `desk-owned-required` keep `receipt_contract`, as the table has them. A required contract field that no class owns keeps `receipt_contract`.
+  - A reason name labels a refusal. The admitted set does not change, and the judged invoker still reads `contract.missing_fields` strictly (RLD:20104).
+
+- **The gate's pins after the fix pass.** These are the builder's counts at `3239f9ce2` with R1 and R2 applied. I reran only the two `launch-config` cases.
+  - v4 generated, 1,472: 390 AGREES_PASS, 1,082 REFUSED, zero FALSE_PASS, WRONG_VERDICT and HARNESS_ERROR. The two `launch-config` IDs move from WRONG_VERDICT to REFUSED.
+  - Named history, 78: unchanged. Writer clean proof 62, 62, 82, 62, 62: unchanged.
+  - Legacy, 25,260 counted and 40 INAPPLICABLE: 982 AGREES_PASS, 24,255 REFUSED, 10 PARITY_DIFFERENCE, 13 printed FALSE_PASS by the runner. Settled: 9 `may pass (control changed)` and 4 `archive_unattested`, both lists closed and by ID. Unsettled: zero.
+  - No ID moves, so the sixteen shard counts stand. `SUITE-v4.sha256` changes in one line.
+  - A count that the audit's fix pass moves is re-pinned by ID in the report.
+- **The loop.** No round is added. The one fix pass RL-215 allows carries the audit's findings and the items below. If CI at the fix head shows these pins, R1 to R4 do not return to me.
+- **The audit is still owed.** When I wrote, the Sol seat had exited with an empty final message (`pl-809-v4/failed-audit-1-sol-filter`). This ruling does not stand in for RL-215's eight checks. If no Sol seat can finish them, that comes to me; the audit is not waived.
+- **What comes back.** One of the four R1 IDs failing a condition. A moved count the lead cannot explain by ID. Q4's stored-replay refusals. Nothing else.
+
+**Cites.**
+- RLD is the ledger at `2b8f28060`. EI is `EVIDENCE-INVARIANTS.md` in `/Volumes/JW-EXT/scratch/astra-partc-invariants-v4-1123/out/`.
+- V4, V4H and LN are `tests/align/test_partc_writer_v4.py` (`a708681c…6824`), `tests/align/partc_v4_history.py` (`17de91e1…3b49`) and `legacy/normalized_v32.py` (`4824c536…f740`) in the issued `suite-v4`.
+- PC and PE are `scripts/align_r1_part_c.py` and `scripts/align_r1_part_c_evidence.py` at `3239f9ce2`.
+- SM2 is `scripts/run_align_r1_smoke.py` at the fixture pin `2d02a6f0e`. SM is the same file at `b2e01464d`.
+- RH, SP and CK are `scripts/align_r1_rehearsal.py`, `joulewise/align/apple/sampler.py` and `joulewise/clock.py` at `b2e01464d`.
+- The builder's report is `docs/run_reports/2026-11-24-pr809-rl215.md` at `3239f9ce2`; its settlement print is `pl-809-v4/build/tmp/settle-13.txt`.
+- My runs are in `/Volumes/JW-EXT/scratch/fable-809-rl215-ids-1124/probes/`: `r2_probe.log` (`e3800573…08b6`), `r2_suite_run.log` (`64d198bf…b4cc`), `r3_probe.log` (`e44b41b8…0440`).
+
+**Checked.**
+- The ledger file is byte-equal to `2b8f28060`. All nine `SUITE-v4.sha256` lines verify in the issuing directory, before and after my runs. The builder's clone is at `3239f9ce2` and clean.
+- I read RL-215, RL-183c, RL-185 §1, RL-189 §1, RL-209 and RL-183 §1.2-1.3; the builder's report and final message; the resolver's escalation; and every source line cited above.
+- Three synthetic runs at `3239f9ce2`, in a private temp directory, with the issued suite read in place and unedited: the two argument forms through the pinned launcher; the two re-expected cases through the suite's entry on a scratch copy; the replay of the clean control in the eight states of R3 and R4 (a). The clean proof printed 62, 62, 82, 62, 62 on the way.
+
+**Not checked.**
+- I ran no shard of the suite, no legacy operand and no settlement. Every count above but the two `launch-config` outcomes is the builder's. I did not read CI's logs.
+- The nine `may pass (control changed)` IDs and the ten parity differences. Q5 settles the first by the oracle and prints the second; auditor check 6 reads them.
+- The builder's clock code (`_check_callbacks`, `_check_battery`), beyond what R4 (b) says of it. Whether any real host's records keep a member's CPU origin free is first seen in the stored replay.
+- That each member reference comparison in `_judge_members` reads the soak's derived statistics. I read the call (PC:5119-5120), not each check.
+- The W1 line's own launcher. R2 is ruled on the fixture pin's, which is the one the suite runs.
+- No custody, energy, power, meter, transcript, hazard or sealed file was opened. Nothing was committed or pushed. I wrote only inside my seat directory, and I did not edit the issued suite or the builder's clone.
+
+**Lead must:**
+1. Replace `assess_launch_config` in the issued `tests/align/test_partc_writer_v4.py` so that it tests R2's five conditions, with no other byte changed in the suite. Record the new digest in `SUITE-v4.sha256` and under this entry. With my body it is `59dd7128…cef7`.
+2. Record under this entry that `cases-v4.tsv` is still `dcc4428a…2967`, and the fix head's CI run ids with the pins above.
+3. Relaunch RL-215's audit. Its checks 1 to 8 are unchanged, and its check 2 reruns on the re-recorded suite.
+
+**Builder must** (in the one fix pass, with the audit's findings):
+1. Copy the re-recorded suite file unchanged and update the repository's `SUITE-v4.sha256`. Edit no suite byte.
+2. Build nothing for R2. Report `launch-config` as built by `_runtime_config`. Keep the argument-list test equal (RLD:20136).
+3. Give the settle job a second closed list, `archive_unattested`, holding exactly the four IDs. Have the tool print the archive's `native_limit` and test the oracle's label, and apply R1's three conditions. The job fails on any other admitted `must refuse` ID and on any of the four that misses a condition.
+4. Add to `tests/align/partc_rl215_checks.py`, on the v4 clean control:
+   - an archive with the reference and no row gives `evidence_unverifiable` naming `soak_row.json` (the reverse test exists);
+   - the run root copied to another parent directory and to another root name, the original removed: replay gives `pass`, `binding: archived_custody` and no reason;
+   - both path strings rewritten to one other absolute path: replay gives `pass`; the same pair written before the soak ledger's row 2 gives `fresh_soak` natively.
+5. Leave R4 (b) and (d) as built, and cite RL-216 for each of the four decisions in the report.
+6. Pin the counts above in CI, and report by ID any that differ.
+
+
+> **Lead note (2026-11-24 08:20 PST), RL-216 "Lead must" items 1-2:**
+> - Item 1 done. `assess_launch_config` in the issued `suite-v4/tests/align/test_partc_writer_v4.py` is replaced with the research lead's body, and the diff is confined to that function (`R2-assess_launch_config.diff`). The file's new SHA-256 is `59dd71280204b9cd4c9aadaa7e28005ce49b66650070826fe55cda77fe88cef7`, re-recorded in `SUITE-v4.sha256`, where exactly one line changed and every entry verifies OK. The prior bytes are kept as `.pre-rl216`.
+> - `cases-v4.tsv` is unchanged: `dcc4428a37899998a76c…2967`.
+> - The fix-head CI run ids will be recorded here when the fix pass lands.
+> - Auditor: the Sol seat was stopped by the OpenAI content filter (`pl-809-v4/failed-audit-1-sol-filter`). The executing Mythos seat `mythos-809-rl215-audit-1124` takes RL-215's audit, as ruled above. It started 08:00, before this entry, so its check 2 runs on the pre-RL-216 suite. The re-expected pair's REFUSED verdicts are confirmed by the fix head's CI pins.
