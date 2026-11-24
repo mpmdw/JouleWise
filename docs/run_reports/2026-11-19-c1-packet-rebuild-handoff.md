@@ -1924,3 +1924,34 @@ The first CI run on `2e2e1c7b4` (`45422131593`) passed 17 of 21 jobs:
 
 The census and `tests.hazards.test_refusal_allowlist` (24) pass locally,
 as does `test_b5_driver_lineage_real` (6).
+
+## Round 19 · lead ruling: keep L1, reverse the frozen link form
+
+The lead resolved round 18's NEEDS_SPEC and kept L1. The candidate
+adapter chose the direction of the frozen `staging-link-and-copy` link,
+and production preflight reads the `R/KIT` path. So the `link` form now
+works as follows:
+- `S/PACK/collection_plan.json` is a regular file with the exported
+  file's bytes and mode;
+- the exported `R/KIT/collection_plan.json` is a link to that file,
+  created before the packet build;
+- `copy` keeps regular files at both paths;
+- the original `S/PACK -> R/KIT` link is kept as the negative
+  `pack-link` fixture.
+
+Only the candidate adapter and its regressions changed. The spec came
+first, as `fb7cdb99d`: on the old adapter the link form still pointed
+from the pack to R, and `pack-link` did not exist. The fix is
+`6e5c48f14`.
+
+| Ruling item | Commit | Named regression | Result |
+| --- | --- | --- | --- |
+| 1 and 2: `link` is `R/KIT` (`S_IFLNK`) -> `S/PACK` (`S_IFREG`, committed bytes and mode); `copy` is `S_IFREG` at both; both are admitted end to end (`build=0`, `cli=0`, `arm=admit`, `host_cli=1`, `host_arm=1`) and by the launch binding | `6e5c48f14` | `test_r19_link_form_links_the_kit_to_the_pack_and_a_pack_link_refuses` | PASS |
+| 2: negative `pack-link` (`S/PACK` `S_IFLNK` -> `R/KIT`) refuses at build as `pack_inadmissible`, reaches zero host checkpoints and refuses again at launch binding | `6e5c48f14` | same test, `pack-link` subcase | PASS |
+| 2: pack digest. `copy` and `link` equal D-134's committed digest; `pack-link` has none | `6e5c48f14` | `test_r16_staged_pack_digest_is_the_committed_d134_digest` | PASS |
+| 3: manifest, nine frozen files, all 94 decisions | `6e5c48f14` | `SUITE.sha256` check; `test_frozen_lite_decisions` | 94/94 |
+
+Local checks: all 50 `test_c1_closure` tests pass in three processes.
+The frozen replay ran once (9 m 21 s) and matched the tape byte for byte.
+`shasum -c SUITE.sha256` passes for all nine files, and they are
+unchanged since `3ea3de760`.
