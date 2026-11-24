@@ -1553,6 +1553,18 @@
     ]
   },
   {
+    "commit": "909465f32ac9ca202f8c73f239f0252a87ea1fb6",
+    "number_bearing_paths": [],
+    "change": "merge of ops/2026-11-11-w1-presign (ecf718b4d, PRs #944, #960, #961) into PR #896 (f00464dcc) for shard 12, lead round 10 L4; an ordinary merge, not a force push",
+    "executing_reviews": [
+      {
+        "reviewer": "Fable 5.2 cold executing review of the merge (non-author), in the Sol 6.1 seat whose command sandbox cannot initialize on this machine, ADMIT",
+        "covered": "merge 909465f32 tree 30a0233a9 equals git merge-tree of f00464dcc and ecf718b4d (no conflicts); 44 PR-only and 35 base-only paths byte-identical to their side, 2 both-changed paths equal the 3-way merge; review-required paths chain.py and calibration_ledger.py equal the PR side, mlx_runtime.py equals the base side; ledger is the exact 80-row union with the first 15 rows intact; 102 tests in 6 base-side modules plus 1 PR-side spot check pass; paper sha256 5034e07294c87b20451880af23cd1cc182d185c7e3337fe382d6b9168c4d50e6",
+        "paper": "docs/align/reviews/2026-11-24-c1-r18-merge-fable-executing-review.md"
+      }
+    ]
+  },
+  {
     "commit": "6093a7454d181c87ae6fcb2e3d30c25fb1e97cce",
     "number_bearing_paths": [
       "joulewise/adapters/mlx_runtime.py"
