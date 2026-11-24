@@ -13,6 +13,7 @@ from joulewise.align.apple.episode_bundle import join_episode_trace
 from joulewise.align.apple.sampler import (
     NS_PER_SECOND as NS, _restore_stamp, monotonic_ns, seconds_ns, stamp_mapping,
 )
+from joulewise.align.power.windows import _support_edge_quantum_ns
 from joulewise.align.records import ClockMapping, Episode, PowerTrace, _build, from_json
 from joulewise.external import km003c_parse as meter
 from joulewise.schemas import BenchmarkConfig
@@ -20,8 +21,8 @@ from joulewise.schemas import BenchmarkConfig
 from . import controls_analysis as analysis
 from .qualification_manifest import _decode
 from .controls_time_fields import (
-    EMPTY_ARRAY, OPAQUE_NUMBER, OPAQUE_STRING, RAIL_COLUMNS, SKIP, Nullable, RecordFields, TimeFieldError,
-    project_json, rail_rows, stream_fields,
+    EMPTY_ARRAY, OPAQUE_NONBLANK_STRING, OPAQUE_NUMBER, OPAQUE_STRING, RAIL_COLUMNS, SKIP,
+    Nullable, RecordFields, TimeFieldError, project_json, rail_rows, stream_fields,
 )
 
 
@@ -64,29 +65,36 @@ METADATA_FIELDS = {
         "effective_clock_anchor_bound_s",
     ))},
 }
+OPTIONAL_CONFIG_TEXT = Nullable(OPAQUE_NONBLANK_STRING)
 CONFIG_FIELDS = {
     "schema_version": None,
-    "run_id": None,
-    "model": dict.fromkeys(("name", "family", "source", "revision", "weight_format", "context_window",
-                            "tokenizer_json_sha256", "chat_template_sha256")),
-    "quantization": dict.fromkeys(("name", "bits", "group_size")),
+    "run_id": OPTIONAL_CONFIG_TEXT,
+    "model": {
+        "name": OPAQUE_NONBLANK_STRING,
+        **dict.fromkeys(("family", "source", "revision", "weight_format"), OPTIONAL_CONFIG_TEXT),
+        **dict.fromkeys(("context_window", "tokenizer_json_sha256", "chat_template_sha256")),
+    },
+    "quantization": {"name": OPAQUE_NONBLANK_STRING, "bits": None, "group_size": None},
     "hardware_target": {
-        **dict.fromkeys(("id", "transport", "runtime_backend", "telemetry_backend", "host", "device_kind")),
-        "notes": Nullable(OPAQUE_STRING),
+        "id": OPAQUE_NONBLANK_STRING,
+        **dict.fromkeys(("transport", "runtime_backend", "telemetry_backend")),
+        **dict.fromkeys(("host", "device_kind", "notes"), OPTIONAL_CONFIG_TEXT),
     },
     "workload_profile": {
-        **dict.fromkeys(("name", "prompt_tokens", "output_tokens", "dataset_ref", "suite_manifest_ref",
-                         "suite_manifest_sha256", "generator_sidecar_ref", "prompt_token_evidence_policy",
-                         "repetitions", "warmup_runs")),
-        "prompt_text": Nullable(OPAQUE_STRING),
+        "name": OPAQUE_NONBLANK_STRING,
+        **dict.fromkeys(("prompt_tokens", "output_tokens", "prompt_token_evidence_policy", "repetitions", "warmup_runs")),
+        **dict.fromkeys(("prompt_text", "dataset_ref", "suite_manifest_ref", "suite_manifest_sha256",
+                         "generator_sidecar_ref"), OPTIONAL_CONFIG_TEXT),
         "prompt_token_expectation": Nullable(RecordFields.fromkeys((
             "schema_version", "token_hash_domain", "token_count", "token_ids_sha256",
         ))),
     },
-    "interconnect": Nullable({"name": None, "link_speed_mbps": None, "notes": Nullable(OPAQUE_STRING)}),
+    "interconnect": Nullable({
+        "name": OPAQUE_NONBLANK_STRING, "link_speed_mbps": None, "notes": OPTIONAL_CONFIG_TEXT,
+    }),
     "sampling": Nullable(dict.fromkeys(("power_hz", "idle_seconds", "warmup_seconds"))),
     "run_metadata": Nullable({
-        "project": None, "operator": Nullable(OPAQUE_STRING), "notes": Nullable(OPAQUE_STRING),
+        "project": OPAQUE_NONBLANK_STRING, "operator": OPTIONAL_CONFIG_TEXT, "notes": OPTIONAL_CONFIG_TEXT,
         "tags": [OPAQUE_STRING], "ambient_temp_c": Nullable(OPAQUE_NUMBER),
     }),
     "schema_extensions": Nullable([SKIP]),
@@ -262,6 +270,10 @@ def _native_grid(rows):
     if (len(grid) < 2 or any(a[0] >= b[0] for a, b in zip(grid, grid[1:]))
             or any(sorted(other) != grid for other in grids.values())):
         raise TimeFieldError("missing or incompatible native rail support")
+    for (_, _, edge), (_, start, _) in zip(grid, grid[1:]):
+        # Compare in the trace clock using the frozen reader's snapping rule.
+        if start < edge and edge - start > _support_edge_quantum_ns(edge):
+            raise TimeFieldError("overlapping native rail support")
     return grid
 
 

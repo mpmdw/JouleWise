@@ -187,6 +187,27 @@ def _kit_inputs(raw, runner_commit, *, synthetic):
     return dict(zip(IDS, kit["legs"], strict=True))
 
 
+def _check_script_requests(work, issued):
+    try:
+        script_steps(work, issued["kind"], allow_interrupted=not work["complete"])
+    except ViewError as error:
+        raise TimeFieldError("invalid native script step record") from error
+    turns = iter(issued["turn_tokens"])
+    intervals = {"cpu": "cpu_s", "gap": "gap_s", "recovery": "recovery_s"}
+    for row in work["steps"]:
+        kind = row["kind"]
+        if kind == "turn":
+            actual, expected = row["requested_tokens"], next(turns, None)
+        elif kind == "hidden":
+            actual, expected = row["requested_tokens"], issued["hidden_tokens"]
+        else:
+            actual, expected = row["requested_s"], issued[intervals[kind]]
+        if actual != expected:
+            raise TimeFieldError("native script step request differs from issued dose")
+    if work["complete"] and next(turns, None) is not None:
+        raise TimeFieldError("issued visible calls missing from native script")
+
+
 def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
     leg_id = kit_leg["leg_id"]
     prefix = f"legs/{leg_id}/"
@@ -255,10 +276,7 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
                  and work["schema"] == "joulewise.cadence_script_work.v1" and work["leg_id"] == leg_id
                  and work["leg_spec_sha256"] == canonical_spec_sha and work["script"] == spec["script"]
                  and type(work["complete"]) is bool and result["script_complete"] is work["complete"])
-        try:
-            script_steps(work, spec["script"]["kind"], allow_interrupted=not work["complete"])
-        except ViewError as error:
-            raise TimeFieldError("invalid native script step record") from error
+        _check_script_requests(work, spec["script"])
         hidden = [step["actual_tokens"] for step in work["steps"] if step["kind"] == "hidden"]
         if len(hidden) == 1:
             hidden_delivered = hidden[0]
@@ -333,6 +351,7 @@ def _make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic):
     inventory = dict(schema=INVENTORY_SCHEMA, kit_sha256=kit_sha, runner_commit=runner_commit,
                      spans={}, positions={})
     result = Inputs(source, private, inventory, {}, {}, {})
+    episode_ids = set()
     _require(len(checks) == 2 and len({row["span_id"].casefold() for row in checks}) == 2
              and len({row["check_item"] for row in checks}) == len({row["close_item"] for row in checks}) == 2)
     for number, (ids, check) in enumerate(zip((PILOT, REMAINDER), checks, strict=True), 1):
@@ -367,6 +386,9 @@ def _make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic):
                     payloads["episode"], payloads["config"], payloads["metadata"],
                     run_id=position["run_id"], config_sha256=files["config"]["sha256"],
                 )
+                if timing.episode_id in episode_ids:
+                    raise TimeFieldError("duplicate native episode identity")
+                episode_ids.add(timing.episode_id)
                 reason = blind_view_refusal(timing.projected_episode, work, position["kind"])
                 if reason is not None:
                     result.view_refusals[leg_id] = reason

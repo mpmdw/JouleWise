@@ -4,7 +4,6 @@ from contextlib import ExitStack, contextmanager, suppress
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from importlib.util import find_spec
-import math
 import os
 from pathlib import Path
 import re
@@ -77,7 +76,7 @@ def validate_shape(value, schema, definitions, *, instrument_reasons=()):
             field = prefix[index] if index < len(prefix) else schema["items"]
             validate_shape(item, field, definitions, instrument_reasons=instrument_reasons)
     elif kind in ("number", "integer"):
-        if not math.isfinite(value) or not schema.get("minimum", value) <= value <= schema.get("maximum", value):
+        if not analysis._finite(value) or not schema.get("minimum", value) <= value <= schema.get("maximum", value):
             raise ValueError("controls_output_schema")
     elif kind == "string" and "pattern" in schema and re.fullmatch(schema["pattern"], value) is None:
         raise ValueError("controls_output_schema")

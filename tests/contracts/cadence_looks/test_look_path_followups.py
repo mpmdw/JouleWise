@@ -17,6 +17,7 @@ from joulewise.cadence_looks import controls_analysis as analysis
 from joulewise.cadence_looks import controls_book as book
 from joulewise.cadence_looks import controls_layout as layout
 from joulewise.cadence_looks import controls_reader as reader
+from joulewise.cadence_looks import controls_release as release
 from joulewise.cadence_looks import controls_time_fields as blind
 from tests.contracts.cadence_looks import look_path_driver as registrar
 
@@ -495,6 +496,24 @@ class LookPathFollowupTests(TestCase):
         with self.assertRaises(blind.TimeFieldError):
             reader._native_grid(rows("9.999999998"))
 
+    def test_aggregate_token_bounds_cover_both_totals_before_numerical_work(self):
+        _, runtime, _ = FROZEN["location"](self.pristine, "L001")
+        for count in ("context_tokens", "actual_tokens"):
+            with self.subTest(count=count):
+                work = registrar.read(runtime / "script-work.json")
+                visible = [step for step in work["steps"] if step["kind"] == "turn"]
+                for step in visible:
+                    step[count] = 10**308
+                    if count == "actual_tokens":
+                        step["requested_tokens"] = step[count]
+                visible[-1][count] = 10**307
+                self.assertTrue(analysis.script_steps(work, work["script"]["kind"]))
+                visible[-1][count] = 10**308
+                with self.assertRaisesRegex(analysis.ViewError, "^aggregate_token_counts$"):
+                    analysis.script_steps(work, work["script"]["kind"])
+        with self.assertRaisesRegex(ValueError, "^controls_output_schema$"):
+            release.validate_shape(2 * 10**308, {"type": "integer"}, {})
+
     def test_blind_stamp_disposition_and_opacity_survive_native_publication(self):
         def configure(world):
             blind_values(world)
@@ -630,11 +649,12 @@ class LookPathFollowupTests(TestCase):
         with (patch.object(layout.os, "mkdir", side_effect=FileExistsError),
               patch.object(layout, "_observation", return_value=entry),
               patch.object(layout, "marker_valid", return_value=False)):
-            for call in (lambda: layout.claim(123, 456, {}, Mock()),
-                         lambda: layout.require_fresh(123, 456, [])):
-                with self.subTest(call=call), self.assertRaises(layout.GateRefusal) as caught:
-                    call()
-                self.assertEqual((caught.exception.status, caught.exception.notice), (4, "REFUSE HALF_MADE\n"))
+            for operation, call in (("claim", lambda: layout.claim(123, 456, {}, Mock())),
+                                    ("status", lambda: layout.require_fresh(123, 456, []))):
+                with self.subTest(operation=operation):
+                    with self.assertRaises(layout.GateRefusal) as caught:
+                        call()
+                    self.assertEqual((caught.exception.status, caught.exception.notice), (4, "REFUSE HALF_MADE\n"))
 
     def test_bootstrap_reports_spent_before_source_layout_and_offline_checks(self):
         world, bench = self.prepare("spent")

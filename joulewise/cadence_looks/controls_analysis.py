@@ -141,6 +141,12 @@ def script_steps(record, kind, *, allow_interrupted=False):
             interrupted = (allow_interrupted and index == len(rows) - 1 and row["complete"] is False
                            and (row["kind"] not in ("hidden", "turn") or row["actual_tokens"] is None))
             steps.append(_step(row, interrupted=interrupted))
+        visible = [row for row in rows if row["kind"] == "turn"]
+        prompt_total = sum(row.get("context_tokens", 0) for row in visible)
+        decode_total = sum(row["actual_tokens"] or 0 for row in visible)
+        # Both totals can become denominators in the frozen phase calculation.
+        if not (_finite(prompt_total) and _finite(decode_total)):
+            raise ViewError("aggregate_token_counts")
         return tuple(steps)
     except (TypeError, KeyError) as error:
         raise ViewError("script_record_shape") from error

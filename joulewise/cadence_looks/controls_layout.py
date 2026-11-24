@@ -391,7 +391,7 @@ def claim(private, public, public_record, redirect):
             # A collision or unconfirmed rollback is evidence of a pathname.
             half_made = made or collision
         else:
-            half_made = reservation is not None and stat.S_ISDIR(reservation.st_mode)
+            half_made = reservation is not None
         if half_made:
             raise GateRefusal("HALF_MADE", status=4, special=True) from error
         raise GateRefusal("CLAIM_SETUP") from error

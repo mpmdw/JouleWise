@@ -31,6 +31,7 @@ EMPTY_ARRAY = object()
 SKIP = object()
 OPAQUE_NUMBER = object()
 OPAQUE_STRING = object()
+OPAQUE_NONBLANK_STRING = object()
 
 
 class RecordFields(dict):
@@ -54,6 +55,19 @@ class _Bad(Exception):
 
 _ESC = {'"': '"', "\\": "\\", "/": "/", "b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t"}
 _ESC_RE = re.compile(r'\\(?:u([0-9a-fA-F]{4})|(.))')
+_NONSPACE_OR_ESCAPE = re.compile(r'[^\\\s]|' + _ESC_RE.pattern)
+
+
+def _has_nonblank_text(raw):
+    """Apply the typed string predicate to a token without decoding its text."""
+    for match in _NONSPACE_OR_ESCAPE.finditer(raw, 1, len(raw) - 1):
+        code, escape = match.groups()
+        if code is not None:
+            if not chr(int(code, 16)).isspace():
+                return True
+        elif escape not in ("t", "n", "r", "f"):
+            return True
+    return False
 
 
 def _unstring(raw):
@@ -299,6 +313,10 @@ def _project(it, token, fields, depth, *, strict):
         if token[0] != "str":
             raise _Bad()
         return "" if token[1] == '""' else "opaque"
+    if fields is OPAQUE_NONBLANK_STRING:
+        if token[0] != "str" or not _has_nonblank_text(token[1]):
+            raise _Bad()
+        return "opaque"
     if isinstance(fields, DigestFields):
         digest = sha256()
 
