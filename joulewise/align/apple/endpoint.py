@@ -793,7 +793,7 @@ class MlxEndpoint:
             seconds_ns(first_epoch) + mapping.offset_ns if first_epoch is not None else None
         )
         if first_ns is not None and not start_ns <= first_ns <= end_ns:
-            flags.append("first_token_clock_outside_turn")
+            flags.extend(("first_token_clock_outside_turn", f"first_token_clock_outside_turn:{turn_index}"))
             first_ns = max(start_ns, min(end_ns, first_ns))
         visible, reasoning, calls, parse_flags = parse_completion(
             text, reasoning_tokens=reasoning_tokens, reasoning_open=reasoning_open_from_template,
