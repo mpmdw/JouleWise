@@ -1313,6 +1313,43 @@ class C1ClosureTests(unittest.TestCase):
                 self.assertEqual(self.tree_bytes(previous), before)
                 self.assertEqual((previous / 'operator-logs/window-chain.log').read_bytes(), record)
 
+    def test_audit7_med_mixed_launch_markers_refuse_at_prepare(self):
+        """Audit 7 MED: a collection selection mixing marked and legacy configs refuses at prepare."""
+        def tag_all(work_holder):
+            def edit(tree):
+                extra = {}
+                for stage in tree['stage_graph']:
+                    if stage['kind'] != 'campaign_collection':
+                        continue
+                    manifest = Path(stage['input']['path'])
+                    authority = work_holder['work'] / 'authority'
+                    for row in closure.decode((authority / manifest).read_bytes())['executed_order']:
+                        name = manifest.parent / row['config']
+                        config = closure.decode((authority / name).read_bytes())
+                        if 'launch_lineage_required' not in config['run_metadata']['tags']:
+                            config['run_metadata']['tags'].append('launch_lineage_required')
+                            extra[str(name)] = adapter.series.raw_json(config)
+                return extra
+            return edit
+
+        def staged(attempt):
+            return closure.decode((attempt.stage / closure.PACK / 'plan_tree.json').read_bytes())
+
+        with self.subTest(case='the invented first stage mixes 7 marked of 11'):
+            attempt = self.attempt()
+            with self.assertRaisesRegex(ValueError, 'mixes marker-bearing and legacy configs'):
+                closure.campaign_marker_refusal(attempt.view, staged(attempt))
+        with self.subTest(control='every dispatched config carries the marker'):
+            holder = {}
+
+            class Tagged(adapter.Attempt):
+                def __init__(self, work, *rest):
+                    holder['work'] = work
+                    super().__init__(work, *rest)
+
+            attempt = self.attempt(make_attempt=Tagged, edit_source=tag_all(holder))
+            closure.campaign_marker_refusal(attempt.view, staged(attempt))
+
     def test_r16_staged_pack_digest_is_the_committed_d134_digest(self):
         """The recomputed pack digest is D-134's committed digest of the same bytes, in both forms."""
         from joulewise.arm_readiness import committed_pack_tree_sha256
