@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "suite_manifest_sha256": "6b541b4462edde5269255bcd7bce4cade071c54b7efaed71d5d76e99b17dd37f",
+  "total_cases": 101889,
+  "case_id_sha256": "75ce2b7e7927ee00d7d67291bebe410e83b90f31a8c970df3e74034b9b6b4cd7",
+  "original_oracle_sha256": "fa710722a1302b4cc888beccee0205e7dcf05a27ad3bc6b067561ad09e5be775",
+  "corrected_oracle_sha256": "f3f58e6ce810c333eb16a94d57d0d8969650aba922d30200c4d63fd45fe30ebb",
+  "reason": "Each signal-130 case removes the soak step's result from the interrupted-after-result receipt. If SIGINT arrives before the writer stores the result, the handler records rc 130 and error 'SystemExit: 130' and the finally block records ended: a receipt each pinned writer can produce, 1,800 s into the soak or at any other time. It is the shape the same suite admits as signal-130, and the two documents differ only in step timestamps. For the six finish_reason cases, the 2026-11-23 19:35 PST lead ruling (option a) applies audit-1 fix 75b28f168: the three pinned runtimes copy upstream strings (endpoint.py:272-276/301-302 and mlx_runtime.py:911-913). Each declares mlx-lm>=0.31.3, so the upstream values have no closed set. Both digit-string mutations satisfy the writer's text-or-null grammar.",
+  "authority": "PR #795 NEEDS_SPEC resolution (lead, 2026-11-20): under RL-184 section 3.3 the writer can produce the receipt, so the cases are judged ADMIT through the full positive signal-130 CLI check on the same mutation and the positive roster. The frozen suite and corpus are not edited. PR #795 Round 6 NEEDS_SPEC resolution (lead, 2026-11-23 19:35 PST, option a): judge exactly the six finish_reason mutations as ADMIT through the same full positive-roster CLI check.",
+  "expect_admit": [
+    "missing-key/b4b6aeb19/interrupt-after-result/runner_receipt.json/steps/13/result/remove",
+    "missing-key/2d347f721/interrupt-after-result/runner_receipt.json/steps/13/result/remove",
+    "missing-key/6e9d42f1d/interrupt-after-result/runner_receipt.json/steps/13/result/remove",
+    "type-number-text/b4b6aeb19/journals/legs/L001/runtime/runs/cadence-leg/outputs/align_turns.jsonl/0/generation/finish_reason/replace/number-text",
+    "type-unicode-digit/b4b6aeb19/journals/legs/L001/runtime/runs/cadence-leg/outputs/align_turns.jsonl/0/generation/finish_reason/replace/unicode-digit",
+    "type-number-text/2d347f721/journals/legs/L001/runtime/runs/cadence-leg/outputs/align_turns.jsonl/0/generation/finish_reason/replace/number-text",
+    "type-unicode-digit/2d347f721/journals/legs/L001/runtime/runs/cadence-leg/outputs/align_turns.jsonl/0/generation/finish_reason/replace/unicode-digit",
+    "type-number-text/6e9d42f1d/journals/legs/L001/runtime/runs/cadence-leg/outputs/align_turns.jsonl/0/generation/finish_reason/replace/number-text",
+    "type-unicode-digit/6e9d42f1d/journals/legs/L001/runtime/runs/cadence-leg/outputs/align_turns.jsonl/0/generation/finish_reason/replace/unicode-digit"
+  ]
+}

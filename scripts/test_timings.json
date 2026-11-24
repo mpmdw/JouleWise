@@ -28,6 +28,15 @@
       ],
       "fallback_rejection_threshold_seconds": 300,
       "_evidence": "CI-12 (2026-10-05): seconds is the median heavy unit (463.593 s) plus the median remainder unit (236.753 s) over runs 37402996922, 37402992313, 37402988115, 37397353773, 37397232989; the two units run in separate exclusive jobs, so this sum is not a serial observation. evidence_range_seconds is the min and max of the per-run sums. Dedicated runners and the 120-minute ceiling are unchanged."
+    },
+    "tests.cadence.test_interim_admission_closure": {
+      "seconds": 1600.0,
+      "evidence_range_seconds": [
+        1400.0,
+        1800.0
+      ],
+      "fallback_rejection_threshold_seconds": 300,
+      "_evidence": "PR #795 (2026-11-20), local single run, not hosted: 101,889 generated cases ran as eight --report shards in about 200 s each on a 10-core Mac, so about 1,600 s of one-process CPU. It needs numpy and creates 101,889 test methods, so it never runs in an ordinary shard or the quick tier. Under RL-194 (2026-11-20) stage 1 admits by content address, and the matrix's CI job was removed because it drove the CLI without a pin list. PR #795 round 5 (2026-11-22): the lead kept it as the acceptance with only its driver adapted (tests/cadence/interim_admission_shim.json). Each case now pins, commits and publishes its custody and runs a committed stage 1, about 4 s per case on the loaded local Mac (mostly about 34 git calls), so the seconds above predate the shim and the matrix runs in its own 32-shard CI job. The module stays an exclusive module so that no shard collects it."
     }
   },
   "split_modules": {

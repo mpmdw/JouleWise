@@ -25,7 +25,8 @@
     "freeze2",
     "custody",
     "review",
-    "open_questions"
+    "open_questions",
+    "inputs"
   ],
   "properties": {
     "schema": {
@@ -190,6 +191,9 @@
             },
             "hold_record": {
               "$ref": "#/$defs/text"
+            },
+            "failure_exit_status": {
+              "const": 1
             }
           }
         },
@@ -860,6 +864,56 @@
           "items": {
             "$ref": "#/$defs/code_ref"
           }
+        },
+        "gpu_trace_hole_refusal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "max_gap_s"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "max_gap_s": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 60
+            },
+            "cite": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1
+            }
+          },
+          "description": "RL-173 E.1 item 3: the GPU-rail hole refusal, stage 2's backstop, on at 2 s for the interim look; switched on, it cites its ruling (Mythos r5 N10)",
+          "anyOf": [
+            {
+              "properties": {
+                "enabled": {
+                  "const": false
+                }
+              }
+            },
+            {
+              "required": [
+                "cite"
+              ]
+            }
+          ]
+        },
+        "twin": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/code_ref"
+            }
+          ]
         }
       }
     },
@@ -949,77 +1003,84 @@
       "additionalProperties": false,
       "required": [
         "schema",
-        "prints",
-        "every_print_carries",
-        "forbidden_content",
+        "words",
         "cite"
       ],
       "properties": {
         "schema": {
           "$ref": "#/$defs/code_ref"
         },
-        "prints": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "id",
-              "what",
-              "cite"
-            ],
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "what": {
-                "$ref": "#/$defs/text"
-              },
-              "channels": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/channel"
-                }
-              },
-              "ratios": {
-                "type": "array",
-                "items": {
-                  "type": "number"
-                }
-              },
-              "caption": {
-                "type": "string"
-              },
-              "cite": {
-                "$ref": "#/$defs/cites"
-              }
-            }
-          }
-        },
-        "every_print_carries": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "allOf": [
-            {
-              "contains": {
-                "const": "model_sha256"
-              }
+        "words": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "qualified_interim",
+            "dev_included_below_45",
+            "days_below_4",
+            "cell_below_10",
+            "start_reading_invalid_over_10pct",
+            "hp01_below_9",
+            "drift_tripwire",
+            "twin_agrees",
+            "stage2_error"
+          ],
+          "properties": {
+            "qualified_interim": {
+              "const": [
+                "yes",
+                "no",
+                "not_evaluable"
+              ]
             },
-            {
-              "contains": {
-                "const": "qualified"
-              }
+            "dev_included_below_45": {
+              "const": [
+                "yes",
+                "no"
+              ]
+            },
+            "days_below_4": {
+              "const": [
+                "yes",
+                "no"
+              ]
+            },
+            "cell_below_10": {
+              "const": [
+                "yes",
+                "no"
+              ]
+            },
+            "start_reading_invalid_over_10pct": {
+              "const": [
+                "yes",
+                "no"
+              ]
+            },
+            "hp01_below_9": {
+              "const": [
+                "yes",
+                "no"
+              ]
+            },
+            "drift_tripwire": {
+              "const": [
+                "within",
+                "to_research_lead",
+                "not_evaluable"
+              ]
+            },
+            "twin_agrees": {
+              "const": [
+                "yes",
+                "no",
+                "not_evaluable"
+              ]
+            },
+            "stage2_error": {
+              "const": [
+                "no"
+              ]
             }
-          ]
-        },
-        "forbidden_content": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "string"
           }
         },
         "cite": {
@@ -1073,6 +1134,28 @@
           },
           "pending": {
             "type": "string"
+          },
+          "disposed_by": {
+            "type": "string",
+            "pattern": "^RL-\\d+[a-z]?"
+          },
+          "evidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^(?!/)(?!.*\\.\\.).+\\.md$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
           }
         }
       }
@@ -1235,6 +1318,9 @@
               }
             }
           }
+        },
+        "schema": {
+          "$ref": "#/$defs/code_ref"
         }
       }
     },
@@ -1252,7 +1338,8 @@
         "disclosure",
         "pre_run_check",
         "cite",
-        "pin_check"
+        "pin_check",
+        "root"
       ],
       "properties": {
         "runs_by": {
@@ -1291,6 +1378,12 @@
         },
         "pin_check": {
           "$ref": "#/$defs/text"
+        },
+        "root": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },
@@ -1347,6 +1440,43 @@
           "cite": {
             "$ref": "#/$defs/cites"
           }
+        }
+      }
+    },
+    "supersedes": {
+      "type": "string",
+      "pattern": "^lm-[a-z0-9][a-z0-9-]{2,40}$"
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pins",
+        "rule",
+        "cite"
+      ],
+      "properties": {
+        "pins": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema",
+            "spans"
+          ],
+          "properties": {
+            "schema": {
+              "const": "joulewise.cadence_look_input_pins.v1"
+            },
+            "spans": {
+              "type": "array"
+            }
+          }
+        },
+        "rule": {
+          "$ref": "#/$defs/text"
+        },
+        "cite": {
+          "$ref": "#/$defs/cites"
         }
       }
     }
@@ -1457,5 +1587,49 @@
         "expected_hot_seconds"
       ]
     }
-  }
+  },
+  "allOf": [
+    {
+      "anyOf": [
+        {
+          "properties": {
+            "look_kind": {
+              "not": {
+                "const": "interim"
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "fit": {
+              "required": [
+                "gpu_trace_hole_refusal"
+              ],
+              "properties": {
+                "gpu_trace_hole_refusal": {
+                  "required": [
+                    "cite"
+                  ],
+                  "properties": {
+                    "enabled": {
+                      "const": true
+                    },
+                    "max_gap_s": {
+                      "const": 2
+                    }
+                  }
+                }
+              }
+            },
+            "freeze2": {
+              "required": [
+                "schema"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
 }

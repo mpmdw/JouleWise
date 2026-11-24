@@ -7,13 +7,16 @@
  "additionalProperties": false,
  "required": [
   "active_readings",
+  "allow_draft",
   "calibrated_range",
   "centring",
   "code_sha256",
   "counts",
   "input_sha256",
+  "ledger_gate",
   "legs",
   "look_id",
+  "manifest_sha256",
   "meter_clock",
   "numpy_version",
   "onset",
@@ -21,8 +24,11 @@
   "rates",
   "roster",
   "schema",
+  "soak_retries",
   "synthetic",
-  "tripwires"
+  "tripwires",
+  "meter_unreadable",
+  "staging"
  ],
  "properties": {
   "schema": {
@@ -39,11 +45,23 @@
    "type": "boolean",
    "description": "true only on the generator's data; a production look carries false"
   },
+  "manifest_sha256": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{64}$",
+   "description": "the manifest verify_pins checked before stage 1 opened anything (Sol N2)"
+  },
+  "allow_draft": {
+   "type": "boolean",
+   "description": "the run used --allow-draft (synthetic only; Mythos N2)"
+  },
   "code_sha256": {
    "type": "object",
    "additionalProperties": {
     "type": "string",
     "pattern": "^[0-9a-f]{64}$"
+   },
+   "propertyNames": {
+    "pattern": "^(input:[a-z0-9_]+|(joulewise|scripts)/[A-Za-z0-9_./]+\\.py)$"
    }
   },
   "numpy_version": {
@@ -64,11 +82,13 @@
       "additionalProperties": false,
       "required": [
        "block_id",
+       "custody",
        "marks",
        "meter_offsets_ns",
        "phase",
        "power_mode",
        "role",
+       "soak_receipt",
        "soak_reference_tv0h_c",
        "span_id",
        "t0_epoch_s",
@@ -142,6 +162,145 @@
           ]
          }
         }
+       },
+       "soak_receipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "field_present",
+         "soak_attempts",
+         "soak_steps"
+        ],
+        "properties": {
+         "field_present": {
+          "type": "boolean"
+         },
+         "soak_attempts": {},
+         "soak_steps": {
+          "type": "array",
+          "items": {
+           "type": "object",
+           "additionalProperties": false,
+           "required": [
+            "name",
+            "rc"
+           ],
+           "properties": {
+            "name": {
+             "type": "string"
+            },
+            "rc": {
+             "type": [
+              "integer",
+              "null"
+             ]
+            }
+           }
+          }
+         }
+        }
+       },
+       "custody": {
+        "oneOf": [
+         {
+          "type": "null"
+         },
+         {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+           "files_sha256",
+           "meter_streams",
+           "meter_time_sha256",
+           "meter_unreadable",
+           "native_pm_sha256"
+          ],
+          "properties": {
+           "files_sha256": {
+            "type": "object",
+            "additionalProperties": {
+             "type": "string",
+             "pattern": "^[0-9a-f]{64}$"
+            }
+           },
+           "meter_time_sha256": {
+            "type": [
+             "string",
+             "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$"
+           },
+           "meter_streams": {
+            "type": "array",
+            "items": {
+             "type": "object",
+             "additionalProperties": false,
+             "required": [
+              "aligned",
+              "clock_fit_excess_s",
+              "clock_rate_ppm",
+              "duplicates",
+              "fit_error",
+              "name",
+              "present",
+              "samples"
+             ],
+             "properties": {
+              "name": {
+               "type": "string"
+              },
+              "present": {
+               "type": "boolean"
+              },
+              "aligned": {
+               "type": "boolean"
+              },
+              "samples": {
+               "type": "integer"
+              },
+              "duplicates": {
+               "type": [
+                "integer",
+                "null"
+               ]
+              },
+              "clock_fit_excess_s": {
+               "type": [
+                "number",
+                "null"
+               ]
+              },
+              "clock_rate_ppm": {
+               "type": [
+                "number",
+                "null"
+               ]
+              },
+              "fit_error": {
+               "type": [
+                "string",
+                "null"
+               ]
+              }
+             }
+            }
+           },
+           "meter_unreadable": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "native_pm_sha256": {
+            "type": "object",
+            "additionalProperties": {
+             "type": "string",
+             "pattern": "^[0-9a-f]{64}$"
+            }
+           }
+          }
+         }
+        ]
        }
       }
      }
@@ -406,6 +565,15 @@
      ],
      "additionalProperties": {
       "type": "number"
+     },
+     "propertyNames": {
+      "enum": [
+       "intercept",
+       "tf08_c",
+       "fan_rpm",
+       "tv0h_excess_c",
+       "t_p_s"
+      ]
      }
     },
     "sigma_s": {
@@ -440,6 +608,9 @@
          "type": "object",
          "additionalProperties": {
           "type": "number"
+         },
+         "propertyNames": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
          }
         },
         "rms_s": {
@@ -617,17 +788,20 @@
    "type": "object",
    "additionalProperties": false,
    "required": [
-    "legs_named",
-    "legs_included",
-    "dev_included",
-    "in_energy_fit",
-    "hp_describe",
-    "type_T",
     "by_block",
     "by_cell",
-    "by_g0_role",
     "by_day",
-    "excluded_by_rule"
+    "by_g0_role",
+    "dev_included",
+    "excluded_by_rule",
+    "excluded_by_trace_clause",
+    "hp_describe",
+    "in_energy_fit",
+    "legs_included",
+    "legs_named",
+    "ruled_exclusions",
+    "type_T",
+    "clock_fit_excess_between_1_and_2_s"
    ],
    "properties": {
     "legs_named": {
@@ -665,31 +839,88 @@
         "type": "integer"
        }
       }
+     },
+     "propertyNames": {
+      "pattern": "^[a-z0-9][a-z0-9-]{2,40}$"
      }
     },
     "by_cell": {
      "type": "object",
      "additionalProperties": {
       "type": "integer"
+     },
+     "propertyNames": {
+      "enum": [
+       "2000",
+       "10000",
+       "19458"
+      ]
      }
     },
     "by_g0_role": {
      "type": "object",
      "additionalProperties": {
       "type": "integer"
+     },
+     "propertyNames": {
+      "enum": [
+       "null",
+       "capture",
+       "consume"
+      ]
      }
     },
     "by_day": {
      "type": "object",
      "additionalProperties": {
       "type": "integer"
+     },
+     "propertyNames": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
      }
     },
     "excluded_by_rule": {
      "type": "object",
      "additionalProperties": {
       "type": "integer"
+     },
+     "propertyNames": {
+      "enum": [
+       "ran_to_cap",
+       "g0_released",
+       "sidecar_coverage",
+       "km003c_clean",
+       "not_a_contaminated_attempt",
+       "block_power_mode"
+      ]
      }
+    },
+    "excluded_by_trace_clause": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "dc_in",
+      "gpu_rail"
+     ],
+     "properties": {
+      "gpu_rail": {
+       "type": "integer",
+       "minimum": 0
+      },
+      "dc_in": {
+       "type": "integer",
+       "minimum": 0
+      }
+     }
+    },
+    "ruled_exclusions": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "clock_fit_excess_between_1_and_2_s": {
+     "type": "integer",
+     "minimum": 0,
+     "description": "RL-174 A.2: energy-fit legs with 1 < clock-fit excess <= 2 s; print only"
     }
    }
   },
@@ -726,6 +957,9 @@
         ]
        }
       }
+     },
+     "propertyNames": {
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
      }
     },
     "max_abs_s": {
@@ -881,6 +1115,137 @@
    },
    "description": "RL-166b P-4: legs that start in state with an observed onset under 116.0 s from the turn start, by G0 role. to_research_lead is true when the onset model is not_estimable and total is above zero: the 116 s cut then does not stand by default."
   },
+  "soak_retries": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "accepted_after_retry",
+    "retried_by_kind",
+    "spans",
+    "spans_with_retry",
+    "stopped_by_soak"
+   ],
+   "properties": {
+    "spans": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "accepted",
+       "attempts",
+       "field_present",
+       "retried"
+      ],
+      "properties": {
+       "attempts": {
+        "type": "integer"
+       },
+       "field_present": {
+        "type": "boolean"
+       },
+       "accepted": {
+        "type": "boolean"
+       },
+       "retried": {
+        "type": "array",
+        "items": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "attempt",
+          "kind",
+          "read_from"
+         ],
+         "properties": {
+          "attempt": {
+           "type": "integer"
+          },
+          "kind": {
+           "enum": [
+            "slope",
+            "load",
+            "kind not recorded"
+           ]
+          },
+          "read_from": {
+           "type": [
+            "string",
+            "null"
+           ]
+          }
+         }
+        }
+       }
+      }
+     },
+     "propertyNames": {
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+     }
+    },
+    "spans_with_retry": {
+     "type": "integer"
+    },
+    "retried_by_kind": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "kind not recorded",
+      "load",
+      "slope"
+     ],
+     "properties": {
+      "slope": {
+       "type": "integer"
+      },
+      "load": {
+       "type": "integer"
+      },
+      "kind not recorded": {
+       "type": "integer"
+      }
+     }
+    },
+    "accepted_after_retry": {
+     "type": "integer"
+    },
+    "stopped_by_soak": {
+     "type": "integer"
+    }
+   },
+   "description": "RL-171 and RL-172a: per roster span, its soak attempts (one when the receipt has no soak_attempts field, as on the v1/v1.1 pins) and the kind of each retried soak: slope or load where a receipt field names it, else 'kind not recorded' (receipt fields only; the RL-171 receipt names no kind). accepted is the last soak step's rc 0. A soak retried and then accepted is not a stop. Written by joulewise/cadence_looks/inclusion_34.py soak_retries(); decides nothing"
+  },
+  "ledger_gate": {
+   "oneOf": [
+    {
+     "type": "null"
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "commit",
+      "ref",
+      "ref_commit"
+     ],
+     "properties": {
+      "commit": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{40}$"
+      },
+      "ref": {
+       "type": "string",
+       "pattern": "^refs/remotes/[^\\s]+$"
+      },
+      "ref_commit": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{40}$"
+      }
+     }
+    }
+   ],
+   "description": "What satisfied the committed-ledger gate (manifest.ledger_gate): HEAD, the shared remote-tracking ref and its commit; null under --allow-draft (Mythos round-3 N3)"
+  },
   "legs": {
    "type": "array",
    "items": {
@@ -904,12 +1269,14 @@
      "prefill_tokens",
      "prefix_tails",
      "role",
+     "ruled_exclusion",
      "segments",
      "span_id",
      "start",
      "state",
      "t_p_s",
-     "tau_hat_s"
+     "tau_hat_s",
+     "trace_holes"
     ],
     "properties": {
      "leg_key": {
@@ -1307,9 +1674,181 @@
         }
        }
       }
+     },
+     "trace_holes": {
+      "oneOf": [
+       {
+        "type": "null"
+       },
+       {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "dc_in",
+         "gpu_rail"
+        ],
+        "properties": {
+         "gpu_rail": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+           "excluded",
+           "max_gap_s",
+           "reason",
+           "rows_sha256"
+          ],
+          "properties": {
+           "max_gap_s": {
+            "type": [
+             "number",
+             "null"
+            ]
+           },
+           "rows_sha256": {
+            "type": [
+             "string",
+             "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$"
+           },
+           "excluded": {
+            "type": "boolean"
+           },
+           "reason": {
+            "type": [
+             "string",
+             "null"
+            ]
+           }
+          }
+         },
+         "dc_in": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+           "bracketed",
+           "clock_fit_excess_s",
+           "excluded",
+           "max_gap_s",
+           "reason"
+          ],
+          "properties": {
+           "max_gap_s": {
+            "type": [
+             "number",
+             "null"
+            ]
+           },
+           "bracketed": {
+            "type": "boolean"
+           },
+           "clock_fit_excess_s": {
+            "type": [
+             "number",
+             "null"
+            ]
+           },
+           "excluded": {
+            "type": "boolean"
+           },
+           "reason": {
+            "type": [
+             "string",
+             "null"
+            ]
+           }
+          }
+         }
+        }
+       }
+      ]
+     },
+     "ruled_exclusion": {
+      "oneOf": [
+       {
+        "type": "null"
+       },
+       {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "rule",
+         "ruling"
+        ],
+        "properties": {
+         "rule": {
+          "enum": [
+           "sidecar_coverage",
+           "km003c_clean"
+          ]
+         },
+         "ruling": {
+          "type": "string",
+          "pattern": "^RL-[0-9]+[a-z]?$"
+         }
+        }
+       }
+      ]
      }
     }
    }
+  },
+  "meter_unreadable": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "span_ids",
+    "to_research_lead"
+   ],
+   "properties": {
+    "span_ids": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "uniqueItems": true
+    },
+    "to_research_lead": {
+     "type": "boolean"
+    }
+   },
+   "description": "RL-174 A.4: unreadable fit spans; a second span is referred to the research lead"
+  },
+  "staging": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "span_id",
+     "archive_sha256",
+     "manifest_sha256",
+     "marker_sha256",
+     "files_verified"
+    ],
+    "properties": {
+     "span_id": {
+      "type": "string"
+     },
+     "archive_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+     },
+     "manifest_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+     },
+     "marker_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+     },
+     "files_verified": {
+      "type": "integer",
+      "minimum": 1
+     }
+    }
+   },
+   "description": "RL-174 D.3: verified byte staging, empty for an already raw custody copy"
   }
  }
 }

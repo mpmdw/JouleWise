@@ -23,19 +23,21 @@ Copied from: ``joulewise/align/apple/thermal.py`` (sha256 b9b46f9e...d39d7) and
 Rule 4, the KM003C stream (RL-149 section 2.4 rule 4 as RL-166 Q7 reads "clean"):
 * every stream file that overlaps the leg's interval has its header (status "streaming") and its
   trailer, and the trailer's stop reason is a normal one: a signal, "duration" or "stop file";
-* inside the leg's interval, the count of sample lines is at least 99 % of the header's nominal poll
-  rate (1 / poll_s) times the interval;
-* no gap over 2 s between consecutive sample stamps, the interval's edges included.
+* inside the leg's interval, the samples the polls carried (each sample line's count ``n``, summed) are at
+  least 99 % of the header's nominal sample rate (``sps``) times the interval;
+* no gap over 2 s between consecutive polls that carried samples (``n > 0``), the interval's edges included.
+  An empty poll covers nothing, so a stream of empty polls cannot cover a leg (Sol cold seat N5).
 
 The trailer's counts are printed in the inclusion table (``span_trailers``) and decide nothing. RL-166
 refused the "trailer counts zero" clause.
 
 **What is read.**
-* From each KM003C sample line (``{"k":"b",...}``), only its ``rt`` stamp (CLOCK_REALTIME ns at receipt),
-  taken with a fixed-prefix regular expression. The line is never JSON-decoded, and its sample bytes,
-  SMC values and counts are never kept, logged or copied.
+* From each KM003C poll line (top-level ``"k": "b"``), only its ``rt`` stamp (CLOCK_REALTIME ns at receipt) and
+  its sample count ``n``, through the look's one time-field reader (``time_fields.py``, RL-173 E.1): its lexer
+  converts no SMC value and no sample byte; they are never kept, logged or copied.
 * Error lines (``{"k": "e", ...}``) are skipped unread.
-* Only the header and the trailer are decoded, as the runner already does (RL-150 R8).
+* Of the header and the trailer, only their operational keys (``time_fields.HEADER_KEYS``, ``TRAILER_KEYS``).
+* A ``.zst`` sibling of a stream (a desk-compressed custody copy) refuses the span (Mythos round-5 N8).
 * From ``rich_telemetry.jsonl``, only ``timestamp_s`` and ``elapsed_ns``, taken by pattern. The line is never
   JSON-decoded, so no power or energy value is parsed (Sol cold seat 1).
 * A type-T leg (``leg_record.json`` ``spec.leg_type == "T"``, the ruled selector only) is never opened
@@ -68,11 +70,6 @@ METER_MIN_COVERAGE = 0.99            # RL-166 Q7
 METER_MAX_GAP_NS = 2 * NS            # RL-166 Q7
 NORMAL_STOP_REASONS = ("duration", "stop file")     # and any "signal N" (km003c_monitor.py on_signal)
 ABNORMAL_STOP_REASONS = ("absent", "exception", "consecutive USB errors")
-
-# km003c_monitor.py writes sample lines compact ('{"k":"b","tx":..,"rx":..,"rt":..,'); spaced JSON is accepted too.
-_SAMPLE_LINE_RE = re.compile(rb'^\{"k":\s*"b",\s*"tx":\s*\d+,\s*"rx":\s*\d+,\s*"rt":\s*(\d+)\s*,')
-_UNREAD_LINE_RE = re.compile(rb'^\{"k":\s*"[be]"')     # sample or error line: never decoded
-
 
 # ------------------------------------------------------------------------------------------------------------
 # Copied from joulewise/align/apple/thermal.py (v4 strict path; see the module docstring). Byte-identical:
@@ -222,19 +219,21 @@ def normal_stop(reason):
 
 
 def rule4(interval_ns, streams):
-    """Rule 4 on one leg. ``streams`` = [{"name", "header", "trailer", "stamps"}] from ``read_meter_stream``
-    (stamps = sorted rt ns). Returns {"pass", "coverage_fraction", "max_gap_s", "streams", "reasons"}."""
+    """Rule 4 on one leg. ``streams`` = [{"name", "header", "trailer", "polls"}] from ``read_meter_stream``
+    (polls = sorted (rt ns, n samples)). Coverage is the samples the polls in the interval carried against the
+    header's sps over the interval; the gap is between polls that carried samples. Returns {"pass",
+    "coverage_fraction", "max_gap_s", "streams", "reasons"}."""
     reasons = []
     out = {"pass": False, "coverage_fraction": None, "max_gap_s": None, "streams": [], "reasons": reasons}
     if interval_ns is None or interval_ns[1] <= interval_ns[0]:
         reasons.append("no leg interval (G0 start or last stamped token missing)")
         return out
     a, b = interval_ns
-    overlapping, stamps, poll_s = [], [], set()
+    overlapping, polls, sps = [], [], set()
     for s in streams:
         header, trailer = s.get("header"), s.get("trailer")
         start = (header or {}).get("start_real_ns")
-        end = s["stamps"][-1] if s["stamps"] else start
+        end = s["polls"][-1][0] if s["polls"] else start
         if start is not None and (end is None or end < a or start > b):
             continue
         overlapping.append(s)
@@ -242,23 +241,24 @@ def rule4(interval_ns, streams):
         if header is None or header.get("status") != "streaming":
             reasons.append(f"{s['name']}: no streaming header")
         else:
-            poll_s.add(header.get("poll_s"))
+            sps.add(header.get("sps"))
         if trailer is None:
             reasons.append(f"{s['name']}: no trailer")
         elif not normal_stop(trailer.get("stop_reason")):
             reasons.append(f"{s['name']}: stop reason {trailer.get('stop_reason')!r} is not a normal stop")
-        stamps.extend(t for t in s["stamps"] if a <= t <= b)
+        polls.extend((t, n) for t, n in s["polls"] if a <= t <= b)
     if not overlapping:
         reasons.append("no meter stream covers the leg's interval")
-    poll_s.discard(None)
-    if len(poll_s) != 1 or not all(isinstance(p, (int, float)) and p > 0 for p in poll_s):
-        reasons.append("the header's nominal poll period is missing or differs between streams")
+    if len(sps) != 1 or not all(isinstance(r, (int, float)) and not isinstance(r, bool) and r > 0 for r in sps):
+        reasons.append("the header's nominal sample rate (sps) is missing or differs between streams")
     else:
-        expected = (b - a) / NS / poll_s.pop()
-        out["coverage_fraction"] = len(stamps) / expected if expected > 0 else None
+        # Sol cold seat N5: samples, not polls. An empty poll (n = 0) carries no sample, so a stream of empty polls
+        # cannot cover the leg. n is a count the monitor writes beside the stamp; no sample value is decoded.
+        expected = (b - a) / NS * sps.pop()
+        out["coverage_fraction"] = sum(n for _, n in polls) / expected if expected > 0 else None
         if out["coverage_fraction"] is None or out["coverage_fraction"] < METER_MIN_COVERAGE:
-            reasons.append("meter coverage under 99 % of the nominal rate")
-    points = sorted({a, b, *stamps})
+            reasons.append("meter samples under 99 % of the nominal rate")
+    points = sorted({a, b, *(t for t, n in polls if n > 0)})
     gap = max((y - x for x, y in zip(points, points[1:])), default=b - a)
     out["max_gap_s"] = gap / NS
     if gap > METER_MAX_GAP_NS:
@@ -270,6 +270,18 @@ def rule4(interval_ns, streams):
 # ------------------------------------------------------------------------------------------------------------
 # Loaders: stamps only.
 
+def _loads(raw, object_pairs_hook=None):
+    """One journal or record document through the look's one decoder of operational files
+    (``custody_pins.operational_json``): what ``json.loads`` gives, except that a number under an energy-named
+    member is never converted. The controller writes the idle baseline's mean power into ``events.jsonl``; this
+    file is run before the reservation and makes no such number. Imported here, not at the top: run as a script
+    under ``-I`` this file has no repository on its path until ``main`` adds it."""
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    from joulewise.cadence_looks import custody_pins
+    return custody_pins.operational_json(raw, strict=False, object_pairs_hook=object_pairs_hook)
+
+
 def _jsonl_lines(path):
     with open(path, "rb") as handle:
         for raw in handle:
@@ -279,28 +291,16 @@ def _jsonl_lines(path):
 
 
 def read_meter_stream(path):
-    """{"name", "header", "trailer", "stamps"} for one KM003C stream. Sample lines give their rt stamp only
-    and are never decoded; error lines are skipped; header and trailer are decoded (RL-150 R8)."""
-    path = Path(path)
-    header = trailer = None
-    stamps, first, last_other = [], True, None
-    for raw in _jsonl_lines(path):
-        m = _SAMPLE_LINE_RE.match(raw)
-        if m:
-            stamps.append(int(m.group(1)))
-        elif _UNREAD_LINE_RE.match(raw):
-            pass                                  # an error line, or a sample line in an unknown form: unread
-        else:
-            doc = json.loads(raw)
-            if first and doc.get("k") == "h":
-                header = doc
-            elif doc.get("k") == "t":
-                last_other = doc
-        first = False
-    if last_other is not None:
-        trailer = last_other
-    stamps.sort()
-    return {"name": path.name, "header": header, "trailer": trailer, "stamps": stamps}
+    """{"name", "header", "trailer", "polls"} for one KM003C stream, through the look's one time-field reader
+    (``time_fields.read_stream``, RL-173 E.1): a poll line gives its ``rt`` stamp and its sample count ``n``; the
+    record kind is the line's top-level ``k`` (Sol round-5 NEW-2); no SMC value or sample value is converted. The header
+    is the first line when it is one, the trailer the last trailer line; only their operational keys are read
+    (RL-150 R8)."""
+    from joulewise.cadence_looks import time_fields as TF     # lazily: run as a program, the repository joins
+    view = TF.read_stream(path, counters=False)               # sys.path in main(), after the fresh pycache prefix
+    polls = sorted((p["rt"], p["n"]) for p in view["polls"]
+                   if all(type(p.get(k)) is int and p[k] >= 0 for k in ("tx", "rx", "rt", "n")))
+    return {"name": view["name"], "header": view["first_line_header"], "trailer": view["trailer"], "polls": polls}
 
 
 TRAILER_COUNT_KEYS = ("polls", "empties", "bad", "usb_errors")
@@ -347,7 +347,7 @@ def read_sidecar_rows(bundle):
     """[(started wall_ns, finished wall_ns, {"sensors", "errors"})] for the journal's temperature readings."""
     rows = []
     for raw in _jsonl_lines(Path(bundle) / "outputs" / "align_thermal.jsonl"):
-        r = json.loads(raw)                       # a journal file: temperatures, levels, states, stamps
+        r = _loads(raw)                           # a journal file: temperatures, levels, states, stamps
         if r.get("module") != "temperature" or r.get("kind") != "reading":
             continue
         s, f = (r.get("started") or {}).get("wall_ns"), (r.get("finished") or {}).get("wall_ns")
@@ -364,7 +364,7 @@ def _scan_events(path):
     hook = _keep({"event_type", "phase", "timestamp_s", "metadata", "kind"})
     g0, last = None, None
     for raw in _jsonl_lines(path):
-        e = json.loads(raw, object_pairs_hook=hook)
+        e = _loads(raw, object_pairs_hook=hook)
         et, ts = e.get("event_type"), e.get("timestamp_s")
         if not isinstance(ts, (int, float)):
             continue
@@ -398,7 +398,7 @@ def pm_period_s(bundle):
     path = Path(bundle) / "config.json"
     if not path.is_file():
         return None
-    cfg = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_keep({"sampling", "power_hz"}))
+    cfg = _loads(path.read_text(encoding="utf-8"), object_pairs_hook=_keep({"sampling", "power_hz"}))
     hz = (cfg.get("sampling") or {}).get("power_hz")
     return 1 / hz if isinstance(hz, (int, float)) and hz > 0 else None
 
@@ -433,7 +433,7 @@ RUNTIME_CONFIG = "configs/align/v4/r1_runtime.json"    # rule 3's sensor policy;
 
 
 def _json(path):
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    return _loads(Path(path).read_text(encoding="utf-8"))
 
 
 def span_dirs(custody, overrides=()):
@@ -445,13 +445,14 @@ def span_dirs(custody, overrides=()):
 def judge_span(sdir, span_id, selected_keys):
     """({leg_key: {sidecar_coverage, km003c_clean}}, {leg_key: detail}, trailers) for one span directory."""
     sdir = Path(sdir)
-    streams = [read_meter_stream(p) for p in sorted((sdir / "hazards" / "meter").glob("stream-*.jsonl"))]
+    from joulewise.cadence_looks import manifest as lm, time_fields as TF
+    streams = [read_meter_stream(p) for p in TF.span_streams(sdir)]       # a .zst sibling refuses (Mythos r5 N8)
     verdicts, detail = {}, {}
     for leg_id in _json(sdir / "runner_receipt.json")["roster"]:
         key = f"{span_id}/{leg_id}"
         record = sdir / "legs" / leg_id / "leg_record.json"
-        bundle = None
         rec = _json(record) if record.is_file() else {}
+        bundle = lm.runtime_bundle(sdir, leg_id, rec)
         if (rec.get("spec") or {}).get("leg_type") == "T":
             # RL-166 Q14: a type-T leg is not read at this look at all. The ruled selector only (RL-167 R-21):
             # spec.leg_type, no legacy field.
@@ -459,11 +460,7 @@ def judge_span(sdir, span_id, selected_keys):
             why = ["type T: never read (RL-166 Q14)"]
             detail[key] = {"rule3": {"reasons": why}, "rule4": {"reasons": why}}
             continue
-        if rec:
-            name = (rec.get("result") or {}).get("bundle")
-            if isinstance(name, str) and name and (sdir / "legs" / leg_id / "runtime" / name).is_dir():
-                bundle = sdir / "legs" / leg_id / "runtime" / name
-        if bundle is None:
+        if bundle is None or not bundle.is_dir():
             verdicts[key] = {k: False for k in VERDICT_KEYS}
             detail[key] = {"rule3": {"reasons": ["no accepted bundle"]}, "rule4": {"reasons": ["no accepted bundle"]}}
             continue
@@ -479,6 +476,109 @@ def judge_span(sdir, span_id, selected_keys):
     return verdicts, detail, span_trailers(span_id, streams)
 
 
+# RL-171 and RL-172a: the span's soak may be retried once, on a slope or a load refusal. Receipt fields only (the
+# lead's ruling on the open list): the receipt's soak_attempts ({"attempt", "refused", ...}) and its steps list,
+# whose soak stages are named "soak" and "soak.a<n>". A receipt from the v1/v1.1 pins has no soak_attempts field,
+# which means one attempt. The receipt's "refused" text is the same for both kinds, so the kind is read from a
+# receipt field that names it (SOAK_KIND_FIELDS; none exists at the RL-171 pin 6010985a3), else it is "kind not
+# recorded". No log and no soak file is opened. A soak retried and then accepted is not a stop: whether the span's
+# soak was accepted is its last soak step's rc, and no look code reads the stage journal.
+SOAK_KINDS = ("slope", "load", "kind not recorded")
+SOAK_KIND_FIELDS = ("refusal_kind",)
+
+
+def soak_fields(receipt):
+    """The receipt fields the soak-retry print reads, as level R carries them (fit_interim stage 1 computes the print
+    from level R, so the twin can): whether ``soak_attempts`` is present, its value, and the receipt's soak steps
+    ({"name", "rc"} of each step named "soak" or "soak.a<n>"). The ruled soak_refusals array is normalized into
+    the matching attempt's soak_refusals_kind field; old receipts keep the same projection."""
+    steps = [{"name": st.get("name"), "rc": None if st.get("error") and st.get("rc") == 0 else st.get("rc")}
+             for st in receipt.get("steps") or []
+             if isinstance(st, dict) and re.fullmatch(r"soak(\.a[0-9]+)?", str(st.get("name")))]
+    attempts = receipt.get("soak_attempts")
+    if isinstance(attempts, list):
+        attempts = [{k: v for k, v in a.items() if k != "soak_refusals_kind"} if isinstance(a, dict) else a
+                    for a in attempts]
+    refusals = receipt.get("soak_refusals")
+    if refusals is not None:
+        if (not isinstance(refusals, list) or any(
+                not isinstance(r, dict) or set(r) != {"attempt", "kind"}
+                or not isinstance(r["attempt"], int) or isinstance(r["attempt"], bool)
+                or r["attempt"] < 1 or r["kind"] not in ("slope", "load") for r in refusals)
+                or len({r["attempt"] for r in refusals}) != len(refusals)):
+            raise ValueError("runner_receipt.json soak_refusals: unique {attempt, kind}, kind slope or load")
+        if refusals and (not isinstance(attempts, list) or any(not isinstance(a, dict) for a in attempts)):
+            raise ValueError("runner_receipt.json soak_refusals: soak_attempts must be recorded objects")
+        for r in refusals:
+            a = next((a for a in attempts or [] if isinstance(a, dict) and a.get("attempt") == r["attempt"]), None)
+            if a is None or a.get("refused") is None:
+                raise ValueError("runner_receipt.json soak_refusals: each entry names a refused soak attempt")
+            a["soak_refusals_kind"] = r["kind"]
+    return {"field_present": "soak_attempts" in receipt, "soak_attempts": attempts, "soak_steps": steps}
+
+
+def soak_attempts_of(span_id, fields):
+    """(attempts, field present, accepted) from a span's soak fields. Each attempt is checked against the receipt's
+    soak steps: numbered from 1, one step per attempt in order, every refused attempt's step nonzero."""
+    if not fields["field_present"]:
+        steps = fields["soak_steps"]
+        return [{"attempt": 1, "refused": None}], False, not steps or steps[0]["rc"] == 0
+    attempts, steps = fields["soak_attempts"], fields["soak_steps"]
+    names = ["soak" if i == 0 else f"soak.a{i + 1}" for i in range(len(attempts) if isinstance(attempts, list) else 0)]
+    if names and [st["name"] for st in steps] == names[:-1]:
+        steps = [*steps, {"name": names[-1], "rc": None}]
+    if (not isinstance(attempts, list) or [st["name"] for st in steps] != names or any(
+            not isinstance(a, dict) or a.get("attempt") != i + 1
+            or not (a.get("refused") is None or isinstance(a.get("refused"), str))
+            or (a.get("refused") is None and i != len(attempts) - 1)
+            or (a.get("refused") is not None and steps[i].get("rc") in (0, None)) for i, a in enumerate(attempts))):
+        raise ValueError(f"{span_id}: runner_receipt.json soak_attempts does not match its soak steps "
+                         "(numbered attempts, each refused but the last, one soak step each)")
+    accepted = bool(attempts) and attempts[-1].get("refused") is None and steps[-1].get("rc") == 0
+    return attempts, True, accepted
+
+
+def soak_attempts(sdir):
+    """soak_attempts_of on the span directory's receipt."""
+    return soak_attempts_of(Path(sdir).name, soak_fields(_json(Path(sdir) / "runner_receipt.json")))
+
+
+def soak_refusal_kind(attempt):
+    """("slope" | "load" | "kind not recorded", the receipt field it was read from or None)."""
+    if attempt.get("soak_refusals_kind") in ("slope", "load"):
+        return attempt["soak_refusals_kind"], "receipt soak_refusals[].kind"
+    for field in SOAK_KIND_FIELDS:
+        if attempt.get(field) in ("slope", "load"):
+            return attempt[field], f"receipt soak_attempts[].{field}"
+    return "kind not recorded", None
+
+
+def soak_retries_from(fields_by_span):
+    """The look's soak-retry print (RL-172a) from each span's soak fields: per span, its attempts and the kinds of
+    the retried ones; in sum, the spans with a retry, the retried soaks by kind, the spans accepted after a retry and
+    those the soak stopped."""
+    spans, by_kind = {}, {k: 0 for k in SOAK_KINDS}
+    for span_id, fields in sorted(fields_by_span.items()):
+        attempts, recorded, accepted = soak_attempts_of(span_id, fields)
+        retried = []
+        for a in attempts[:-1]:                     # every attempt with a successor was retried
+            kind, source = soak_refusal_kind(a)
+            by_kind[kind] += 1
+            retried.append({"attempt": a["attempt"], "kind": kind, "read_from": source})
+        spans[span_id] = {"attempts": len(attempts), "field_present": recorded, "accepted": accepted,
+                          "retried": retried}
+    return {"spans": spans, "spans_with_retry": sum(1 for v in spans.values() if v["retried"]),
+            "retried_by_kind": by_kind,
+            "accepted_after_retry": sum(1 for v in spans.values() if v["retried"] and v["accepted"]),
+            "stopped_by_soak": sum(1 for v in spans.values() if v["attempts"] and not v["accepted"])}
+
+
+def soak_retries(span_dirs_by_id):
+    """soak_retries_from on each span directory's receipt."""
+    return soak_retries_from({sid: soak_fields(_json(Path(sdir) / "runner_receipt.json"))
+                              for sid, sdir in span_dirs_by_id.items()})
+
+
 def judge_custody(roster, sdir_of, selected_keys):
     """The verdict file and its detail for every roster span (``manifest.resolve_roster``'s list)."""
     verdicts, detail, trailers = {}, {}, []
@@ -487,7 +587,8 @@ def judge_custody(roster, sdir_of, selected_keys):
         verdicts.update(v)
         detail.update(d)
         trailers += t
-    return verdicts, {"legs": detail, "span_trailers": trailers}
+    soaks = soak_retries({e["span_id"]: Path(sdir_of(e["span_id"])) for e in roster})
+    return verdicts, {"legs": detail, "span_trailers": trailers, "soak_retries": soaks}
 
 
 def _write(path, doc):
@@ -495,6 +596,20 @@ def _write(path, doc):
     text = json.dumps(doc, indent=1, sort_keys=True, allow_nan=False) + "\n"
     Path(path).write_text(text, encoding="utf-8")
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _fresh_bytecode_cache():
+    """Mythos round-4 N4, Sol round-4 NEW-2: -B stops Python writing bytecode, not reading it. A fresh, empty
+    pycache prefix (removed at exit) means no repository module can run from a stale __pycache__ entry beside its
+    pinned source: each compiles from the bytes verify_pins hashes. Called before the first repository import when
+    the file runs as a program; manifest.cached_bytecode() confirms it before custody opens."""
+    import atexit
+    import shutil
+    import tempfile
+    sys.dont_write_bytecode = True
+    prefix = tempfile.mkdtemp(prefix="jw-look-pyc-")
+    sys.pycache_prefix = prefix
+    atexit.register(shutil.rmtree, prefix, True)
 
 
 def main(argv=None):
@@ -512,8 +627,16 @@ def main(argv=None):
         sys.path.insert(0, str(REPO))
     from joulewise.cadence_looks import manifest as lm
     try:
+        # a committed run reads the ledger from origin/main only, fetched now (audit 3, rule P3)
+        ledger_ref = None if a.allow_draft else "origin/main"
+        if not a.allow_draft:
+            lm.fetch_public(REPO)
         doc = lm.verify_pins(a.manifest, REPO, allow_draft=a.allow_draft,
-                             running=[Path(__file__).resolve(), REPO / RUNTIME_CONFIG])
+                             running=[Path(__file__).resolve(), REPO / RUNTIME_CONFIG], ledger_ref=ledger_ref)
+        gate = None if a.allow_draft else lm.ledger_gate(REPO, ledger_ref)
+        stale = lm.cached_bytecode(REPO)
+        if stale:
+            raise lm.ManifestError([f"a repository module may have run from cached bytecode: {', '.join(stale[:4])}"])
     except lm.ManifestError as error:
         for problem in error.problems:
             print(f"REFUSE {problem}")
@@ -522,23 +645,46 @@ def main(argv=None):
     if not isinstance(roster, list):
         print("REFUSE the roster is a JSON list (validate --span-ledger --roster-out writes it)")
         return 1
+    sdir_of = span_dirs(a.custody, a.span_dir)
+    if a.allow_draft:
+        # Mythos N2: --allow-draft is for synthetic custody only (every span's receipt says so)
+        real = [e["span_id"] for e in roster
+                if _json(Path(sdir_of(e["span_id"])) / "runner_receipt.json").get("synthetic") is not True]
+        if real:
+            print(f"REFUSE --allow-draft on custody that is not synthetic: {', '.join(real[:5])}")
+            return 1
     selected = keys(_json(REPO / RUNTIME_CONFIG)["sensors"])
     try:
-        verdicts, detail = judge_custody(roster, span_dirs(a.custody, a.span_dir), selected)
+        verdicts, detail = judge_custody(roster, sdir_of, selected)
     except Exception as exc:                      # type and line only: a message could carry a value
+        if any(c.__name__ == "TimeFieldError" for c in type(exc).__mro__):    # time_fields' refusal names a file and a field, never a value
+            print(f"REFUSE {exc}")
+            return 1
         tb = exc.__traceback__
         while tb.tb_next:
             tb = tb.tb_next
         print(f"FAILED {type(exc).__name__} at line {tb.tb_lineno}")
         return 2
-    print(f"wrote {a.out} sha256={_write(a.out, verdicts)} legs={len(verdicts)}")
+    unpinned = lm.unpinned_loaded_modules(doc, REPO)                 # Mythos N6
+    if unpinned:
+        print("REFUSE loaded repository modules the manifest does not pin: " + ", ".join(unpinned[:6]))
+        return 1
+    verdicts_sha = _write(a.out, verdicts)
+    print(f"wrote {a.out} sha256={verdicts_sha} legs={len(verdicts)} roster_sha256={lm.sha256_file(a.roster)}")
     detail["pins"] = {"manifest_sha256": lm.sha256_file(a.manifest), "look_id": doc["look_id"],
                       "inclusion_34_sha256": lm.sha256_file(Path(__file__).resolve()),
-                      "runtime_config_sha256": lm.sha256_file(REPO / RUNTIME_CONFIG)}
+                      "runtime_config_sha256": lm.sha256_file(REPO / RUNTIME_CONFIG),
+                      "code_sha256": lm.loaded_repo_files(REPO)}
+    detail["allow_draft"] = bool(a.allow_draft)
+    detail["ledger_gate"] = gate
+    # Mythos round-3 N8: the lead commits these two hashes in LOOKS.json before stage 1, which checks them
+    detail["roster_sha256"] = lm.sha256_file(a.roster)
+    detail["verdicts_sha256"] = verdicts_sha
     if a.detail_out:
         print(f"wrote {a.detail_out} sha256={_write(a.detail_out, detail)}")
     return 0
 
 
 if __name__ == "__main__":
+    _fresh_bytecode_cache()
     raise SystemExit(main())

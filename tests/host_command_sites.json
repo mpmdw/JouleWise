@@ -1,5 +1,47 @@
 [
   {
+    "file": "joulewise/cadence_looks/interim_twin.py",
+    "locator": "run:b7caa1f02e90b3d4",
+    "command": "python-isolated",
+    "seam": "The stage-2 preflight verifies the twin and its pin-checking wrapper by path and hash. The parent launches the wrapper, which checks the look's content pins and becomes the reviewed child (RL-194 condition 4). Synthetic release tests run it on generated inputs and inject child failures through subprocess.run."
+  },
+  {
+    "file": "scripts/cadence_interim_twin_pins.py",
+    "locator": "<module>:39420b1906b12418",
+    "command": "python-isolated",
+    "seam": "Usage line in the wrapper's docstring; no command runs at import."
+  },
+  {
+    "file": "scripts/cadence_interim_twin_pins.py",
+    "locator": "main:e9c4a5b16240436b",
+    "command": "python-isolated",
+    "seam": "After every content pin is checked, the wrapper becomes the reviewed twin child by os.execv with the same isolated interpreter and the child's arguments untouched. tests/cadence/test_twin_wrapper.py runs it on generated custody with a stand-in child."
+  },
+  {
+    "file": "scripts/cadence_look_run.py",
+    "locator": "run_verifier:4c6bb39a61da7461",
+    "command": "python-isolated",
+    "seam": "Each stage launches the pinned hash-only verifier as its own process before it parses a roster file (RL-194a). It reads generated custody in tests/cadence/test_content_admission.py and writes one result file of words and hashes."
+  },
+  {
+    "file": "scripts/cadence_look_verify_inputs.py",
+    "locator": "<module>:c69e70db08ba9904",
+    "command": "python-isolated",
+    "seam": "Usage line in the verifier's docstring; no command runs at import."
+  },
+  {
+    "file": "scripts/cadence_look_run.py",
+    "locator": "stage_archive:f5ae899cbfc1d7d0",
+    "command": "python-isolated",
+    "seam": "Stage 1 launches the pinned hash-only staging process for a pulled span archive after the pin list is admitted and against the span's pinned offload manifest digest (RL-174 D.3; RL-194a). tests/cadence/test_look_run.py Staging runs it on generated archives."
+  },
+  {
+    "file": "scripts/cadence_look_stage_archive.py",
+    "locator": "<module>:7df036b9708abfd3",
+    "command": "python-isolated",
+    "seam": "Usage line in the staging process's docstring; no command runs at import."
+  },
+  {
     "file": "scripts/run_align_r1_smoke.py",
     "locator": "ac_power:541443a289d468bd",
     "command": "pmset",
@@ -2068,5 +2110,11 @@
     "locator": "<module>:fc9ea9bc8b139d43",
     "command": "python-isolated",
     "seam": "docstring usage line only (step 3's pinned bytes, RL-166 Q6: not edited); the module starts no process"
+  },
+  {
+    "file": "scripts/cadence_look_synth.py",
+    "locator": "<module>:bb037716d1cc3829",
+    "command": "python-isolated",
+    "seam": "docstring usage line only; the generator starts no process"
   }
 ]
