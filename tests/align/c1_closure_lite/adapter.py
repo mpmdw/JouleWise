@@ -1,6 +1,7 @@
 """Run the frozen C1 decisions through the production packet and arm entry points."""
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from copy import deepcopy
+import hashlib
 import io
 import json
 import os
@@ -51,6 +52,25 @@ def literal(value):
 
 def arguments(stage):
     return stage['launch']['commands'][0]['argv_template']['arguments']
+
+
+def staged_pack_digest(root):
+    """D-134 framing (arm_readiness.committed_pack_tree_sha256) over the staged pack's bytes.
+
+    An independent copy of the framing, so the invented clean attempt checks
+    the production recomputation rather than reusing it.
+    """
+    from joulewise.arm_readiness import PACK_DIGEST_DOMAIN
+
+    root = Path(os.path.realpath(root))
+    framed = bytearray(PACK_DIGEST_DOMAIN)
+    for path in sorted((p for p in root.rglob('*') if p.is_file()),
+                       key=lambda p: p.relative_to(root).as_posix().encode()):
+        raw = path.read_bytes()
+        mode = b'100755' if path.stat().st_mode & 0o111 else b'100644'
+        framed += (path.relative_to(root).as_posix().encode() + b'\0' + mode + b'\0'
+                   + str(len(raw)).encode() + b'\0' + hashlib.sha256(raw).hexdigest().encode() + b'\n')
+    return hashlib.sha256(bytes(framed)).hexdigest()
 
 
 def option(args, flag, kind, value):
@@ -140,6 +160,10 @@ class Attempt:
 
     def edit_night(self, night):
         """A test hook: change the prepared night plan before it is sealed."""
+
+    def custody_path(self):
+        """This attempt's custody root (prepare's custody_root input)."""
+        return self.work / 'attempt-custody'
 
     def reserved_value(self, flag, default):
         """The value the tree's reservation passes for ``flag``, as rendered."""
@@ -327,10 +351,23 @@ class Attempt:
             chain_raw = b'# invalid binding refuses before launch\n'
         files[chain_path.relative_to(self.stage)] = chain_raw
         files[Path(str(chain_path.relative_to(self.stage)) + '.sha256')] = chain.sidecar_bytes(chain_raw, chain_path.name)
-        custody_root = str(self.work / 'attempt-custody')
+
+        def write(entries):
+            for name, raw in entries.items():
+                if self.form == 'link' and name == closure.PACK / series.C1_PLAN:
+                    path = self.stage / name
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.symlink_to(self.repo / KIT / series.C1_PLAN)
+                else:
+                    put(self.stage, name, raw)
+
+        # Stage the pack before the plan, so its digest is of the staged bytes.
+        write(files)
+        custody_root = str(self.custody_path())
         # The launch identity and locations b5.plan writes from the same inputs.
         self.night_data = {'plan_id': plan_id, 't0_epoch_s': 1000, 'chain_path': str(chain_path),
                            'chain_sha256_path': str(chain_path) + '.sha256', 'measurement_root': str(self.view),
+                           'repo_head': self.execution, 'measurement_head': self.execution,
                            'custody_root': custody_root, 'hazard_window': {
             'attempt': 1, 'bracket_session_id': self.bindings['bracket_session_id'],
             'runs_roots': {'claim': self.bindings['claim_runs_root'], 'bound': self.bindings['bound_runs_root']},
@@ -338,23 +375,19 @@ class Attempt:
             'window_env': {'path': str(window_env), 'sha256': closure.digest(window_env_raw)},
             'thresholds': {'clock': {'frequency_error_budget_s': 1}},
             'pack': {'pack_root': str(self.view / closure.PACK), 'plan_tree_sha256': tree_digest,
+                     'pack_sha256': staged_pack_digest(self.stage / closure.PACK),
                      'pack_id': closure.PACK.name, 'pack_plan_id': plan_id,
                      'window_id': self.reserved_value('--window-id', 'C1'),
                      'evidence_root_id': self.reserved_value('--evidence-root-id', 'fixture-evidence')}}}
         self.edit_night(self.night_data)
-        files[self.night.relative_to(self.stage)] = series.raw_json(self.night_data)
+        late = {self.night.relative_to(self.stage): series.raw_json(self.night_data)}
         self.state = {'session_root': str(self.work / 'install'), 'measurement_root': str(self.view), 'source_measurement_root': str(self.repo),
                       'plan_path': str(self.night), 'plan_sha256': closure.digest(series.raw_json(self.night_data)),
                       'v4_series': {'window_id': 'W1' if self.fixture == 'session_downgrade' else 'C1'},
                       'inputs': {'custody_root': custody_root, 'attempt': 1, 'plan_id': plan_id}}
-        files[Path('session.json')] = series.raw_json(self.state)
-        for name, raw in files.items():
-            if self.form == 'link' and name == closure.PACK / series.C1_PLAN:
-                path = self.stage / name
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.symlink_to(self.repo / KIT / series.C1_PLAN)
-            else:
-                put(self.stage, name, raw)
+        late[Path('session.json')] = series.raw_json(self.state)
+        write(late)
+        files.update(late)
         closure.declare_outputs(self.repo, self.stage, files)
         # Reserve the packet directory before producing the detached blob.
         (self.stage / PACKET.parent).mkdir(exist_ok=True)

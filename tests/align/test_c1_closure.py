@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -1240,6 +1241,142 @@ class C1ClosureTests(unittest.TestCase):
             adapter.put(custody(attempt), 'install-record.json', {'invented': True})
             code, _ = attempt.build()
             self.assertEqual(code, 0, attempt.build_error)
+
+    def previous_attempt(self):
+        """A previous attempt's directory: a sibling of this attempt, holding its own records."""
+        previous = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        adapter.put(previous, 'session.json', {'invented_previous_attempt': True})
+        return previous
+
+    @staticmethod
+    def tree_bytes(root):
+        return {str(path.relative_to(root)): path.read_bytes() if path.is_file() else None
+                for path in sorted(root.rglob('*'))}
+
+    def roots_attempt(self, place=None, custody=None):
+        """An attempt whose render inputs ``place(attempt)`` changes before prepare."""
+        class RootsAttempt(adapter.Attempt):
+            def custody_path(self):
+                return custody if custody is not None else super().custody_path()
+
+            def prepare(self):
+                # One render input changed; every later byte comes from the adapter.
+                for name, value in ((place(self) if place else None) or {}).items():
+                    self.bindings[name] = str(value)
+                    if name == 'claim_runs_root':
+                        for slot in ('pre', 'post'):
+                            self.bindings[f'{slot}_calibration_dir'] = str(
+                                Path(value) / 'instrument_validation' / self.bindings[f'{slot}_attempt_id'])
+                return super().prepare()
+
+        return self.attempt(make_attempt=RootsAttempt)
+
+    def test_audit7_high1_stale_pack_digest_refuses_before_reservation(self):
+        """Audit 7 HIGH 1: a previous pack's digest in the night plan refuses on both routes."""
+        def previous_digest(attempt, night):
+            copy = attempt.work / 'previous-pack'
+            shutil.copytree(attempt.stage / closure.PACK, copy, symlinks=False)
+            tree = copy / 'plan_tree.json'
+            tree.write_bytes(tree.read_bytes() + b'\n')  # a prior serialization of the same tree
+            previous = adapter.staged_pack_digest(copy)
+            self.assertNotEqual(previous, night['hazard_window']['pack']['pack_sha256'])
+            night['hazard_window']['pack']['pack_sha256'] = previous
+
+        attempt = self.night_attempt(previous_digest)
+        self.assert_refused_on_both_routes(attempt, 'night plan hazard_window.pack.pack_sha256')
+        for name in ('claim_runs_root', 'bound_runs_root'):
+            self.assertFalse(os.path.lexists(attempt.bindings[name]))
+
+    def test_audit7_high2_stale_operator_log_root_refuses_before_reservation(self):
+        """Audit 7 HIGH 2: an operator log root naming a previous attempt's logs refuses on both routes."""
+        record = b'2001-01-01T00:00:00Z chain_start plan=previous-attempt\n'
+
+        def previous_logs(root):
+            logs = root / 'operator-logs'
+            logs.mkdir(parents=True)
+            (logs / 'window-chain.log').write_bytes(record)
+            return {'operator_log_root': logs}
+
+        outside = self.previous_attempt()
+        for name, place, previous, detail in (
+                ('previous logs beside this attempt (audit reproduction)',
+                 lambda attempt: previous_logs(attempt.work / 'previous-attempt'), None,
+                 'operator_log_root is not empty'),
+                ('a previous attempt directory', lambda attempt: previous_logs(outside), outside,
+                 "operator_log_root resolves outside this attempt's directory")):
+            with self.subTest(case=name):
+                attempt = self.roots_attempt(place)
+                previous = previous or attempt.work / 'previous-attempt'
+                before = self.tree_bytes(previous)
+                self.assert_refused_on_both_routes(attempt, detail)
+                self.assertEqual(self.tree_bytes(previous), before)
+                self.assertEqual((previous / 'operator-logs/window-chain.log').read_bytes(), record)
+
+    def test_r16_previous_attempt_digest_fields_refuse_before_reservation(self):
+        """Round 16 class: each digest the night plan carries is recomputed; a previous value refuses."""
+        def pack(field, value):
+            def change(attempt, night):
+                night['hazard_window']['pack'][field] = value(attempt, night) if callable(value) else value
+            return change
+
+        def previous_head(attempt, night):
+            return attempt.git('rev-parse', attempt.execution + '^').decode().strip()
+
+        def head(field):
+            def change(attempt, night):
+                night[field] = previous_head(attempt, night)
+            return change
+
+        def window_env(attempt, night):
+            night['hazard_window']['window_env']['sha256'] = closure.digest(b'WAIVER_PATH=previous\n')
+
+        def registration(attempt, night):
+            night['hazard_window']['registration'] = {
+                'path': night['hazard_window']['window_env']['path'],
+                'sha256': closure.digest(b'WAIVER_PATH=previous\n')}
+
+        tree_digest = lambda attempt, night: closure.digest(  # noqa: E731
+            (attempt.stage / closure.PACK / 'plan_tree.json').read_bytes() + b'\n')
+        cases = (
+            ('pack digest', pack('pack_sha256', '42' * 32), 'night plan hazard_window.pack.pack_sha256'),
+            ('pack digest absent', pack('pack_sha256', None), 'night plan hazard_window.pack.pack_sha256'),
+            ('plan tree digest', pack('plan_tree_sha256', tree_digest), 'night plan hazard_window.pack.plan_tree_sha256'),
+            ('window env digest', window_env, 'prepared control SHA-256 mismatch'),
+            ('registration digest', registration, 'prepared control SHA-256 mismatch'),
+            ('repository head', head('repo_head'), 'night plan repo_head'),
+            ('measurement head', head('measurement_head'), 'night plan measurement_head'),
+            ('an unchecked digest field', pack('previous_sha256', '0' * 64), 'unverified digest'),
+        )
+        for name, change, detail in cases:
+            with self.subTest(case=name):
+                attempt = self.night_attempt(change)
+                code, _ = attempt.build()
+                self.assertEqual(code, 2, attempt.build_error)
+                self.assertIn(detail, attempt.build_error)
+
+    def test_r16_previous_attempt_write_roots_refuse_before_reservation(self):
+        """Round 16 class: each root the launch writes resolves inside this attempt's own directory."""
+        for name in ('operator_log_root', 'claim_runs_root', 'bound_runs_root', 'claim_backup_destination',
+                     'bound_backup_destination', 'custody_root', 'operator_log_root through a link'):
+            with self.subTest(root=name):
+                field = name.split()[0]
+                previous = self.previous_attempt()
+                target = previous / field
+                adapter.put(target, 'previous-record.json', {'invented': True})
+                before = self.tree_bytes(previous)
+                if field == 'custody_root':
+                    attempt = self.roots_attempt(custody=target)
+                elif name.endswith('through a link'):
+                    def through_link(attempt, previous=previous):
+                        (attempt.work / 'logs-link').symlink_to(previous, target_is_directory=True)
+                        return {field: attempt.work / 'logs-link' / field}
+                    attempt = self.roots_attempt(through_link)
+                else:
+                    attempt = self.roots_attempt(lambda attempt, field=field, target=target: {field: target})
+                code, _ = attempt.build()
+                self.assertEqual(code, 2, attempt.build_error)
+                self.assertIn(f"{field} resolves outside this attempt's directory", attempt.build_error)
+                self.assertEqual(self.tree_bytes(previous), before)
 
     def test_r13_arguments_a_consumer_rejects_or_that_disagree_with_the_plan(self):
         """Round 13 sweep: each such rendered argument refuses at the shared preflight (builder exit 2)."""
