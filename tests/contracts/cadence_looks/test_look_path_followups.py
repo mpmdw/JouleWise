@@ -1,6 +1,7 @@
 """Synthetic regressions for the pre-reservation audit findings."""
 
 from collections import Counter
+from dataclasses import asdict
 import json
 import os
 from pathlib import Path
@@ -280,6 +281,28 @@ def interrupted_script(world):
     for path, document in zip((result_path, record_path, receipt_path), (result, record, receipt), strict=True):
         registrar.put(path, document)
     FROZEN["reanchor"](world, span)
+
+
+def audit7_short_visible_call(world):
+    def short(work):
+        row, = (step for step in work["steps"] if step["kind"] == "turn")
+        assert row["complete"] and row["actual_tokens"] == row["requested_tokens"] == 1024
+        row["actual_tokens"] -= 1
+
+    mutate(world, "script", short)
+    mutate(world, "episode", lambda row: row["turns"][0].update(decode_tokens=1023))
+    mutate(world, "result", lambda row: row.update(decode_tokens=1023))
+    mutate(world, "leg-record", lambda row: row["result"].update(decode_tokens=1023))
+
+
+def audit7_short_recovery(world):
+    def short(work):
+        row = work["steps"][-1]
+        assert work["complete"] and row["complete"] and row["requested_s"] == 600
+        row.update(ended_ns=row["started_ns"] + 39 * analysis.NS,
+                   ended_epoch_s=row["started_epoch_s"] + 39)
+
+    mutate(world, "script", short)
 
 
 class LookPathFollowupTests(TestCase):
@@ -1281,6 +1304,55 @@ class LookPathFollowupTests(TestCase):
         episode["start_ns"] -= 2
         episode["hardware"]["thermal"]["intervals"][0]["end_ns"] = episode["start_ns"] + 1
         self.assertEqual(reason(), "leg_record_invalid")
+
+    def test_round8_short_visible_call_cannot_supply_fourth_dc_leg(self):
+        path = Path(__file__).with_name("look_path") / "suite-v2"
+        with patch.object(sys, "path", [str(path), *sys.path]):
+            profile = runpy.run_path(str(path / "fixtures.py"))
+        disposed = ("L005", "L008")
+
+        def configure(world):
+            audit7_short_visible_call(world)
+            span, _, _ = FROZEN["location"](world, disposed[0])
+            profile["partition"](world, span, FROZEN["IDS"][3:], dict.fromkeys(disposed, "meter_absent"))
+
+        world, bench = self.prepare("short-fourth-dc", configure=configure)
+        self.assertEqual(self.invoke(world, bench, "project"), (0, b"", b""))
+        rows = []
+        for leg in disposed:
+            certificate = self.private(bench) / "certificates" / f"{leg}.json"
+            code = registrar.read(certificate)["dc_code"]
+            self.assertEqual(code, "not_bracketed")
+            rows.append(dict(leg_id=leg, code=code, certificate_sha256=registrar.digest(certificate.read_bytes())))
+        registrar.put(world / "authority/disposition.json",
+                      dict(schema="joulewise.cadence_ctl_dc_disposition.v1", legs=rows))
+        self.assertEqual(self.invoke(world, bench, "attest-disposition"), (0, b"", b""))
+        self.assertEqual(self.invoke(world, bench, "stage1"), (2, b"", b"REFUSE PREFLIGHT insufficient_legs\n"))
+        self.assert_fresh(world, bench)
+
+    def test_round8_short_recovery_is_ineligible_before_the_marker(self):
+        world, bench = self.prepare("short-recovery", configure=audit7_short_recovery)
+        self.assertEqual(self.invoke(world, bench, "stage1"), (0, b"", b""))
+        self.assertEqual(self.invoke(world, bench, "commit-stage1"), (0, b"", b""))
+        self.assertEqual(self.invoke(world, bench, "preflight"), (0, b"", b""))
+        self.assert_fresh(world, bench)
+        certificate = registrar.read(self.private(bench) / "certificates/L002.json")
+        self.assertEqual(certificate.get("admission_reason"), "recovery_incomplete")
+
+    def test_round8_blind_tool_sizes_do_not_change_typed_projection(self):
+        _, _, bundle = FROZEN["location"](self.pristine, "L002")
+        episode = registrar.read(bundle / "outputs/align_episode.json")
+        turn = episode["turns"][0]
+        call = dict(name="function", start_ns=turn["start_ns"], end_ns=turn["end_ns"], logged=True,
+                    state_changed=None, state_before_sha256=None, state_after_sha256=None)
+        turn["tool_calls"] = [call]
+
+        def projection(args, result):
+            call.update(args_bytes=args, result_bytes=result)
+            raw = registrar.manifest.canonical(episode)
+            return registrar.manifest.canonical(asdict(reader.episode_timing(raw, {}).projected_episode))
+
+        self.assertEqual(projection(99183, 876543), projection(3, 7))
 
     def test_incomplete_script_allows_a_native_interrupted_tail(self):
         work = {"steps": [{"kind": "turn", "complete": False, "actual_tokens": None,
