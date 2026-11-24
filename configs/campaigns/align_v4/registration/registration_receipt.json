@@ -244,6 +244,7 @@
     "scripts/align_pilot_session.py": null,
     "scripts/align_r0_checks.py": null,
     "scripts/align_r1_part_c.py": null,
+    "scripts/align_r1_part_c_evidence.py": null,
     "scripts/align_r1_rehearsal.py": null,
     "scripts/align_r1_runtime.py": null,
     "scripts/align_r1_followup_kit.py": null,
