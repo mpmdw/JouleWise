@@ -9,6 +9,7 @@
     "configs/campaigns/align_v4/registration/inputs.json": null,
     "configs/campaigns/align_v4/registration/local_file_verification.json": null,
     "configs/campaigns/align_v4/registration/model_artifact_inventory.json": null,
+    "configs/campaigns/align_v4/registration/r1_planning_release.json": null,
     "configs/campaigns/align_v4/registration/r1_slots.json": null,
     "configs/campaigns/align_v4/registration/r1_soak_reference.json": null,
     "configs/campaigns/align_v4/registration/u3_bar.json": null,
