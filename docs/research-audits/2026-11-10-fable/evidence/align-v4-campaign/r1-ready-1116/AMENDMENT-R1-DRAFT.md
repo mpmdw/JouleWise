@@ -150,7 +150,7 @@ This is the series' own number for "energy tracks the amount of work". It prints
 - A decode-only row runs from the turn's first-token stamp to the row's end as RL-149 §1.3 defines it. The first-token stamp is the record's `Turn.first_token_ns`: the end of prefill as the runtime reports it, which the pinned runtime writes when its stream yields the first generated token. State, clock clause, guard and `after_hot_turn` are unchanged.
 - Its prediction is the three-term fit [1, D, (C+P)·D + D²/2], where D is the row's decode tokens and C + P is the turn's prompt size in tokens (cached context plus prefill). The fit is refitted on the decode-only rows of all other eligible held-out D members of the same window and pair, both conditions.
 - Its prediction SD carries three timing edges of 1.0 J a row. Any label-free choice keeps the test exact.
-- A turn with no first-token stamp gives no decode-only row. A member with no decode-only row, with fewer than 6 training rows in its fit, or whose fit has zero residual variance (A26) has no S score and leaves its stratum with code `s_score_undefined`.
+- A turn with no first-token stamp gives no decode-only row. A member with no decode-only row, with fewer than 6 training rows in its fit, whose fit's design is rank-deficient, or whose fit has zero residual variance (A26) has no S score and leaves its stratum with code `s_score_undefined`.
 
 Under the sharp null (the instruction changes no member's energy, counts or eligibility) every S score is a function of the stratum's data, not of its labels, so B5's randomization makes the test exact. The same statistic on the A4 scores prints as `S_a4`, and on rows that include prefill as `S_pf` (*Prompt size*).
 
