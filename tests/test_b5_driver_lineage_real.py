@@ -40,8 +40,9 @@ UPPER_BOOT = "ABCDEF01-2345-4678-9ABC-DEF012345678"
 
 def hazard_window(w: SimpleNamespace, *, bracket_session_id: str = fixture.SESSION_ID) -> dict:
     return {
+        # The plan's real pack digest: a lineage that records one is held to it at launch.
         "pack": {"pack_root": str(w.pack), "pack_id": fixture.PACK_ID, "pack_plan_id": fixture.PLAN_ID,
-                 "window_id": fixture.WINDOW_ID, "pack_sha256": "0" * 64},
+                 "window_id": fixture.WINDOW_ID, "pack_sha256": window_lineage.pack_tree_digest(w.pack)},
         "bracket_session_id": bracket_session_id,
         "bindings": {"pre_attempt_id": fixture.PRE_ATTEMPT, "post_attempt_id": fixture.POST_ATTEMPT},
         "runs_roots": {"claim": str(w.claim), "bound": str(w.bound)},

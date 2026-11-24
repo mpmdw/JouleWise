@@ -1909,3 +1909,18 @@ Local checks, within the lead's test budget:
   pass.
 - `tests.align.test_v4_next_arm_packet` (69), `tests.align.test_v4_series_e2e` (11) and `tests.test_arm_readiness` (75) pass at `afe82aca9`.
 - The census is clean, with seven new predicate rows.
+
+The first CI run on `2e2e1c7b4` (`45422131593`) passed 17 of 21 jobs:
+- `quick` and shard 8: `test_b5_driver_lineage_real` published a lineage
+  whose `pack_sha256` was a placeholder of zeros. A lineage that records
+  a digest is now held to it at launch. The fixture now publishes the
+  pack's real `pack_tree_digest`, as the driver does.
+- Shard 12: the refusal allowlist. The staging refactor moved two
+  `INTERNAL` raise sites into `render_measurement_files.inventory`. Their
+  rows now name that function; the guards are unchanged.
+- Shard 9: only the frozen replay failed, on decision 90
+  `staging-link-and-copy/link`, which is the NEEDS_SPEC above.
+  `test_c1_closure` otherwise passed 49 of 50.
+
+The census and `tests.hazards.test_refusal_allowlist` (24) pass locally,
+as does `test_b5_driver_lineage_real` (6).
