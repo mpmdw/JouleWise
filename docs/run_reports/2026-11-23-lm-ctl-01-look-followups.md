@@ -357,6 +357,11 @@ The frozen trees match PR #951 byte for byte and all four checksum
 manifests verify. Final-head CI and the frozen cumulative receipt are
 linked from [draft PR #957](https://github.com/mpmdw/JouleWise/pull/957).
 
+The first full CI run required classification of the new ancillary
+metadata module in the battery lexeme sweep. The module checks the
+calibration-bound token and projects a placeholder. The guarded
+synthetic case covers the bound alongside all three extension records.
+
 The orphan-marker race remains an open LOW follow-up. Independent
 Tier 2 executing review, the installed byte pass and bound-host blind
 preflight remain lead gates before reservation.

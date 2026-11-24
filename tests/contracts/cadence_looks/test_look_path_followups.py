@@ -683,8 +683,12 @@ class LookPathFollowupTests(TestCase):
                     blind.project_json(raw, blind.OPAQUE_PERCENT)
 
     def test_v10_metadata_extensions_stay_out_of_projection_and_output(self):
-        world, bench = self.prepare(
-            "v10-extension-opacity", role="metadata", fault=lambda data: data.update(extension_metadata()))
+        def observations(document):
+            calibration = wire_matrix.sample(reader.METADATA_FIELDS["instrument_calibration"])
+            calibration["b_fiducial_s"] = EXTENSION_VALUE
+            document.update(extension_metadata(), instrument_calibration=calibration)
+
+        world, bench = self.prepare("v10-extension-opacity", role="metadata", fault=observations)
         for operation in ("stage1", "commit-stage1", "preflight"):
             with self.subTest(operation=operation):
                 self.assertEqual(self.invoke(world, bench, operation, "guard_metadata_extensions"), (0, b"", b""))
