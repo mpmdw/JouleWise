@@ -733,7 +733,7 @@ def check_roster(roster):
 
 
 def stage1_preflight(roster, sdir_of, rules34, fan_keys=FAN_KEYS, ruled=None, *, also_ruled=None,
-                     synthetic_only=False):
+                     synthetic_only=False, outputs=()):
     """Phase 1 of stage 1: the ONE function where every refusal that needs no protected file is made, for the whole
     roster, before the first protected source (a trace, telemetry, powermetrics or meter stream) opens (lead, PR #795
     round 8, C1; the merge audits on c3a0dd9f8 and 5a7a3eae0). In order:
@@ -748,7 +748,9 @@ def stage1_preflight(roster, sdir_of, rules34, fan_keys=FAN_KEYS, ruled=None, *,
     * the soak-retry print's receipt fields;
     * the fit candidates: fit-role type-A legs that the records, the committed verdicts and the ruled exclusions
       include, with an operational turn and a start reading. If every development candidate has zero prefill seconds,
-      or every one zero decode seconds, stage 1 refuses whatever the protected reads give.
+      or every one zero decode seconds, or no cell holding a fit candidate can supply both rates, stage 1 refuses
+      whatever the protected reads give;
+    * ``outputs``: each directory stage 1 writes into after the protected reads is a writable directory.
 
     Returns the plan ``stage1_protected`` reads. The reads here are the operational files the pin guard verified and
     directory names; nothing protected is opened."""
@@ -782,6 +784,24 @@ def stage1_preflight(roster, sdir_of, rules34, fan_keys=FAN_KEYS, ruled=None, *,
         if development and all(leg["turn"][end] - leg["turn"][begin] <= 0 for leg in development):
             raise F.LookInputError("stage 1: zero prefill or decode seconds on every development leg that can enter "
                                    "the fit")
+    # fit_interim.stage1 takes both rates over each cell's included development legs. The protected reads can only
+    # exclude legs, so a fit exists only if some cell holding a fit candidate has a development leg with prefill
+    # seconds and one with decode seconds (lead closing decision F4; final confirm audit on 2a3752363).
+    cells = {}
+    for leg in development:
+        cells.setdefault(leg["cell"], []).append(leg)
+    if candidates and not any(
+            any(leg["key"] in candidates for leg in legs)
+            and any(leg["turn"]["first_token_s"] - leg["turn"]["turn_start_s"] > 0 for leg in legs)
+            and any(leg["turn"]["last_token_s"] - leg["turn"]["first_token_s"] > 0 for leg in legs)
+            for legs in cells.values()):
+        raise F.LookInputError("stage 1: zero prefill or decode seconds in every cell that holds a fit candidate")
+    for directory in outputs:
+        # F2: the private directory stage 1 writes level_r.json and stage1.json into after the protected reads
+        if (os.path.islink(directory) or not os.path.isdir(directory)
+                or not os.access(directory, os.W_OK | os.X_OK)):
+            raise F.LookInputError("the look's private directory cannot be written: stage 1 writes its two files "
+                                   "there after the protected reads")
     return {"spans": spans, "fit_candidates": candidates,
             "synthetic": bool(spans) and all(span["synthetic"] for span in spans)}
 
@@ -1334,7 +1354,8 @@ def _stage1(a, stack):
         # Phase 1 (C1): every refusal that needs no protected file, for the whole roster, then the loaded code and
         # the ledger gate the output records. Nothing protected has been opened.
         plan = stage1_preflight(roster, sdir_of, rules34, ruled=ruled, also_ruled=superseded[1],
-                                synthetic_only=a.allow_draft)
+                                synthetic_only=a.allow_draft,
+                                outputs=sorted({layout.file(key).parent for key in ("stage1", "level_r")}))
         _guard_loaded(doc)
         a.ledger_gate_record = None if a.allow_draft else M.ledger_gate(ROOT, a.ledger_ref)
         extra = {"roster_sha256": roster_sha, "rules_3_4_sha256": rules_sha}
@@ -1680,6 +1701,24 @@ def _cached_source():
     return None
 
 
+def finish_stage1(a, doc, out):
+    """The rest of the stage-1 entry point: the shared check of stage 1's own file, then stage 1's only writes, both
+    at fixed names in the look's private directory, and only now (a refused run has created no file; each is created
+    once and never replaced). After a custody stage 1's protected reads a failed check is a breach: the preflight
+    owns every refusal that needs no protected file."""
+    probs = M.stage1_problems(ROOT, doc, out, sha256_file(a.manifest), allow_draft=a.allow_draft)
+    if probs:
+        raise owned_refusal("stage 1's own output: " + "; ".join(probs))
+    if getattr(a, "look_input_bytes", None) is not None:
+        a.layout.create("level_r", a.look_input_bytes)
+    return a.layout.create("stage1", F.dump(out))
+
+
+def owned_refusal(message):
+    """A check the preflight owns: a refusal before stage 1's first protected open, a PreflightBreach after it."""
+    return PreflightBreach(message) if _PHASE["protected"] else F.LookInputError(message)
+
+
 def _refusal_text(exc):
     return "; ".join(exc.problems) if isinstance(exc, M.ManifestError) else str(exc)
 
@@ -1742,15 +1781,7 @@ def main(argv=None, *, keep_redirected=False):
         _VERIFIED[:] = [(doc, a.manifest)]
         if a.cmd == "stage2":
             return cmd_stage2(a, keep_redirected=keep_redirected)
-        out = cmd_stage1(a)
-        probs = M.stage1_problems(ROOT, doc, out, sha256_file(a.manifest), allow_draft=a.allow_draft)
-        if probs:
-            raise F.LookInputError("stage 1's own output: " + "; ".join(probs))
-        # Stage 1's only writes, both at fixed names in the look's private directory, and only now: a refused run
-        # has created no file. Each is created once and never replaced.
-        if getattr(a, "look_input_bytes", None) is not None:
-            a.layout.create("level_r", a.look_input_bytes)
-        sha = a.layout.create("stage1", F.dump(out))
+        sha = finish_stage1(a, doc, cmd_stage1(a))
     except ContentRefusal as exc:           # stage 1's protected phase: a condition on protected content
         print(f"REFUSED {exc}", file=sys.stderr)
         return 2
@@ -1767,7 +1798,10 @@ def main(argv=None, *, keep_redirected=False):
         tb = exc.__traceback__
         while tb.tb_next:
             tb = tb.tb_next
-        print(f"FAILED {type(exc).__name__} at {os.path.basename(tb.tb_frame.f_code.co_filename)}:{tb.tb_lineno}",
+        # F2: after stage 1's first protected open an unexpected failure (an I/O error included) is a breach of the
+        # preflight; its type and place only, never its message
+        kind = "FAILED preflight breach:" if _PHASE["protected"] else "FAILED"
+        print(f"{kind} {type(exc).__name__} at {os.path.basename(tb.tb_frame.f_code.co_filename)}:{tb.tb_lineno}",
               file=sys.stderr)
         return 2
     print(f"wrote {M.LOOK_FILES['stage1']} sha256={sha}")

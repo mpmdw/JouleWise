@@ -269,67 +269,213 @@ class ValidateBeforeOpen(unittest.TestCase):
         self.assertTrue(R.stage1_preflight(self.roster, LF.span_dirs(self.custody(), []), self.verdicts)["fit_candidates"])
 
 
+    def test_audit_r8_no_cell_able_to_supply_both_rates_refuses_before_any_open(self):
+        """Closing decision F4 (final confirm audit on 2a3752363, C1 HIGH): with every 2,000-token turn starting at its
+        first token (no prefill seconds) and every other turn ending at it (no decode seconds), no cell holding a fit
+        candidate can supply both rates and the fit is impossible whatever the protected reads give. The preflight
+        refuses with zero protected opens. With only the 2,000-token turns changed, the other cells supply both rates
+        and the preflight passes."""
+        original = R.turn_operational
+
+        def zero_prefill(turn):
+            turn["turn_start_s"] = turn["segments"][0]["wall_start_s"] = turn["first_token_s"]
+            turn["journal"] = [r for r in turn["journal"] if r["t_s"] >= turn["turn_start_s"] - 60.0]
+
+        def zero_decode(turn):
+            first = turn["first_token_s"]
+            for part in turn["segments"][1:] + turn["prefix_tails"]:
+                part["wall_start_s"] = part["wall_end_s"] = part["first_token_s"] = first
+            turn["last_token_s"] = first
+            turn["journal"] = [r for r in turn["journal"] if r["t_s"] <= first + 5.0]
+
+        def shaped(others):
+            def turn(bundle, result, fan_keys):
+                got = original(bundle, result, fan_keys)
+                parts = Path(bundle).parts
+                leg_dir = Path(*parts[:parts.index("legs") + 2])
+                cell = _rj(leg_dir / "leg_record.json")["spec"]["prefill_tokens"]
+                self.assertIn(cell, F.CELLS)
+                if cell == 2000:
+                    zero_prefill(got)
+                elif others:
+                    zero_decode(got)
+                return got
+            return turn
+        ok = ("ok", None, None, None, None)          # every changed leg keeps its start reading: still a candidate
+        for others, refuses in ((True, True), (False, False)):
+            root = self.custody()
+            with self.subTest(other_cells_without_decode=others), _Opens() as opened, \
+                    mock.patch.object(R, "turn_operational", side_effect=shaped(others)), \
+                    mock.patch.object(R.F, "start_reading", return_value=ok):
+                if refuses:
+                    with self.assertRaisesRegex(F.LookInputError, "zero prefill or decode seconds in every cell that "
+                                                                  "holds a fit candidate"):
+                        R.stage1_preflight(self.roster, LF.span_dirs(root, []), self.verdicts)
+                else:
+                    self.assertTrue(R.stage1_preflight(self.roster, LF.span_dirs(root, []), self.verdicts)
+                                    ["fit_candidates"])
+                self.assertEqual(opened, [])
+
+
 @unittest.skipIf(F is None, "numpy is not installed; runs in the look-fit CI job")
 class PostOpenAllowlist(unittest.TestCase):
-    """Lead C2's mechanical guard on C1. The protected phase of stage 1 is ``stage1_protected`` and every function of
-    cadence_look_run.py it reaches; each raise there must be a ContentRefusal whose code is in POST_OPEN_REASONS (a
-    literal, or fit_interim's refusals through FIT_CONTENT_REASONS) or a PreflightBreach. ``main`` reports anything
-    else that stops the protected phase as a breach, never a refusal."""
+    """Lead C2's mechanical guard on C1, extended by the closing decision's F3. The protected phase of stage 1 is
+    ``stage1_protected``, the rest of the stage-1 entry point (``finish_stage1``), the ``sdir_of`` callback they are
+    handed, the methods of the objects they use (the look's layout, the pin guard), and every function, class method
+    and imported project helper they reach, across modules. Each raise
+    reached there is classified:
 
-    SOURCE = Path(R.__file__) if R is not None else None
-    ENTRY = "stage1_protected"
-    REFUSAL = "ContentRefusal"
-    BREACH = "PreflightBreach"
+    * in cadence_look_run.py's own functions: a ContentRefusal with a POST_OPEN_REASONS code, a PreflightBreach, or
+      ``owned_refusal`` (a breach after the first open);
+    * under ``fit_interim.stage1`` (wrapped by ``fit_stage1``): an allowlisted code when its text is one of
+      FIT_CONTENT_REASONS, else a breach;
+    * anywhere else (an imported helper or a callback): a breach, which ``main`` reports as FAILED, never a refusal.
+    """
 
-    def tree(self):
+    ENTRIES = ("stage1_protected", "finish_stage1")
+    OWN = ("ContentRefusal", "PreflightBreach", "owned_refusal")
+
+    @staticmethod
+    def module_tree(module):
         import ast
-        return ast.parse(self.SOURCE.read_text(encoding="utf-8"))
+        return ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
 
-    def protected_phase(self):
-        """{function name: its AST} for the entry and every module function it reaches by name."""
+    def walk(self, roots, *, boundary=()):
+        """{(file, qualified name): AST} for every definition reached from ``roots`` ([(module, name)]), following
+        calls by name, through imported project modules (module aliases, ``from`` imports, imports inside a
+        function), into class methods; ``boundary`` ([(module, name)]) is not entered."""
         import ast
-        functions = {node.name: node for node in self.tree().body if isinstance(node, ast.FunctionDef)}
-        reached, pending = {}, [self.ENTRY]
+        import importlib
+        import types
+        trees, reached, pending = {}, {}, list(roots)
+
+        def project(value):
+            name = getattr(value, "__name__", "") if isinstance(value, types.ModuleType) else ""
+            return name.startswith(("joulewise.", "scripts.", "_step3"))
+
+        def definitions(module):
+            if module.__name__ not in trees:
+                tree = self.module_tree(module)
+                defs = {}
+                for node in tree.body:
+                    if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+                        defs[node.name] = node
+                trees[module.__name__] = defs
+            return trees[module.__name__]
+
+        def local_modules(module, function):
+            aliases = {k: v for k, v in vars(module).items() if project(v)}
+            for node in ast.walk(function):
+                if isinstance(node, ast.ImportFrom) and node.module:
+                    for alias in node.names:
+                        try:
+                            value = importlib.import_module(f"{node.module}.{alias.name}")
+                        except ImportError:
+                            continue
+                        aliases[alias.asname or alias.name] = value
+            return aliases
+
         while pending:
-            name = pending.pop()
-            if name in reached or name not in functions:
+            module, name = pending.pop()
+            if (module, name) in boundary:
                 continue
-            reached[name] = functions[name]
-            pending += [node.func.id for node in ast.walk(functions[name])
-                        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)]
+            node = definitions(module).get(name)
+            if node is None:
+                value = getattr(module, name, None)        # a helper imported by name from another project module
+                home = importlib.import_module(getattr(value, "__module__", "") or "builtins")
+                if callable(value) and project(home) and home is not module:
+                    pending.append((home, name))
+                continue
+            key = (Path(module.__file__).name, name)
+            if key in reached:
+                continue
+            reached[key] = node
+            bodies = [node] if isinstance(node, ast.FunctionDef) else [n for n in node.body if isinstance(n, ast.FunctionDef)]
+            for body in bodies:
+                aliases = local_modules(module, body)
+                for call in ast.walk(body):
+                    if not isinstance(call, ast.Call):
+                        continue
+                    func = call.func
+                    if isinstance(func, ast.Name):
+                        pending.append((module, func.id))
+                    elif (isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name)
+                          and func.value.id in aliases):
+                        pending.append((aliases[func.value.id], func.attr))
+                    elif (isinstance(func, ast.Attribute) and isinstance(func.value, ast.Attribute)
+                          and isinstance(func.value.value, ast.Name) and func.value.value.id in aliases):
+                        inner = getattr(aliases[func.value.value.id], func.value.attr, None)    # e.g. R.F.stage1
+                        if project(inner):
+                            pending.append((inner, func.attr))
         return reached
 
-    def test_every_refusal_after_the_first_open_has_an_allowlisted_reason_code(self):
+    @staticmethod
+    def raises(reached):
         import ast
-        phase = self.protected_phase()
-        for name in ("read_protected", "protected_span", "span_meter", "trace_holes", "native_states",
-                     "fit_stage1", "stage2_preflight", "_stamp_protected"):
-            self.assertIn(name, phase)
+        return [(file, name, node) for (file, name), definition in reached.items()
+                for node in ast.walk(definition) if isinstance(node, ast.Raise)]
+
+    def sdir_of_callback(self):
+        """The ``sdir_of`` closure ``_stage1`` hands the protected phase: its raises are reached after the open."""
+        import ast
+        stage1 = next(n for n in self.module_tree(R).body if isinstance(n, ast.FunctionDef) and n.name == "_stage1")
+        return next(n for n in ast.walk(stage1) if isinstance(n, ast.FunctionDef) and n.name == "sdir_of")
+
+    def test_every_refusal_after_the_first_open_is_allowlisted_or_a_breach(self):
+        import ast
+        own = Path(R.__file__).name
+        fit_root = [(R.F, "stage1")]
+        # the objects made before the open whose methods the protected phase calls: the look's layout (create, file)
+        # and the pin guard every open of a roster path passes through
+        objects = [(R.M, "LookLayout"), (R.PINS, "PinnedCustody")]
+        phase = self.walk([(R, name) for name in self.ENTRIES] + objects, boundary=fit_root)
+        fit = self.walk(fit_root)
+        names = {name for file, name in phase if file == own}
+        for name in ("read_protected", "protected_span", "span_meter", "trace_holes", "native_states", "fit_stage1",
+                     "stage2_preflight", "_stamp_protected", "finish_stage1", "owned_refusal"):
+            self.assertIn(name, names)
         for name in ("stage1_preflight", "plan_span", "plan_leg", "turn_operational", "validate_runtime_bundles",
                      "check_roster", "_guard_loaded", "_stamp"):
-            self.assertNotIn(name, phase, f"{name} is a preflight function and must not run after the first open")
-        codes, breaches = set(), 0
-        for name, function in phase.items():
-            for node in ast.walk(function):
-                if not isinstance(node, ast.Raise):
-                    continue
-                where = f"{name}:{node.lineno}"
-                call = node.exc
-                self.assertIsInstance(call, ast.Call, f"{where}: a bare or non-constructing raise")
-                self.assertIsInstance(call.func, ast.Name, where)
-                self.assertIn(call.func.id, (self.REFUSAL, self.BREACH), f"{where}: raises {call.func.id}")
-                if call.func.id == self.BREACH:
-                    breaches += 1
-                    continue
-                code = call.args[0]
-                if isinstance(code, ast.Constant):
-                    codes.add(code.value)
-                else:                      # fit_interim's refusals, through the registry of their texts
-                    self.assertEqual((name, getattr(code, "id", None)), ("fit_stage1", "code"), where)
-                    codes |= {code for code, _ in R.FIT_CONTENT_REASONS}
-        self.assertLessEqual(codes, set(R.POST_OPEN_REASONS))
+            self.assertNotIn(name, names, f"{name} is a preflight function and must not run after the first open")
+        imported = {file for file, _ in phase} - {own}
+        self.assertTrue({"inclusion_34.py", "time_fields.py", "manifest.py"} <= imported, imported)
+        self.assertIn(("manifest.py", "LookLayout"), phase)          # layout.create's class, by its methods
+        codes, breaches, other = set(), [], []
+        for file, name, node in self.raises(phase) + [(own, "sdir_of", n) for n in ast.walk(self.sdir_of_callback())
+                                                       if isinstance(n, ast.Raise)]:
+            where = f"{file}:{name}:{node.lineno}"
+            if file != own or name in ("sdir_of", "ContentRefusal", "PreflightBreach"):
+                # an imported helper, a callback, or the refusal classes' own guard (an unregistered code, which this
+                # test proves is never passed): main reports each as a breach
+                other.append(where)
+                continue
+            call = node.exc
+            self.assertIsInstance(call, ast.Call, f"{where}: a bare or non-constructing raise")
+            self.assertIsInstance(call.func, ast.Name, where)
+            self.assertIn(call.func.id, self.OWN, f"{where}: raises {call.func.id}")
+            if call.func.id != "ContentRefusal":
+                breaches.append(where)
+                continue
+            code = call.args[0]
+            if isinstance(code, ast.Constant):
+                codes.add(code.value)
+            else:                                   # fit_interim's refusals, through the registry of their texts
+                self.assertEqual((name, getattr(code, "id", None)), ("fit_stage1", "code"), where)
+        self.assertIn(f"{own}:finish_stage1:" + str(next(node.lineno for f, n, node in self.raises(phase)
+                                                         if (f, n) == (own, "finish_stage1"))), breaches)
+        fit_codes = {}
+        for file, name, node in self.raises(fit):
+            text = node.exc.args[0].value if (isinstance(node.exc, ast.Call) and node.exc.args
+                                              and isinstance(node.exc.args[0], ast.Constant)) else None
+            code = next((c for c, pattern in R.FIT_CONTENT_REASONS if text and pattern.fullmatch(text)), None)
+            fit_codes[f"{file}:{name}:{node.lineno}"] = code or "breach"
+            self.assertNotIn("ContentRefusal", ast.unparse(node), "only cadence_look_run.py makes a content refusal")
+        rate = [w for w, c in fit_codes.items() if c == "zero_rate_seconds"]
+        self.assertTrue(rate and all(w.startswith("fit_interim.py:") for w in rate), fit_codes)   # fit_interim.py:800
+        self.assertTrue(any(c == "no_leg_enters_fit" for c in fit_codes.values()), fit_codes)
+        codes |= {c for c in fit_codes.values() if c != "breach"} | {c for c, _ in R.FIT_CONTENT_REASONS}
         self.assertEqual(codes, set(R.POST_OPEN_REASONS), "an allowlisted code that no protected path raises")
-        self.assertGreater(breaches, 0)
+        self.assertTrue(other and breaches)
         self.assertEqual(R.KNOWN_LIMITATION_REASONS, {"no_fit_candidate"})
         self.assertTrue(all(R.POST_OPEN_REASONS[c].startswith("Known limitation (lead ruling N1(a)")
                             for c in R.KNOWN_LIMITATION_REASONS))
@@ -352,7 +498,9 @@ class PostOpenAllowlist(unittest.TestCase):
                  (F.LookInputError("roster: a block_id is not a registered block id"), "FAILED preflight breach"),
                  (R.PreflightBreach("stage-2 preflight: x"), "FAILED preflight breach"),
                  (R.M.ManifestError(["a ledger problem"]), "FAILED preflight breach"),
-                 (R.PINS.PinRefusal("x: a file that is not pinned"), "FAILED preflight breach"))
+                 (R.PINS.PinRefusal("x: a file that is not pinned"), "FAILED preflight breach"),
+                 (PermissionError(13, "generated"), "FAILED preflight breach: PermissionError at "),
+                 (KeyError("generated"), "FAILED preflight breach: KeyError at "))
         for error, text in cases:
             with self.subTest(type(error).__name__), mock.patch.object(R.M, "verify_pins",
                                                                         return_value={"look_id": F.LOOK_ID}), \
@@ -459,7 +607,9 @@ class AuditCommittedStageOne(unittest.TestCase):
         after four protected opens; the Check line ``- Observed offload manifest <sha>`` held a correct span."""
         arena = self.arena
         for label in ("\n\n   - Observed offload manifest `{sha}`", "\n\n   * Observed offload manifest `{sha}`",
-                      "\n\n+ **Observed offload manifest** `{sha}`"):
+                      "\n\n+ **Observed offload manifest** `{sha}`",
+                      # closing decision F1 (final confirm audit on 2a3752363, C3 HIGH): the bold adjective and noun
+                      "\n\n- Observed **offload** manifest `{sha}`", "\n\n- Observed offload **manifest** `{sha}`"):
             with self.subTest(label):
                 row = self.run_stage1(label)
                 self.assertEqual((row["rc"], row["output"]), (0, True), row)
@@ -474,6 +624,23 @@ class AuditCommittedStageOne(unittest.TestCase):
             self.assert_refused_before_any_open(self.run_stage1(), "roster: a block_id is not a registered block id")
         finally:
             self.restore()
+
+    def test_audit_r8_a_read_only_private_directory_refuses_before_any_open(self):
+        """Closing decision F2 (final confirm audit on 2a3752363, C1/C2 MED): a private directory stage 1 cannot write
+        into gave ``FAILED PermissionError`` after four protected opens. The preflight now refuses first."""
+        import stat
+        arena = self.arena
+        directory = arena.out.parent
+        for name in ("stage1.json", "level_r.json"):
+            (directory / name).unlink(missing_ok=True)
+        mode = stat.S_IMODE(directory.stat().st_mode)
+        try:
+            directory.chmod(mode & ~0o222)
+            if os.access(directory, os.W_OK):
+                self.skipTest("this account can write a read-only directory")
+            self.assert_refused_before_any_open(self.run_stage1(), "the look's private directory cannot be written")
+        finally:
+            directory.chmod(mode)
 
     def test_audit_r7_1_no_fit_candidate_is_a_known_limitation_and_refuses_after_the_first_open(self):
         """Known limitation (lead ruling N1(a), 2026-11-24). Audit on 5a7a3eae0, finding 1: every verdict's
@@ -494,6 +661,67 @@ class AuditCommittedStageOne(unittest.TestCase):
             self.assertTrue(row["opens"], "the known-limitation refusal moved before the first open without a ruling")
         finally:
             self.restore()
+
+
+@unittest.skipIf(F is None, "numpy is not installed; runs in the look-fit CI job")
+class AuditR8ImpossibleFit(unittest.TestCase):
+    """Closing decision F4, the final confirm audit's own case on 2a3752363 through committed stage 1: two supporting
+    spans whose two fit candidates sit in different cells, the 2,000-token turn with no prefill seconds and the
+    19,458-token turn with no decode seconds. It opened the four protected source types, then refused on zero rate
+    seconds; the preflight now refuses with no protected open, no output and no reservation."""
+
+    @classmethod
+    def setUpClass(cls):
+        from tests.cadence import test_interim_admission_closure as suite
+        cls.suite = suite
+        owner = unittest.TestCase()
+        cls.addClassCleanup(owner.doCleanups)
+        cls.arena = arena = suite.Arena(owner)
+        cls.case = suite.Case("admit", suite.PINS[0], "normal")
+        arena.install(cls.case)
+        support, second = arena.support, arena.source / "dev-02-s01"
+        shutil.copytree(support, second)
+        for name, doc in arena.corpus[suite.PINS[1]]["support"].items():
+            (second / name).write_bytes(suite.wire(doc))
+        row = next(r for r in json.loads(arena.inputs[0].read_bytes()) if r["span_id"] == support.name)
+        cls.roster = [row, dict(row, span_id=second.name, block_id="dev-02")]
+        arena.inputs[0].write_bytes(suite.wire(cls.roster))
+
+    register = AuditCommittedStageOne.register
+    assert_refused_before_any_open = AuditCommittedStageOne.assert_refused_before_any_open
+
+    def test_audit_r8_impossible_fit_refuses_before_any_open(self):
+        arena, sdir_of = self.arena, (lambda sid: self.arena.source / sid)
+        verdicts = {f"{r['span_id']}/L001": dict(sidecar_coverage=True, km003c_clean=True) for r in self.roster}
+        plan = R.stage1_preflight(self.roster, sdir_of, verdicts)
+        cells = {}
+        for span in plan["spans"]:
+            for leg in span["legs"]:
+                if leg["key"] in plan["fit_candidates"]:
+                    cells.setdefault(leg["cell"], leg)
+        self.assertGreaterEqual(len(cells), 2, cells)
+        (low, low_leg), (high, high_leg) = sorted(cells.items())[0], sorted(cells.items())[-1]
+        keep = {low_leg["key"], high_leg["key"]}
+        verdicts = {k: dict(v) if k in keep else dict(v, sidecar_coverage=False) for k, v in verdicts.items()}
+        self.register(verdicts)
+        control = arena.run(self.case)
+        self.assertEqual((control["rc"], control["output"]), (0, True), control)
+        turns = low_leg["bundle"] / "outputs/align_turns.jsonl"           # no prefill seconds in the low cell
+        item = json.loads(turns.read_bytes())
+        item["start_stamp"]["epoch_s"] = low_leg["turn"]["first_token_s"]
+        turns.write_bytes(self.suite.wire(item))
+        events = high_leg["bundle"] / "events.jsonl"                       # no decode seconds in the high cell
+        rows = [json.loads(line) for line in events.read_bytes().splitlines()]
+        for event in rows:
+            if event["timestamp_s"] >= high_leg["turn"]["first_token_s"]:
+                event["timestamp_s"] = high_leg["turn"]["first_token_s"]
+        events.write_bytes(b"".join(self.suite.wire(event) for event in rows))
+        self.register(verdicts)
+        with _Opens() as opened, self.assertRaisesRegex(F.LookInputError, "in every cell that holds a fit candidate"):
+            R.stage1_preflight(self.roster, sdir_of, verdicts)      # the audit's plan: two candidates, no full cell
+        self.assertEqual(opened, [])
+        arena.out.unlink(missing_ok=True)
+        self.assert_refused_before_any_open(arena.run(self.case), "zero prefill or decode seconds in every cell")
 
 
 # ============================================================================================ finding 2, its class
@@ -539,6 +767,34 @@ class ObservedNotExpected(unittest.TestCase):
         for line in ("\n\n   - Observed offload manifest `{d}`", "\n\n   * Observed offload manifest `{d}`"):
             text = PF.run_state(doc).replace(f"Offload manifest `{d}`", line.format(d=d))
             self.assertEqual(P.chain_link(doc, text), {"dev-03-s01": "full"}, line)
+
+    def test_inline_markdown_anywhere_in_the_statement_changes_no_binding(self):
+        """Closing decision F1 (final confirm audit on 2a3752363, C3 HIGH): inline Markdown is normalized across the
+        whole statement, so a bold, italic or code-quoted part of the label binds as the plain label does."""
+        d = self.digest
+        for body in ("- Observed **offload** manifest `{d}`", "- Observed offload **manifest** `{d}`",
+                     "- `Observed` offload manifest `{d}`", "- __Observed__ offload _manifest_ `{d}`",
+                     "- *Observed* **offload** *manifest* `{d}` (5 files)", "- **Observed offload manifest** `{d}`"):
+            with self.subTest(body):
+                self.assertEqual(self.form("Copy checked.\n\n" + body.format(d=d)), "full")
+
+    def test_a_qualifier_anywhere_in_the_statement_holds_the_span(self):
+        """Closing decision F1 (C3 MED): qualification is judged on the complete normalized statement, never on the
+        clause a comma, semicolon or colon cuts out of it. The audit's text-only case was "- Expected, offload
+        manifest <the pin>", whose clause "offload manifest" bound."""
+        d = self.digest
+        for word in ("Expected", "Planned", "Target", "Intended", "Projected", "Not"):
+            for body in ("- {w}, offload manifest `{d}`", "- {w}; offload manifest `{d}`", "- {w}: offload manifest `{d}`",
+                         "- **{w}**, offload **manifest** `{d}`", "- Offload manifest `{d}`, {w}"):
+                text = "Copy checked.\n\n" + body.format(w=word, d=d)
+                with self.subTest(text=text):
+                    self.assertEqual(self.form(text), "absent")
+                    states = P.check_states({"schema": P.SCHEMA, "spans": [self.span]},
+                                            f"1. **Check of dev-03-s01 (generated).** {text}\n")
+                    self.assertEqual(states["dev-03-s01"]["state"], P.HELD)
+        # a qualifier in another sentence of the item leaves the observation's statement alone
+        self.assertEqual(self.form(f"Expected copy done. Offload manifest `{d}`."), "full")
+        self.assertEqual(self.form(f"Planned at 02:00.\n- Observed offload manifest `{d}`"), "full")
 
     def test_a_pending_malformed_conflicting_or_expected_only_observation_holds_the_span(self):
         d = self.digest

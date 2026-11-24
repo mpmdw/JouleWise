@@ -256,6 +256,37 @@ def _observation_prefix(prefix):
     return True
 
 
+# Inline Markdown, removed from a Check item before anything is matched (lead closing decision F1, PR #795, after the
+# final confirm audit on 2a3752363): emphasis (``**``, ``*``, ``__``, ``_`` at a word's edge, never inside a name such
+# as ``offload_manifest_sha256``) and backticks. "Observed **offload** manifest" then reads as "Observed **offload
+# manifest**" does. Digests are hex and carry none of these characters.
+_INLINE_MARKDOWN = re.compile(r"\*+|`+|(?<![A-Za-z0-9])_+|_+(?![A-Za-z0-9])")
+
+
+def plain_text(text):
+    """``text`` without inline Markdown emphasis or backticks."""
+    return _INLINE_MARKDOWN.sub("", text)
+
+
+# A statement ends at a sentence's end (".", "!" or "?" before whitespace or the end) or a line's end; a comma, a
+# semicolon or a colon does not end it. A qualifier anywhere in a digest's statement makes the digest a statement about
+# the offload manifest rather than an observation of it (F1: "- Expected, offload manifest <the pin>" bound, because the
+# comma cut "Expected" from the clause the identification reads).
+_STATEMENT_END = re.compile(r"[.!?](?=\s|$)|\n")
+_QUALIFIER = re.compile(
+    r"(?<![a-z])(?:expect(?:s|ed|ing)?|plan(?:s|ned)?|target(?:s|ed)?|intend(?:s|ed)?|anticipat(?:e|es|ed)"
+    r"|predict(?:s|ed)?|project(?:s|ed)|estimat(?:e|es|ed)|assum(?:e|es|ed)|presum(?:e|es|ed)|suppos(?:e|es|ed)"
+    r"|provisional|tentative|placeholder|should|would|will|to be|not)(?![a-z])", re.I)
+
+
+def qualified_statement(item, start, end):
+    """Whether the complete statement around ``item[start:end]`` (a digest) carries a qualifier: "Expected",
+    "Planned", "Target" or any such word, before or after the digest, across every clause of the statement."""
+    begin = max((m.end() for m in _STATEMENT_END.finditer(item, 0, start)), default=0)
+    after = _STATEMENT_END.search(item, end)
+    return _QUALIFIER.search(item, begin, after.start() if after else len(item)) is not None
+
+
 def _offload_identified(label):
     """Whether a digest under ``label`` is identified as the span's observed offload manifest (audit 3, rule P2;
     RL-195 Q2; merge audit finding 2): the label's last manifest word is "offload manifest", only names and an
@@ -385,6 +416,7 @@ def check_binding(span, run_state_text, span_ids=()):
     item = run_state_item(run_state_text, number)
     if item is None:
         return out
+    item = plain_text(item)
     names = _names(item)
     printed = list(_PRINTED.finditer(item))
     owned, identified = [], []           # the span's manifest-labelled digests; those identified as its offload one
@@ -394,7 +426,7 @@ def check_binding(span, run_state_text, span_ids=()):
         label = _label(item, match.start(), printed[index - 1].end() if index else 0)
         if _manifest_mentioned(label):
             owned.append(match)
-        if _offload_identified(label):
+        if _offload_identified(label) and not qualified_statement(item, match.start(), match.end()):
             identified.append(match)
     if not owned:
         return out
