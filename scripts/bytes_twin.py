@@ -1552,6 +1552,9 @@ def _check_reducer_dispatch(bundle, config, metadata):
     version = provenance.get("reducer_version") if isinstance(provenance, dict) else None
     event_v2 = metadata.get("event_semantics_version") == "joulewise.events.v2"
     config_v2 = config.get("schema_extensions") == ["joulewise.axi_decode_config.v1"]
+    summary_v2 = isinstance(summary, dict) and any(field in summary for field in (
+        "decode_counter_rollup", "batch_group_gross_energy_j", "request_decode_metrics",
+    ))
     if version is None:
         if summary_path.is_file() and (event_v2 or summary != {"status": "failed"}):
             raise ValueError("finalized bundle reducer version missing")
@@ -1559,7 +1562,8 @@ def _check_reducer_dispatch(bundle, config, metadata):
     if version in ("0.6.0", "0.6.1", "0.6.2"):
         if not (config_v2 and event_v2):
             raise ValueError("AXI reducer requires its config and event layouts")
-    elif version not in ("0.4.1", "0.4.2", "0.5.0", "0.5.1", "0.5.2") or event_v2 or config_v2:
+    elif (version not in ("0.4.1", "0.4.2", "0.5.0", "0.5.1", "0.5.2")
+          or event_v2 or config_v2 or summary_v2):
         raise ValueError("bundle reducer version or layout unsupported")
     return version
 

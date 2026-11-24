@@ -145,7 +145,8 @@ class ConditionalAvailabilityTests(unittest.TestCase):
             check(v2)
             self.assertEqual(set(initial) | set(environment) | set(v2), {
                 key for key, row in CONTRACT.items() if row["scope"] == "observed_branch"
-                and key not in {"compressed_member", "restore_bundle_inventory", "authenticated_plan_trees"}})
+                and key not in {"compressed_member", "restore_bundle_inventory", "authenticated_plan_trees",
+                                "bound_pack_plan_tree"}})
         print(f"\nBYTES {timing} conditional matrix: {cases} cases, {comparisons} exact comparisons, zero disagreements", flush=True)
 
     def test_mock_timing_conditional_file_faults(self):

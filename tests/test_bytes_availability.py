@@ -18,8 +18,10 @@ from unittest.mock import patch
 
 from joulewise import environment_admission
 from joulewise.axi_decode_config import RequestDescriptor, RequestRoster
+from joulewise.bundle_read import BundleReader
 from joulewise.desk_restore import RestoreRefused, StorageStop, readable_run
 from joulewise.b6.acceptance import evidence_from_archive
+from joulewise.reduce import _verify_instrument_calibration
 from scripts import bytes_analyze, bytes_commitment, bytes_twin
 from tests import test_bytes_agreement as agreement
 from tests.bytes_commitment_support import commitment_fixture
@@ -68,13 +70,14 @@ def traced_input(fixture, path):
 
 
 @contextmanager
-def trace_primary_inputs(fixture, *, suppress=()):
+def trace_primary_inputs(fixture, *, suppress=(), aliases=None):
     seen = set()
     original = Path.open
+    aliases = aliases or {}
 
     def tracked(path, mode="r", *args, **kwargs):
         if mode.startswith("r"):
-            key = traced_input(fixture, path)
+            key = aliases.get(path) or traced_input(fixture, path)
             if key is not None:
                 seen.add(key)
             if path in suppress:
@@ -347,6 +350,57 @@ class BytesAvailabilityTests(unittest.TestCase):
             fields = [f'`{row["path"]}`', row["phase"], row["primary"], *row["faults"].values(), row["flags"]]
             self.assertIn("| " + " | ".join(field.replace("|", r"\|") for field in fields) + " |", documented)
 
+    def test_bound_pack_plan_tree_is_authenticated_only_when_selected(self):
+        with tempfile.TemporaryDirectory(prefix="bytes-bound-plan-contract-") as directory:
+            root = Path(directory)
+            fixture = AvailabilityFixture(root / "base", "mock")
+            sources = fixture.archive / "sources"
+            pack_root = sources / "custom-pack"
+            pack_root.mkdir()
+            candidate = pack_root / "plan_tree.json"
+            body = b'{"stage_graph":[]}\n'
+            candidate.write_bytes(body)
+            ledger = sources / "SHA256SUMS"
+            base = ledger.read_bytes()
+
+            def bound_inventory(contents):
+                return base + f"{hashlib.sha256(contents).hexdigest()}  {candidate.relative_to(sources)}\n".encode()
+
+            ledger.write_bytes(bound_inventory(body))
+            plan = {"pack_root": str(pack_root), "plan_tree": json.loads(body)}
+
+            def export(tag):
+                with patch("os.fsync", return_value=None), \
+                        trace_primary_inputs(fixture, aliases={candidate: "pack_root/plan_tree.json"}) as reads:
+                    agreement.export_runs.export(fixture.archive, plan, fixture.root / "registration",
+                        root / f"{tag}-private", root / f"{tag}-export", evidence=fixture.evidence,
+                        pack_registration={"blinding_group": "bytes", "bytes_pass": 1})
+                self.assert_contract_covers_reads(reads, "export")
+                return reads
+
+            self.assertIn("pack_root/plan_tree.json", export("clean"))
+            for fault in CONTRACT["bound_pack_plan_tree"]["faults"]:
+                with self.subTest(fault=fault), file_fault(candidate, fault):
+                    self.assertIn("pack_root/plan_tree.json", export(fault))
+
+            # A truthy parse selects the bound candidate and requires authentication.
+            non_object = b"[true]\n"
+            for case, contents, inventory in (
+                    ("digest-mismatch", b'{"stage_graph":[], "changed":true}\n', bound_inventory(body)),
+                    ("no-proof", body, base),
+                    ("non-object", non_object, bound_inventory(non_object))):
+                with self.subTest(case=case):
+                    candidate.write_bytes(contents)
+                    ledger.write_bytes(inventory)
+                    with self.assertRaisesRegex(StorageStop, r"custom-pack/plan_tree\.json"):
+                        export(case)
+
+            fixed = sources / "pack/plan_tree.json"
+            fixed.parent.mkdir(exist_ok=True)
+            fixed.write_bytes(body)
+            ledger.write_bytes(base + f"{hashlib.sha256(body).hexdigest()}  pack/plan_tree.json\n".encode())
+            self.assertNotIn("pack_root/plan_tree.json", export("fixed-first"))
+
     @unittest.skipUnless(shutil.which("zstd"), "compressed reference trace needs zstd")
     def test_export_restores_verified_reference_inventory(self):
         with tempfile.TemporaryDirectory(prefix="bytes-reference-restore-") as directory:
@@ -594,6 +648,28 @@ class BytesAvailabilityTests(unittest.TestCase):
                 count += fixture.compare(self, fixture.export, fixture.keys, bad, fit_cli=True, expect_kept=False)
                 print(f"\nBYTES {timing} missing event type: {count} comparisons, zero above bar", flush=True)
 
+    def test_v2_summary_fields_drop_historical_member_in_both_fit_clis(self):
+        for timing in ("mock", "native"):
+            with self.subTest(timing=timing), tempfile.TemporaryDirectory(prefix="bytes-summary-layout-") as directory:
+                root = Path(directory)
+                fixture = AvailabilityFixture(root / "base", timing, complete_fit=True)
+                summary = fixture.bundle / "summary_metrics.json"
+                historical = agreement.load(summary)
+                control = root / "control"
+                control.mkdir()
+                count = fixture.compare(self, fixture.export, fixture.keys, control, fit_cli=True,
+                                        expect_exit=0, expect_kept=True)
+                fields = {"batch_group_gross_energy_j": {}, "decode_counter_rollup": None, "request_decode_metrics": []}
+                for field, value in fields.items():
+                    with self.subTest(field=field):
+                        scratch = root / field
+                        scratch.mkdir()
+                        agreement._write(summary, {**historical, field: value})
+                        count += fixture.compare(self, fixture.export, fixture.keys, scratch, fit_cli=True,
+                                                 expect_exit=0, expect_kept=False)
+                print(f"\nBYTES {timing} historical summary with event-v2 fields: {count} comparisons, zero above bar",
+                      flush=True)
+
     def test_bundle_restored_after_export_supplies_unblinded_science_record(self):
         for timing in ("mock", "native"):
             with self.subTest(timing=timing), tempfile.TemporaryDirectory(prefix="bytes-bundle-return-") as directory:
@@ -689,10 +765,12 @@ class BytesAvailabilityTests(unittest.TestCase):
                                                                           read_registration=row_id == "export_registration")
                                     compared += fixture.compare(self, export, keys, scratch)
                             else:
-                                # These paths are conditional on the producer or native hardware path.
-                                # Exercise their absence from this synthetic science reader, too.
                                 with file_fault(file, fault):
-                                    compared += fixture.compare(self, fixture.export, fixture.keys, scratch)
+                                    if phase == "before_export":
+                                        export, keys = fixture.export_again(scratch / "export", scratch / "private")
+                                    else:
+                                        export, keys = fixture.export, fixture.keys
+                                    compared += fixture.compare(self, export, keys, scratch)
             print(f"\nBYTES {timing} optional controls: {cases} cases, {compared} comparisons", flush=True)
 
     def test_mock_timing_control_faults(self):
@@ -828,17 +906,67 @@ class BytesAvailabilityTests(unittest.TestCase):
             evidence = calibration / "instrument_evidence.json"
             evidence_sha = artifact(evidence, json.dumps({"artifact_sha256": hashes}).encode())
             manifest = calibration / "manifest.json"
-            manifest_sha = artifact(manifest, json.dumps({"artifacts": {**hashes, evidence.name: evidence_sha}}).encode())
+            manifest_sha = artifact(manifest, json.dumps({
+                "schema_version": "joulewise.instrument_validation_manifest.v1",
+                "artifacts": {**hashes, evidence.name: evidence_sha},
+            }).encode())
             metadata = {"device": {"telemetry": "powermetrics"}, "instrument_calibration": {
                 "validation_manifest_path": "calibration/manifest.json", "validation_manifest_sha256": manifest_sha,
-                "artifact_path": "calibration/instrument_evidence.json", "artifact_sha256": evidence_sha}}
+                "artifact_path": "calibration/instrument_evidence.json", "artifact_sha256": evidence_sha,
+                "b_fiducial_s": 0.04}}
+            calibration_metadata = metadata["instrument_calibration"]
+            # This clean manifest passes the primary's custody check. Its
+            # minimal evidence deliberately stops at the subsequent schema gate.
+            self.assertEqual(_verify_instrument_calibration(BundleReader(bundle), metadata, calibration_metadata),
+                             (None, "instrument_calibration_schema_mismatch"))
             trace = [(0.0, 1.0, 3.0), (1.0, 2.0, 3.0)]
             bytes_twin._verify_native_trace(trace, bytes_twin._native_science_inputs(bundle, metadata, "0.5.2"))
             files = {"raw_powermetrics": capture_file, "cal_manifest": manifest, "cal_evidence": evidence,
                      "cal_members": calibration / "events.jsonl"}
+            resolved_manifest = manifest.resolve()
+            manifest_opened = False
+            original_open = Path.open
+
+            def observe_manifest(path, mode="r", *args, **kwargs):
+                nonlocal manifest_opened
+                if path == resolved_manifest and mode.startswith("r"):
+                    manifest_opened = True
+                return original_open(path, mode, *args, **kwargs)
+
             for row_id, file in files.items():
                 for fault in CONTRACT[row_id]["faults"]:
-                    with self.subTest(file=row_id, fault=fault), file_fault(file, fault), \
-                            self.assertRaises((ValueError, OSError)):
-                        inputs = bytes_twin._native_science_inputs(bundle, metadata, "0.5.2")
-                        bytes_twin._verify_native_trace(trace, inputs)
+                    with self.subTest(file=row_id, fault=fault), file_fault(file, fault):
+                        if row_id == "cal_manifest":
+                            manifest_opened = False
+                            with patch.object(Path, "open", observe_manifest):
+                                result = _verify_instrument_calibration(BundleReader(bundle), metadata, calibration_metadata)
+                            self.assertEqual(result, (None, "instrument_calibration_invalid"))
+                            self.assertEqual(manifest_opened, fault != "absent")
+                        with self.assertRaises((ValueError, OSError)):
+                            inputs = bytes_twin._native_science_inputs(bundle, metadata, "0.5.2")
+                            bytes_twin._verify_native_trace(trace, inputs)
+
+    def test_reference_export_authenticates_calibration_manifest_faults(self):
+        for timing in ("mock", "native"):
+            with self.subTest(timing=timing), tempfile.TemporaryDirectory(prefix="bytes-calibration-inventory-") as directory:
+                root = Path(directory)
+                fixture = AvailabilityFixture(root / "base", timing)
+                members = agreement.load(fixture.archive / "derived/roster.json")["members"]
+                reference = next(member["run_id"] for member in members if member["role"] == "start")
+                sources = fixture.archive / "sources"
+                manifest = sources / "claim-runs" / reference / "calibration/manifest.json"
+                manifest.parent.mkdir(exist_ok=True)
+                body = b'{"schema_version":"joulewise.instrument_validation_manifest.v1","artifacts":{}}\n'
+                manifest.write_bytes(body)
+                with (sources / "SHA256SUMS").open("a") as ledger:
+                    ledger.write(f"{hashlib.sha256(body).hexdigest()}  {manifest.relative_to(sources)}\n")
+
+                key = "instrument_calibration.validation_manifest_path"
+                with trace_primary_inputs(fixture, aliases={manifest: key}) as reads:
+                    fixture.export_again(root / "clean-export", root / "clean-private")
+                self.assertIn(key, reads)
+                self.assert_contract_covers_reads(reads, "export")
+                for fault in CONTRACT["cal_manifest"]["faults"]:
+                    with self.subTest(fault=fault), file_fault(manifest, fault):
+                        with self.assertRaisesRegex(StorageStop, r"calibration/manifest\.json"):
+                            fixture.export_again(root / f"{fault}-export", root / f"{fault}-private")

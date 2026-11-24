@@ -88,7 +88,7 @@
     "id": "summary",
     "path": "bundle/summary_metrics.json",
     "phase": "both",
-    "primary": "joulewise/b6/export_runs.py:261\u2013305,677\u2013679; joulewise/bundle_read.py:423\u2013424; joulewise/reduce.py:2751\u20132788",
+    "primary": "joulewise/b6/export_runs.py:261\u2013305,677\u2013679; joulewise/bundle_read.py:423\u2013424; joulewise/reduce.py:2751\u20132829",
     "scope": "member",
     "faults": {
       "absent": "Science reducer chooses its unfinalized default; reference export may use another verified status source.",
@@ -96,7 +96,7 @@
       "half": "Same as zero for an invalid prefix.",
       "garbage": "Same as zero."
     },
-    "flags": "Dispatch refusal makes a science record unusable; the synthetic override cannot catch a dispatch exception.",
+    "flags": "Dispatch refusal makes a science record unusable before the synthetic override. Historical reducers reject the presence of decode_counter_rollup, batch_group_gross_energy_j or request_decode_metrics, regardless of their values.",
     "read_paths": [
       "bundle/summary_metrics.json"
     ]
@@ -142,12 +142,15 @@
     "primary": "joulewise/reduce.py:1213\u20131255; joulewise/b6/export_runs.py:450",
     "scope": "conditional_member",
     "faults": {
-      "absent": "Strict native calibration is invalid.",
+      "absent": "Strict native calibration is invalid. The synthetic mock and native-timing bases do not enter this manifest reader. Reference export can authenticate a listed manifest as part of the bundle inventory.",
       "zero": "Same as absent.",
       "half": "Same as absent.",
       "garbage": "Same as absent."
     },
-    "flags": "Reducer reports instrument_calibration_invalid. The analysis does not invent a member flag."
+    "flags": "Reducer reports instrument_calibration_invalid. The analysis does not invent a member flag.",
+    "read_paths": [
+      "instrument_calibration.validation_manifest_path"
+    ]
   },
   {
     "id": "cal_evidence",
@@ -359,7 +362,7 @@
     "primary": "joulewise/b6/export_runs.py:93\u2013105,130\u2013142,556\u2013572; joulewise/b6/archive.py:63\u201370",
     "scope": "observed_branch",
     "faults": {
-      "absent": "Every SHA256SUMS-listed candidate is required, even if a byte-identical authenticated alternate, explicit plan, and evidence are available. Unlisted candidates may fall back under normal tree discovery.",
+      "absent": "Both fixed candidates are checked before fallback when listed in SHA256SUMS, even with an authenticated alternate, explicit plan and evidence. An unlisted fixed candidate may fall back under normal tree discovery.",
       "zero": "A listed candidate fails its digest or object validation.",
       "half": "A listed candidate fails its digest or object validation.",
       "garbage": "A listed candidate fails its digest or object validation."
@@ -368,6 +371,23 @@
     "read_paths": [
       "sources/pack/plan_tree.json",
       "sources/repo/configs/campaigns/*/plan_tree.json"
+    ]
+  },
+  {
+    "id": "bound_pack_plan_tree",
+    "path": "pack_root/plan_tree.json (resolved plan binding)",
+    "phase": "export",
+    "primary": "joulewise/b6/archive.py:16\u201332,60\u201371; joulewise/b6/export_runs.py:93\u2013105,130\u2013142,556\u2013572",
+    "scope": "observed_branch",
+    "faults": {
+      "absent": "After the fixed candidates, look under the resolved pack_root. If missing, use the inline plan even if the bound path remains listed in SHA256SUMS.",
+      "zero": "The tolerant probe yields no tree and falls back to the inline plan. A selected truthy parse must authenticate as a JSON object.",
+      "half": "An unparseable or falsey prefix falls back. A truthy prefix is selected and then verified against SHA256SUMS as a JSON object.",
+      "garbage": "An unparseable candidate falls back to the inline plan."
+    },
+    "flags": "StorageStop on a selected candidate without a matching digest or a JSON object. An unsuccessful probe can fall back without a storage refusal.",
+    "read_paths": [
+      "pack_root/plan_tree.json"
     ]
   },
   {
