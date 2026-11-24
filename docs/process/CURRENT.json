@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "a lead RUN_STATE item on main issuing ledger initialization (RL-197c draft item 2) that binds this item's ITEM552 facts, then the ctl-01 pilot (draft item 3). Quiet relaunches before then write nothing.",
+  "next_observable": "/Users/edr/night-custody/magistrate/attempt-ledger.json.first-row.json for the sequence-1 close of cq-f2-stab-15-l010-a1 (dispatch 552), followed by the magistrate's Check on main with the ledger and sidecar SHA-256s.",
   "open_items": [
+    {
+      "expires_epoch_s": 1795579200,
+      "item": 561,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 560,
@@ -239,11 +245,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "560",
-  "source_item_heading_date": "2026-11-23",
+  "source_item": "561",
+  "source_item_heading_date": null,
   "wait": {
-    "deadline_epoch_s": 1795563000,
-    "observable": "none",
-    "on_early_or_refused": "Arm nothing (item 552: stability pauses until the ctl-01 pilot). If a lead item issuing ledger initialization or the ctl-01 pilot is on main, follow it. If none is on main by this deadline (item 552's), mail the lead and Ed once that the Mac has sat idle since 11:49 Monday waiting for ledger initialization, and ask whether to resume the item 422 stability ladder (kit 07 L001 on pin A next, rank 1 from kit 14 under item 553) until it lands."
+    "deadline_epoch_s": 1795579200,
+    "observable": "result_json_exists",
+    "on_early_or_refused": "Check the initializer disposition immediately. Preserve existing or partial files. On refusal, missing proof, an intervening arm or missing record at deadline, hold the pilot and report to the lead under RL-197c section 3."
   }
 }

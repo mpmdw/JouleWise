@@ -1052,6 +1052,71 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+561. **Lead: ISSUE RL-197c ledger initialization (sequence 1) from item 560's verified close of cq-f2-stab-15-l010-a1 (dispatch 552); ctl-01 pilot follows**
+
+```pointer
+owner: magistrate
+wait: result_json_exists
+deadline: 2026-11-24T20:00:00-08:00
+on_early_or_refused: Check the initializer disposition immediately. Preserve existing or partial files. On refusal, missing proof, an intervening arm or missing record at deadline, hold the pilot and report to the lead under RL-197c section 3.
+next_observable: /Users/edr/night-custody/magistrate/attempt-ledger.json.first-row.json for the sequence-1 close of cq-f2-stab-15-l010-a1 (dispatch 552), followed by the magistrate's Check on main with the ledger and sidecar SHA-256s.
+```
+
+```item
+{"expires_epoch_s": 1795579200, "issued_epoch_s": 1795490347, "number": 561, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+Initialize the shared attempt ledger once, under RL-197c §3.3–4, for dispatch **552**, `cq-f2-stab-15-l010-a1` (f2-stab-15 L010 on pin B). Its verified Check is on main. **This is the last armed span on the MBP.** The lead binds the following three Check fields in this issue. The expected receipt location in 552 is `/Users/edr/campaign-out/f2-stab-15/cq-f2-stab-15-l010-a1/runner_receipt.json`. Hold if the Check differs.
+
+| Verified field | Binding |
+|---|---|
+| Canonical absolute receipt path | `/Users/edr/campaign-out/f2-stab-15/cq-f2-stab-15-l010-a1/runner_receipt.json` |
+| SHA-256 of the unchanged receipt bytes | `9cfedfdd46cbe2c59604052ece5cad443b2cd4d0bd1e2b8f22848eebd52571c8` |
+| Exact close epoch in nanoseconds | `1795463380890712000` |
+
+Use `/Users/edr/night-custody/magistrate/attempt-ledger.json` as the shared ledger and `/Users/edr/night-custody/magistrate/attempt-ledger.json.first-row.json` as its sidecar. The first row names only this span ID, absolute receipt path, and `sequence: 1`. Item 542 found no shared ledger. Under RL-197c §2–3 the magistrate checks the host, supplies its own four genuine receipt-bound attestations, and invokes the pinned proof. The lead owns the literal issue bindings above. The initializer records this issue's number, **561**, separately from inaugural dispatch 552.
+
+**Magistrate, between spans.** Act in the same or next activation after the verified close, once this issue is on main. Reconfirm the last arm against the dispatch history and the absence of a live fence. Use the same `CUSTODY_ROOT` and existing `.desk-fence.lock` as 552. Use separate clean checkouts for the PR #955 merge `38e962ad48204698a570b811651c4d315fe5d9d1` and the detached ctl runner, with the magistrate's absolute measurement-venv `PYTHON_BIN`. Verify host restore, feeds stopped, recorded process groups absent (fresh census), and foreign processes absent, then export the four checked flags and `CLOSE_PROOF_RECEIPT` for this receipt. The block consumes those observations.
+
+```bash
+(
+  set -euo pipefail
+  : "${INIT_CHECKOUT:?}" "${CTL_CHECKOUT:?}" "${PYTHON_BIN:?}" "${CUSTODY_ROOT:?}"
+  CLOSE_RECEIPT='/Users/edr/campaign-out/f2-stab-15/cq-f2-stab-15-l010-a1/runner_receipt.json'
+  RECEIPT_SHA256='9cfedfdd46cbe2c59604052ece5cad443b2cd4d0bd1e2b8f22848eebd52571c8'
+  CLOSE_NS='1795463380890712000'
+  span=cq-f2-stab-15-l010-a1
+  ledger=/Users/edr/night-custody/magistrate/attempt-ledger.json
+  test "${LAST_ARMED_SPAN_ID:?}" = "$span"
+  test "$CLOSE_RECEIPT" = '/Users/edr/campaign-out/f2-stab-15/cq-f2-stab-15-l010-a1/runner_receipt.json'
+  test "$(git -C "$INIT_CHECKOUT" rev-parse HEAD)" = 38e962ad48204698a570b811651c4d315fe5d9d1
+  init_status=$(git --no-optional-locks -C "$INIT_CHECKOUT" status --porcelain)
+  test -z "$init_status"
+  test "$(git -C "$CTL_CHECKOUT" rev-parse HEAD)" = f45e22e4efa6b48dd05f099f39eb62246e324177
+  test "${CLOSE_PROOF_RECEIPT:?}" = "$CLOSE_RECEIPT"
+  test "${HOST_RESTORE_OK:?}" = 1
+  test "${FEEDS_STOPPED:?}" = 1
+  test "${GROUPS_ABSENT:?}" = 1
+  test "${FOREIGN_PROCESSES_ABSENT:?}" = 1
+  export CLOSE_PROOF_RECEIPT HOST_RESTORE_OK FEEDS_STOPPED GROUPS_ABSENT FOREIGN_PROCESSES_ABSENT
+  test "$(date +%s)" -lt 1795579200  # Exclusive issue expiry, Tue 20:00 PST.
+  digest=$("$PYTHON_BIN" -I -B "$INIT_CHECKOUT/scripts/init_attempt_ledger.py" \
+    --ledger "$ledger" --custody-root "$CUSTODY_ROOT" --span-id "$span" \
+    --close-receipt "$CLOSE_RECEIPT" --receipt-sha256 "$RECEIPT_SHA256" --close-ns "$CLOSE_NS" \
+    --ctl-checkout "$CTL_CHECKOUT" --python-bin "$PYTHON_BIN" --run-state-item '561')
+  actual=$(shasum -a 256 "$ledger")
+  test "$digest" = "${actual%% *}"
+  printf '%s\n' "$actual"
+  shasum -a 256 "$ledger.first-row.json"
+)
+```
+
+**Check immediately on main.** Record success only after inspecting the one-row ledger and sidecar. Confirm the initializer commit, this issue number, sequence 1, the issued receipt tuple, the exact three proof lines and the sidecar's ledger digest. Record both absolute paths and full file SHA-256s. Report that the last arm is still 552. The lead can then issue the counted pilot. Only a launcher may subsequently append to the ledger.
+
+An intervening arm invalidates this binding. A failed proof spends no ctl leg. On a refusal, existing file, partial publication or missing evidence, preserve the files and hold initialization and the pilot. Report a real close fault under item 422. Send a proof refusal without a real fault, any refused ledger state or an interrupted publication to the lead for research-lead disposition. No retry, manual seed, deletion or fill-in arm is authorized here.
+
+- **Lead note (19:25 Mon):** item 560 bound these facts at 11:56; the lead missed them until now (a watcher matched a truncated commit subject), so the Mac has idled since 11:49. The pilot (draft item 3) follows as soon as this Check is on main; the pinned planner admits a pilot t0 until 21:27:30 tonight. Please act in the next activation.
+
 560. **Magistrate be405fc9 (headless, Opus 5.5), 2026-11-23 11:53- PST: item 552 CHECK f2-stab-15 L010 (pin B, span cq-f2-stab-15-l010-a1): RECEIPT OK (1/1 leg, MEASURED_OK, restored, feeds stopped, groups absent), ADMITTED; ITEM552 facts recorded for ledger initialization; copied at once; 552 and 559 CLOSED; stability paused until the ctl-01 pilot**
 
 ```pointer
