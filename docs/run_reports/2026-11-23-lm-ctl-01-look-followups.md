@@ -219,3 +219,42 @@ the exact supersession receipt. The gate ledger on [draft PR #957](https://githu
 records final-head CI. Revision 7 and its executed head are routed to
 the lead for independent Tier 2 executing review. The installed byte
 pass and bound-host blind preflight remain lead gates before reservation.
+
+## 23:45 engineering ruling and audit 5
+
+The synthetic audit ran on `62d0a3c8d86d0c5475260a2aec6d94e51038bbc4`
+and verified three HIGHs, zero MEDs, and one LOW. The previous review
+cycle remains closed. Revision 8 froze at
+`c155cdd6c826e7863ddb21a7369cb3d59528dd28` before implementation.
+The failed-first regressions against the audited production tree
+recorded ten failed assertions. [Revision 8](../process/cadence/looks/lm-ctl-01.print-spec.v8.md)
+
+| Verified finding | Root cause and change in `c68b91949` | Regression |
+| --- | --- | --- |
+| HIGH. A G0 turn label exposed a diagnostic. | `fix-regression`. Project thermal fields by interval kind. G0 and G1 turn values remain opaque. H retains its typed owner index. | `test_g0_turn_is_opaque_at_both_blind_gates` and the native publication witness |
+| HIGH. Incomplete work remained admitted. | `impl-bug`. Compare script completion across both result records and the work record. Dispatched incomplete work conflicts with complete terminal status or admission. | `incomplete-admitted`, both completion-copy disagreements, and the valid interrupted-tail control |
+| HIGH. Oversized score reached the value constructor. | `impl-bug`. Validate the complete native Episode, Turn, ToolCall, MonitorVerdict and RouterLog field inventories before construction. Check numeric shape and finite conversion on opaque tokens. | `oversized-score`, `score-type`, and the generic per-field wrong-type, nonfinite, oversized, and missing-field matrix |
+| LOW. An orphan marker races with mkdir denial. | `impl-bug`. Follow-up. Claim can answer `CLAIM_SETUP` while later status answers `HALF_MADE`. The reported race remains pre-read. | Audit orphan-marker reproduction |
+
+The worker records the failing read, calculation, or publication phase
+and exception type in its confined diagnostics. The frozen observer
+notice retains its two-line format, and the bound marker preserves
+spend. Injected failures exercise all three phases. The G0 sentinel
+fixture qualified after the authenticated read with the sentinel
+absent from the public output. The generic field matrix invokes the
+shared native episode input validation path, with the rebound score
+and admission cases going through all three launcher entry points.
+
+Two points require a lead ruling to extend the shared schema to every
+native input. The accepted frozen JSON clock bound `0.0001` is
+`1/10000`, which has no exact binary64 representation. The wire gate
+in this change checks finite conversion and preserves existing float
+rounding. Also, the native interrupted-tail form omits fields and the
+pinned writer emits task-defined object keys. The wider closed schema
+and exhaustive removal matrix depend on the numeric policy, the
+conditional required fields, and the authorized opaque object bounds.
+
+The draft [PR gate ledger](https://github.com/mpmdw/JouleWise/pull/957)
+records final-head CI and the frozen verification. Tier 2 executing
+review, the installed byte pass, and bound-host blind preflight
+remain lead gates before reservation.
