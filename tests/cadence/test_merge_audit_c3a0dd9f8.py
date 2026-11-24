@@ -155,6 +155,9 @@ class ValidateBeforeOpen(unittest.TestCase):
         def no_such_leg(root):
             return {"ruled": {f"{S2}/L099": ("km003c_clean", "RL-999")}}
 
+        def zero_prefill(root):
+            return {"_zero_prefill": True}
+
         def unreadable_turn(root):
             # the second span's first leg, which its record and verdicts include, gives no turn from its journals
             return {"_turn_fault": True}
@@ -174,7 +177,11 @@ class ValidateBeforeOpen(unittest.TestCase):
                 verdicts(lambda v: {**v, f"{S2}/L002": {**v[f"{S2}/L002"], "note": True}}),
                 "verdict is not sidecar_coverage and km003c_clean as booleans"),
             "a verdict file that is not an object": (verdicts(lambda v: sorted(v)), "not an object of leg verdicts"),
-            "a roster role that is neither fit nor describe": (roster([dict(r1, role="support")]), "roster: a span entry"),
+            "a roster role that is neither fit nor describe": (roster([dict(r1, role="support")]),
+                                                                "roster: a role is neither fit nor describe"),
+            "audit r7 2: a block id the registry refuses": (roster([dict(r1, block_id="Dev-01")]),
+                                                           "roster: a block_id is not a registered block id"),
+            "every development leg with zero prefill seconds": (zero_prefill, "zero prefill or decode seconds on every"),
             "a roster entry with no day": (
                 roster([{k: x for k, x in r1.items() if k != "t0_local_date"}]), "roster: a span entry"),
             "a roster day that is not the receipt's": (roster([dict(r1, t0_local_date="2026-01-01")]),
@@ -202,11 +209,16 @@ class ValidateBeforeOpen(unittest.TestCase):
                 root = self.custody()
                 kwargs = plant(root)
                 fault = kwargs.pop("_turn_fault", False)
+                zero = kwargs.pop("_zero_prefill", False)
 
                 def turn(bundle, result, fan_keys):
                     if fault and f"/{self.S2}/legs/L001/" in str(bundle):
                         raise KeyError("generated")
-                    return original(bundle, result, fan_keys)
+                    got = original(bundle, result, fan_keys)
+                    if zero:         # the turn starts at its first token: a valid turn with no prefill seconds
+                        got["turn_start_s"] = got["segments"][0]["wall_start_s"] = got["first_token_s"]
+                        got["journal"] = [r for r in got["journal"] if r["t_s"] >= got["turn_start_s"] - 60.0]
+                    return got
                 with mock.patch.object(R, "turn_operational", side_effect=turn, create=True), _Opens() as opened:
                     with self.assertRaisesRegex(F.LookInputError, text):
                         self.read(root, **kwargs)
@@ -221,6 +233,139 @@ class ValidateBeforeOpen(unittest.TestCase):
             with self.assertRaisesRegex(F.LookInputError, "synthetic input only"):
                 self.read(root, synthetic_only=True)
         self.assertEqual(opened, [])
+
+
+    def test_every_roster_field_with_an_invalid_value_refuses_before_any_open(self):
+        """Lead C2: for each roster field, an invalid value refuses with zero protected opens (the second span's
+        entry, so a late check would have opened the first span's sources)."""
+        r0, r1 = self.roster
+        invalid = {"span_id": ("Dev-01-s02", "dev-01-s02/L001", "d", ""),
+                   "block_id": ("Dev-01", "dev-01\n", "d", "", "DEV-01"),
+                   "role": ("support", "Fit", ""),
+                   "t0_local_date": ("2026-1-01", "2026-11-14T00:00", "01/02/2026", "")}
+        variants = [(f"{field} missing", {k: v for k, v in r1.items() if k != field}) for field in R.ROSTER_ENTRY_KEYS]
+        variants += [(f"{field} {bad!r}", dict(r1, **{field: bad})) for field in R.ROSTER_ENTRY_KEYS
+                     for bad in (None, 5, True, ["x"], *invalid[field])]
+        variants += [("another member", dict(r1, note="x")), ("a list", [r1]), ("text", "dev-01-s02")]
+        root = self.custody()
+        for name, entry in variants:
+            with self.subTest(name), _Opens() as opened:
+                with self.assertRaisesRegex(F.LookInputError, "^roster: "):
+                    self.read(root, roster=[r0, entry])
+                self.assertEqual(opened, [], name)
+        with self.assertRaisesRegex(F.LookInputError, "^roster: not a list"), _Opens() as opened:
+            self.read(root, roster={"spans": [r0, r1]})
+        self.assertEqual(opened, [])
+
+    def test_the_preflight_knows_when_no_leg_can_enter_the_fit(self):
+        """Audit r7 finding 1: with every verdict's sidecar_coverage false, the preflight's plan has no fit candidate
+        and nothing protected was opened. Whether stage 1 refuses here is NEEDS_SPEC (POST_OPEN_REASONS
+        ``no_fit_candidate``; AuditCommittedStageOne.test_audit_r7_1_no_fit_candidate_refuses_before_any_open)."""
+        excluded = {k: dict(v, sidecar_coverage=False) for k, v in self.verdicts.items()}
+        root = self.custody()
+        with _Opens() as opened:
+            plan = R.stage1_preflight(self.roster, LF.span_dirs(root, []), excluded)
+        self.assertEqual((plan["fit_candidates"], opened), ([], []))
+        self.assertTrue(R.stage1_preflight(self.roster, LF.span_dirs(self.custody(), []), self.verdicts)["fit_candidates"])
+
+
+@unittest.skipIf(F is None, "numpy is not installed; runs in the look-fit CI job")
+class PostOpenAllowlist(unittest.TestCase):
+    """Lead C2's mechanical guard on C1. The protected phase of stage 1 is ``stage1_protected`` and every function of
+    cadence_look_run.py it reaches; each raise there must be a ContentRefusal whose code is in POST_OPEN_REASONS (a
+    literal, or fit_interim's refusals through FIT_CONTENT_REASONS) or a PreflightBreach. ``main`` reports anything
+    else that stops the protected phase as a breach, never a refusal."""
+
+    SOURCE = Path(R.__file__) if R is not None else None
+    ENTRY = "stage1_protected"
+    REFUSAL = "ContentRefusal"
+    BREACH = "PreflightBreach"
+
+    def tree(self):
+        import ast
+        return ast.parse(self.SOURCE.read_text(encoding="utf-8"))
+
+    def protected_phase(self):
+        """{function name: its AST} for the entry and every module function it reaches by name."""
+        import ast
+        functions = {node.name: node for node in self.tree().body if isinstance(node, ast.FunctionDef)}
+        reached, pending = {}, [self.ENTRY]
+        while pending:
+            name = pending.pop()
+            if name in reached or name not in functions:
+                continue
+            reached[name] = functions[name]
+            pending += [node.func.id for node in ast.walk(functions[name])
+                        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)]
+        return reached
+
+    def test_every_refusal_after_the_first_open_has_an_allowlisted_reason_code(self):
+        import ast
+        phase = self.protected_phase()
+        for name in ("read_protected", "protected_span", "span_meter", "trace_holes", "native_states",
+                     "fit_stage1", "stage2_preflight", "_stamp_protected"):
+            self.assertIn(name, phase)
+        for name in ("stage1_preflight", "plan_span", "plan_leg", "turn_operational", "validate_runtime_bundles",
+                     "check_roster", "_guard_loaded", "_stamp"):
+            self.assertNotIn(name, phase, f"{name} is a preflight function and must not run after the first open")
+        codes, breaches = set(), 0
+        for name, function in phase.items():
+            for node in ast.walk(function):
+                if not isinstance(node, ast.Raise):
+                    continue
+                where = f"{name}:{node.lineno}"
+                call = node.exc
+                self.assertIsInstance(call, ast.Call, f"{where}: a bare or non-constructing raise")
+                self.assertIsInstance(call.func, ast.Name, where)
+                self.assertIn(call.func.id, (self.REFUSAL, self.BREACH), f"{where}: raises {call.func.id}")
+                if call.func.id == self.BREACH:
+                    breaches += 1
+                    continue
+                code = call.args[0]
+                if isinstance(code, ast.Constant):
+                    codes.add(code.value)
+                else:                      # fit_interim's refusals, through the registry of their texts
+                    self.assertEqual((name, getattr(code, "id", None)), ("fit_stage1", "code"), where)
+                    codes |= {code for code, _ in R.FIT_CONTENT_REASONS}
+        self.assertLessEqual(codes, set(R.POST_OPEN_REASONS))
+        self.assertEqual(codes, set(R.POST_OPEN_REASONS), "an allowlisted code that no protected path raises")
+        self.assertGreater(breaches, 0)
+        self.assertEqual(R.NEEDS_SPEC_REASONS, {"no_fit_candidate"})
+        self.assertTrue(all(R.POST_OPEN_REASONS[c].startswith("NEEDS_SPEC") for c in R.NEEDS_SPEC_REASONS))
+
+    def test_a_content_refusal_takes_only_an_allowlisted_code(self):
+        with self.assertRaises(ValueError):
+            R.ContentRefusal("roster_block_id", "a preflight reason")
+        self.assertEqual(R.ContentRefusal("native_states", "x").code, "native_states")
+
+    def test_any_other_stop_in_the_protected_phase_is_a_breach_never_a_refusal(self):
+        import contextlib
+        import io
+
+        def protected(error):
+            def stage1(a):
+                R._PHASE["protected"] = True
+                raise error
+            return stage1
+        cases = ((R.ContentRefusal("native_states", "plist/rich frame count mismatch"), "REFUSED plist/rich"),
+                 (F.LookInputError("roster: a block_id is not a registered block id"), "FAILED preflight breach"),
+                 (R.PreflightBreach("stage-2 preflight: x"), "FAILED preflight breach"),
+                 (R.M.ManifestError(["a ledger problem"]), "FAILED preflight breach"),
+                 (R.PINS.PinRefusal("x: a file that is not pinned"), "FAILED preflight breach"))
+        for error, text in cases:
+            with self.subTest(type(error).__name__), mock.patch.object(R.M, "verify_pins",
+                                                                        return_value={"look_id": F.LOOK_ID}), \
+                    mock.patch.object(R, "cmd_stage1", side_effect=protected(error)), \
+                    contextlib.redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(R.main(["stage1", "--allow-draft"]), 2)
+                self.assertTrue(err.getvalue().startswith(text), err.getvalue())
+                self.assertNotIn("REFUSED", err.getvalue()) if text.startswith("FAILED") else None
+        # before the protected phase the same refusal is an ordinary refusal
+        with mock.patch.object(R.M, "verify_pins", return_value={"look_id": F.LOOK_ID}), \
+                mock.patch.object(R, "cmd_stage1", side_effect=F.LookInputError("roster: a span appears twice")), \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(R.main(["stage1", "--allow-draft"]), 2)
+        self.assertEqual(err.getvalue(), "REFUSED roster: a span appears twice\n")
 
 
 @unittest.skipIf(F is None, "numpy is not installed; runs in the look-fit CI job")
@@ -238,6 +383,13 @@ class AuditCommittedStageOne(unittest.TestCase):
         cls.arena = suite.Arena(owner)
         cls.case = suite.Case("admit", suite.PINS[0], "normal")
         cls.arena.install(cls.case)
+        # the registered inputs as the arena made them: a test that re-registers restores these
+        cls.roster_bytes = cls.arena.inputs[0].read_bytes()
+        cls.verdicts = json.loads(cls.arena.inputs[1].read_bytes())
+
+    def restore(self):
+        self.arena.inputs[0].write_bytes(self.roster_bytes)
+        self.register(self.verdicts)
 
     def run_stage1(self, label=None):
         """Committed stage 1 on the arena's pinned custody; with ``label``, the focus span's Check item prints its
@@ -288,14 +440,52 @@ class AuditCommittedStageOne(unittest.TestCase):
 
         # finding 1: a registered verdict file with no verdict for a rostered leg of either span (the second, the
         # supporting span, opened rich_telemetry.jsonl and stream-0001.jsonl at c3a0dd9f8 before refusing)
-        verdicts = json.loads(arena.inputs[1].read_bytes())
+        verdicts = self.verdicts
         receipt = arena.docs[self.suite.RECEIPT]
         first = f"{arena.span.name}/{receipt['roster'][0]}"
         support = next(key for key in verdicts if key.startswith(arena.support.name + "/"))
-        for key in (first, support):
-            with self.subTest(missing=key):
-                self.register({k: v for k, v in verdicts.items() if k != key})
-                self.assert_refused_before_any_open(self.run_stage1(), "no verdict for a roster leg")
+        try:
+            for key in (first, support):
+                with self.subTest(missing=key):
+                    self.register({k: v for k, v in verdicts.items() if k != key})
+                    self.assert_refused_before_any_open(self.run_stage1(), "no verdict for a roster leg")
+        finally:
+            self.restore()
+
+
+    def test_audit_r7_2_and_3_through_committed_stage_one(self):
+        """Audit on 5a7a3eae0, findings 2 and 3, as reproduced there: the supporting block's id ``Dev-01`` refused
+        after four protected opens; the Check line ``- Observed offload manifest <sha>`` held a correct span."""
+        arena = self.arena
+        for label in ("\n\n   - Observed offload manifest `{sha}`", "\n\n   * Observed offload manifest `{sha}`",
+                      "\n\n+ **Observed offload manifest** `{sha}`"):
+            with self.subTest(label):
+                row = self.run_stage1(label)
+                self.assertEqual((row["rc"], row["output"]), (0, True), row)
+        for label in ("\n\n   - Expected offload manifest `{sha}`", "\n\n   * Planned offload manifest `{sha}`"):
+            with self.subTest(label):
+                self.assert_refused_before_any_open(self.run_stage1(label), "the span is held")
+        roster = json.loads(self.roster_bytes)
+        try:
+            roster[-1]["block_id"] = roster[-1]["block_id"].capitalize()
+            arena.inputs[0].write_bytes(self.suite.wire(roster))
+            self.register(self.verdicts)
+            self.assert_refused_before_any_open(self.run_stage1(), "roster: a block_id is not a registered block id")
+        finally:
+            self.restore()
+
+    @unittest.expectedFailure
+    def test_audit_r7_1_no_fit_candidate_refuses_before_any_open(self):
+        """NEEDS_SPEC (PR #795 round 8). Audit on 5a7a3eae0, finding 1: every verdict's sidecar_coverage false leaves
+        no fit candidate; stage 1 still opens the four protected sources and refuses ``no leg enters the fit``. The
+        refusal is not moved before the first open because the frozen admission matrix's negative-arena control (the
+        roster of 101,605 of its 101,889 cases) has every verdict false and must reach a protected open. This test
+        fails until the lead rules; it then passes and unittest reports an unexpected success."""
+        try:
+            self.register({k: dict(v, sidecar_coverage=False) for k, v in self.verdicts.items()})
+            self.assert_refused_before_any_open(self.run_stage1(), "no leg")
+        finally:
+            self.restore()
 
 
 # ============================================================================================ finding 2, its class
@@ -321,6 +511,26 @@ class ObservedNotExpected(unittest.TestCase):
                      f"Offload manifest `{d}`. Read back: dev-03-s01 offload manifest `{d[:8]}…{d[-4:]}`."):
             with self.subTest(body):
                 self.assertEqual(self.form(body), "full")
+
+    def test_a_markdown_list_marker_or_emphasis_changes_no_binding(self):
+        """Lead C3 (audit on 5a7a3eae0, finding 3): the observation line is classified after its Markdown list marker,
+        emphasis and surrounding whitespace are stripped. The writer's form and every marker variant bind; an
+        expected, planned or target digest binds nothing in every variant."""
+        d = self.digest
+        leads = (("", ""), ("* ", ""), ("- ", ""), ("+ ", ""), ("   - ", ""), ("\t* ", ""), ("7. ", ""), ("7) ", ""),
+                 ("- **", "**"), ("* _", "_"), ("+ __", "__"), ("**", "**"), ("- *", "*"))
+        for lead, closing in leads:
+            for word, form in (("Observed ", "full"), ("", "full"), ("Expected ", "absent"), ("Planned ", "absent"),
+                               ("Target ", "absent")):
+                body = f"Copy checked.\n\n{lead}{word}offload manifest{closing} `{d}` (5 files)"
+                with self.subTest(lead=lead, word=word):
+                    self.assertEqual(self.form(body), form)
+        # the generated public Check, as the fixture writes it, and the audit's two replayed lines
+        doc = {"schema": P.SCHEMA, "spans": [self.span]}
+        self.assertEqual(P.chain_link(doc, PF.run_state(doc)), {"dev-03-s01": "full"})
+        for line in ("\n\n   - Observed offload manifest `{d}`", "\n\n   * Observed offload manifest `{d}`"):
+            text = PF.run_state(doc).replace(f"Offload manifest `{d}`", line.format(d=d))
+            self.assertEqual(P.chain_link(doc, text), {"dev-03-s01": "full"}, line)
 
     def test_a_pending_malformed_conflicting_or_expected_only_observation_holds_the_span(self):
         d = self.digest

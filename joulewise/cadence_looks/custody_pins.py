@@ -239,10 +239,15 @@ def _label(item, at, floor=0):
 _OBSERVATION_WORDS = frozenset({"check", "of", "the", "observed", "verified", "read", "back", "readback", "read-back",
                                 "reread", "re-read", "joulewise-offload"})
 _PREFIX_SPLIT = re.compile(r"[\s`'\"()\[\]*,;:=_/]+")
+# The Markdown a RUN_STATE line may open with: whitespace, one list marker (``*``, ``-``, ``+``, ``1.`` or ``1)``) and
+# emphasis. Merge audit on 5a7a3eae0, finding 3: "- Observed offload manifest" held a span "* Observed" bound.
+_MARKDOWN_LEAD = re.compile(r"\s*(?:(?:[-+*]|[0-9]+[.)])\s+)?(?:(?:\*\*|__|\*|_)\s*)*")
 
 
 def _observation_prefix(prefix):
-    """Whether every word before "offload manifest" in a label is a name or an observation's word."""
+    """Whether every word before "offload manifest" in a label is a name or an observation's word, once the line's
+    Markdown list marker, emphasis and surrounding whitespace are stripped (lead, PR #795 round 8, C3)."""
+    prefix = prefix[_MARKDOWN_LEAD.match(prefix).end():]
     for word in _PREFIX_SPLIT.split(prefix):
         if not word or word.lower() in _OBSERVATION_WORDS:
             continue
