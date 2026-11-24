@@ -1,22 +1,16 @@
 {
   "armed": null,
-  "next_observable": "/Users/edr/campaign-out/cl-ctl-01/cq-ctl-01-s02-a1/runner_receipt.json with fence PID gone, then the magistrate's verified close, automatic desk disposition, copy proof and twelve-position accounting on main.",
+  "next_observable": "/Users/edr/campaign-out/cl-ctl-01/cq-ctl-01-s02-a1/runner_receipt.json with the fence pid from ctl01-abff831c/run-out.txt gone (t0 ~02:37 Tue; expected close ~08:00, worst case ~12:40, fence deadline ~13:37; read the true values from run-out.txt). The next activation Checks it per item 568 \"Close and Check\": adapt ctl01-check-881bf52f/check.sh to LEGS L004-L012, span_id cq-ctl-01-s02-a1, kit 1d7d6f5f...f2bf, pin f45e22e4e, runner_kind cadence-ctl-v1, batch_windows ['02:00-02:35']; verify L004 capture and L005-L012 consumers, L006 split and L007 adjacent; record close ns, receipt and post-append ledger (sequence 3) sha256, desk disposition, copy at once, and account for all twelve ctl-01 positions (RL-198).",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 569,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": 1795665600,
       "item": 568,
-      "owner": "magistrate",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": null,
-      "item": 567,
-      "owner": "magistrate",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": null,
-      "item": 565,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -257,11 +251,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "568",
-  "source_item_heading_date": null,
+  "source_item": "569",
+  "source_item_heading_date": "2026-11-23",
   "wait": {
-    "deadline_epoch_s": 1795705500,
+    "deadline_epoch_s": 1795559400,
     "observable": "result_json_exists",
-    "on_early_or_refused": "Read the verdict immediately. On timing cede, replan within authority. On refusal, fault, changed predecessor, unproven close or missing receipt at deadline, hold ctl, preserve evidence and alert the lead. Refer an appended row without receipt to the research lead."
+    "on_early_or_refused": "Read the verdict first (item 568's on_early_or_refused governs). If ctl01-abff831c/run-out.txt has no LAUNCH_RC line, nothing launched (STOP or WAIT before launch, e.g. not quiet by 04:10): span 2 is unspent and item 568 re-runs at the next eligible start until Wed 25 Nov 20:00 PST. If LAUNCH_RC is nonzero, read whether sequence 3 was appended to the attempt ledger: a pre-leg refusal spends no ctl leg; an appended row with no receipt, a refused ledger state or an unexplained close-proof refusal goes via the lead to the research lead (RL-197c); preserve ledger, sidecar and outputs; no blind retry."
   }
 }
