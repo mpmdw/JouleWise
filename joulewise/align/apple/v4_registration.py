@@ -824,6 +824,10 @@ def declared_pins(repo, stage):
 LEDGER = 'runs/calibration_observation_ledger.jsonl'
 PACK = Path('configs/campaigns/align-v4-c1')
 C1_WINDOW = 'C1'
+# Where the harvest reads a campaign stage's log (also the runner's default)
+# and the bound-derivation stage's bound, in this attempt's runs roots.
+CAMPAIGN_LOG = 'campaign_log.jsonl'
+NEG8_BOUND_NAME = 'neg8-drift-bound.json'
 # The pinned campaign runner probes at most six ancestors of a resolved
 # config directory. Keep its last probe inside S without editing the runner.
 C1_DISPATCH = Path('members/dispatch')
@@ -1182,6 +1186,13 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
     selections = {}
     generated_bound = None
 
+    def this_attempt(consumer, option, value, expected):
+        # A stage writes only this attempt's locations, each where the harvest
+        # reads it. Compared as spelled from the launch view: another root, a
+        # previous attempt or a parent step refuses instead of being resolved.
+        if view.root / value != Path(expected):
+            raise ValueError(f"C1 {consumer} {option} must be this attempt's {expected}: {value}")
+
     def same_head_pin(consumer, path):
         # Every later reader judges the pin that the reservation's read-only
         # pre-reserve check judged, as every reader uses the one live ledger.
@@ -1258,9 +1269,7 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
                                  f'window identity {identity.get("window_id")!r}')
             if identity.get('evidence_root_id') not in (None, args.evidence_root_id):
                 raise ValueError('C1 reservation evidence root differs from the frozen window identity')
-            if os.path.normpath(view.root / args.runs_root) != os.path.normpath(bindings['claim_runs_root']):
-                raise ValueError(f"C1 reservation runs root differs from the window's claim runs root: "
-                                 f"{args.runs_root}")
+            this_attempt('reservation', '--runs-root', args.runs_root, bindings['claim_runs_root'])
             if not args.execute or args.verify_only:
                 # Without --execute the reservation validates and exits 0 without
                 # reserving; the capture then finds no session.
@@ -1294,6 +1303,10 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
         elif stage.kind == 'calibration_capture':
             if args.slot != stage.slot:
                 raise ValueError('C1 capture resolved to the wrong slot')
+            # Its custody directory and flag root (the output root's parent)
+            # both follow from this; the slot agreement below binds the attempt.
+            this_attempt('capture', '--output-root', args.output_root,
+                         Path(bindings['claim_runs_root']) / fiducial._CALIBRATION_OUTPUT_ROOT_BASENAME)
             if args.rederive_from is not None or args.output is not None:
                 raise ValueError('C1 capture must be a live bracket capture')
             if args.derivation_only:
@@ -1337,13 +1350,12 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
             check_ledger(view.locate(args.calibration_ledger), pin, starting=starting)
             same_head_pin('campaign', args.head_pin)
             _, runs_binding = chain.c1_dispatch_selection(stage, tree)
-            if view.root / args.runs_dir != view.root / bindings[runs_binding]:
-                raise ValueError('C1 campaign resolves to a different runs directory')
+            this_attempt('campaign', '--runs-dir', args.runs_dir, bindings[runs_binding])
             if stage.kind == 'bound_derivation':
                 selections['derivation'] = view.locate(args.derive_neg8_drift_bound)
-                generated_bound = view.root / args.neg8_drift_bound_output
-                if '..' in generated_bound.parts or not generated_bound.is_absolute():
-                    raise ValueError('invalid same-attempt bound output')
+                generated_bound = Path(bindings['bound_runs_root']) / NEG8_BOUND_NAME
+                this_attempt('campaign', '--neg8-drift-bound-output', args.neg8_drift_bound_output,
+                             generated_bound)
                 config_references(decode(selections['derivation'].read_bytes()),
                                   selections['derivation'], view, runner)
                 # Corpus bundle names describe same-attempt products.
@@ -1371,8 +1383,10 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
                 selections['policy'] = view.locate(args.campaign_policy)
                 # The runner's own loaders on the exact bytes it will read.
                 runner.load_campaign_policy(args.campaign_policy)
+                if args.log is not None:
+                    this_attempt('campaign', '--log', args.log, Path(bindings[runs_binding]) / CAMPAIGN_LOG)
                 runner._require_external_campaign_log(
-                    Path(args.log) if args.log else Path(args.runs_dir) / 'campaign_log.jsonl')
+                    Path(args.log) if args.log else Path(args.runs_dir) / CAMPAIGN_LOG)
                 for field in ('waivers', 'environment_override', 'salvage_closure',
                               'window_membership_binding', 'bracket_session_binding'):
                     if value := getattr(args, field, None):

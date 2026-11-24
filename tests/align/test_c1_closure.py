@@ -903,16 +903,17 @@ class C1ClosureTests(unittest.TestCase):
 
     def test_r11_capture_slot_binding_must_match_the_reservation(self):
         """Review MED-2: each capture's session, attempt and custody locator match its reserved slot."""
-        for slot, flag, value in (('pre', '--session-id', 'fixture-other-session'),
-                                  ('post', '--attempt-id', 'fixture-other-attempt'),
-                                  ('pre', '--output-root', 'other_validation')):
+        # Since round 14 another output root refuses first, at the write-location check.
+        for slot, flag, value, detail in (
+                ('pre', '--session-id', 'fixture-other-session', 'calibration_reserved_slot_mismatch'),
+                ('post', '--attempt-id', 'fixture-other-attempt', 'calibration_reserved_slot_mismatch'),
+                ('pre', '--output-root', 'other_validation', "capture --output-root must be this attempt's")):
             with self.subTest(slot=slot, flag=flag):
                 def edit(tree, slot=slot, flag=flag, value=value):
                     set_option(capture_arguments(tree, slot), flag, 'literal', value)
                     return {}
 
-                self.assert_refused_on_both_routes(self.attempt(edit_source=edit),
-                                                   'calibration_reserved_slot_mismatch')
+                self.assert_refused_on_both_routes(self.attempt(edit_source=edit), detail)
 
     def test_audit4_h1_reservation_window_is_the_frozen_c1_window(self):
         """Audit 4 H1: --window-id C2 beside plan_id align-v4-c1 refuses, and the writer asserts it."""
@@ -1074,6 +1075,9 @@ class C1ClosureTests(unittest.TestCase):
                 code, _ = attempt.build()
                 self.assertEqual(code, 2, attempt.build_error)
                 self.assertIn(detail, attempt.build_error)
+        with self.subTest(pin='the bound name preflight binds is the one the harvest reads'):
+            from joulewise.b5 import harvest
+            self.assertEqual(closure.NEG8_BOUND_NAME, harvest.NEG8_BOUND_NAME)
         with self.subTest(control='explicit log at this attempt\'s runs root'):
             attempt = self.attempt(edit_source=edit(
                 (collection(0), '--log', under('claim_runs_root', 'campaign_log.jsonl'))))
@@ -1100,7 +1104,7 @@ class C1ClosureTests(unittest.TestCase):
         instrument = value('--instrument-calibration-dir', 'pre_calibration_dir', 'binding')
         cases = (
             ('reservation runs root', reservation, ('--runs-root', '/synthetic-other-runs'),
-             "runs root differs from the window's claim runs root"),
+             "reservation --runs-root must be this attempt's"),
             ('derivation-only capture', pre, flag('--derivation-only'), 'C1 capture is a bracket capture'),
             ('test-only sampler', pre, flag('--sampler-direct-for-test'), 'test-only capture option'),
             ('test-only time scale', post, value('--time-scale-for-test', '0.5'), 'test-only capture option'),
