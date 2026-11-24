@@ -1389,20 +1389,6 @@
     ]
   },
   {
-    "commit": "5bb152acc27b7c34aef7721a51dd959223ddd530",
-    "number_bearing_paths": [
-      "joulewise/b5/driver.py"
-    ],
-    "change": "fix(night): surface failed chains and R1 refusals as faults (A-01)",
-    "executing_reviews": [
-      {
-        "reviewer": "Opus 5.5 cold executing A-01 review (non-author), ADMIT-WITH-FIXES",
-        "covered": "5bb152acc27b7c34aef7721a51dd959223ddd530: joulewise/b5/driver.py blob d58ca9e4c7b648a2ce42c52ee0df08dbae574a8a and scripts/run_night.py blob 7c830753a129bff96e0e4a06616c74425be239e3; fail-before/pass-after, 35 mutants, driver modules at the commit and presign head 535bf9cee; original report docs/run_reports/2026-11-11-a01-5bb152acc-executing-review.md sha256 7fb65721def92fcc964bd6e068616c5f973a9be4edd38c88f1cd5eb6a46c9056; F-1 repaired in e721e53c5, F-2 test gaps open; paper sha256 195f94dfe5de8cc9a35ce9d253419b1e7312e0b9d412b7fa8d9387b145a76fa1",
-        "paper": "docs/align/reviews/2026-11-11-a01-5bb152acc-executing-review-citation.md"
-      }
-    ]
-  },
-  {
     "commit": "3ae356e818e1b8bd9cec88597f9ba36d62bddd1a",
     "number_bearing_paths": [
       "joulewise/b5/chain.py",
@@ -1535,6 +1521,20 @@
         "reviewer": "Fable 5.2 cold executing review (non-author), in the Sol 6.1 seat whose command sandbox cannot initialize on this machine, ADMIT-WITH-FIXES; fix-round delta 3daea0447..062698aff ADMIT",
         "covered": "fcfc0dee489e649d641ac34793eeed1a5000ddaa: joulewise/calibration_ledger.py blob fcd1bbdcca032c86d8d889f7fa2e3790bffeb33b; no HIGH; default and every existing caller unchanged, only the C1 preflight disables the probe; read-only versus lease-held decisions agreed 52/52 and 6/6 with the directory unchanged; F1 (later-consumer head pin) repaired in 062698aff; LOW test gaps open; paper sha256 da6a1502703a6dbfb163a896b8afbe7510e5e66e09e749dd64dce691bb9826e8",
         "paper": "docs/align/reviews/2026-11-22-c1-r12-fable-executing-review.md"
+      }
+    ]
+  },
+  {
+    "commit": "5bb152acc27b7c34aef7721a51dd959223ddd530",
+    "number_bearing_paths": [
+      "joulewise/b5/driver.py"
+    ],
+    "change": "fix(night): surface failed chains and R1 refusals as faults (A-01)",
+    "executing_reviews": [
+      {
+        "reviewer": "Opus 5.5 cold executing A-01 review (non-author), ADMIT-WITH-FIXES",
+        "covered": "5bb152acc27b7c34aef7721a51dd959223ddd530: joulewise/b5/driver.py blob d58ca9e4c7b648a2ce42c52ee0df08dbae574a8a and scripts/run_night.py blob 7c830753a129bff96e0e4a06616c74425be239e3; fail-before/pass-after, 35 mutants, driver modules at the commit and presign head 535bf9cee; original report docs/run_reports/2026-11-11-a01-5bb152acc-executing-review.md sha256 7fb65721def92fcc964bd6e068616c5f973a9be4edd38c88f1cd5eb6a46c9056; F-1 repaired in e721e53c5, F-2 test gaps open; paper sha256 195f94dfe5de8cc9a35ce9d253419b1e7312e0b9d412b7fa8d9387b145a76fa1",
+        "paper": "docs/align/reviews/2026-11-11-a01-5bb152acc-executing-review-citation.md"
       }
     ]
   }
