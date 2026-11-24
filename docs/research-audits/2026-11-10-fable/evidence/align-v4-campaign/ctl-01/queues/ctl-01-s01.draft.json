@@ -1,0 +1,29 @@
+{
+  "schema": "joulewise.cadence_queue.v1",
+  "queue_id": "cq-ctl-01-s01",
+  "expires_at": "2026-11-22T00:00:00-08:00",
+  "halt": {
+    "reason": "Review draft. Runner on main, cold kit PASS and lead issue required.",
+    "by": "builder",
+    "at": "2026-11-21T23:15:00-08:00"
+  },
+  "standing_notice": null,
+  "spans": [
+    {
+      "seq": 1,
+      "span_id": "ctl-01-s01",
+      "block_id": "ctl-01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/ctl-01/kits/cl-ctl-01.draft.json",
+        "sha256": "7636dd298508eb02ae4e71aa7ab172e31a23d9c8e356e41223601972930b3545"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003"
+      ],
+      "attempt": 1,
+      "not_before": "2026-11-22"
+    }
+  ]
+}

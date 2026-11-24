@@ -1,0 +1,13 @@
+{
+  "base_kits": [
+    "cl-ctl-01"
+  ],
+  "rows": [
+    {
+      "kit_id": "cl-ctl-01",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/ctl-01/kits/cl-ctl-01.draft.json",
+      "runner_pin": "f45e22e4efa6b48dd05f099f39eb62246e324177",
+      "sha256": "7636dd298508eb02ae4e71aa7ab172e31a23d9c8e356e41223601972930b3545"
+    }
+  ]
+}

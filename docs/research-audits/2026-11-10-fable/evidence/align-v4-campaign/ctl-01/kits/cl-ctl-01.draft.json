@@ -1,0 +1,553 @@
+{
+ "schema": "joulewise.cadence_campaign_kit.ctl.v1",
+ "campaign_id": "cl-ctl-01",
+ "title": "cl-ctl-01 RL-197 physical positive controls review draft",
+ "ruling": {
+  "id": "RL-197",
+  "authorizes_spans": false
+ },
+ "frozen": {
+  "commit": "f45e22e4efa6b48dd05f099f39eb62246e324177",
+  "paths": {
+   "configs/align/v4/qwen38-27b-8bit-hf-pins.json": "3a1835342b4576b53fb715eb18e53877b54de8e9d04b1f71854d302c9d3635b8",
+   "configs/align/v4/r1_runtime.json": "272aecb8bc0d9e33defd7f686b129ea236b925fdfbf68137697120dd63232f46",
+   "configs/campaigns/align_v4/registration/inputs.json": "49806b61e50d5c2ceeeea323d8aceff75177a2f7e7d83ad2f5dfbe1c20090130",
+   "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e05.json": "d73cc748aa3732573370cbd44cbb54a992dd8d1b20a92cdf92295c7b320d1507",
+   "joulewise/adapters/mlx_runtime.py": "953e6fec990c1d7e0702a8abb199a55f179e50d28854f4b62d0e95302dde0c45",
+   "joulewise/adapters/powermetrics.py": "70f47086b2445e88d0cb25ed2d47751dfd99843d0cf1e149f2fe630c5116e5e4",
+   "joulewise/align/apple/cadence_ctl.py": "3e5a82cd377ef4479213628b4d596373159b9806ca1297cbf0bb35f0cb8bc8d9",
+   "joulewise/align/apple/cadence_leg.py": "adb2a0c932e6fb8ba10f1a00241b5c551cc59bb25b17000566a898fc9fe16ea8",
+   "joulewise/align/apple/endpoint.py": "65b02aea0e02b5484811e2021445213b2d2645e334b93461b593f23e0a4d0deb",
+   "joulewise/align/apple/powermode.py": "a5cb6efe7707b95277cfb85ddb4453dbcb02fe87ada5177ec3947d48ce64e84b",
+   "joulewise/align/apple/prompt_cache.py": "48cf0d5453b96fadfb58168e0c55a90d92066af7469f2ee1151fb61821c83999",
+   "joulewise/align/apple/r1_phase_table.py": "ffd6c025f4691771ea348f5d0f670c8f4bbfcb61afe67b83831afdd6c3d6f1ea",
+   "joulewise/align/apple/r1_runtime.py": "a5ba3cd4dce1b41c8448e2e26653789a9f607ffc2836a7b4a9339b991f9b6dac",
+   "joulewise/align/apple/r1_runtime_contract.py": "4b9d1c69b0459a0382dfdd5e3aee56366e99f770ed2320cfff90539647ab6591",
+   "joulewise/align/apple/smc_enumeration.py": "0132579cc33f8a997cdfd5f3dd84466352cdeeeebf9ca7de8dc1ec7990cea0a9",
+   "joulewise/align/apple/smc_reader.py": "6ea8dbb6ed6b6640f8cb89698ec19827de8de0e657750815a101e7809520516e",
+   "joulewise/align/apple/thermal.py": "b9b46f9ede50b265c245dcc05d3503139632ae129e313675622fa1dce25d39d7",
+   "joulewise/align/apple/thermal_gates.py": "c72937bd8bf7b5553c1ffd70e76018ffbf25f32578533c8749aa88419837918d",
+   "joulewise/align/apple/v4_registration.py": "6815d1b65fee6bc67743a8905a3e61dcc8f5294b62fdd238938ca1e77b16ef57",
+   "joulewise/align/apple/workload.py": "837b74be97616c48c26b0c1277fe2a605b575d5cfc4396dc05e1139079daf1ba",
+   "joulewise/b5/driver.py": "88068b64d09d3e335810e3b4718246cb3164223b87f96b56c5a098349882f90b",
+   "joulewise/cadence/__init__.py": "f4b0e5a58ba794f75fc831965b4a840bcd07340807c66b42b3efad66bd787630",
+   "joulewise/cadence/ctl.py": "224f8c4f2ab4cb6a780624239269b702e164139398987e69b9277fb698b22c03",
+   "joulewise/cadence/desk.py": "502ec84face40f5396c1f51943350f21030885cf3e054ca9aef4a7d353e6ea08",
+   "joulewise/cadence/kit.py": "50b54642f7cfcb3a9118015066e24557db238bd8a451df0fcffa4e9eab50e93c",
+   "joulewise/cadence/kit_v11.py": "935f8f0ff5bdb049101207735e612dbb405b733f444dae89d901716d362cdc85",
+   "joulewise/cadence/legs.py": "7a016f5a3b729acdc79a1703ab1a3463685601d0fa18bd11c4fe0d8fea45d54f",
+   "joulewise/cadence/queue.py": "059a8f8621e03f2bdcc102f291dda1eb8f68c8a3c2e0c0ca7722530b3fcac48e",
+   "joulewise/cadence/stops.py": "80d640fc6519c8c35def61f086ae255a15bbebac43900bdcd183d772bec020fb",
+   "joulewise/controller.py": "3f0535c976463da1ae99718cfcde2b0ef92241cda36973baaf4b1a6ebe1b12db",
+   "scripts/align_r1_rehearsal.py": "2806f9eae61210d457ae19a5484cfe7dc7ac70a31c20b1ca0a2856f32178a825",
+   "scripts/align_r1_runtime.py": "7403e69d9aedb54887bfc4218a45db84faa653329ca977bcf97edf20af88f923",
+   "scripts/cadence_leg_runtime.py": "c269b4fe6d1cee725c2fdd520d6c51ab8dd261c96cbc884968b6f2a754020504",
+   "scripts/cadence_legs_runner.py": "a449c755f23e2a254866acfac3f7fc55806ce3c1a2bdbb269c2137ed028d5f40",
+   "scripts/km003c_monitor.py": "211a807f152e18b28b622f1d914fca115f308e5938c979269842e2df91601ef9",
+   "scripts/launch_align_r0.py": "242cd7aa0bf5788786ca8630e6931abcaaa3e01dc3bf014255a6191b50c6e799",
+   "scripts/launch_cadence_span.py": "609a46217e6e885082916870e3d2c8f8fe1b48a7313b11f260c698d4bc84eb86",
+   "scripts/run_align_r0_launchagent.sh": "ac1dc2a223754cfc3295dd1352a838a3077671da140ffeeba484400e1bd249c6",
+   "scripts/run_align_r1_smoke.py": "6f1fb9f4ac3109650b36b07012e24728c17e7112e7b59953e6557f2b5fdd35aa",
+   "scripts/run_night.py": "b3c58c91125b8355a5269928cda3b30e26f362b9927b03cbebf71d71f1fb28c0"
+  }
+ },
+ "runner": {
+  "kind": "cadence-ctl-v1",
+  "entry": "scripts/cadence_legs_runner.py",
+  "stage_journal": "chain-stages.jsonl"
+ },
+ "model": "mlx-community/Qwen3.8-27B-8bit",
+ "leg_defaults": {
+  "prefill_tokens": 2000
+ },
+ "seed_law": {
+  "method": "sha256-scripts-v1",
+  "master_seed": 2026111601,
+  "n_legs": 12,
+  "bands": [
+   "q0"
+  ],
+  "scripts": [
+   {
+    "kind": "hidden",
+    "turn_tokens": [
+     1024
+    ],
+    "hidden_tokens": 128,
+    "cpu_s": 0,
+    "gap_s": 0,
+    "recovery_s": 600
+   },
+   {
+    "kind": "hidden",
+    "turn_tokens": [
+     1024
+    ],
+    "hidden_tokens": 128,
+    "cpu_s": 0,
+    "gap_s": 0,
+    "recovery_s": 600
+   },
+   {
+    "kind": "hidden",
+    "turn_tokens": [
+     1024
+    ],
+    "hidden_tokens": 256,
+    "cpu_s": 0,
+    "gap_s": 0,
+    "recovery_s": 600
+   },
+   {
+    "kind": "hidden",
+    "turn_tokens": [
+     1024
+    ],
+    "hidden_tokens": 256,
+    "cpu_s": 0,
+    "gap_s": 0,
+    "recovery_s": 600
+   },
+   {
+    "kind": "hidden",
+    "turn_tokens": [
+     1024
+    ],
+    "hidden_tokens": 512,
+    "cpu_s": 0,
+    "gap_s": 0,
+    "recovery_s": 600
+   },
+   {
+    "kind": "hidden",
+    "turn_tokens": [
+     1024
+    ],
+    "hidden_tokens": 512,
+    "cpu_s": 0,
+    "gap_s": 0,
+    "recovery_s": 600
+   },
+   {
+    "kind": "extra-turn",
+    "turn_tokens": [
+     1024,
+     1024
+    ],
+    "hidden_tokens": 0,
+    "cpu_s": 0,
+    "gap_s": 0,
+    "recovery_s": 600
+   },
+   {
+    "kind": "cpu",
+    "turn_tokens": [
+     512,
+     512
+    ],
+    "hidden_tokens": 0,
+    "cpu_s": 10,
+    "gap_s": 0,
+    "recovery_s": 600
+   },
+   {
+    "kind": "cpu",
+    "turn_tokens": [
+     512,
+     512
+    ],
+    "hidden_tokens": 0,
+    "cpu_s": 30,
+    "gap_s": 0,
+    "recovery_s": 600
+   },
+   {
+    "kind": "cpu",
+    "turn_tokens": [
+     512,
+     512
+    ],
+    "hidden_tokens": 0,
+    "cpu_s": 90,
+    "gap_s": 0,
+    "recovery_s": 600
+   },
+   {
+    "kind": "split",
+    "turn_tokens": [
+     342,
+     341,
+     341
+    ],
+    "hidden_tokens": 0,
+    "cpu_s": 0,
+    "gap_s": 60,
+    "recovery_s": 600
+   },
+   {
+    "kind": "plain",
+    "turn_tokens": [
+     1024
+    ],
+    "hidden_tokens": 0,
+    "cpu_s": 0,
+    "gap_s": 0,
+    "recovery_s": 600
+   }
+  ]
+ },
+ "legs": [
+  {
+   "leg_id": "L001",
+   "seed": 2492371355,
+   "start_band": "q0",
+   "prefill_tokens": 2000,
+   "decode_tokens": 2048,
+   "g0_shape": "span",
+   "script": {
+    "kind": "extra-turn",
+    "turn_tokens": [
+     1024,
+     1024
+    ],
+    "hidden_tokens": 0,
+    "cpu_s": 0,
+    "gap_s": 0,
+    "recovery_s": 600
+   }
+  },
+  {
+   "leg_id": "L002",
+   "seed": 3901590846,
+   "start_band": "q0",
+   "prefill_tokens": 2000,
+   "decode_tokens": 1024,
+   "g0_shape": "span",
+   "script": {
+    "kind": "hidden",
+    "turn_tokens": [
+     1024
+    ],
+    "hidden_tokens": 512,
+    "cpu_s": 0,
+    "gap_s": 0,
+    "recovery_s": 600
+   }
+  },
+  {
+   "leg_id": "L003",
+   "seed": 4008811407,
+   "start_band": "q0",
+   "prefill_tokens": 2000,
+   "decode_tokens": 1024,
+   "g0_shape": "span",
+   "script": {
+    "kind": "cpu",
+    "turn_tokens": [
+     512,
+     512
+    ],
+    "hidden_tokens": 0,
+    "cpu_s": 30,
+    "gap_s": 0,
+    "recovery_s": 600
+   }
+  },
+  {
+   "leg_id": "L004",
+   "seed": 1386543436,
+   "start_band": "q0",
+   "prefill_tokens": 2000,
+   "decode_tokens": 1024,
+   "g0_shape": "span",
+   "script": {
+    "kind": "cpu",
+    "turn_tokens": [
+     512,
+     512
+    ],
+    "hidden_tokens": 0,
+    "cpu_s": 90,
+    "gap_s": 0,
+    "recovery_s": 600
+   }
+  },
+  {
+   "leg_id": "L005",
+   "seed": 92817822,
+   "start_band": "q0",
+   "prefill_tokens": 2000,
+   "decode_tokens": 1024,
+   "g0_shape": "span",
+   "script": {
+    "kind": "hidden",
+    "turn_tokens": [
+     1024
+    ],
+    "hidden_tokens": 128,
+    "cpu_s": 0,
+    "gap_s": 0,
+    "recovery_s": 600
+   }
+  },
+  {
+   "leg_id": "L006",
+   "seed": 603567892,
+   "start_band": "q0",
+   "prefill_tokens": 2000,
+   "decode_tokens": 1024,
+   "g0_shape": "span",
+   "script": {
+    "kind": "split",
+    "turn_tokens": [
+     342,
+     341,
+     341
+    ],
+    "hidden_tokens": 0,
+    "cpu_s": 0,
+    "gap_s": 60,
+    "recovery_s": 600
+   }
+  },
+  {
+   "leg_id": "L007",
+   "seed": 603567892,
+   "start_band": "q0",
+   "prefill_tokens": 2000,
+   "decode_tokens": 1024,
+   "g0_shape": "span",
+   "script": {
+    "kind": "plain",
+    "turn_tokens": [
+     1024
+    ],
+    "hidden_tokens": 0,
+    "cpu_s": 0,
+    "gap_s": 0,
+    "recovery_s": 600
+   }
+  },
+  {
+   "leg_id": "L008",
+   "seed": 3928512548,
+   "start_band": "q0",
+   "prefill_tokens": 2000,
+   "decode_tokens": 1024,
+   "g0_shape": "span",
+   "script": {
+    "kind": "hidden",
+    "turn_tokens": [
+     1024
+    ],
+    "hidden_tokens": 256,
+    "cpu_s": 0,
+    "gap_s": 0,
+    "recovery_s": 600
+   }
+  },
+  {
+   "leg_id": "L009",
+   "seed": 800711026,
+   "start_band": "q0",
+   "prefill_tokens": 2000,
+   "decode_tokens": 1024,
+   "g0_shape": "span",
+   "script": {
+    "kind": "hidden",
+    "turn_tokens": [
+     1024
+    ],
+    "hidden_tokens": 512,
+    "cpu_s": 0,
+    "gap_s": 0,
+    "recovery_s": 600
+   }
+  },
+  {
+   "leg_id": "L010",
+   "seed": 2927643913,
+   "start_band": "q0",
+   "prefill_tokens": 2000,
+   "decode_tokens": 1024,
+   "g0_shape": "span",
+   "script": {
+    "kind": "cpu",
+    "turn_tokens": [
+     512,
+     512
+    ],
+    "hidden_tokens": 0,
+    "cpu_s": 10,
+    "gap_s": 0,
+    "recovery_s": 600
+   }
+  },
+  {
+   "leg_id": "L011",
+   "seed": 3745194143,
+   "start_band": "q0",
+   "prefill_tokens": 2000,
+   "decode_tokens": 1024,
+   "g0_shape": "span",
+   "script": {
+    "kind": "hidden",
+    "turn_tokens": [
+     1024
+    ],
+    "hidden_tokens": 256,
+    "cpu_s": 0,
+    "gap_s": 0,
+    "recovery_s": 600
+   }
+  },
+  {
+   "leg_id": "L012",
+   "seed": 807871911,
+   "start_band": "q0",
+   "prefill_tokens": 2000,
+   "decode_tokens": 1024,
+   "g0_shape": "span",
+   "script": {
+    "kind": "hidden",
+    "turn_tokens": [
+     1024
+    ],
+    "hidden_tokens": 128,
+    "cpu_s": 0,
+    "gap_s": 0,
+    "recovery_s": 600
+   }
+  }
+ ],
+ "inclusion_rules": [
+  {
+   "id": "g0_released",
+   "text": "Its G0 released."
+  },
+  {
+   "id": "exact_script",
+   "text": "Every scripted call reached its exact token cap and every timed interval completed."
+  },
+  {
+   "id": "print_only",
+   "text": "Outside every fit and series; read only at the registered controls look by frozen print code."
+  }
+ ],
+ "stop_rules": {
+  "instrument_fault": true,
+  "refusal": true,
+  "contaminated_redos_max": 3,
+  "contaminated_redos_scope": "span",
+  "band_unreachable_max": 2,
+  "band_unreachable_scope": "span",
+  "leg_time_factor": 1.5,
+  "notes": "RL-149 section 2.4: REFUSAL, restore unproven, disk or watcher down (span; the lead clears); INSTRUMENT_FAULT (span; the research lead clears); CONTAMINATED_REDOS, 3 in a span (the lead once, then the research lead); LEG_OVERTIME, two legs over 1.5 x their budget in a span (the lead). BAND_UNREACHABLE is dropped; the band_unreachable keys are schema v1 fields that no stop reads. A stop stops the next arm, never a running span. Leg budgets come from the runner's time model by prompt size: 1,076 s (2,000 tokens), 1,156 s (10,000) and 1,251 s (19,458) for a leg that judges its G0 against its own capture (G0 at Part C's 209 s); a span-reference leg's G0 is modeled at 600 s (1,467 s, 1,547 s and 1,642 s), so a span-reference G0 that runs to its 1,200 s cap alone never trips LEG_OVERTIME. leg_budget_s is their ceiling and leg_worst_case_s (a G0 at its 1,200 s cap, with margin) is each leg's process cap."
+ },
+ "span_template": {
+  "timezone": "America/Los_Angeles",
+  "t0_rule": "free",
+  "legs_per_span": 9,
+  "soak_s": 1950,
+  "fixed_overhead_s": 1200,
+  "leg_budget_s": 2400,
+  "leg_worst_case_s": 3300,
+  "redo_quota": 1
+ },
+ "checklist": [
+  {
+   "id": "head_is_frozen_commit",
+   "kind": "head_is_frozen_commit"
+  },
+  {
+   "id": "frozen_paths_hash",
+   "kind": "frozen_paths_hash"
+  },
+  {
+   "id": "kit_sha256",
+   "kind": "kit_sha256"
+  },
+  {
+   "id": "ac_power",
+   "kind": "ac_power"
+  },
+  {
+   "id": "powermode_zero",
+   "kind": "powermode_zero"
+  },
+  {
+   "id": "network_time_off",
+   "kind": "network_time_off"
+  },
+  {
+   "id": "freq_word_zero",
+   "kind": "freq_word_zero"
+  },
+  {
+   "id": "no_stray_monitor",
+   "kind": "no_stray_monitor"
+  },
+  {
+   "id": "no_other_agent",
+   "kind": "no_other_agent"
+  },
+  {
+   "id": "no_night_agent_loaded",
+   "kind": "no_night_agent_loaded"
+  },
+  {
+   "id": "no_high_power_marker",
+   "kind": "no_high_power_marker"
+  },
+  {
+   "id": "sudo_kill",
+   "kind": "sudo_kill"
+  },
+  {
+   "id": "km003c_ready",
+   "kind": "km003c_ready"
+  },
+  {
+   "id": "disk_free_gb",
+   "kind": "disk_free_gb",
+   "args": {
+    "min_gb": 40
+   }
+  },
+  {
+   "id": "previous_span_closed",
+   "kind": "previous_span_closed"
+  },
+  {
+   "id": "no_halt_or_veto",
+   "kind": "no_halt_or_veto"
+  },
+  {
+   "id": "span_window",
+   "kind": "span_window"
+  }
+ ],
+ "looks": [],
+ "desk": {
+  "adapter": "leg-summary-v1"
+ },
+ "status": "draft",
+ "layout": [
+  [
+   "L001",
+   "L002",
+   "L003"
+  ],
+  [
+   "L004",
+   "L005",
+   "L006",
+   "L007",
+   "L008",
+   "L009",
+   "L010",
+   "L011",
+   "L012"
+  ]
+ ]
+}
