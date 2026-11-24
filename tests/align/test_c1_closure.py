@@ -989,6 +989,97 @@ class C1ClosureTests(unittest.TestCase):
 
         self.assert_refused_on_both_routes(self.attempt(edit_source=edit), '--max-blocks must be >= 1')
 
+    def test_audit5_high_stale_campaign_log_refuses_before_host(self):
+        """Audit 5 HIGH: a collection --log naming a previous attempt's log refuses on both routes."""
+        logs = {}
+
+        class PreviousAttempt(adapter.Attempt):
+            def __init__(self, work, *rest):
+                # An earlier attempt's campaign log beside this attempt (invented bytes).
+                previous = work / 'previous-attempt' / 'campaign_log.jsonl'
+                previous.parent.mkdir()
+                previous.write_bytes(b'{"record_type": "campaign_provenance_attestation", "invented": true}\n')
+                logs['previous'] = previous
+                super().__init__(work, *rest)
+
+        def stale(spelling):
+            def edit(tree):
+                row = next(row for row in tree['stage_graph'] if row['kind'] == 'campaign_collection')
+                self.assertNotIn(adapter.literal('--log'), adapter.arguments(row))
+                adapter.option(adapter.arguments(row), '--log', 'literal', spelling(logs['previous']))
+                return {}
+            return edit
+
+        for name, spelling in (('absolute path (audit reproduction)', str),
+                               ('relative to the launch view', lambda path: '../previous-attempt/campaign_log.jsonl')):
+            with self.subTest(case=name):
+                attempt = self.attempt(make_attempt=PreviousAttempt, edit_source=stale(spelling))
+                before = logs['previous'].read_bytes()
+                self.assert_refused_on_both_routes(attempt, "campaign --log must be this attempt's")
+                self.assertEqual(logs['previous'].read_bytes(), before)
+                self.assertFalse((Path(attempt.bindings['claim_runs_root']) / 'campaign_log.jsonl').exists())
+
+    def test_r14_every_stage_writes_only_where_this_attempt_is_read(self):
+        """Round 14 class: each stage writes only this attempt's paths that the harvest reads."""
+        def collection(index):
+            return lambda tree: adapter.arguments(
+                [row for row in tree['stage_graph'] if row['kind'] == 'campaign_collection'][index])
+
+        def derivation(tree):
+            return adapter.arguments(next(row for row in tree['stage_graph'] if row['kind'] == 'bound_derivation'))
+
+        def reservation(tree):
+            return adapter.arguments(next(row for row in tree['stage_graph'] if row['kind'] == 'bracket_reservation'))
+
+        def under(binding, relative):
+            return {'kind': 'binding_path', 'value': binding, 'relative': relative}
+
+        def edit(*changes):
+            def apply(tree):
+                for select, flag, item in changes:
+                    arguments = select(tree)
+                    if adapter.literal(flag) in arguments:
+                        index = arguments.index(adapter.literal(flag))
+                        del arguments[index:index + 2]
+                    arguments.extend([adapter.literal(flag), item])
+                return {}
+            return apply
+
+        pre = lambda tree: capture_arguments(tree, 'pre')  # noqa: E731
+        previous = '/synthetic-previous-attempt'
+        cases = (
+            ('log in the other runs root', edit((collection(0), '--log', under('bound_runs_root', 'campaign_log.jsonl'))),
+             "campaign --log must be this attempt's"),
+            ('log under another name', edit((collection(0), '--log', under('claim_runs_root', 'campaign-log-2.jsonl'))),
+             "campaign --log must be this attempt's"),
+            ('second stage logs into a previous attempt',
+             edit((collection(1), '--log', adapter.literal(f'{previous}/claim_runs_root/campaign_log.jsonl'))),
+             "campaign --log must be this attempt's"),
+            ('bound written into a previous attempt',
+             edit((derivation, '--neg8-drift-bound-output',
+                   adapter.literal(f'{previous}/bound_runs_root/neg8-drift-bound.json'))),
+             "campaign --neg8-drift-bound-output must be this attempt's"),
+            ('bound written into the claim runs root',
+             edit((derivation, '--neg8-drift-bound-output', under('claim_runs_root', 'neg8-drift-bound.json'))),
+             "campaign --neg8-drift-bound-output must be this attempt's"),
+            # Agreeing reservation and capture: the capture's flag root would leave the runs root.
+            ('capture output root below instrument_validation',
+             edit((reservation, '--pre-custody-locator', under('claim_runs_root', 'instrument_validation/nested/fixture-pre')),
+                  (pre, '--output-root', under('claim_runs_root', 'instrument_validation/nested'))),
+             "capture --output-root must be this attempt's"),
+        )
+        for name, change, detail in cases:
+            with self.subTest(case=name):
+                attempt = self.attempt(edit_source=change)
+                code, _ = attempt.build()
+                self.assertEqual(code, 2, attempt.build_error)
+                self.assertIn(detail, attempt.build_error)
+        with self.subTest(control='explicit log at this attempt\'s runs root'):
+            attempt = self.attempt(edit_source=edit(
+                (collection(0), '--log', under('claim_runs_root', 'campaign_log.jsonl'))))
+            code, _ = attempt.build()
+            self.assertEqual(code, 0, attempt.build_error)
+
     def test_r13_arguments_a_consumer_rejects_or_that_disagree_with_the_plan(self):
         """Round 13 sweep: each such rendered argument refuses at the shared preflight (builder exit 2)."""
         def stage(kind, slot=None):

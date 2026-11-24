@@ -174,7 +174,9 @@ class Attempt:
                     option(args, '--power-policy', 'literal', 'ac_high_power')
             if stage['kind'] == 'bound_derivation':
                 if literal('--neg8-drift-bound-output') not in args:
-                    option(args, '--neg8-drift-bound-output', 'literal', self.work / 'derived.json')
+                    # The harvest reads this attempt's bound under this name in the bound runs root.
+                    args.extend([literal('--neg8-drift-bound-output'), {
+                        'kind': 'binding_path', 'value': 'bound_runs_root', 'relative': 'neg8-drift-bound.json'}])
                 if literal('--runs-dir') not in args:
                     option(args, '--runs-dir', 'binding', 'bound_runs_root')
 
