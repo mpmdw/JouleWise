@@ -22,6 +22,9 @@ BYTE_RECEIPT = LOOK_DIR + "lm-ctl-01.byte-pass.json"
 INSTRUMENT_STAGE1 = LOOK_DIR + "stage1/lm-inst-01.json"
 SUITE = "tests/contracts/cadence_looks/look_path/"
 SUITE_NAMES = ("SUITE.sha256", "SUITE-v2.sha256", "SUITE-v3.sha256")
+INSTALLED_BUNDLE_RESULT = ("75 raw + 4 superseded "
+                           "(RL-202a §2.4; lead record audit branch 1850d6930 SUPERSESSION-v2.md)")
+SUPERSESSION_SHA256 = "1c4b7086a03487e1059748364e56061d1175614bf4a4d0c5ff304c542009325d"
 KERNEL_ROLES = (
     "print_code/phase", "print_code/attribution", "print_code/records", "print_code/windows",
     "print_code/powermetrics_adapter", "print_code/trace_point", "print_code/integrator",
@@ -291,7 +294,8 @@ class Authority:
             "kernel_sha256": dict(zip(KERNEL_ROLES, AUDITED_KERNEL, strict=True)),
             "suite_sha256": {name: _sha(book.working(SUITE + name, self.revision)) for name in SUITE_NAMES},
             "v3_1_count": 846,
-            "installed_bundle_cases": 79,
+            "installed_bundle_cases": INSTALLED_BUNDLE_RESULT,
+            "supersession_sha256": SUPERSESSION_SHA256,
             "h_output_bytes_equal": True,
         }
         _require(receipt == expected)

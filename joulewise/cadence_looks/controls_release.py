@@ -4,7 +4,6 @@ from contextlib import ExitStack, contextmanager, suppress
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from importlib.util import find_spec
-import math
 import os
 from pathlib import Path
 import re
@@ -77,7 +76,7 @@ def validate_shape(value, schema, definitions, *, instrument_reasons=()):
             field = prefix[index] if index < len(prefix) else schema["items"]
             validate_shape(item, field, definitions, instrument_reasons=instrument_reasons)
     elif kind in ("number", "integer"):
-        if not math.isfinite(value) or not schema.get("minimum", value) <= value <= schema.get("maximum", value):
+        if not analysis._finite(value) or not schema.get("minimum", value) <= value <= schema.get("maximum", value):
             raise ValueError("controls_output_schema")
     elif kind == "string" and "pattern" in schema and re.fullmatch(schema["pattern"], value) is None:
         raise ValueError("controls_output_schema")
@@ -206,9 +205,12 @@ def _redirect_at(restricted):
 
 
 def calculate_private(positions, *, kernel, pooled, instrument_manifest_sha256, schema_bytes,
-                      instrument_reasons=(), gap_limits_ns=None):
-    report = analysis.print_controls(positions, kernel=kernel, pooled=pooled, gap_limits_ns=gap_limits_ns,
-                                     instrument_manifest_sha256=instrument_manifest_sha256)
+                      instrument_reasons=(), gap_limits_ns=None, native=False):
+    options = dict(kernel=kernel, pooled=pooled, instrument_manifest_sha256=instrument_manifest_sha256)
+    if native:
+        report = analysis.print_admitted_controls(positions, **options)
+    else:
+        report = analysis.print_controls(positions, gap_limits_ns=gap_limits_ns, **options)
     return prepare_private(report, schema_bytes, instrument_reasons=instrument_reasons)
 
 
@@ -299,6 +301,7 @@ def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, l
     saved_stderr = None
     confined = False
     read_started = False
+    phase = "read"
     try:
         freeze = verify_freeze(**freeze_inputs)
         stage1 = verify_stage1(freeze, freeze_inputs["committed"], stage1_bytes)
@@ -317,9 +320,9 @@ def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, l
             else:
                 private_parent, publication = native.directories
                 restricted = claim(private_parent, publication, stage1.public, _redirect_at)
-            stack.callback(os.close, restricted)
             confined = True
             read_started = True
+            stack.callback(os.close, restricted)
             if native is None:
                 requests = tuple(replace(leg, binding=replace(leg.binding)) for leg in stage1.legs)
                 positions = _bound_positions(stage1.legs, first_read(requests))
@@ -327,17 +330,21 @@ def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, l
                 from . import controls_reader
 
                 positions = controls_reader.first_read(native.inputs, stage1)
+            phase = "calculate"
             private_bytes = calculate_private(
                 positions, kernel=kernel, pooled=freeze.instrument_pool,
                 instrument_manifest_sha256=freeze.instrument_manifest_sha256,
                 schema_bytes=freeze.restricted_schema, instrument_reasons=freeze.instrument_pool.reason_enum,
+                native=native is not None,
             )
+            phase = "publish"
             sys.stdout.flush()
             sys.stderr.flush()
             _write_outputs_at(restricted, publication, PUBLIC_NAME, private_bytes, public_bytes)
     except BaseException as error:
         if confined:
             with suppress(BaseException):
+                print(f"stage2_error {phase} {_failure_type(error)}", file=sys.stderr, flush=True)
                 traceback.print_exception(error)
         status = POST_READ_FAILURE if read_started else PRE_READ_REFUSAL
         if read_started:

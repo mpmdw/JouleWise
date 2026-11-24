@@ -124,7 +124,7 @@
             },
             {
               "type": "integer",
-              "minimum": 0
+              "minimum": 1
             }
           ]
         },
@@ -170,7 +170,7 @@
           "anyOf": [
             {
               "type": "string",
-              "minLength": 1
+              "pattern": "^cadence-cl-ctl-01-L0(?:0[1-9]|1[0-2])$"
             },
             {
               "type": "null"

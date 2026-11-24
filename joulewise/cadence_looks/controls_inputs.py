@@ -1,22 +1,33 @@
 """Build the private ctl-01 roster and bind its native sources to two Checks."""
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from hashlib import sha256
 import os
 from pathlib import Path
 import re
 
+from . import controls_analysis as analysis
+from .controls_analysis import NS, ViewError, has_dose_quorum, script_steps
 from .controls_layout import GateRefusal, open_file, require_private, write_exclusive
-from .controls_manifest import ISSUED_SETTINGS, STAGE1_SCHEMA, canonical
-from .controls_print import KIT_ID, MASTER_SEED, PILOT, REMAINDER, _hex_pin
+from .controls_manifest import (
+    FIXTURE_SPAN_ID_PATTERN, ISSUED_SETTINGS, SPAN_ID_PATTERN, STAGE1_SCHEMA, RosterIdentifierError, canonical,
+    require_episode_identifier, require_identifier,
+)
+from .controls_print import CHANNELS, KIT_ID, MASTER_SEED, PILOT, REMAINDER, _hex_pin
 from .controls_reader import (
-    ELIGIBLE, ReaderBindingError, binding_projection, blind_stream, rail_timing, select_dc,
+    AC_POWERMODE,
+    ELIGIBLE, LegTiming, ReaderBindingError, binding_projection, blind_stream, rail_timing, select_dc,
 )
 from .custody_pins import PinRefusal, safe_relative
 from .description_inputs import PinnedInput
 from .qualification_manifest import _decode
-from .controls_time_fields import TimeFieldError, project_json
+from .controls_time_fields import (
+    BOOLEAN, EMPTY_ARRAY, INT64, INTEGER, NUMBER, OPAQUE_BOOLEAN, OPAQUE_FINITE_NUMBER, OPAQUE_INTEGER,
+    OPAQUE_NONNEGATIVE_INTEGER, OPAQUE_STRING, STRING,
+    DigestFields, DiscardedField, Nullable, RecordFields, RequiredRecordFields, TaggedFields, TimeFieldError, WireRecord,
+    project_json,
+)
 
 
 IDS = PILOT + REMAINDER
@@ -28,20 +39,110 @@ FILES = {
     "metadata": "metadata.json",
     "rails": "power_trace.csv",
 }
-SCRIPT_FIELDS = dict.fromkeys(("kind", "hidden_tokens", "cpu_s", "gap_s", "recovery_s"))
-SCRIPT_FIELDS["turn_tokens"] = [None]
-WORK_FIELDS = {
-    **dict.fromkeys(("schema", "leg_id", "leg_spec_sha256", "complete")),
-    "script": SCRIPT_FIELDS,
-    "steps": [dict.fromkeys(("kind", "complete", "actual_tokens", "requested_tokens"))],
+SCRIPT_FIELDS = RequiredRecordFields(
+    kind=STRING, hidden_tokens=INTEGER, cpu_s=INTEGER, gap_s=INTEGER, recovery_s=NUMBER,
+    turn_tokens=[INTEGER],
+)
+SPEC_FIELDS = DigestFields(
+    **dict.fromkeys(("schema", "campaign_id", "g0_role", "prefill_tokens", "leg_id", "seed",
+                     "start_band", "decode_tokens", "g0_shape")),
+    script=SCRIPT_FIELDS,
+)
+STEP_FIELDS = {"kind": STRING, "complete": BOOLEAN}
+STEP_TIMES = dict.fromkeys(("started_ns", "ended_ns"), INT64)
+CALL_RETURN_FIELDS = {
+    **STEP_TIMES, "first_token_ns": Nullable(INT64), "context_tokens": INTEGER, "cached_prompt_tokens": INTEGER,
 }
+CALL_FIELDS = WireRecord({**STEP_FIELDS, "requested_tokens": INTEGER, "actual_tokens": Nullable(INTEGER)},
+                         CALL_RETURN_FIELDS)
+INTERVAL_TIMES = {**STEP_TIMES, **dict.fromkeys(("started_epoch_s", "ended_epoch_s"), OPAQUE_FINITE_NUMBER)}
+INTERVAL_FIELDS = WireRecord({**STEP_FIELDS, "requested_s": NUMBER}, INTERVAL_TIMES)
+CPU_FIELDS = WireRecord({**STEP_FIELDS, "requested_s": INTEGER},
+                        {**INTERVAL_TIMES, "thread_cpu_ns": INTEGER})
+STEP_VARIANTS = {**dict.fromkeys(("turn", "hidden"), CALL_FIELDS),
+                 **dict.fromkeys(("gap", "recovery"), INTERVAL_FIELDS), "cpu": CPU_FIELDS}
+WORK_FIELDS = WireRecord(
+    {"schema": STRING, "leg_id": STRING, "leg_spec_sha256": STRING, "complete": BOOLEAN,
+     "script": SCRIPT_FIELDS, "steps": [TaggedFields("kind", STEP_VARIANTS)]},
+    {"failed_envelope": RequiredRecordFields(
+        **dict.fromkeys(("index", "context_tokens", "prefill_tokens", "decode_tokens", "hidden_tokens"), OPAQUE_INTEGER),
+        start_ns=INT64, end_ns=INT64, first_token_ns=Nullable(INT64), tool_calls=EMPTY_ARRAY, logged=BOOLEAN,
+    )},
+)
 REFERENCE_FIELDS = {"schema": None, "status": None, "source": {"run_id": None, "config_sha256": None},
                     "record_sha256": None}
-RESULT_FIELDS = dict.fromkeys((
-    "schema", "kind", "backend", "leg_id", "leg_status", "bundle", "member_status", "g0_released",
-    "g0_role", "g0_reference_record_sha256", "config_sha256", "script_complete", "script_record_sha256",
-    "decode_tokens", "prefill_tokens", "turn_start_ns", "turn_end_ns", "first_token_ns",
+RESULT_REQUIRED = {
+    **dict.fromkeys(("leg_id", "leg_status", "bundle", "member_status", "g0_role", "script_record_sha256"), STRING),
+    **dict.fromkeys(("g0_released", "script_complete"), BOOLEAN),
+    "g0_reference_record_sha256": Nullable(STRING),
+    "decode_tokens": Nullable(INTEGER), "prefill_tokens": Nullable(INTEGER),
+}
+RESULT_OPTIONAL = {
+    **dict.fromkeys(("turn_start_ns", "turn_end_ns", "first_token_ns"), Nullable(INT64)),
+    "config_sha256": STRING, "g0_outcome": Nullable(OPAQUE_STRING),
+    "g0_wait_s": Nullable(OPAQUE_FINITE_NUMBER), "g0_timeout_s": OPAQUE_FINITE_NUMBER,
+    "quiet_s": OPAQUE_FINITE_NUMBER, "prefill_chars": DiscardedField(OPAQUE_INTEGER), "decode_cap": OPAQUE_INTEGER,
+    "decode_cap_reached": BOOLEAN, "episode_flags": [OPAQUE_STRING], "incomplete_reasons": [OPAQUE_STRING],
+    "ac_powermode": Nullable(AC_POWERMODE), "quiet_spans_ns": [[INT64]], "g0_shape": OPAQUE_STRING,
+    "g0_reference_source": Nullable(OPAQUE_STRING), "os_level_max": Nullable(OPAQUE_INTEGER),
+    "pm_nominal": Nullable(OPAQUE_BOOLEAN),
+}
+BATTERY_SAMPLE = RequiredRecordFields(epoch_s=OPAQUE_FINITE_NUMBER, soc_pct=OPAQUE_INTEGER,
+                                      state=Nullable(OPAQUE_STRING), ac=OPAQUE_BOOLEAN, raw=OPAQUE_STRING)
+BATTERY_RESULT = RequiredRecordFields(
+    samples=OPAQUE_INTEGER, valid_samples=OPAQUE_INTEGER, drain_pct_per_h=Nullable(OPAQUE_FINITE_NUMBER),
+    drain_unavailable_reason=Nullable(OPAQUE_STRING),
+    charge_resume_events=[RequiredRecordFields(epoch_s=OPAQUE_FINITE_NUMBER, soc_pct=OPAQUE_INTEGER,
+                                              prior_soc_pct=OPAQUE_INTEGER)],
+    charge_resume_soc_pct=Nullable(OPAQUE_INTEGER), first=Nullable(BATTERY_SAMPLE), last=Nullable(BATTERY_SAMPLE),
+    resolution=OPAQUE_STRING,
+)
+RUNTIME_ONLY = {
+    "cpu_busy_cores": [OPAQUE_FINITE_NUMBER], "cpu_busy_t_s": [OPAQUE_FINITE_NUMBER],
+    "census": [RequiredRecordFields(
+        label=OPAQUE_STRING, t_s=OPAQUE_FINITE_NUMBER,
+        processes=[RequiredRecordFields(pid=OPAQUE_INTEGER, ppid=OPAQUE_INTEGER,
+                                        pcpu=OPAQUE_FINITE_NUMBER, comm=OPAQUE_STRING)])],
+    "load_journal_errors": [OPAQUE_STRING], "battery": BATTERY_RESULT,
+}
+RUNTIME_IDENTITY = dict.fromkeys(("schema", "kind", "backend"), STRING)
+RESULT_FIELDS = WireRecord(RESULT_REQUIRED, {**RESULT_OPTIONAL, **RUNTIME_IDENTITY, **RUNTIME_ONLY})
+RUNTIME_RESULT_FIELDS = WireRecord({**RESULT_REQUIRED, **RUNTIME_IDENTITY}, {**RESULT_OPTIONAL, **RUNTIME_ONLY})
+NATIVE_RESULT_COPY = frozenset((
+    "config_sha256", "g0_outcome", "g0_wait_s", "g0_timeout_s", "quiet_s", "prefill_chars", "decode_cap",
+    "decode_cap_reached", "os_level_max", "pm_nominal", "incomplete_reasons", "ac_powermode", "quiet_spans_ns",
+    "g0_shape", "g0_reference_source",
 ))
+ATTEMPT_FIELDS = DigestFields.fromkeys(("attempt", "redone", "output_dir", "leg_status", "contaminated"))
+CLOSE_FIELDS = {
+    **dict.fromkeys(("span_id", "schema", "runner_kind", "mock", "rc", "legs_finished")),
+    "desk_bundle_error": Nullable(OPAQUE_STRING),
+    "roster": [None],
+    "kit": RecordFields.fromkeys(("campaign_id", "sha256", "frozen_commit")),
+    "feeds": {"meter": {"stop": {"rc": None, "proven_stopped": None}, "files": [
+        {"path": None, "sha256": None},
+    ]}},
+    "span_result": Nullable({"outcome": None}),
+    "steps": [{"name": None, "rc": None}],
+    "legs": [{
+        "leg_id": None, "attempts": [ATTEMPT_FIELDS],
+        "summary": {"leg_id": None, "admitted": None},
+        "span_reference": Nullable(dict.fromkeys(("leg_id", "attempt", "excluded"))),
+    }],
+}
+LEG_RECORD_FIELDS = RequiredRecordFields(schema=STRING, spec=DigestFields(), attempts=[ATTEMPT_FIELDS],
+                                         result=RESULT_FIELDS)
+NATIVE_LEG_RECORD_FIELDS = RequiredRecordFields(
+    LEG_RECORD_FIELDS,
+    result=WireRecord({**RESULT_REQUIRED, **{key: RESULT_FIELDS[key] for key in NATIVE_RESULT_COPY}},
+                      RESULT_FIELDS),
+)
+NATIVE_RUNTIME_RESULT_FIELDS = WireRecord(
+    {**RESULT_REQUIRED, **RUNTIME_IDENTITY, **RUNTIME_ONLY,
+     **{key: RESULT_OPTIONAL[key] for key in NATIVE_RESULT_COPY | {"episode_flags"}}},
+    RUNTIME_RESULT_FIELDS,
+)
+TERMINAL_FIELDS = {"schema": None, "status": None, "files": {"runtime_result.json": None}}
 STREAM = re.compile(r"hazards/meter/stream-[0-9]{3,}\.jsonl")
 
 
@@ -89,10 +190,6 @@ def _read(path, entry):
         raise GateRefusal("INPUT_BINDING") from error
 
 
-def _read_doc(root, entry):
-    return _decode(_read(root / entry["path"], entry))
-
-
 def _entries(pins):
     return {entry["path"]: entry for entry in pins["files"]}
 
@@ -105,9 +202,10 @@ def _entry_from_check(check, role, path, expected_sha256=None, *, parent=None):
     return _pin(role, path, entry, parent or check["offload_manifest_sha256"])
 
 
-def _close(kit_sha, runner_commit, check, root, ids, *, synthetic):
+def _bind_span(kit_sha, runner_commit, check, root, ids, *, synthetic):
     entry = _entry_from_check(check, "close_receipt", "runner_receipt.json")
-    document = _read_doc(root, entry)
+    document = project_json(_read(root / entry["path"], entry), CLOSE_FIELDS, strict=True)
+    require_identifier(document["span_id"], FIXTURE_SPAN_ID_PATTERN if synthetic else SPAN_ID_PATTERN)
     _require(document["span_id"] == check["span_id"], "INPUT_CHANNELS")
     _require(document["schema"] == "joulewise.cadence_span_receipt.v1"
              and document["runner_kind"] == "cadence-ctl-v1"
@@ -135,7 +233,7 @@ def _close(kit_sha, runner_commit, check, root, ids, *, synthetic):
         _require(name.casefold() not in names and _hex_pin(row["sha256"], 64))
         names.add(name.casefold())
         streams.append(_entry_from_check(check, "stream", name, row["sha256"], parent=entry["sha256"]))
-    return entry, document, streams
+    return entry, document["legs"], streams
 
 
 def _kit_inputs(raw, runner_commit, *, synthetic):
@@ -164,29 +262,84 @@ def _kit_inputs(raw, runner_commit, *, synthetic):
     return dict(zip(IDS, kit["legs"], strict=True))
 
 
+def _check_script_requests(work, issued):
+    try:
+        script_steps(work, issued["kind"], allow_interrupted=not work["complete"])
+    except ViewError as error:
+        raise TimeFieldError("invalid native script step record") from error
+    if work["complete"] and any(row["complete"] is not True for row in work["steps"]):
+        raise TimeFieldError("incomplete step in completed native script")
+    turns = iter(issued["turn_tokens"])
+    intervals = {"cpu": "cpu_s", "gap": "gap_s", "recovery": "recovery_s"}
+    for index, row in enumerate(work["steps"]):
+        kind = row["kind"]
+        trailing = not work["complete"] and index == len(work["steps"]) - 1 and not row["complete"]
+        if kind in ("turn", "hidden"):
+            if row["actual_tokens"] is None:
+                if not trailing or {"first_token_ns", "context_tokens", "cached_prompt_tokens"} & row.keys():
+                    raise TimeFieldError("invalid native interrupted call")
+            elif (CALL_RETURN_FIELDS.keys() - row.keys()
+                  or (row["complete"] and row["first_token_ns"] is None)
+                  or not 0 <= row["cached_prompt_tokens"] <= row["context_tokens"]):
+                raise TimeFieldError("missing or invalid native returned call fields")
+        else:
+            required = INTERVAL_TIMES.keys() | ({"thread_cpu_ns"} if kind == "cpu" else set())
+            if trailing:
+                required = {"started_ns", "started_epoch_s"}
+            if (required - row.keys()
+                    or ("ended_ns" in row) != ("ended_epoch_s" in row)
+                    or (kind == "cpu" and ("ended_ns" in row) != ("thread_cpu_ns" in row))):
+                raise TimeFieldError("missing or unmatched native interval stamps")
+            if kind == "cpu" and row.get("thread_cpu_ns", 0) < 0:
+                raise TimeFieldError("negative native thread CPU duration")
+        if kind == "turn":
+            actual, expected = row["requested_tokens"], next(turns, None)
+        elif kind == "hidden":
+            actual, expected = row["requested_tokens"], issued["hidden_tokens"]
+        else:
+            actual, expected = row["requested_s"], issued[intervals[kind]]
+        if actual != expected:
+            raise TimeFieldError("native script step request differs from issued dose")
+        if kind == "cpu" and row["complete"]:
+            # The pinned writer's completed_step requires both clocks to reach
+            # duration_ns(dose). Issued CPU doses are integer seconds.
+            threshold = expected * NS
+            if min(row["ended_ns"] - row["started_ns"], row["thread_cpu_ns"]) < threshold:
+                raise TimeFieldError("native CPU step did not reach its issued duration")
+    if work["complete"] and next(turns, None) is not None:
+        raise TimeFieldError("issued visible calls missing from native script")
+
+
 def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
     leg_id = kit_leg["leg_id"]
     prefix = f"legs/{leg_id}/"
     leg_record = _entry_from_check(check, "leg_record", prefix + "leg_record.json")
     leg_spec = _entry_from_check(check, "leg_spec", prefix + "leg_spec.json")
-    record, spec = _read_doc(root, leg_record), _read_doc(root, leg_spec)
-    canonical_spec_sha = digest(canonical(spec))
+    record_fields = LEG_RECORD_FIELDS if synthetic else NATIVE_LEG_RECORD_FIELDS
+    record = project_json(_read(root / leg_record["path"], leg_record), record_fields, strict=True)
+    # Both the runner's file writer and its script binding sort object keys.
+    # Compact the verified tokens to obtain the binding without decoding extras.
+    spec, canonical_spec_sha = project_json(_read(root / leg_spec["path"], leg_spec), SPEC_FIELDS, strict=True)
     role = "capture" if ordinal == 0 else "consume"
-    _require(record["schema"] == "joulewise.cadence_leg_record.v1" and record["spec"] == spec
+    _require(record["schema"] == "joulewise.cadence_leg_record.v1" and record["spec"][1] == canonical_spec_sha
              and spec["schema"] == "joulewise.cadence_leg_spec.ctl.v1"
              and spec["campaign_id"] == KIT_ID and spec["g0_role"] == role
              and spec["prefill_tokens"] == ISSUED_SETTINGS["prefill_tokens"]
              and all(spec[key] == kit_leg[key] for key in
                      ("leg_id", "seed", "start_band", "script", "prefill_tokens", "decode_tokens", "g0_shape")))
-    attempts = record["attempts"]
-    _require(attempts and attempts == close_leg["attempts"]
+    # The pinned writer serializes the same attempt objects with sorted keys
+    # in both files. Bind their tokens while leaving diagnostics unconverted.
+    attempts = [attempt for attempt, _ in record["attempts"]]
+    _require(attempts and record["attempts"] == close_leg["attempts"]
              and all(type(row["attempt"]) is int and row["attempt"] == i and row["redone"] is (i < len(attempts))
                      for i, row in enumerate(attempts, 1)))
     selected = attempts[-1]
     runtime = _path(selected["output_dir"])
     _require(runtime == prefix + "runtime" and selected["redone"] is False)
     terminal = _entry_from_check(check, "terminal_map", runtime + "/runtime_custody.json")
-    custody = _read_doc(root, terminal)
+    # The terminal map names the exact run directory from the projected result.
+    terminal_raw = _read(root / terminal["path"], terminal)
+    custody = project_json(terminal_raw, TERMINAL_FIELDS, strict=True)
     _require(custody["schema"] == "joulewise.align.r1_runtime_custody.v1" and custody["status"] == "complete")
 
     def file(role, member):
@@ -196,12 +349,17 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
         return _entry_from_check(check, role, runtime + "/" + member, pin, parent=terminal["sha256"])
 
     result_entry = file("result", "runtime_result.json")
-    result = project_json(_read(root / result_entry["path"], result_entry), RESULT_FIELDS)
+    result_fields = RUNTIME_RESULT_FIELDS if synthetic else NATIVE_RUNTIME_RESULT_FIELDS
+    result = project_json(_read(root / result_entry["path"], result_entry), result_fields, strict=True)
+    expected_turn = {"turn_start_ns", "turn_end_ns", "first_token_ns"} if result["prefill_tokens"] is not None else set()
+    if expected_turn - result.keys() or expected_turn - record["result"].keys():
+        raise TimeFieldError("missing native runtime turn fields")
     _require(result["schema"] == "joulewise.align.r1_runtime_result.v1"
              and result["kind"] == "cadence-leg" and result["leg_id"] == leg_id
              and result["g0_role"] == role and (synthetic or result["backend"] != "synthetic")
              and result["leg_status"] == selected["leg_status"]
-             and all(value == result[key] for key, value in record["result"].items() if key in result)
+             and all(value == result[key] for key, value in record["result"].items()
+                     if key in result and key != "script_complete")
              and all(key in record["result"] for key in ("leg_id", "leg_status", "bundle", "g0_released",
                                                         "g0_role", "script_record_sha256")))
     admitted = close_leg["summary"]["admitted"]
@@ -209,25 +367,33 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
     _require(close_leg["summary"]["leg_id"] == leg_id and type(admitted) is bool and type(dispatched) is bool
              and (not admitted or (dispatched and result["leg_status"] == "complete"
                                    and result["member_status"] == "succeeded" and not selected["contaminated"])))
+    script_complete = result.get("script_complete")
+    if (type(script_complete) is not bool or record["result"].get("script_complete") is not script_complete
+            or (script_complete and not dispatched)
+            or (not script_complete and (admitted or dispatched and result["leg_status"] == "complete"))):
+        raise TimeFieldError("inconsistent native admission or terminal completion")
     bundle = _path(result["bundle"])
     _require(bundle.startswith("runs/") and len(bundle.split("/")) == 2)
+    member_files = {bundle + "/" + member: None for member in (*FILES.values(),
+                                                               "outputs/align_window_reference.json")}
+    member_files["script-work.json"] = None
+    custody = project_json(terminal_raw, {"files": member_files}, strict=True)
     run_id = bundle.split("/")[1]
+    require_episode_identifier(run_id, leg_id)
     files = {"leg_record": leg_record, "leg_spec": leg_spec, "terminal_map": terminal, "result": result_entry}
-    hidden_delivered = None
+    hidden_delivered = work = None
     if dispatched:
         script = file("script", "script-work.json")
         files["script"] = script
-        work = project_json(_read(root / script["path"], script), WORK_FIELDS)
+        work = project_json(_read(root / script["path"], script), WORK_FIELDS, strict=True)
         _require(result["script_record_sha256"] == script["sha256"]
                  and work["schema"] == "joulewise.cadence_script_work.v1" and work["leg_id"] == leg_id
-                 and work["leg_spec_sha256"] == canonical_spec_sha and work["script"] == spec["script"]
-                 and type(work["complete"]) is bool and result["script_complete"] is work["complete"])
+                 and work["leg_spec_sha256"] == canonical_spec_sha and work["script"] == spec["script"])
+        if work.get("complete") is not script_complete:
+            raise TimeFieldError("native work completion disagrees with both result records")
         hidden = [step["actual_tokens"] for step in work["steps"] if step["kind"] == "hidden"]
         if len(hidden) == 1:
             hidden_delivered = hidden[0]
-            _require(type(hidden_delivered) is int and 0 <= hidden_delivered <= spec["script"]["hidden_tokens"])
-        if work["complete"] and spec["script"]["kind"] == "hidden":
-            _require(hidden_delivered == spec["script"]["hidden_tokens"])
         for name, member in FILES.items():
             files[name] = file(name, bundle + "/" + member)
     if role == "capture":
@@ -241,22 +407,65 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
     else:
         reference_sha = result["g0_reference_record_sha256"]
     _require(_hex_pin(reference_sha, 64))
-    return {
+    position = {
         "attempt": selected["attempt"], "role": role, "reference_sha256": reference_sha,
         "kind": spec["script"]["kind"], "admitted": admitted, "g0_released": dispatched,
         "leg_status": result["leg_status"], "script_complete": result["script_complete"],
         "hidden_delivered": hidden_delivered, "spec_sha256": canonical_spec_sha,
         "span_id": check["span_id"], "bundle": runtime + "/" + bundle, "run_id": run_id, "files": files,
     }
+    return position, work
+
+
+def _blind_leg(index, position, work, issued, plan):
+    """Construct the science input from verified fields with fixed roles."""
+    episode = rails = dc = None
+    steps = ()
+    if work is not None:
+        _check_script_requests(work, issued)
+    if position["g0_released"]:
+        source = plan.episode.projected_episode
+        episode = analysis.BlindEpisode(
+            source.start_ns, source.end_ns,
+            tuple(analysis.BlindTurn(turn.start_ns, turn.end_ns, turn.first_token_ns, turn.context_tokens,
+                                     turn.prefill_tokens, turn.decode_tokens, turn.hidden_tokens,
+                                     turn.logged, bool(turn.tool_calls)) for turn in source.turns),
+            tuple(analysis.BlindInterval(analysis.IntervalKind(row["kind"]), row["start_ns"], row["end_ns"],
+                                         row["turn"] if row["kind"] == "H" else None)
+                  for row in analysis.thermal_intervals(source.hardware)),
+        )
+        rail = plan.rail
+        offset = rail.mapping.offset_ns
+        rails = analysis.BlindSupport(
+            tuple(stamp + offset for stamp in rail.times), rail.period_ns, rail.mapping.uncertainty_ns, offset,
+            tuple(start + offset for start in rail.starts),
+        )
+        selected = plan.dc.selected
+        if selected is not None:
+            dc = analysis.BlindSupport(tuple(stamp - selected.offset_ns for stamp in selected.times),
+                                       selected.period_ns, selected.width_ns, -selected.offset_ns)
+        if position["script_complete"]:
+            steps = tuple(analysis.BlindStep(
+                analysis.StepKind(row.kind), row.start_ns, row.end_ns, row.complete,
+                row.requested_tokens if row.requested_tokens is not None else int(row.requested_s),
+                row.first_ns, row.delivered_tokens, row.context_tokens,
+            ) for row in script_steps(work, issued["kind"]))
+    return analysis.BlindLeg(index, analysis.ScriptKind(issued["kind"]), position["g0_released"],
+                             position["admitted"], position["script_complete"], tuple(map(int, issued["turn_tokens"])),
+                             int(issued["hidden_tokens"]), int(issued["gap_s"]), int(issued["recovery_s"]),
+                             steps, episode, rails, dc)
 
 
 @dataclass
-class Inputs:
+class SourceBindings:
+    """Authenticated locators and registered file commitments."""
+
     source: Path
     private: Path
     inventory: dict
-    legs: dict
-    certificates: dict
+    legs: dict = field(default_factory=dict)
+    certificates: dict = field(default_factory=dict)
+    timing: dict = field(default_factory=dict)
 
     @property
     def positions(self):
@@ -288,28 +497,38 @@ class Inputs:
             raise ReaderBindingError("stage-1 inventory")
 
 
+@dataclass(frozen=True)
+class Inputs:
+    projection: analysis.BlindProjection
+    admissions: dict
+    sources: SourceBindings
+
+
 def _make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic):
     kit_sha = digest(kit_raw)
     kit = _kit_inputs(kit_raw, runner_commit, synthetic=synthetic)
     inventory = dict(schema=INVENTORY_SCHEMA, kit_sha256=kit_sha, runner_commit=runner_commit,
                      spans={}, positions={})
-    result = Inputs(source, private, inventory, {}, {})
+    sources = SourceBindings(source, private, inventory)
+    legs, certificate_entries = [], {}
+    episode_ids = set()
     _require(len(checks) == 2 and len({row["span_id"].casefold() for row in checks}) == 2
              and len({row["check_item"] for row in checks}) == len({row["close_item"] for row in checks}) == 2)
     for number, (ids, check) in enumerate(zip((PILOT, REMAINDER), checks, strict=True), 1):
         span_id = check["span_id"]
+        require_identifier(span_id, FIXTURE_SPAN_ID_PATTERN if synthetic else SPAN_ID_PATTERN)
         root = source / span_id
         _require(check["runner_commit"] == runner_commit)
-        close_entry, close, streams = _close(kit_sha, runner_commit, check, root, ids, synthetic=synthetic)
+        close_entry, close_legs, streams = _bind_span(kit_sha, runner_commit, check, root, ids, synthetic=synthetic)
         stream_views = tuple(blind_stream(entry["path"], _read(root / entry["path"], entry)) for entry in streams)
         span = dict(layout_index=number, close_item=check["close_item"], check_item=check["check_item"],
                     offload_manifest_sha256=check["offload_manifest_sha256"], close_receipt=close_entry,
                     streams=streams, capture_leg=ids[0])
-        result.spans[span_id] = span
-        for ordinal, (leg_id, close_leg) in enumerate(zip(ids, close["legs"], strict=True)):
-            position = _terminal(root, check, close_leg, kit[leg_id], ordinal, synthetic=synthetic)
+        sources.spans[span_id] = span
+        for ordinal, (leg_id, close_leg) in enumerate(zip(ids, close_legs, strict=True)):
+            position, work = _terminal(root, check, close_leg, kit[leg_id], ordinal, synthetic=synthetic)
             position.update(span_index=number, disposition_sha256=None, certificate=None)
-            result.positions[leg_id] = position
+            sources.positions[leg_id] = position
             if ordinal == 0:
                 span.update(capture_attempt=position["attempt"], reference_sha256=position["reference_sha256"],
                             capture_run_id=position["run_id"], capture_config_sha256=position["files"]["config"]["sha256"],
@@ -322,38 +541,56 @@ def _make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic):
 
             files = position["files"]
             episode_id = episode_sha = script_sha = None
+            issued = kit[leg_id]["script"]
+            plan = None
             if position["g0_released"]:
                 payloads = {name: _read(root / files[name]["path"], files[name]) for name in FILES}
                 timing, period, evidence = binding_projection(
                     payloads["episode"], payloads["config"], payloads["metadata"],
-                    run_id=position["run_id"], config_sha256=files["config"]["sha256"],
+                    run_id=position["run_id"], config_sha256=files["config"]["sha256"], synthetic=synthetic,
                 )
+                if timing.episode_id in episode_ids:
+                    raise TimeFieldError("duplicate native episode identity")
+                require_episode_identifier(timing.episode_id, leg_id)
+                episode_ids.add(timing.episode_id)
                 rail = rail_timing(payloads["rails"], timing, period, evidence)
                 dc = select_dc(timing, stream_views)
+                plan = LegTiming(timing, rail, evidence, dc)
+                sources.timing[leg_id] = plan
                 episode_id, episode_sha, script_sha = timing.episode_id, files["episode"]["sha256"], files["script"]["sha256"]
-                certificate = canonical({
+                certificate_entries[leg_id] = (close_entry["sha256"], {
                     "schema": CERTIFICATE_SCHEMA, "leg_id": leg_id, "span_id": span_id,
                     "episode_sha256": episode_sha, "rails": rail.evidence(),
                     "input_sha256": {name: pin["sha256"] for name, pin in files.items()},
                     "stream_sha256": {entry["path"]: entry["sha256"] for entry in streams},
                     **dc.evidence(),
                 })
-                result.certificates[leg_id] = certificate
-                position["certificate"] = _pin("certificate", f"certificates/{leg_id}.json",
-                                               {"size": len(certificate), "sha256": digest(certificate)},
-                                               close_entry["sha256"])
-            result.legs[leg_id] = {
+            legs.append(_blind_leg(len(legs), position, work, issued, plan))
+            sources.legs[leg_id] = {
                 "identity": [KIT_ID, kit_sha, runner_commit, number, leg_id, position["attempt"]],
                 "role": position["role"], "reference": position["reference_sha256"],
                 "script_sha": script_sha, "kind": position["kind"], "admitted": position["admitted"],
                 "g0_released": position["g0_released"], "episode_id": episode_id, "episode_sha256": episode_sha,
             }
-    return result
+    projection = analysis.BlindProjection(kit_sha, tuple(legs))
+    admissions = dict(zip(IDS, analysis.dry_run(projection), strict=True))
+    for leg_id, (parent, fields) in certificate_entries.items():
+        admission = admissions[leg_id]
+        certificate = canonical(dict(fields, admission=admission.disposition, admission_reason=admission.reason,
+                                     fit_channels=admission.fit_channels, estimate_shape=admission.estimate_shape))
+        sources.certificates[leg_id] = certificate
+        sources.positions[leg_id]["certificate"] = _pin(
+            "certificate", f"certificates/{leg_id}.json",
+            {"size": len(certificate), "sha256": digest(certificate)}, parent,
+        )
+    return Inputs(projection, admissions, sources)
 
 
 def make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic=False):
     try:
         return _make_inputs(source, private, kit_raw, checks, runner_commit, synthetic=synthetic)
+    except RosterIdentifierError as error:
+        raise GateRefusal("ROSTER_IDENTIFIER") from error
     except (FileNotFoundError, TimeFieldError) as error:
         raise GateRefusal("INPUT_CHANNELS") from error
     except (AttributeError, KeyError, TypeError, ValueError, OSError, OverflowError) as error:
@@ -372,25 +609,29 @@ def apply_disposition(inputs, disposition_raw):
         dispositions = {row["leg_id"]: row for row in document["legs"]}
         _require(dispositions and len(dispositions) == len(document["legs"]), "INPUT_CHANNELS")
         disposition_sha = digest(disposition_raw)
-    supported_hidden = []
-    for leg, raw in inputs.certificates.items():
+    disposed_legs = frozenset(dispositions)
+    for leg, raw in inputs.sources.certificates.items():
         certificate = load_canonical(raw)
         code = certificate["dc_code"]
         row = dispositions.pop(leg, None)
-        position = inputs.positions[leg]
         if code == "ok":
             _require(row is None, "INPUT_CHANNELS")
-            if (position["admitted"] and position["kind"] == "hidden" and position["script_complete"]
-                    and type(position["hidden_delivered"]) is int and position["hidden_delivered"] > 0):
-                supported_hidden.append(position["hidden_delivered"])
         else:
             _require(code in ELIGIBLE and row == {"leg_id": leg, "code": code, "certificate_sha256": digest(raw)},
                      "INPUT_CHANNELS")
     _require(not dispositions, "INPUT_CHANNELS")
     if disposition_sha is not None:
-        _require(len(supported_hidden) >= 4 and len(set(supported_hidden)) == 3, "INPUT_CHANNELS")
-        for position in inputs.positions.values():
+        # Authorize the requested DC exclusions against the issued roster.
+        # The actual fit quorum below also accounts for the blind verdicts.
+        authorized_doses = (leg.hidden_dose for leg in inputs.projection.legs
+                            if leg.kind is analysis.ScriptKind.HIDDEN and IDS[leg.index] not in disposed_legs)
+        _require(has_dose_quorum(authorized_doses), "INPUT_CHANNELS")
+        for position in inputs.sources.positions.values():
             position["disposition_sha256"] = disposition_sha
+    for name in CHANNELS:
+        doses = (leg.hidden_dose for leg in inputs.projection.legs
+                 if name in inputs.admissions[IDS[leg.index]].fit_channels)
+        _require(has_dose_quorum(doses), "insufficient_legs")
 
 
 def write_or_compare(directory, name, data):

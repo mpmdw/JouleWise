@@ -763,7 +763,13 @@
                 "envelope_counts",
                 "envelope_stamps",
                 "other_partition",
-                "leg_record_invalid"
+                "leg_record_invalid",
+                "script_incomplete",
+                "runner_unadmitted",
+                "token_delivery",
+                "gap_incomplete",
+                "recovery_incomplete",
+                "phase_denominator"
               ]
             }
           }

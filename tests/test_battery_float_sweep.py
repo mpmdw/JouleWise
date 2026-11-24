@@ -81,6 +81,10 @@ READERS = {
     "joulewise/analysis_engine/inputs.py": (
         "bracket rows (block-5 archive context)", "outside the derivation scope: the claim gate reads the "
         "authenticated archive context's window_bracket b_fiducial_s (lane L9 S5)"),
+    "joulewise/cadence_looks/controls_metadata.py": (
+        "blind schema (member metadata)", "validates bound token shape and projects a placeholder "
+        "through the ctl-01 input gates; test_v10_metadata_extensions_stay_out_of_projection_and_output "
+        "guards conversion and checks the private and public outputs"),
     "joulewise/b5_analysis/sensitivity.py": (
         "bracket rows (b5_analysis.bracket)", "outside the derivation scope: compares each window's "
         "authenticated WindowBracket and archive-context bound with the sensitivity bound (lane L9 S9)"),

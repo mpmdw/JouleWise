@@ -1,7 +1,7 @@
 #!/usr/bin/env python3.13
 """Synthetic-only registrar and observer for the frozen ctl bundle driver."""
 
-from dataclasses import replace
+from dataclasses import asdict, fields as dataclass_fields, is_dataclass, replace
 from contextlib import contextmanager
 from hashlib import sha256
 from importlib import import_module, util
@@ -9,6 +9,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import socket
 import subprocess
 import sys
@@ -198,7 +199,8 @@ def install(world, bench, fault, legacy):
                                     kernel_sha256=dict(zip(book.KERNEL_ROLES, book.AUDITED_KERNEL, strict=True)),
                                     suite_sha256={name: digest((repo/book.SUITE/name).read_bytes())
                                                   for name in book.SUITE_NAMES},
-                                    v3_1_count=846, installed_bundle_cases=79, h_output_bytes_equal=True))
+                                    v3_1_count=846, installed_bundle_cases=book.INSTALLED_BUNDLE_RESULT,
+                                    supersession_sha256=book.SUPERSESSION_SHA256, h_output_bytes_equal=True))
     receipt_sha = digest((repo/book.BYTE_RECEIPT).read_bytes())
     add_event(repo, "byte_pass", manifest_sha256=manifest_sha, receipt_sha256=receipt_sha, hand_vectors_passed=True)
     add_event(repo, "receipt", revision=revision, manifest_sha256=manifest_sha)
@@ -222,9 +224,14 @@ def _production_modules(repo):
     launcher = util.module_from_spec(spec)
     loader.exec_module(launcher)
     launcher._public_tip = lambda: git(repo, "rev-parse", book.REF)
-    inventory = launcher._registration(repo)
+    try:
+        inventory = launcher._registration(repo)
+    except launcher.Spent:
+        os.write(2, b"REFUSE SPENT\n")
+        return False
     sys.path.insert(0, str(repo))
     sys.meta_path.insert(0, launcher.RegisteredModules(repo, inventory))
+    return True
 
 
 def run(operation, world, bench, fault):
@@ -258,7 +265,8 @@ def run(operation, world, bench, fault):
     if fault == "installed_kernel_drift":
         path = repo/manifest.CODE_PATHS["print_code/attribution"]
         put(path, path.read_bytes() + b"\n")
-    _production_modules(repo)
+    if not _production_modules(repo):
+        return 3
     from joulewise.cadence_looks import controls_inputs as inputs, controls_layout as layout, controls_reader as reader
     from joulewise.cadence_looks import controls_run as worker
     from joulewise.cadence_looks.controls_book import Authority, Book
@@ -267,13 +275,126 @@ def run(operation, world, bench, fault):
     make_inputs = inputs.make_inputs
     inputs.make_inputs = lambda *args: make_inputs(*args, synthetic=True)
 
+    if fault in ("guard_blind_values", "guard_metadata_extensions", "guard_measured_sizes",
+                 "guard_model_filenames"):
+        from joulewise.cadence_looks import controls_time_fields as fields
+
+        forbidden = ("91827.375", "19.8375")
+        if fault == "guard_metadata_extensions":
+            forbidden += ("synthetic_extension_opaque",)
+        if fault == "guard_model_filenames":
+            forbidden += ("18.625", "calibration-ambient_temp_c=")
+        size_token = re.compile(r"(?<![\w.])(?:99183|876543)(?![\w.])")
+
+        def contains_observation(text):
+            if fault == "guard_measured_sizes":
+                return size_token.search(text) is not None
+            return any(value in text for value in forbidden)
+        original_loads, original_convert = json.loads, fields._convert
+        original_project = fields.project_json
+
+        def guarded_loads(raw, *args, **kwargs):
+            text = raw.decode("utf-8") if isinstance(raw, (bytes, bytearray)) else raw
+            assert not contains_observation(text), "unprojected blind JSON decode"
+            return original_loads(raw, *args, **kwargs)
+
+        def guarded_convert(kind, text):
+            assert not contains_observation(text), "blind observation conversion"
+            return original_convert(kind, text)
+
+        def guarded_project(raw, projection, **kwargs):
+            result = original_project(raw, projection, **kwargs)
+            assert not contains_observation(repr(result)), "observation in blind projection"
+            if fault == "guard_model_filenames" and b"calibration-ambient_temp_c=" in raw:
+                if projection is reader.EPISODE_FIELDS:
+                    put(bench / f"artifact-{operation}-episode.json", manifest.canonical(result))
+                if projection is reader.METADATA_FIELDS:
+                    put(bench / f"artifact-{operation}-metadata.json", manifest.canonical(result))
+            return result
+
+        json.loads, fields._convert = guarded_loads, guarded_convert
+        inputs.project_json = reader.project_json = guarded_project
+
+    if fault == "guard_measured_sizes":
+        episode_timing = reader.episode_timing
+
+        def observe_tool_timing(*args, **kwargs):
+            timing = episode_timing(*args, **kwargs)
+            episode = timing.projected_episode
+            if any(turn.tool_calls for turn in episode.turns):
+                put(bench / f"projection-{operation}.json", manifest.canonical(asdict(episode)))
+            return timing
+
+        reader.episode_timing = observe_tool_timing
+
+    if fault == "capture_blind_projection":
+        from enum import Enum
+        from unittest.mock import patch
+        from joulewise.cadence_looks import controls_analysis as analysis
+
+        run_dry = analysis.dry_run
+        phases = analysis.PhaseKernel.frozen().phases
+        phase_table = phases.phase_table
+
+        def closed(value):
+            if is_dataclass(value):
+                for field in dataclass_fields(value):
+                    closed(getattr(value, field.name))
+            elif isinstance(value, tuple):
+                for item in value:
+                    closed(item)
+            else:
+                assert value is None or type(value) in (int, bool) or isinstance(value, Enum), type(value)
+
+        def capture(projection):
+            assert isinstance(projection, analysis.BlindProjection)
+            assert len(projection.kit_sha256) == 64
+            closed(projection.legs)
+            put(bench / f"blind-{operation}.json", manifest.canonical(asdict(projection)))
+
+            def check_samples(episode, *args, **kwargs):
+                assert all(sample == 1.0 for trace in episode.power_traces
+                           if trace.channel != "package" for sample in trace.values)
+                return phase_table(episode, *args, **kwargs)
+
+            with (
+                patch.object(inputs, "_read", side_effect=AssertionError("dry run read a source")),
+                patch.object(reader.meter, "parse_bytes", side_effect=AssertionError("dry run decoded values")),
+                patch.object(phases, "phase_table", side_effect=check_samples) as same_phase_table,
+            ):
+                result = run_dry(projection)
+                assert same_phase_table.called
+                return result
+
+        analysis.dry_run = capture
+
+    if fault == "guard_battery_observations":
+        original_project = reader.project_json
+
+        def guarded_battery(raw, projection, **kwargs):
+            view = original_project(raw, projection, **kwargs)
+            if projection is reader.METADATA_FIELDS and "battery_float" in view:
+                for row in (view["battery_float"]["pre"], view["battery_float"]["post"]):
+                    assert row is None or all(row[key] is False for key in (
+                        "is_charging", "external_connected", "fully_charged", "passed",
+                    )), "an observed boolean entered the blind projection"
+            if projection is inputs.RUNTIME_RESULT_FIELDS and "battery" in view:
+                for key in ("first", "last"):
+                    row = view["battery"][key]
+                    assert row is None or row["ac"] is False, "an observed AC bit entered the blind projection"
+                nominal = view.get("pm_nominal")
+                assert nominal is False or nominal is None, "an observed thermal bit entered the blind projection"
+            return view
+
+        inputs.project_json = reader.project_json = guarded_battery
+
     if operation == "project":
         authority = Authority(Book(repo))
         binding, source, _ = worker._binding(authority, private)
         projection = worker._check_inputs(authority, binding, private, source)
         fd, _ = layout.open_directory(private)
         try:
-            worker._certificates(fd, projection, create=True)
+            worker._certificates(fd, projection.sources, create=True)
         finally:
             os.close(fd)
         return 0
@@ -282,11 +403,17 @@ def run(operation, world, bench, fault):
         with (bench/"events.jsonl").open("ab") as stream:
             stream.write(manifest.canonical(value) + b"\n")
 
+    if fault in ("marker_final_sync", "synthetic_reservation") or fault.startswith("typed_failure_"):
+        # Keep the production claim path usable on hosts that deny the
+        # literal reservation name even in a synthetic temporary directory.
+        layout.PRIVATE_NAME = "SYNTHETIC-RESERVATION"
     os_mkdir, os_fsync, original_claim = os.mkdir, os.fsync, layout.claim
     claim_parent = None
 
     def mkdir(path, *args, **kwargs):
         nonlocal claim_parent
+        if path == layout.PRIVATE_NAME and fault == "mkdir_denied":
+            raise PermissionError("synthetic reservation mkdir denial")
         result = os_mkdir(path, *args, **kwargs)
         if path == layout.PRIVATE_NAME:
             claim_parent = kwargs["dir_fd"]
@@ -298,7 +425,11 @@ def run(operation, world, bench, fault):
         if fault == "mkdir_sync_once" and fd == claim_parent:
             claim_parent = None
             raise OSError("synthetic reservation directory sync")
-        return os_fsync(fd)
+        result = os_fsync(fd)
+        if fault == "marker_final_sync" and fd == claim_parent and (private / layout.MARKER_NAME).is_file():
+            claim_parent = None
+            raise OSError("synthetic error after syncing the bound marker")
+        return result
 
     def claim(*args):
         restricted = original_claim(*args)
@@ -366,11 +497,29 @@ def run(operation, world, bench, fault):
         return positions
 
     reader.meter.parse_bytes, reader.first_read = decode, first_read
+    if fault.startswith("typed_failure_"):
+        from joulewise.cadence_looks import controls_release
+
+        def fail(*args, **kwargs):
+            raise ValueError("synthetic injected failure")
+
+        if fault == "typed_failure_read":
+            reader.first_read = fail
+        elif fault == "typed_failure_calculate":
+            controls_release.calculate_private = fail
+        elif fault == "typed_failure_publish":
+            controls_release._write_outputs_at = fail
     if fault in ("observe_ruled_h", "observe_zero_h_on_clone"):
         observe_kernel(reader, bench, force_zero=fault == "observe_zero_h_on_clone")
+    if fault == "worker_entrypoint":
+        return worker.main([operation], repo)
     try:
         return worker.run(operation, repo)
     except layout.GateRefusal as error:
+        if fault == "require_structural_cause":
+            from joulewise.cadence_looks.controls_time_fields import TimeFieldError
+
+            assert isinstance(error.__cause__, TimeFieldError), "wrong blind refusal cause"
         if os.environ.get("CTL_BENCH_DEBUG"):
             with (bench/"driver-debug.txt").open("a") as stream:
                 print_exc(file=stream)

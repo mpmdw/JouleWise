@@ -312,8 +312,10 @@ def probe_link(private, public):
         raise GateRefusal("PUBLIC_LINK") from error
 
 
-def marker_valid(private, reservation, history):
+def _marker_matches(private, reservation, stage1_records):
     try:
+        if reservation is None or not stat.S_ISDIR(reservation.st_mode):
+            return False
         fd = _entry(private, MARKER_NAME, FILE_FLAGS)
         with os.fdopen(fd, "rb") as stream:
             require_private(fd, directory=False)
@@ -323,13 +325,16 @@ def marker_valid(private, reservation, history):
                 and marker.keys() == {"look_id", "manifest_sha256", "stage1_sha256", "device", "inode"}
                 and marker["look_id"] == LOOK_ID
                 and all(_hex_pin(marker[key], 64) for key in ("manifest_sha256", "stage1_sha256"))
-                and any(row.get("look_id") == LOOK_ID and row.get("kind") == "stage1"
+                and any(row.get("look_id") == LOOK_ID
                         and all(row.get(key) == marker[key] for key in ("manifest_sha256", "stage1_sha256"))
-                        for row in history)
-                and reservation is not None and stat.S_ISDIR(reservation.st_mode)
+                        for row in stage1_records)
                 and (marker["device"], marker["inode"]) == _identity(reservation))
     except (OSError, ValueError, TypeError, AttributeError):
         return False
+
+
+def marker_valid(private, reservation, history):
+    return _marker_matches(private, reservation, (row for row in history if row.get("kind") == "stage1"))
 
 
 def require_unspent_history(history):
@@ -365,20 +370,35 @@ def claim(private, public, public_record, redirect):
         os.fsync(private)
         return restricted
     except BaseException as error:
+        collision = not made and isinstance(error, FileExistsError)
         try:
-            if _observation(private, MARKER_NAME) is not None or not made:
-                raise ValueError("claim durability or ownership not established")
-            if restricted is not None:
-                for name in os.listdir(restricted):
-                    if name not in ("stdout", "stderr"):
-                        raise ValueError("unexpected claim setup artifact")
-                    os.unlink(name, dir_fd=restricted)
-                os.fsync(restricted)
-            os.rmdir(PRIVATE_NAME, dir_fd=private)
-            os.fsync(private)
+            if made and _observation(private, MARKER_NAME) is None:
+                if restricted is not None:
+                    for name in os.listdir(restricted):
+                        if name not in ("stdout", "stderr"):
+                            raise ValueError("unexpected claim setup artifact")
+                        os.unlink(name, dir_fd=restricted)
+                    os.fsync(restricted)
+                try:
+                    os.rmdir(PRIVATE_NAME, dir_fd=private)
+                except FileNotFoundError:
+                    pass
+                made = False
+                os.fsync(private)
         except (OSError, ValueError):
-            raise GateRefusal("HALF_MADE", status=4, special=True) from error
+            pass
         finally:
             if restricted is not None:
                 os.close(restricted)
+        try:
+            reservation = _observation(private, PRIVATE_NAME)
+        except OSError:
+            # A collision or unconfirmed rollback is evidence of a pathname.
+            half_made = made or collision
+        else:
+            if _marker_matches(private, reservation, (public_record,)):
+                raise GateRefusal("SPENT", status=3, special=True) from error
+            half_made = reservation is not None
+        if half_made:
+            raise GateRefusal("HALF_MADE", status=4, special=True) from error
         raise GateRefusal("CLAIM_SETUP") from error
