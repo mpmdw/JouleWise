@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "a lead RUN_STATE item on main issuing the ctl-01 pilot (RL-197c draft item 3) against /Users/edr/night-custody/magistrate/attempt-ledger.json (sha256 bebdff13...ee19). Quiet relaunches before then write nothing.",
+  "next_observable": "/Users/edr/campaign-out/cl-ctl-01/cq-ctl-01-s01-a1/runner_receipt.json for cq-ctl-01-s01-a1, then the magistrate's verified close and automatic desk result on main; the lead assigns the signed independent hand-read before span 2.",
   "open_items": [
+    {
+      "expires_epoch_s": 1795579200,
+      "item": 563,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 562,
@@ -245,11 +251,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "562",
-  "source_item_heading_date": "2026-11-23",
+  "source_item": "563",
+  "source_item_heading_date": null,
   "wait": {
-    "deadline_epoch_s": 1795579200,
-    "observable": "none",
-    "on_early_or_refused": "Arm nothing until a lead item on main issues the ctl-01 pilot (RL-197c draft item 3); only a launcher appends to the ledger from here. If the pilot item is on main, follow it. If none is on main by this deadline (item 561's expiry), mail the lead and Ed once that the ledger has been initialized since 19:27 Monday and the Mac is idle, and ask whether to resume the item 422 stability ladder (kit 07 L001 on pin A next, rank 1 from kit 14 under item 553)."
+    "deadline_epoch_s": 1795599900,
+    "observable": "result_json_exists",
+    "on_early_or_refused": "Read the verdict first. On pre-leg refusal no ctl leg is spent. On unproven close, appended attempt without receipt, refusal or missing result at deadline, preserve the ledger and outputs, hold ctl and notify the lead. Refer a stranded row to the research lead."
   }
 }

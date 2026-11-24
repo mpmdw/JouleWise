@@ -1052,6 +1052,138 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+563. **Lead: ISSUE counted cl-ctl-01 pilot L001-L003 on f45e22e4e, cq-ctl-01-s01-a1, RL-197c sequence 2 (predecessor cq-f2-stab-15-l010-a1; ledger bebdff13 from item 562); t0 by 21:27:30 tonight**
+
+```pointer
+owner: magistrate
+wait: result_json_exists
+deadline: 2026-11-25T01:45:00-08:00
+on_early_or_refused: Read the verdict first. On pre-leg refusal no ctl leg is spent. On unproven close, appended attempt without receipt, refusal or missing result at deadline, preserve the ledger and outputs, hold ctl and notify the lead. Refer a stranded row to the research lead.
+next_observable: /Users/edr/campaign-out/cl-ctl-01/cq-ctl-01-s01-a1/runner_receipt.json for cq-ctl-01-s01-a1, then the magistrate's verified close and automatic desk result on main; the lead assigns the signed independent hand-read before span 2.
+```
+
+```item
+{"expires_epoch_s": 1795579200, "issued_epoch_s": 1795490932, "number": 563, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+Issue **cq-ctl-01-s01-a1**, sequence 2. Run L001, L002 and L003 of `cl-ctl-01` once as the counted pilot and first native run of `f45e22e4efa6b48dd05f099f39eb62246e324177` (permanent tag `pin/cl-ctl-01-runner`). Item 543 records the executing audit, full green suite, F-11 synthetic launch-to-close and cold PASS on the issued kit. L001 captures the fresh span reference. L002 and L003 consume it. Dev-02 closed under item 365.
+
+**Lead's predecessor binding.** The verified Check of dispatch 552 and the successful Check of initializer issue **561** are on main. **The last armed span is `cq-f2-stab-15-l010-a1`.** Its immutable receipt is `/Users/edr/campaign-out/f2-stab-15/cq-f2-stab-15-l010-a1/runner_receipt.json`, SHA-256 `9cfedfdd46cbe2c59604052ece5cad443b2cd4d0bd1e2b8f22848eebd52571c8`, exact close `1795463380890712000` epoch ns. Its sequence-1 ledger at `/Users/edr/night-custody/magistrate/attempt-ledger.json` has SHA-256 `bebdff138f0e47d55f984baff9feb2723955171421bfa77e529075c2b07dee19`. The first-row sidecar at `/Users/edr/night-custody/magistrate/attempt-ledger.json.first-row.json` has SHA-256 `59b01bc296b4bf3ec2ab42bde742fcd4dd200c840957266839187a9db4b9ed8a`. Reconfirm no other span has armed. Hold on any change.
+
+**Queue and priority.** Stage these exact files at their repository-relative paths under the same `QUEUE_KITS_ROOT`. Fetch the queue-bearing revision of `ops/2026-11-22-ctl01-issue-path` (PR #943, target `audit/2026-11-10-fable`), or its landed audit revision. Record the full source commit in Start and check. Match both hashes.
+
+| File under `QUEUE_KITS_ROOT` | SHA-256 |
+|---|---|
+| `docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/ctl-01/kits/cl-ctl-01.issued.json` | `1d7d6f5fe8531b74401fb8d6e60b8fa17f068849e59ec3c241caaa6f523ff2bf` |
+| `docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/ctl-01/queues/ctl-01-s01-pilot.queue.json` | `1ad32b96c0deaf752989a6084606bc7a344a5cadfbc27295b82a95a1abcfe785` |
+
+Queue `cq-ctl-01-s01`, row 1, attempt 1, pilot roster only. Earliest local date Monday 23 November. Queue and typed issue expire exclusively Tuesday 24 November at 20:00 PST. Both launcher and agent-free child must reach their queue checks while valid. Place this admitted, ready registered product directly ahead of rank-4 stability under RL-197b §3.7, RL-200 §3 and item 536. Preserve higher ranks and dated-block fit. Item 552 reserves the immediate succession. If another arm would take precedence, refer the conflict to the lead.
+
+**Clock and fit.** Earliest t0 is the first actual start after the Check of 552, the initializer issue and its successful Check, and publication of this pilot issue on main, with the pinned close bound, queue, quiet host and time-fit checks satisfied. RL-179 row 4 imposes no timed close gap. The ctl kit has free t0. Its required `--batch-window 02:00-02:35` applies to validation, checklist, plan and launch. Keep the full 1,950 s soak and worst-work interval clear of that local band (item 507). Respect the standing deadline, higher-rank and quiet checks. At a Monday 10:50:01 L010 start, its expected close is 12:05:29. A midday pilot start is possible once the gates finish. The pinned plan at Monday 13:30 PST gives the following times.
+
+| Pilot plan | Elapsed from t0 | Monday PST |
+|---|---:|---:|
+| Expected work | 8,382 s (2 h 19 m 42 s) | 15:49:42 |
+| Worst-case work | 16,350 s (4 h 32 m 30 s) | 18:02:30 |
+| Runner launch minimum, including soak retry and cleanup reserves | 18,860 s | 18:44:20 |
+| Desk deadline, including 900 s issue slack (item 439) | 19,760 s | 18:59:20 |
+
+RL-197 fixes the pilot roster at three legs. No partial-roster substitution. The issue timestamp below is the same whole second as the typed header.
+
+```json
+{
+  "schema": "joulewise.cadence_span_dispatch.v1",
+  "attempt_id": "cq-ctl-01-s01-a1",
+  "campaign_id": "cl-ctl-01",
+  "kit_sha256": "1d7d6f5fe8531b74401fb8d6e60b8fa17f068849e59ec3c241caaa6f523ff2bf",
+  "frozen_pin": "f45e22e4efa6b48dd05f099f39eb62246e324177",
+  "roster": ["L001", "L002", "L003"],
+  "kit_positions": [1, 2, 3],
+  "issued_epoch_s": 1795490932,
+  "arg": "02:00-02:35",
+  "batch_windows": ["02:00-02:35"]
+}
+```
+
+**Magistrate Start and check.** Use a separate clean detached checkout at the admitted ctl pin. Apply PR #943's Shared Start and check. Check the standing directives, queue evidence and issues, vetoes, close and copy state, fence, maintenance marker, host settings, disk and meter, and agent/process censuses. Run the standing three quiet minutes before launch and refresh observations at actual t0. Use the measurement venv, the original desk lock/root from 552, the actual magistrate PID and authorized disk path. In the block, `QUEUE_EVIDENCE`, `QUEUE_ISSUES` and `OBSERVATIONS` are the current ordinary Start and check inputs. Determine the four close attestations from this receipt and current host census. Set `LAST_ARMED_SPAN_ID` from the actual arm history. Prepare the create-once output path's parent. Run once as the last act of the quiet activation. The launcher re-proves the predecessor and appends under lock before bootstrap.
+
+```bash
+(
+  set -euo pipefail
+  : "${CTL_CHECKOUT:?}" "${PYTHON_BIN:?}" "${QUEUE_KITS_ROOT:?}" "${CUSTODY_ROOT:?}"
+  : "${DISK_PATH:?}" "${MAGISTRATE_PID:?}" "${OBSERVATIONS:?}" "${QUEUE_EVIDENCE:?}" "${QUEUE_ISSUES:?}"
+  pin=f45e22e4efa6b48dd05f099f39eb62246e324177
+  predecessor=cq-f2-stab-15-l010-a1
+  pilot=cq-ctl-01-s01-a1
+  receipt='/Users/edr/campaign-out/f2-stab-15/cq-f2-stab-15-l010-a1/runner_receipt.json'
+  close_ns='1795463380890712000'
+  ledger=/Users/edr/night-custody/magistrate/attempt-ledger.json
+  output=/Users/edr/campaign-out/cl-ctl-01/cq-ctl-01-s01-a1
+  kit_sha=1d7d6f5fe8531b74401fb8d6e60b8fa17f068849e59ec3c241caaa6f523ff2bf
+  queue_sha=1ad32b96c0deaf752989a6084606bc7a344a5cadfbc27295b82a95a1abcfe785
+  base="$QUEUE_KITS_ROOT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/ctl-01"
+  kit="$base/kits/cl-ctl-01.issued.json"
+  queue="$base/queues/ctl-01-s01-pilot.queue.json"
+  tool="$CTL_CHECKOUT/scripts"
+  legs=L001,L002,L003
+  window=02:00-02:35
+
+  test "$(git -C "$CTL_CHECKOUT" rev-parse HEAD)" = "$pin"
+  test "$(git -C "$CTL_CHECKOUT" rev-parse --abbrev-ref HEAD)" = HEAD
+  ctl_status=$(git --no-optional-locks -C "$CTL_CHECKOUT" status --porcelain)
+  test -z "$ctl_status"
+  test "${LAST_ARMED_SPAN_ID:?}" = "$predecessor"
+  test "$receipt" = '/Users/edr/campaign-out/f2-stab-15/cq-f2-stab-15-l010-a1/runner_receipt.json'
+  test "${CLOSE_PROOF_RECEIPT:?}" = "$receipt"
+  test "${HOST_RESTORE_OK:?}" = 1
+  test "${FEEDS_STOPPED:?}" = 1
+  test "${GROUPS_ABSENT:?}" = 1
+  test "${FOREIGN_PROCESSES_ABSENT:?}" = 1
+  export CLOSE_PROOF_RECEIPT HOST_RESTORE_OK FEEDS_STOPPED GROUPS_ABSENT FOREIGN_PROCESSES_ABSENT
+  test ! -e "$output" && test ! -L "$output" || exit 1
+  check_sha() {
+    local result
+    result=$(shasum -a 256 "$1") || return 1
+    test "${result%% *}" = "$2"
+  }
+  check_sha "$receipt" '9cfedfdd46cbe2c59604052ece5cad443b2cd4d0bd1e2b8f22848eebd52571c8'
+  check_sha "$ledger" 'bebdff138f0e47d55f984baff9feb2723955171421bfa77e529075c2b07dee19'
+  check_sha "$ledger.first-row.json" '59b01bc296b4bf3ec2ab42bde742fcd4dd200c840957266839187a9db4b9ed8a'
+  check_sha "$kit" "$kit_sha"
+  check_sha "$queue" "$queue_sha"
+
+  "$PYTHON_BIN" -I -B "$tool/cadence_queue.py" validate-kit "$kit" --repo "$CTL_CHECKOUT" --batch-window "$window"
+  "$PYTHON_BIN" -I -B "$tool/cadence_queue.py" validate-queue "$queue" --kits-root "$QUEUE_KITS_ROOT"
+  "$PYTHON_BIN" -I -B "$tool/cadence_queue.py" next --queue "$queue" \
+    --evidence "$QUEUE_EVIDENCE" --issues "$QUEUE_ISSUES" | \
+    "$PYTHON_BIN" -I -B -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if (d["action"],d["plan_id"]) == ("arm",sys.argv[1]) else f"queue refused: {d}")' "$pilot"
+  "$PYTHON_BIN" -I -B "$tool/cadence_queue.py" checklist --kit "$kit" --kit-sha256 "$kit_sha" \
+    --observations "$OBSERVATIONS" --batch-window "$window"
+  proof=$("$PYTHON_BIN" -I -B "$tool/launch_cadence_span.py" close-proof --attempt-ledger "$ledger")
+  test "$proof" = "$(printf '%s\n%s\n%s' "$predecessor" "$close_ns" "$receipt")"
+  plan=$("$PYTHON_BIN" -I -B "$tool/cadence_legs_runner.py" plan --kit "$kit" \
+    --legs "$legs" --batch-window "$window" --t0 "$(date +%s)")
+  deadline=$(printf '%s\n' "$plan" | "$PYTHON_BIN" -I -B -c '
+import json, sys
+p = json.load(sys.stdin)
+if not p["blackout_clear"] or p["batch_windows"] != ["02:00-02:35"] or [l["leg_id"] for l in p["legs"]] != ["L001", "L002", "L003"]:
+    raise SystemExit("pilot plan or clock window changed")
+print(int(p["launch_deadline_epoch_s"]) + 900)')
+  "$PYTHON_BIN" -I -B "$tool/launch_cadence_span.py" launch \
+    --repo "$CTL_CHECKOUT" --python-bin "$PYTHON_BIN" --kit "$kit" --kit-sha256 "$kit_sha" \
+    --queue "$queue" --queue-sha256 "$queue_sha" --queue-kits-root "$QUEUE_KITS_ROOT" \
+    --legs "$legs" --batch-window "$window" --output "$output" --disk-path "$DISK_PATH" \
+    --custody-root "$CUSTODY_ROOT" --magistrate-pid "$MAGISTRATE_PID" --deadline "$deadline" \
+    --span-id "$pilot" --attempt-ledger "$ledger" --previous-close-receipt "$receipt" --t0-not-before-ns "$close_ns"
+)
+```
+
+**Close and handoff.** At the first activation with the fence PID gone and the receipt present, read the verdict. Verify native receipt identity, kit, pin, issued roster, recorded start/close, batch window, completed legs, first consumer release, restore and stopped feeds/groups. Record the full receipt and post-append ledger SHA-256s, close ns, usual copy proof and automatic desk disposition. Copy at once under the standing rule. After verified close and automatic desk PASS, the lead assigns an independent F-3(c) and RL-197 §3.6 hand-read. For every pilot leg verify the visible-token and context sums, exact first-visible stamps, step order/non-overlap within episode after G0, and recovery end by episode end. Sign PASS or HOLD against this attempt, issued kit and receipt digest. An absent or unevaluable leg cannot establish PASS. Keep the look sealed. Hold span 2 and all intervening arms on this sequence-2/3 route. L004–L012 need a separate lead issue and a separately hashed queue binding the signed pilot PASS.
+
+On a pre-leg refusal no ctl leg is spent. Determine whether sequence 2 was appended. An appended attempt with no receipt, refused ledger state or unexplained predecessor-proof refusal goes via the lead to the research lead under RL-197c §3.7. Preserve the ledger, sidecar and outputs. No second launch, reseed, manual row edit or span-2 authority follows from this item.
+
+- **Lead note (19:31 Mon).** The queue-bearing revision is `c03a23411` on `ops/2026-11-22-ctl01-issue-path` (PR #943). Item 562 verified the sequence-1 ledger and sidecar SHA-256s bound above. The pinned planner admits a pilot t0 until **21:27:30 tonight**; launch in this activation if the start checks pass. If 21:27:30 is missed, the next legal t0 is the next eligible start under the same checks (this item and its queue stay valid until Tue 20:00). Span 2 (L004-L012) follows only after the pilot PASS and a separate lead item.
+
 562. **Magistrate fe96d29a (headless, Opus 5.5), 2026-11-23 19:25- PST: item 561 RL-197c ledger initialization CHECK OK: sequence 1 = cq-f2-stab-15-l010-a1 (dispatch 552), ledger sha256 bebdff13...ee19, sidecar 59b01bc2...ed8a; last arm still 552; 561 CLOSED; arm nothing until the lead issues the ctl-01 pilot**
 
 ```pointer
