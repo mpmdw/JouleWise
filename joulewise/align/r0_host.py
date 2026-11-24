@@ -33,12 +33,17 @@ monotonic clocks move apart by more than WALL_DIVERGENCE_LIMIT_NS is
 flagged, which withholds publication, so no unflagged window relies on a
 conversion across a wall step.
 
-A zero-counter opening, once a series read proves it, is a monotonic
-instant and stays proven. A sampled absence is the read's own midpoint. A
-printed start second is converted once by each read that lists the process,
-and the exact check at a later read uses every conversion proven by then.
-A wall step after a proof, gain or loss, therefore never moves or removes an
-opening. It can only add one, so it can only make the verdict stricter.
+A process the series first lists after its first read has one birth bound,
+fixed by that first sighting and never recomputed. It was born after the
+last series read that did not list it and before the first that did. Its
+printed start second can only narrow that bracket. That second is converted
+once, with the largest wall offset either bracket read measured, so a clock
+change between the reads cannot date the birth later than it was. A zero
+counter is inferred only at the bound's earliest instant, so contention is
+claimed only if it holds for every birth time inside it. The exact check
+and the lifetime check use the same bound. Every counter reading stays a
+lower bound for everything inferred after it: an absence after a reading,
+or a later reading of the same start second, proves nothing.
 """
 from __future__ import annotations
 
@@ -246,45 +251,91 @@ def _exact_cpu_evidence(identity, row, baseline, basis):
 
 
 def _exact_window_evidence(earlier, later):
-    """Evidence from a sampled opening, including an identity absent at that read."""
-    measured, absent = [], []
+    """Growth between two readings of the same identity, charged to 30 s.
+
+    An identity missing from ``earlier`` gets no zero here: its only zero
+    is its birth bound's (``_BirthBound``), never an absence read after a
+    reading of it.
+    """
+    measured = []
     for identity, row in later.rows.items():
         before = earlier.rows.get(identity)
-        if before is None:
-            if row["contaminant"]:
-                evidence = _exact_cpu_evidence(identity, row, 0, "CPU since an accounting read proved absence")
-                if evidence:
-                    absent.append(evidence)
-        elif "peak_cpu_seconds" not in before and (row["contaminant"] or before["contaminant"]):
+        if (before is not None and "peak_cpu_seconds" not in before
+                and (row["contaminant"] or before["contaminant"])):
             evidence = _exact_cpu_evidence(identity, row, before["cumulative_cpu_seconds"],
                                            "CPU between two samples at most 30 s apart, charged to 30 s")
             if evidence:
                 measured.append(evidence)
-    return measured, absent
+    return measured
+
+
+def _stamp_offsets_ns(read):
+    return [stamp.wall_ns - stamp.monotonic_ns
+            for stamp in (read.started, read.finished, getattr(read, "admitted_finish", read.finished))]
+
+
+@dataclass(frozen=True)
+class _BirthBound:
+    """Where a process the series first saw at ``sighted`` was born, in monotonic ns.
+
+    It was born after the last series read that did not list it
+    (``absent``) and before the first that did (``sighted``). Its printed
+    start second can only narrow that bracket. It is converted once, when
+    the process is first seen, with the largest wall offset either bracket
+    read measured, because the birth lies between them. That is the
+    earliest instant any offset in the bracket allows, so a clock change
+    between the reads cannot date the birth late. No later read converts it
+    again. ``printed_ns`` is that conversion; it narrows only from inside
+    the bracket.
+    """
+    absent_midpoint_ns: int
+    absent_started_ns: int
+    sighted_midpoint_ns: int
+    sighted_finished_ns: int
+    printed_ns: int
+
+    @property
+    def zero_ns(self):
+        """The exact check's zero: the earliest birth the samples allow."""
+        if self.absent_midpoint_ns < self.printed_ns < self.sighted_midpoint_ns:
+            return self.printed_ns
+        return self.absent_midpoint_ns
+
+    @property
+    def lifetime_floor_ns(self):
+        """The lifetime check's earliest birth, on its read-bracket convention."""
+        if self.printed_ns <= self.sighted_finished_ns:
+            return max(self.absent_started_ns, self.printed_ns)
+        return self.absent_started_ns
+
+
+def _birth_bound(row, absent, sighted):
+    return _BirthBound(absent.midpoint_ns, absent.started.monotonic_ns, sighted.midpoint_ns,
+                       sighted.finished.monotonic_ns,
+                       int(row["start_epoch_s"]) * 1_000_000_000
+                       - max(_stamp_offsets_ns(absent) + _stamp_offsets_ns(sighted)))
 
 
 def _birth_window_evidence(current, births, dwell_ns):
-    """The printed start second supplies a zero counter even between samples.
+    """A zero counter at each newcomer's birth bound, charged to 30 s.
 
-    ``births`` maps an identity absent from the series' first read to its
-    proven openings: monotonic ns -> midpoint of the first series read whose
-    own wall offset converted the printed start to that instant. ``current``
-    can use every opening proven by then, so a wall step after a proof (gain
-    or loss) adds an opening and never moves or removes one. The latest
-    opening not after ``current`` gives the shortest, most conservative span.
+    ``births`` holds the bound fixed when the series first saw each identity
+    absent from its first read. A later read's offset never moves it, so a
+    later wall step, gain or loss, cannot change this evidence.
     """
     windows = {}
     closing_ns = current.midpoint_ns
     for identity, row in current.rows.items():
-        if not row["contaminant"]:
+        bound = births.get(identity)
+        if bound is None or not row["contaminant"]:
             continue
-        proven = [born for born, proved_ns in births.get(identity, {}).items()
-                  if proved_ns <= closing_ns and born <= closing_ns]
-        if not proven or closing_ns - max(proven) > dwell_ns:
-            continue
-        evidence = _exact_cpu_evidence(identity, row, 0, "CPU since the printed start second")
-        if evidence:
-            windows.setdefault(max(proven), []).append(evidence)
+        zero_ns = bound.zero_ns
+        if 0 <= closing_ns - zero_ns <= dwell_ns:
+            basis = ("CPU since an accounting read proved absence" if zero_ns == bound.absent_midpoint_ns
+                     else "CPU since the printed start second")
+            evidence = _exact_cpu_evidence(identity, row, 0, basis)
+            if evidence:
+                windows.setdefault(zero_ns, []).append(evidence)
     return windows.items()
 
 
@@ -294,8 +345,15 @@ def _window_reads(reads, opening, current):
     return reads[start:end + 1]
 
 
-def _overlap_cpu_evidence(opening, current, reads, *, endpoint_elapsed_ns):
-    """Compare observed TIME growth against the largest supported overlap."""
+def _overlap_cpu_evidence(opening, current, reads, *, endpoint_elapsed_ns, births=None, initial=frozenset()):
+    """Compare observed TIME growth against the largest supported overlap.
+
+    ``births`` and ``initial`` are the series' birth bounds and the
+    identities its first read listed. A newcomer's overlap starts at its
+    birth bound. An identity already read before this window gets no
+    inferred zero, even if a table in between omitted it.
+    """
+    births = births or {}
     accounting = [(i, read) for i, read in enumerate(reads) if isinstance(read, contention.Snapshot)]
     named = {pid for read in reads if isinstance(read, _ArgumentsRead) for pid in read.contenders}
     identities = {key for _, read in accounting for key, row in read.rows.items()
@@ -330,23 +388,36 @@ def _overlap_cpu_evidence(opening, current, reads, *, endpoint_elapsed_ns):
         # released it before the next holder's printed start second ended,
         # and before the read that listed that holder. A forward wall step
         # since this identity's last row can only have dated the start early.
+        # Each later holder is judged at the read that first listed it; a
+        # later read of the same start second supplies no new bound.
         released = None
+        bounded = set()
         for index, read, other, row in holders[pid]:
-            if other == identity or index <= last_index:
+            if other == identity or index <= last_index or other in bounded:
                 continue
+            bounded.add(other)
             step = max(0, _wall_offset_ns(read) - _wall_offset_ns(last))
             bound = min(read.finished.monotonic_ns,
                         _birth_floor_ns(row, read) + _START_RESOLUTION_NS + step)
             if last.started.monotonic_ns <= bound < last_possible:
                 released = bound if released is None else min(released, bound)
 
-        # Darwin prints lstart at whole-second precision. Its floor and
-        # the opening read's beginning bound the largest possible overlap.
-        wall_offset = _wall_offset_ns(first)
-        birth_floor = _birth_floor_ns(first_row, first)
-        reliable_start = (abs(wall_offset - opening_offset) <= 1_000_000_000
-                          and birth_floor <= first.finished.monotonic_ns)
-        start_bound = max(window_start, birth_floor) if reliable_start else window_start
+        # Darwin prints lstart at whole-second precision. The largest
+        # possible overlap starts at the later of the opening read's
+        # beginning and the birth bound fixed at the series' first sighting.
+        # A process only admission reads listed gets the same conversion
+        # over its bracket in this window.
+        birth = births.get(identity)
+        seen_before = identity in initial or (birth is not None and birth.sighted_midpoint_ns < opening.midpoint_ns)
+        if birth is not None:
+            start_bound = max(window_start, birth.lifetime_floor_ns)
+        else:
+            previous = next((read for i, read in reversed(accounting) if i < first_index), None)
+            offsets = _stamp_offsets_ns(first) + (_stamp_offsets_ns(previous) if previous is not None else [])
+            floor = int(first_row["start_epoch_s"]) * 1_000_000_000 - max(offsets)
+            reliable_start = (abs(_wall_offset_ns(first) - opening_offset) <= 1_000_000_000
+                              and floor <= first.finished.monotonic_ns)
+            start_bound = max(window_start, floor) if reliable_start else window_start
 
         # An arguments sighting of the PID counts until this identity's
         # confirmed absence. One that precedes its first accounting row
@@ -386,11 +457,16 @@ def _overlap_cpu_evidence(opening, current, reads, *, endpoint_elapsed_ns):
             overlap_ns = min(last_possible, current.finished.monotonic_ns) - start_bound
         if overlap_ns <= 0:
             continue
-        if first is not opening:
+        if first is not opening and not seen_before:
             # This complete table proves a zero counter for the identity,
             # including when it lists another holder of the same PID.
             baseline = 0.0
             basis = "CPU lower bound from absence at the opening and a sample inside this window"
+        elif first is not opening:
+            # Read before this window: a table that omits it proves no zero.
+            # Its first reading here is a lower bound on the opening counter.
+            baseline = first_row.get("peak_cpu_seconds", first_row["cumulative_cpu_seconds"])
+            basis = "CPU lower bound between samples in this window"
         else:
             baseline = first_row.get("peak_cpu_seconds", first_row["cumulative_cpu_seconds"])
             basis = "CPU lower bound from the opening counter and a later sample in this window"
@@ -474,10 +550,9 @@ class QuietGuard:
         self._cpu_probe_lock = threading.Lock()
         self._snapshots = []
         self._initial_identities = frozenset()
-        # (pid, start) -> {opening monotonic ns: midpoint of the series read
-        # that proved it}, for identities absent from the series' first read.
-        # An entry is dropped only once no later closing read can use it.
-        self._birth_openings = {}
+        # (pid, start) -> _BirthBound, fixed by the series read that first
+        # listed an identity its first read did not. Never recomputed.
+        self._birth_bounds = {}
         self._admission_snapshots = []
         self._admission_previous_over = {}
         self._process_observations = []
@@ -611,15 +686,13 @@ class QuietGuard:
                             "pid": identity[0], "start": identity[1],
                             "command": rows[identity]["command"], "reason": "counter regressed",
                             "contaminant": rows[identity]["contaminant"] or previous.rows[identity]["contaminant"]})
+                # A newcomer was born between the previous series read, which
+                # did not list it, and this one. Fix its bound now, once.
+                for identity, row in rows.items():
+                    if identity not in self._initial_identities and identity not in self._birth_bounds:
+                        self._birth_bounds[identity] = _birth_bound(row, previous, snapshot)
             else:
                 self._initial_identities = frozenset(rows)
-            # This read converts each newcomer's printed start second with
-            # its own wall offset. Keep that opening in monotonic time. A
-            # later read's different offset adds its own opening beside it.
-            for identity, row in rows.items():
-                if identity not in self._initial_identities:
-                    self._birth_openings.setdefault(identity, {}).setdefault(
-                        _birth_floor_ns(row, snapshot), snapshot.midpoint_ns)
             self._pending["wall_clock_backwards"] |= backwards
             self._snapshots.append(snapshot)
             if census_summary is not None:
@@ -908,8 +981,10 @@ class QuietGuard:
             opening = samples[start]
             with self._snapshot_lock:
                 reads = _window_reads(self._process_observations, opening, current)
+                births = dict(self._birth_bounds)
             endpoint, endpoint_busy, lifetime_busy = self._judge_cpu_interval(
-                opening, current, details, reads=reads, previous_over=self._admission_previous_over)
+                opening, current, details, reads=reads, births=births,
+                previous_over=self._admission_previous_over)
             self._record_interval_flags(receipt, details, endpoint, endpoint_busy, lifetime_busy)
             receipt.setdefault("admission_cpu_intervals", []).append(details)
             del samples[:start]
@@ -949,12 +1024,10 @@ class QuietGuard:
             opening = snapshots[earlier]
             if closing_ns - opening.midpoint_ns > dwell_ns:
                 break
-            measured, absent = _exact_window_evidence(opening, current)
+            measured = _exact_window_evidence(opening, current)
             if measured:
                 record(opening.midpoint_ns, measured, measured)
                 busy.extend(measured)
-            if absent:
-                zero_windows.append((opening.midpoint_ns, absent, None))
         for opening_ns, evidence in _birth_window_evidence(current, births, dwell_ns):
             sampled_ns = next((sample.midpoint_ns for sample in reversed(snapshots[:end])
                                if sample.midpoint_ns <= opening_ns), snapshots[0].midpoint_ns)
@@ -977,7 +1050,7 @@ class QuietGuard:
         with self._snapshot_lock:
             snapshots = list(self._snapshots)
             observations = list(self._process_observations)
-            births = {identity: dict(proofs) for identity, proofs in self._birth_openings.items()}
+            births = dict(self._birth_bounds)
             pending, self._pending = self._pending, self._empty_pending()
             background_failure = self._background_failure
         if pending["census"]:
@@ -986,10 +1059,9 @@ class QuietGuard:
             receipt.setdefault("background_census", []).extend(pending["census"])
         if pending["wall_clock_backwards"]:
             receipt["wall_clock_backwards"] = True
-        opening = closed_ns = None
+        opening = None
         try:
             for end in range(self._judged_end + 1, len(snapshots)):
-                closed_ns = snapshots[end].midpoint_ns
                 # The newest opening at least INTERVAL_S before this end: the
                 # window slides by one snapshot, so its opening never passes
                 # the previous end and every stretch is judged.
@@ -1001,7 +1073,7 @@ class QuietGuard:
                     interval_details = {"regressed_counters": [], "regressed_noncontaminant": []}
                     reads = _window_reads(observations, snapshots[start], snapshots[end])
                     endpoint, endpoint_busy, lifetime_busy = self._judge_cpu_interval(
-                        snapshots[start], snapshots[end], interval_details, reads=reads)
+                        snapshots[start], snapshots[end], interval_details, reads=reads, births=births)
                     judged.append(interval_details)
                     details = interval_details
                     self._judged_end, opening = end, start
@@ -1012,7 +1084,7 @@ class QuietGuard:
                         self._record_interval_flags(receipt, interval_details, endpoint, endpoint_busy, lifetime_busy)
                         flagged.update((row["pid"], row["start"]) for row in endpoint_busy + lifetime_busy)
                 # The exact check at this sample, against every earlier sample
-                # at most INTERVAL_S before it and the printed start seconds.
+                # at most INTERVAL_S before it and each newcomer's birth bound.
                 busy.extend(self._exact_windows(receipt, snapshots, births, end, dwell_ns, flagged))
                 if long_interval is not None:
                     receipt["long_interval"] = True
@@ -1039,16 +1111,6 @@ class QuietGuard:
             with self._snapshot_lock:
                 del self._snapshots[:opening]
             self._judged_end -= opening
-        if closed_ns is not None:
-            # Every later closing read ends after this one, so an opening
-            # more than INTERVAL_S before it can never qualify again.
-            with self._snapshot_lock:
-                for identity, proofs in list(self._birth_openings.items()):
-                    kept = {born: at for born, at in proofs.items() if closed_ns - born <= dwell_ns}
-                    if kept:
-                        self._birth_openings[identity] = kept
-                    else:
-                        del self._birth_openings[identity]
         # Completed windows precede a later failed census or stale tail.
         if background_failure:
             # This copy belongs to the snapshots judged above. A later latch
@@ -1058,7 +1120,7 @@ class QuietGuard:
             self._require_fresh_background(receipt["monotonic_s"], snapshots[-1] if snapshots else None)
         return busy
 
-    def _judge_cpu_interval(self, opening, current, details, *, reads, previous_over=None):
+    def _judge_cpu_interval(self, opening, current, details, *, reads, births, previous_over=None):
         limit = prewindow.CPU_LIMIT_PERCENT / 100
 
         def measure(before, after, prior=None):
@@ -1121,7 +1183,8 @@ class QuietGuard:
             previous_over.clear()
             previous_over.update((key, rate) for key, rate in contention.over_limit(raw).items() if key in matches)
         evidence, details["contaminants"] = _overlap_cpu_evidence(
-            opening, current, reads, endpoint_elapsed_ns=endpoint_elapsed_ns)
+            opening, current, reads, endpoint_elapsed_ns=endpoint_elapsed_ns,
+            births=births, initial=self._initial_identities)
         same_window = before.midpoint_ns == opening.midpoint_ns and after.midpoint_ns == current.midpoint_ns
         lifetime_busy = []
         for row in evidence:

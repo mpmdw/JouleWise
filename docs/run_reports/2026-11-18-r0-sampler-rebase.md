@@ -401,3 +401,63 @@ After a step, every expected window is still reported at its closing read. Any a
 Local checks used Python 3.13 under `taskpolicy -c utility`, `TZ=UTC` and synthetic inputs. The focused run covered `tests.align.test_r0_host` (151 tests, one native-capture skip), the sweep, `tests.align.test_r0_checks` and `tests.hazards.test_contention` (86 tests, three live skips). The census fault matrix test and frozen v3 run in hosted CI, per the lead's test budget. Frozen v3 remains byte-identical at SHA-256 `afd360c29d390f7d39400e1363a25add5c13ace71bca55c80d11ec0ceb4e5009`. Under a local `TZ=America/Los_Angeles`, four `R0QuietIntervalTest` cases fail identically with and without this repair. Their fixture builds its wall clock from a naive local time, and they pass under UTC. They were left unchanged.
 
 `RUN_STATE.md` and `TASK_QUEUE.md` retain their PR-base blobs. The remaining MED and LOW items stay with the lead.
+
+## 2026-11-24 wide-audit round 4 repair for PR #824 (lead ruling S1–S4)
+
+The round-3 confirmation audit of `3e37db72a2fc964e9990b8c3374d3315c41174ea` blocked the opposite way. A synthetic worker used at most 1.482 CPU-s in any 30 s, and R0 read 0.01 CPU-s for it at 46.25 s. After a 450 ms wall loss at 70 s, the closing read converted its printed start again, inferred a zero at 46.45 s, and refused. A 6 ms gradual loss refused a 1.49985 CPU-s worker the same way. Moving the 450 ms loss between birth and the first sighting refused through the lifetime check. Both audit scripts reproduced on that head before the repair, outcome for outcome.
+
+The lead's ruling replaces the round-3 rule:
+
+- **S1:** one birth interval per process, fixed at its first sighting.
+- **S2:** the exact and lifetime checks share it, and contention must be provable for every birth time inside it.
+- **S3:** a counter reading is a lower bound for everything inferred after it.
+- **S4:** the acceptance tests, including an independent workload oracle.
+
+Repair, `joulewise/align/r0_host.py`:
+
+- **One birth bound per identity.** When a series read first lists an identity the series' first read did not, it records `_BirthBound` once. The bound runs from the last series read that did not list the identity to the first that did. The printed start second narrows that bracket from inside it only. It is converted once, with the larger wall offset of the two bracket reads. No later read converts it again.
+- **Exact check.** A newcomer's only zero is the bound's earliest instant. An absence read after a reading of the identity proves nothing.
+- **Lifetime check.** A newcomer's overlap starts at the bound's earliest instant, which now includes the sampled absence. An identity already read before a window gets no zero from a table that omits it.
+- **PID reuse.** A PID's later holder bounds the earlier lifetime only at the read that first listed that holder.
+
+**Deviation from S1's wording.** S1 converts the printed second "with the wall/mono pair of the first-sighting read". When the wall clock changes between the last absence and the first sighting, that pair can date the birth after the true birth. The audit's 450 ms loss between birth (46.01 s) and first sighting (61 s) is such a case. With the first-sighting pair alone, the audit's "before" replay refused 1.47 and 1.482 CPU-s workers in both modes. The new sweep failed 21 cases:
+
+- 16 quiet or 1.49 workers refused after a 0.49 s loss between birth and first sighting;
+- one genuine 1.50 contention lost, because the conversion fell past the sighting and was discarded.
+
+The repair converts with the larger offset of the absence and sighting reads, the earliest birth any offset in the bracket allows. When the clock did not change across the bracket, this equals S1's conversion.
+
+| Finding or rule | Regression | Result |
+| --- | --- | --- |
+| HIGH: quiet worker refused after a 450 ms loss, a 6 ms slew, or a 450 ms loss before first sighting | `test_audit_r3_quiet_worker_publishes_after_a_wall_loss` (90 CLI runs, both modes) | PASS |
+| S4(b): every r2/r3 false-publish case still refuses; 1.49 controls publish | Both birth-slew replays (52 runs) and the round-2 birth, turnover and sweep tests | PASS |
+| S4(c): independent workload model | `test_publication_matches_an_independent_workload_model` (3,920 CLI runs) | PASS |
+| MED: the round-3 sweep checked the guard against its own evidence | Replaced by the S4(c) test | Done |
+
+The audit regression ports both scripts with Darwin's rounding of TIME to the centisecond and 10 ms reads. Every quiet worker publishes and 0.051 of a core refuses.
+
+In the S4(c) test, each worker has a true birth and a true CPU curve. Its printed start second comes from the simulated wall clock at birth. The run crosses four loads, four opening kinds, five daemon cadences and 49 clock variants:
+
+- **Loads:** quiet (at most 1.49 CPU-s in any 30 s, reaching 1.50 after 30.3 s), busy, and threshold 1.50 and 1.49.
+- **Opening kinds:** resident pair, sampled absence, PID held by another process, and printed start only.
+- **Daemon cadences:** 0.5, 2, 7.5, 15 and 30 s.
+- **Clock variants:** none, or a step or slew, gain or loss, of 1 µs to 2 s, placed between the last absence and the first sighting or after the sighting.
+
+The expectation never reads the guard's evidence. Contention is true iff the curve uses at least 1.50 CPU-s in some 30 s. A clock change above 0.5 s withholds the run. Otherwise R0 must refuse iff contention is true and provable from the series reads alone, and publish otherwise. Two things count as provable. One is two readings at most 30 s apart that differ by at least 1.50 CPU-s. The other is a reading of at least 1.50 CPU-s at most 30 s after the earliest birth the reads allow. The test states that earliest birth by the S1 rule. It also checks that the rule never proves contention a quiet worker did not have.
+
+On `3e37db72a`'s `r0_host.py`, the audit regression failed exactly the audit's ten refusals. The sweep failed 19 quiet or 1.49 cases under a 0.49 s loss, placed both before and after the first sighting.
+
+Three existing tests changed with the bound:
+
+- **Round-2 birth and turnover tests.** They now find the zero proof in the receipt's exact windows. The lifetime check also starts at the sampled absence, so 1.51 or 1.52 CPU-s within 29.9 s can be flagged by the rule window first. The verdicts are unchanged.
+- **PID-reuse wall-step test.** Its worker printed 5 s before a −5 s step. The old lifetime check discarded that start because the bracket offsets differ by 5 s, and charged from 0 s. The bound now dates the birth at 5.0 s. 0.80 CPU-s in at most 11 s is over the limit, so that control moved to 0.55 CPU-s, the tie. The step still withholds every case.
+- **Round-3 gain test.** It now asserts the proof at exactly 46.0 s.
+
+Not changed: R0 still treats a printed counter as exact, as the E1 tie ruling requires. Darwin rounds TIME to the nearest centisecond, so a worker within a centisecond of the limit can still flag on rounding alone. The audit's 1.482 CPU-s worker is clear of that.
+
+Local checks used Python 3.13 under `taskpolicy -c utility`, `TZ=UTC` and synthetic inputs:
+
+- `tests.align.test_r0_host`: 153 tests passed with one native-capture skip, including both new tests. The census fault matrix test was skipped locally.
+- `tests.align.test_r0_checks` and `tests.hazards.test_contention`: 86 tests passed with three live skips.
+
+The census fault matrix test and frozen v3 run in hosted CI, per the lead's test budget. Frozen v3 is byte-identical at SHA-256 `afd360c29d390f7d39400e1363a25add5c13ace71bca55c80d11ec0ceb4e5009`. `RUN_STATE.md` and `TASK_QUEUE.md` retain their PR-base blobs. The remaining MED and LOW items stay with the lead.
