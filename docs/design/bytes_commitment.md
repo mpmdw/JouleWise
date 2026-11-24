@@ -16,9 +16,13 @@ independent authorization mechanism.
 
 ## Private export integrity manifest
 
-The stage-1 driver commits `bytes-export-integrity.json` in the private
-export Git checkout before running the blinded comparison and the empty-key
-probes. The inventory records the campaign manifest, export tables and
+The stage-1 driver commits `bytes-export-integrity.json` in a private Git
+directory, `--export-seal-repo`, before running the blinded comparison and the
+empty-key probes. The driver has no default for it. The directory must be
+outside every export directory. Capture and every later verification refuse a
+seal repository inside one. A sealed command given export directories also
+refuses any table under them that the seal does not name (cold review of
+#949, MED 1). The inventory records the campaign manifest, export tables and
 session sidecars, each expected session's own binding, and the named archive
 control roots in place. The driver checks the captured commit after the fit
 release, verifies the key bytes against the session bindings, and commits

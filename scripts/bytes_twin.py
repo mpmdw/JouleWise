@@ -2074,7 +2074,9 @@ def absent_science_rows(sessions, archives):
         exported = {row["run_id"] for row in rows}
         for member in archive.get("planned_members", []):
             run_id = member["run_id"]
-            if member.get("role") != "science" or run_id in exported:
+            # The harvested roster names units, not roles: a planned science run is one with a unit,
+            # as the library reads it (joulewise/bytes_analysis.py archive_records).
+            if not member.get("units") or run_id in exported:
                 continue
             units = member.get("units", [])
             exclusions = archive["exclusions"].get(run_id, ())

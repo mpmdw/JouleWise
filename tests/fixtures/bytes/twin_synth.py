@@ -31,8 +31,13 @@ import json
 import math
 import random
 import struct
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+if str(Path(__file__).resolve().parents[3]) not in sys.path:   # also run as a script
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from tests.fixtures.bytes import harvest_roster  # noqa: E402  the one roster writer: the harvest's shape
 
 GB = 1e9
 DECODE_STEPS = 512   # Addendum 5 item 4
@@ -251,8 +256,7 @@ class Session:
         self.bundles[run_id] = bundle
         self.spans[run_id] = {"monotonic_ns": [int(idle_start * 1e9), int(request_end * 1e9)],
                               "request_monotonic_ns": [int(request_start * 1e9), int(request_end * 1e9)]}
-        self.roster.append({"run_id": run_id, "stage_id": stage_id, "role": role, "units": units,
-                            "config_key": config_key})
+        self.roster.append(harvest_roster.member(run_id, stage_id, units))
         codes = []
         if status != "succeeded":
             codes.append("member.status_not_succeeded")
@@ -383,9 +387,7 @@ class Session:
             "session_id": self.session_id, "verdict": "ACCEPT", "counting": True, "physics_stop": False,
             "excluding": self.excluding, "emitted_flags": [], "flag_counts": {},
             "calibration": {"operative_bound_s": "0.046"}, "neg8": {"verdict": "passed"}})
-        write_json(archive / "derived/roster.json", {"pack_id": self.pack_id, "attempt": 1, "members": self.roster,
-                                                      "cells": sorted({u["cell_id"] for m in self.roster for u in m["units"]})})
-        (archive / "derived").mkdir(parents=True, exist_ok=True)
+        harvest_roster.write(archive / "derived/roster.json", self.pack_id, self.roster)
         (archive / "derived/flags.jsonl").write_text("".join(json.dumps(f) + "\n" for f in self.flags), encoding="utf-8")
         write_json(archive / "withheld/spans.json", {"spans": self.spans})
         for run_id, bundle in self.bundles.items():

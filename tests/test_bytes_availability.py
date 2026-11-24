@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from contextlib import chdir, contextmanager, redirect_stderr, redirect_stdout
+import csv
 import errno
 from fnmatch import fnmatchcase
 import hashlib
@@ -109,8 +110,11 @@ class AvailabilityFixture:
         # The library selects dispatch by reading a finalized summary when one exists.
         agreement._write(self.bundle / "summary_metrics.json", {"summary_provenance": {"reducer_version": "0.5.2"}})
         roster = agreement.load(self.archive / "derived/roster.json")["members"]
+        # The harvested roster has no role. The exporter takes roles from the plan walk.
+        self.plan = {"plan_tree": agreement._campaign.plan_tree(roster)}
         self.evidence = SimpleNamespace(runtime={}, session_id=SESSION, stages=[SimpleNamespace(members=[
-            SimpleNamespace(**member, status="succeeded", config_key="fixture") for member in roster])])
+            SimpleNamespace(**member, role=agreement._campaign.plan_role(member), status="succeeded",
+                            config_key="fixture") for member in roster])])
         self.private = root / "private-keys/bytes/blinding"
         self.keys = root / "released-keys/bytes/blinding"
         if not complete_fit:
@@ -142,7 +146,7 @@ class AvailabilityFixture:
     def export_again(self, destination, private, *, read_registration=False, grouped=True, read_evidence=False, plan=None):
         pack = {"blinding_group": "bytes", "bytes_pass": 1} if grouped else {"pack_id": SESSION}
         with patch("os.fsync", return_value=None):
-            agreement.export_runs.export(self.archive, plan or {}, self.root / "registration", private, destination,
+            agreement.export_runs.export(self.archive, plan or self.plan, self.root / "registration", private, destination,
                                          evidence=None if read_evidence else self.evidence,
                                          pack_registration=None if read_registration else pack)
         return self.export_path(destination), private / ("bytes" if grouped else SESSION) / "blinding"
@@ -270,7 +274,7 @@ class BytesAvailabilityTests(unittest.TestCase):
             registered.touch()
             # Exercise the producer without the fixture's precomputed evidence.
             with patch("os.fsync", return_value=None), trace_primary_inputs(fixture) as opened:
-                agreement.export_runs.export(fixture.archive, {}, registered.parent, fixture.root / "private-keys",
+                agreement.export_runs.export(fixture.archive, fixture.plan, registered.parent, fixture.root / "private-keys",
                     fixture.root / "read-trace-export", pack_registration={"blinding_group": "bytes", "bytes_pass": 1})
             self.assertIn("registration/acceptance.json", opened)
             self.assert_contract_covers_reads(opened, "export")
@@ -344,7 +348,8 @@ class BytesAvailabilityTests(unittest.TestCase):
             self.assertIn(f"configs/b6/packs/{SESSION}/registration.json", reads)
             self.assert_contract_covers_reads(reads, "export")
 
-            body = b'{"stage_graph":[]}\n'
+            # The plan walk names the roles: the harvested roster has none.
+            body = (json.dumps(fixture.plan["plan_tree"]) + "\n").encode()
             first = "pack/plan_tree.json"
             other = f"repo/configs/campaigns/{SESSION}/plan_tree.json"
             sources = fixture.archive / "sources"
@@ -383,8 +388,8 @@ class BytesAvailabilityTests(unittest.TestCase):
                 inventory = fixture.archive / "sources/SHA256SUMS"
                 original = inventory.read_bytes()
                 members = agreement.load(fixture.archive / "derived/roster.json")["members"]
-                science = {member["run_id"] for member in members if member["role"] == "science"}
-                reference = next(member["run_id"] for member in members if member["role"] == "start")
+                science = {member["run_id"] for member in members if member["units"]}
+                reference = next(member["run_id"] for member in members if member["stage_id"] == "start_reference")
                 reference_config = f"claim-runs/{reference}/config.json".encode()
                 required, optional = [], []
                 for row in original.splitlines(keepends=True):
@@ -443,7 +448,7 @@ class BytesAvailabilityTests(unittest.TestCase):
                     with trace_primary_inputs(fixture, aliases=aliases) as reads, \
                             patch.object(agreement.export_runs, "evidence_from_archive", side_effect=record_evidence):
                         fixture.export_again(root / f"{tag}-export", root / f"{tag}-private", read_evidence=True,
-                                             plan={"custody_root": str(custody)})
+                                             plan={**fixture.plan, "custody_root": str(custody)})
                     self.assert_contract_covers_reads(reads, "export")
                     reason, = reasons
                     return reads, reason
@@ -471,7 +476,8 @@ class BytesAvailabilityTests(unittest.TestCase):
             pack_root = sources / "custom-pack"
             pack_root.mkdir()
             candidate = pack_root / "plan_tree.json"
-            body = b'{"stage_graph":[]}\n'
+            # The plan walk names the roles: the harvested roster has none.
+            body = (json.dumps(fixture.plan["plan_tree"]) + "\n").encode()
             candidate.write_bytes(body)
             ledger = sources / "SHA256SUMS"
             base = ledger.read_bytes()
@@ -520,7 +526,7 @@ class BytesAvailabilityTests(unittest.TestCase):
             root = Path(directory)
             fixture = AvailabilityFixture(root / "base", "mock")
             members = agreement.load(fixture.archive / "derived/roster.json")["members"]
-            reference = next(member["run_id"] for member in members if member["role"] == "start")
+            reference = next(member["run_id"] for member in members if member["stage_id"] == "start_reference")
             bundle = fixture.archive / "sources/claim-runs" / reference
             log = bundle / "logs/controller.log"
             log.parent.mkdir(exist_ok=True)
@@ -883,10 +889,14 @@ class BytesAvailabilityTests(unittest.TestCase):
         pack = fixture.archive / "sources/pack"
         pack.mkdir(parents=True, exist_ok=True)
         witness = pack / "smoke-registered-tree.json"
-        # Reuse the registered graph shape with no registered member inputs.
+        # Reuse the registered graph shape. Its member inputs name this fixture's runs, as a real
+        # witness names its own: the harvested roster has no role, so the plan walk supplies them.
         tree = agreement.load(agreement.ROOT / "configs/campaigns" / SESSION / "plan_tree.json")
-        tree["external_inputs"] = []
-        tree["science"] = []
+        walk = {manifest["external_input_id"]: manifest["members"]
+                for manifest in fixture.plan["plan_tree"]["external_inputs"]["manifests"]}
+        for manifest in tree["external_inputs"]["manifests"]:
+            manifest["members"] = walk.get(manifest["external_input_id"], [])
+        tree["science"] = fixture.plan["plan_tree"]["science"]
         keep = {stage["stage_id"]: 1 for stage in tree["stage_graph"] if stage["kind"] == "campaign_collection"}
         plan = pack / "plan_tree.json"
         agreement._write(witness, tree)
@@ -1169,7 +1179,7 @@ class BytesAvailabilityTests(unittest.TestCase):
                 root = Path(directory)
                 fixture = AvailabilityFixture(root / "base", timing)
                 members = agreement.load(fixture.archive / "derived/roster.json")["members"]
-                reference = next(member["run_id"] for member in members if member["role"] == "start")
+                reference = next(member["run_id"] for member in members if member["stage_id"] == "start_reference")
                 sources = fixture.archive / "sources"
                 manifest = sources / "claim-runs" / reference / "calibration/manifest.json"
                 manifest.parent.mkdir(exist_ok=True)
@@ -1187,3 +1197,22 @@ class BytesAvailabilityTests(unittest.TestCase):
                     with self.subTest(fault=fault), file_fault(manifest, fault):
                         with self.assertRaisesRegex(StorageStop, r"calibration/manifest\.json"):
                             fixture.export_again(root / f"{fault}-export", root / f"{fault}-private")
+
+    def test_planned_run_lost_from_withheld_rows_agrees_on_the_harvest_roster(self):
+        # Cold review of #949: a withheld store loses a planned held-out row after export. The
+        # harvest's roster names units and no role; both programs keep the run as unusable.
+        with tempfile.TemporaryDirectory(prefix="bytes-lost-withheld-row-") as directory:
+            root = Path(directory)
+            fixture = AvailabilityFixture(root / "base", "mock")
+            members = {member["run_id"]: member
+                       for member in agreement.load(fixture.archive / "derived/roster.json")["members"]}
+            self.assertEqual({key for member in members.values() for key in member},
+                             {"run_id", "stage_id", "kind", "units"})
+            store = fixture.targets(fixture.export)["withheld_csv"]
+            lines = store.read_text().splitlines(keepends=True)
+            lost = next(csv.DictReader(lines[:1] + lines[-1:]))["run_id"]
+            self.assertTrue(members[lost]["units"])
+            store.write_text("".join(lines[:-1]))
+            scratch = root / "scratch"
+            scratch.mkdir()
+            self.assertGreater(fixture.compare(self, fixture.export, fixture.keys, scratch, stage="heldout"), 0)
