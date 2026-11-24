@@ -5,7 +5,8 @@ on the soak and no census on D_bank or X_G, so under R3 its clean control refuse
 plus a complete-census clean fixture, with expectations otherwise unchanged. Until it is adopted, this runs the
 suite file at its repo path unmodified, with only the clean control's member close wrapped by
 ``partc_audit_probe.census_stand_in``. That adds the missing census points (both points; for the soak, the closing
-one) and nothing else. On a fixture that already carries both points it adds nothing, and the run is the suite's
+one) and, from fix round r3, the one excluded PID frozen ``Segment.__init__`` passes (the fixture writes none),
+and nothing else. On a fixture that already carries both points it adds nothing, and the run is the suite's
 own. It ends by printing how many points it added and the suite file's digest.
 
     python3.13 -IB tests/align/partc_suite_census.py      (the suite's own JW_PARTC_* variables apply)

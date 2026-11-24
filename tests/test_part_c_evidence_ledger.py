@@ -2473,12 +2473,34 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
                           "config-separate": "pass -", "config-equals": "other_failure issued_inputs",
                           "config-repeated": "other_failure issued_inputs"})
 
+    # Fix round r3 (confirmation audit of 2026-11-23): five more contradictions that passed, each refused for
+    # its own reason, each beside its control (tests/align/partc_audit_probe.py, ``R3``).
+    def test_r3_soak_close_and_launch_order(self):
+        """A soak tail whose slope at the session close is 0.201 C/min is unsettled there and refused; at 0.19 it
+        passes. Predecessor CPU offsets that put its origin inside the soak (+500 s) or before zero (+4,000 s)
+        cannot be bounded after the soak closed; unshifted offsets pass."""
+        self.check_probe({"soak-close-settled": "pass -", "soak-close-unsettled": "other_failure soak_unsettled",
+                          "origin-control": "pass -", "origin-during-soak": "other_failure evidence_unverifiable",
+                          "origin-negative": "other_failure evidence_unverifiable"})
+
+    def test_r3_row_stamps_battery_samples_and_excluded_pid(self):
+        """An X_G status stamp (monotonic or powermetrics) from after the session closed is refused; the
+        recorded stamp passes. Dropping the closing battery sample is refused; both samples pass. An excluded-PID
+        list of [pid, pid] or [] is refused; exactly one PID passes."""
+        self.check_probe({"status-control": "pass -", "status-future": "other_failure reading_record",
+                          "status-pm-future": "other_failure reading_record",
+                          "closing-battery-kept": "pass -", "closing-battery-dropped": "other_failure battery_evidence",
+                          "roots-single": "pass -", "roots-repeated": "other_failure quiet_load",
+                          "roots-empty": "other_failure quiet_load"})
+
     DOMAIN_SWEEP = Path(__file__).resolve().parent / "align" / "partc_domain_sweep.py"
 
     def test_r2_generated_temporal_and_schema_sweeps_refuse_every_mutation(self):
         """R1: every timestamped source with one row outside its bound interval, one stamp repeated, or its tail
         dropped. R2: every schema field with a wrong type, a value out of range, an unknown enumeration value, a
-        missing or extra field, or a duplicate key. Every mutation refuses and every clean record passes."""
+        missing or extra field, a wrong item count, or a duplicate key. R3 classes, as properties: the soak's
+        settling at the session close, the launch order of CPU origins and census sessions, nested row stamps
+        against the next row, and the two battery samples. Every mutation refuses and every clean record passes."""
         import os
         import subprocess
 
@@ -2494,7 +2516,7 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
         output = proc.stdout + proc.stderr
         entries = {line.split()[1]: tuple(map(int, line.split()[2:4])) for line in proc.stdout.splitlines()
                    if line.startswith("SWEEP ")}
-        self.assertEqual(len(entries), 15, output[-3000:])
+        self.assertEqual(len(entries), 19, output[-3000:])
         for name, (generated, refused) in entries.items():
             with self.subTest(entry=name):
                 self.assertGreater(generated, 0)

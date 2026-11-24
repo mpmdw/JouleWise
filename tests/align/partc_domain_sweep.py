@@ -38,6 +38,10 @@ SUITE = HERE / "test_partc_frozen_differential.py"
 
 TEMPORAL = ("cpu.samples", "census.session", "battery.rows", "events.timestamp", "turns.stamps",
             "episode.paired_stamps", "sensor.wall", "sensor.monotonic", "soak.tail")
+# Fix round r3: the classes of the confirmation audit of 2026-11-23, each swept as a property. The expected
+# outcome is computed independently (the frozen reducer at both ends, the launch order, the next row's start,
+# the two Segment.run samples), and the evaluator must refuse exactly the inputs that violate it.
+R3_CLASSES = ("soak.close_settled", "launch.origin", "row.nested_stamps", "battery.samples")
 SCHEMA = ("load_journal", "battery_reading", "battery_error", "episode_endpoint", "provenance_endpoint",
           "generation_finish")
 
@@ -65,6 +69,7 @@ def wrong_values(pc, rule, current):
     return {pc._uint: ["1", 1.5, True, None, -1, [1]],
             pc._finite: ["1", True, None, [], math.inf],
             pc._nonnegative: ["1", True, None, -1, -0.5, math.inf],
+            pc._pid: ["1", 1.5, True, None, 0, -1, [1]],
             pc._text: [1, True, None, "", ["x"]],
             pc._string: [1, True, None, ["x"]]}.get(rule, ["1", 1.5, True, -1, 101, []])
 
@@ -91,11 +96,14 @@ def schema_mutations(pc, record, table, path=()):
         if isinstance(rule, dict):
             yield from schema_mutations(pc, record, rule, here)
         elif isinstance(rule, pc._Each):
-            item_rule, nonempty, unique = rule
+            item_rule, nonempty, unique, length = rule
             for value in ({}, "x", None):
                 yield f"{label} = {value!r}", replace(here, value)
-            if nonempty:
+            if nonempty or length:
                 yield f"{label} empty", replace(here, [])
+            if length is not None and current:
+                yield f"{label} with {length + 1} items", lambda root, here=here: at(root, here).append(
+                    copy.deepcopy(at(root, here)[0]))
             if current:
                 first = (*here, 0)
                 if isinstance(item_rule, dict):
@@ -121,7 +129,7 @@ def duplicate_key(raw_object, key, value):
 def run():
     s = load("partc_suite", SUITE)
     probe = load("partc_probe", HERE / "partc_audit_probe.py")
-    generated = {name: 0 for name in (*TEMPORAL, *SCHEMA)}
+    generated = {name: 0 for name in (*TEMPORAL, *R3_CLASSES, *SCHEMA)}
     refused = {name: 0 for name in generated}
     failures = []
 
@@ -371,6 +379,116 @@ def run():
             rows = [start, *kept, closed_row]
             expect("soak.tail", f"last {len(observed) - keep} readings dropped", lambda rows=rows, claim=claim:
                    pc._derive_soak(raw_rows(rows), claim, sensors, soak_window))
+
+        # ================= R3 CLASSES =================
+        def judge(entry, label, check, refuses):
+            """A property case: ``refuses`` is the independently computed outcome the evaluator must match."""
+            expect(entry, label, check, clean=not refuses)
+
+        # The soak's settling test at the session close, for tails that stop short of it and rise at slopes
+        # straddling the frozen 0.2 C/min limit. The frozen reducer at the last reading and at the close decides.
+        fast = sensors["s_fast"]
+        for keep in (1661, 1701, 1741, 1781):
+            for amplitude in (0.15, 0.19, 0.199, 0.2005, 0.201, 0.21, 0.3):
+                kept = copy.deepcopy(observed[:keep])
+                for index, row in enumerate(kept):
+                    value = 35.0 + amplitude * max(index - 600, 0) / 60
+                    row["values"]["sensors"][fast] = row["values"]["readings"][fast]["value"] = value
+                sampling = s.tg.sample_rows(kept)
+                origin = sampling[0]["monotonic_ns"]
+                coverage = Coverage(start["started"]["monotonic_ns"], keys(start["values"]["thermal"]))
+                for row in kept:
+                    coverage.observe(row["started"]["monotonic_ns"], row["finished"]["monotonic_ns"], row["values"])
+                closed_row = copy.deepcopy(close)
+                closed_row["values"]["coverage"] = coverage.report(close["values"]["coverage"]["span_ns"][1])
+                closed_row["seq"] = len(kept) + 2
+                claim = copy.deepcopy(soak_receipt)
+                for key in (sensors["s_fast"], sensors["s_slow"]):
+                    good = s.rt.valid_series(sampling, key)
+                    claim["sensor_series_c"][key] = [value for _, value in good]
+                    claim["sensor_series_t_s"][key] = [(ns - origin) / s.N for ns, _ in good]
+                    claim["sensor_series_failed_reads"][key] = len(kept) - len(good)
+                claim["sensor_series_end_t_s"] = (sampling[-1]["monotonic_ns"] - origin) / s.N
+                ends = (claim["sensor_series_end_t_s"], (close["started"]["monotonic_ns"] - origin) / s.N)
+                try:
+                    refuses = any(stat["settled"] is not True for end in ends for stat in s.r1.soak_detrended(
+                        claim["sensor_series_c"], claim["sensor_series_t_s"], end).values())
+                except s.r1.Refusal:
+                    refuses = True
+                rows = [start, *kept, closed_row]
+
+                def soak_check(rows=rows, claim=claim):
+                    # _check_native_soak's own test of the frozen derivation, after _derive_soak's at the close.
+                    if any(stat["settled"] is not True for stat in pc._derive_soak(
+                            raw_rows(rows), claim, sensors, soak_window).values()):
+                        raise EvidenceFailure("soak_unsettled", "idle", "sensors/align_thermal.jsonl")
+
+                judge("soak.close_settled", f"keep {keep} rise {amplitude}", soak_check, refuses)
+
+        # Launch order on the monotonic clock: each member's census and CPU origin lie after the previous
+        # member's close (the soak's after 0). Offsets shifted later move the origin earlier by the same amount.
+        prior = 0.0
+        for kind in kinds:
+            journal = s.read(base / kind / "load_journal.json")
+            receipt, data = member(kind)
+            anchors, wall = pc._monotonic_anchors(data), wall_of(kind)
+            opened, closed = (point["t_s"] for point in journal["census"])
+
+            def launched(document, kind=kind, receipt=receipt, wall=wall, anchors=anchors, after=prior):
+                claim = {**receipt, **{key: document[key] for key in ("cpu_busy_t_s", "census")}}
+                return lambda: pc._check_load(json.dumps(document).encode(), claim, kind, wall, anchors=anchors,
+                                              after=after)
+
+            judge("launch.origin", f"{kind} clean", launched(journal), False)
+            if journal["cpu_busy_t_s"]:
+                first = journal["cpu_busy_t_s"][0]
+                for delay in (1, 50, 199, 200, 201, 500, 4000):
+                    document = {**journal, "cpu_busy_t_s": [t + delay for t in journal["cpu_busy_t_s"]]}
+                    # The edges fix the origin at opened - first - delay; it must not precede the prior close.
+                    judge("launch.origin", f"{kind} offsets +{delay}", launched(document),
+                          opened - first - delay < prior)
+            else:
+                for label, moved in (("census opened at the prior close", prior), ("one second before it", prior - 1),
+                                     ("whole census before it", None)):
+                    points = copy.deepcopy(journal["census"])
+                    if moved is None:
+                        points[0]["t_s"], points[1]["t_s"] = prior - 2, prior - 1
+                    else:
+                        points[0]["t_s"] = moved
+                    judge("launch.origin", f"{kind} {label}", launched({**journal, "census": points}), points[0]["t_s"] < prior)
+            prior = closed
+
+        # Producer order inside a journal row: every nested observation stamp is no later than the next row's
+        # start (for the last reading, the session_end row). One past it refuses; exactly at it passes.
+        def place(root, field, value):
+            parts = [int(part) if part.isdigit() else part for part in field.split(".")]
+            at(root, parts[:-1])[parts[-1]] = value
+
+        for kind, path, gated in journals:
+            rows = s.rows(path)
+            source = str(path.relative_to(path.parents[1]))
+            stamped = [i for i, row in enumerate(rows[:-1]) if any(True for _ in pc._nested_stamps(row["values"]))]
+            for i in sorted({*stamped[:2], *stamped[len(stamped) // 2:][:1], *stamped[-2:]}):
+                following = rows[i + 1]["started"]["monotonic_ns"]
+                for field, _ in pc._nested_stamps(rows[i]["values"]):
+                    for value, refuses in ((following + 1, True), (following, False)):
+                        if not refuses and not field.startswith("status."):
+                            continue                 # a gate row's paired stamps have their own later checks
+                        mutated = copy.deepcopy(rows)
+                        place(mutated[i]["values"], field, value)
+                        judge("row.nested_stamps", f"{kind} {source} row {i} {field} {'+1' if refuses else '=0'}",
+                              lambda mutated=mutated, kind=kind, source=source, gated=gated:
+                              pc._validate_sidecar(mutated, sensors, kind, source, gated=gated), refuses)
+
+        # Structural completeness: Segment.run's opening and closing battery samples, for every member.
+        for kind in kinds:
+            receipt, _ = member(kind)
+            bound, battery = terminal(kind), s.rows(base / kind / s.pc.BATTERY_SOURCE)
+            for dropped in range(len(battery)):
+                rows = [row for index, row in enumerate(battery) if index != dropped]
+                claim = {**receipt, "battery": s.rt.battery_summary(rows)}
+                judge("battery.samples", f"{kind} row {dropped} dropped", lambda rows=rows, claim=claim, kind=kind,
+                      bound=bound: pc._check_battery(raw_rows(rows), claim, kind, bound), len(rows) < 2)
 
         # ================= R2 SCHEMA =================
         def refuse(field):

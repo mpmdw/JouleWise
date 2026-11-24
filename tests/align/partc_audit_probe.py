@@ -135,11 +135,33 @@ R2 = {
     "config-repeated": ("issued_inputs", "--config"),
 }
 EXPECTED.update(R2)
+# Fix round r3 (confirmation audit of 2026-11-23). Each damaged case refuses; each control passes.
+R3 = {
+    # A derivation at the bound session close is a verdict: the soak's tail must be settled there too.
+    "soak-close-settled": None,
+    "soak-close-unsettled": ("soak_unsettled", "session_close"),
+    # Launch order on the monotonic clock: the predecessor's CPU origin lies after the soak closed.
+    "origin-control": None,
+    "origin-during-soak": ("evidence_unverifiable", "cpu_busy_t_s"),
+    "origin-negative": ("evidence_unverifiable", "cpu_busy_t_s"),
+    # Nested observation stamps lie no later than the next row (producer order) and the session close.
+    "status-control": None,
+    "status-future": ("reading_record", "values.status.monotonic_ns"),
+    "status-pm-future": ("reading_record", "values.status.pm_observed_ns"),
+    # Structural completeness: the opening and closing battery samples Segment.run takes.
+    "closing-battery-kept": None,
+    "closing-battery-dropped": ("battery_evidence", "samples"),
+    # Exactly the one excluded PID Segment.__init__ passes.
+    "roots-single": None,
+    "roots-repeated": ("quiet_load", "exclude_roots"),
+    "roots-empty": ("quiet_load", "exclude_roots"),
+}
+EXPECTED.update(R3)
 # Until the lead issues suite v3.2, its v3.1 clean fixture has no closing census on the soak and no census on
 # D_bank or X_G. These are the points frozen ``Segment.run`` writes, added here only where the fixture lacks
 # them (wide audit FO ``census_cardinality.py``'s complete case); on v3.2 this changes nothing.
 CENSUS_ORIGIN = {"idle": 0.0, "d-bank-benign-s1": 6000.0, "x-g": 8000.0}
-ADDED = []                                      # (kind, label) of every census point the stand-in added
+ADDED = []                  # (kind, what) of every census point or excluded PID the stand-in added
 DIRECT = ("step-d-member-wall-over-bracket", "episode-stamps-reversed")
 AUDIT_2 = ("control", "interval-header-zero-rows", "raw-runner-fault", "raw-turn-budget-flag", "last-turn-unclosed",
            "other-run-id", "duplicate-predecessor", "predecessor-timeout", "extra-stop-flag", "gate-before-entry",
@@ -161,20 +183,28 @@ def member_wall(s, wall, opened=4_001_000_000_000, closed=4_002_000_000_000):
 
 
 def complete_census(s, segment, kind, receipt):
-    """The v3.2 stand-in: both census points on the soak, D_bank and X_G, where the fixture lacks them."""
+    """The v3.2 stand-in, only where the v3.1 fixture lacks what frozen ``Segment`` writes: both census points
+    on the soak, D_bank and X_G, and on every member the one excluded PID ``Segment.__init__`` passes
+    (``(os.getpid(),)``; the runtime process of the member's own census)."""
     import copy
 
     path = segment / "load_journal.json"
     load = s.read(path)
-    if kind not in CENSUS_ORIGIN or [point["label"] for point in load["census"]] == ["start", "end"]:
-        return
-    opening = copy.deepcopy(load["census"][0]) if load["census"] else {
-        "label": "start", "t_s": CENSUS_ORIGIN[kind],
-        "processes": [{"pid": 12, "ppid": 1, "pcpu": 0.1, "comm": "synthetic"}]}
-    closing = {**copy.deepcopy(opening), "label": "end", "t_s": opening["t_s"] + 1800}
-    ADDED.extend((kind, point["label"]) for point in (opening, closing) if point not in load["census"])
-    load["census"] = receipt["census"] = [opening, closing]
-    s.write(path, load)
+    changed = False
+    if kind in CENSUS_ORIGIN and [point["label"] for point in load["census"]] != ["start", "end"]:
+        opening = copy.deepcopy(load["census"][0]) if load["census"] else {
+            "label": "start", "t_s": CENSUS_ORIGIN[kind],
+            "processes": [{"pid": 12, "ppid": 1, "pcpu": 0.1, "comm": "synthetic"}]}
+        closing = {**copy.deepcopy(opening), "label": "end", "t_s": opening["t_s"] + 1800}
+        ADDED.extend((kind, point["label"]) for point in (opening, closing) if point not in load["census"])
+        load["census"] = receipt["census"] = [opening, closing]
+        changed = True
+    if load.get("exclude_roots") == [] and load["census"]:
+        load["exclude_roots"] = [load["census"][0]["processes"][0]["pid"]]
+        ADDED.append((kind, "exclude_roots"))
+        changed = True
+    if changed:
+        s.write(path, load)
 
 
 def census_stand_in(s):
@@ -237,6 +267,71 @@ def run(argv):
                                                   "stop-unknown", "stop-deadman", "census-omit-d-bank-benign-s1")})
     changed_member.update({"census-omit-x-g": s.X, "census-complete": None, "config-separate": None,
                            "config-equals": None, "config-repeated": None})
+    changed_member.update({name: s.P for name in R3})
+    changed_member.update({"soak-close-settled": "idle", "soak-close-unsettled": "idle", "status-control": s.X,
+                           "status-future": s.X, "status-pm-future": s.X})
+
+    def mutate_r3(case, kind, segment, receipt):
+        """The r3 reproductions (confirmation audit's bound_tail, regressions and status_cases scripts)."""
+        load_path = segment / "load_journal.json"
+        if case.startswith("soak-close-"):
+            from joulewise.align.apple.thermal import Coverage, keys
+
+            path = segment / "sensors/align_thermal.jsonl"
+            records = s.rows(path)
+            start, close = records[0], records[-1]
+            sensors = start["values"]["thermal"]
+            kept = [row for row in records if row["kind"] == "reading"][:1701]
+            # A flat baseline, then a linear rise whose slope over the window at the close straddles 0.2 C/min.
+            amplitude, key = (0.201 if case.endswith("unsettled") else 0.19), sensors["s_fast"]
+            for index, row in enumerate(kept):
+                value = 35.0 + amplitude * max(index - 600, 0) / 60
+                row["values"]["sensors"][key] = row["values"]["readings"][key]["value"] = value
+            sampling = s.tg.sample_rows(kept)
+            origin = sampling[0]["monotonic_ns"]
+            coverage = Coverage(start["started"]["monotonic_ns"], keys(sensors))
+            for row in kept:
+                coverage.observe(row["started"]["monotonic_ns"], row["finished"]["monotonic_ns"], row["values"])
+            close["values"]["coverage"] = coverage.report(close["values"]["coverage"]["span_ns"][1])
+            close["seq"] = len(kept) + 2
+            s.write_rows(path, [start, *kept, close])
+            for name in (sensors["s_fast"], sensors["s_slow"]):
+                good = s.rt.valid_series(sampling, name)
+                receipt["sensor_series_c"][name] = [v for _, v in good]
+                receipt["sensor_series_t_s"][name] = [(ns - origin) / s.N for ns, _ in good]
+                receipt["sensor_series_failed_reads"][name] = len(kept) - len(good)
+            receipt["sensor_series_end_t_s"] = round((sampling[-1]["monotonic_ns"] - origin) / s.N, 9)
+        elif case.startswith("origin-"):
+            load = s.read(load_path)
+            delay = {"origin-control": 0, "origin-during-soak": 500, "origin-negative": 4000}[case]
+            load["cpu_busy_t_s"] = receipt["cpu_busy_t_s"] = [t + delay for t in load["cpu_busy_t_s"]]
+            s.write(load_path, load)
+        elif case.startswith("roots-"):
+            load = s.read(load_path)
+            valid = load["census"][0]["processes"][0]["pid"]
+            load["exclude_roots"] = {"roots-single": [valid], "roots-repeated": [valid, valid], "roots-empty": []}[case]
+            s.write(load_path, load)
+        elif case.startswith("closing-battery-"):
+            path = segment / s.pc.BATTERY_SOURCE
+            rows = s.rows(path)
+            assert len(rows) == 2
+            if case.endswith("dropped"):
+                rows.pop()
+            receipt["battery"] = s.rt.battery_summary(rows)
+            if "battery_drain_pct_per_h" in receipt:
+                receipt["battery_drain_pct_per_h"] = receipt["battery"]["drain_pct_per_h"]
+            s.write_rows(path, rows)
+        elif case.startswith("status-"):
+            journal = segment / receipt["bundle"] / "outputs/align_thermal.jsonl"
+            rows = s.rows(journal)
+            row = [r for r in rows if r["kind"] == "reading" and r["values"].get("status")][1]
+            key = "pm_observed_ns" if "-pm-" in case else "monotonic_ns"
+            if case != "status-control":
+                row["values"]["status"][key] = rows[-1]["finished"]["monotonic_ns"] + 60 * s.N
+                s.write_rows(journal, rows)
+        else:
+            return False
+        return True
 
     def mutate_r2(case, kind, segment, receipt):
         """The r2 reproductions (wide audit FO and IN scripts), one change before the member's producer closes."""
@@ -505,7 +600,7 @@ def run(argv):
         s.write_rows(bundle / "outputs/align_turns.jsonl", turns)
 
     def mutate(case, kind, segment, receipt):
-        if mutate_r2(case, kind, segment, receipt):
+        if mutate_r3(case, kind, segment, receipt) or mutate_r2(case, kind, segment, receipt):
             return
         bundle = segment / receipt["bundle"]
         episode_path = bundle / "outputs/align_episode.json"

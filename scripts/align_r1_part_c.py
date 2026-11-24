@@ -1407,11 +1407,11 @@ def _strings(value):
 # a field it does not name refuses, and so does an absent one. A Python equality that crosses types
 # (``True == 1``, ``[17] == [17]``) therefore never reaches a comparison.
 class _Each(tuple):
-    """A list whose items each satisfy ``rule``; ``nonempty`` refuses an empty list and ``unique`` names
-    the field no two items share."""
+    """A list whose items each satisfy ``rule``; ``nonempty`` refuses an empty list, ``unique`` names
+    the field no two items share, and ``length`` is the exact number of items the producer writes."""
 
-    def __new__(cls, rule, *, nonempty=False, unique=None):
-        return super().__new__(cls, (rule, nonempty, unique))
+    def __new__(cls, rule, *, nonempty=False, unique=None, length=None):
+        return super().__new__(cls, (rule, nonempty, unique, length))
 
 
 class _OneOf(tuple):
@@ -1430,13 +1430,18 @@ def _nonnegative(value):
     return _finite(value) and value >= 0
 
 
+def _pid(value):
+    return _uint(value) and value > 0
+
+
 # ``r1_runtime_contract.process_table``: one row per process, a PID once per snapshot.
 PROCESS_ROW = {"pid": _uint, "ppid": _uint, "pcpu": _nonnegative, "comm": _string}
 # ``LoadJournal.snapshot``: the label is a census point and the process table is never empty.
 CENSUS_SNAPSHOT = {"label": _OneOf(CENSUS_POINTS), "t_s": _finite,
                    "processes": _Each(PROCESS_ROW, nonempty=True, unique="pid")}
 # ``Segment.stop_journals`` writes exactly these fields; busy cores are a finite count, never negative.
-LOAD_JOURNAL = {"exclude_roots": _Each(_uint), "errors": _Each(_text), "cpu_busy_cores": _Each(_nonnegative),
+# ``Segment.__init__`` builds the journal with ``(os.getpid(),)``: exactly one positive PID is excluded.
+LOAD_JOURNAL = {"exclude_roots": _Each(_pid, length=1), "errors": _Each(_text), "cpu_busy_cores": _Each(_nonnegative),
                 "cpu_busy_t_s": _Each(_finite), "census": _Each(CENSUS_SNAPSHOT)}
 # ``BatteryJournal.sample``: a parsed ``pmset -g batt`` reading, or an error row with no reading.
 BATTERY_READING = {"epoch_s": _finite, "raw": _string, "ac": _OneOf((True, False)),
@@ -1474,8 +1479,8 @@ def _conform_value(value, rule, refuse, path):
     if isinstance(rule, dict):
         _conform(value, rule, refuse, f"{path}.")
     elif isinstance(rule, _Each):
-        item_rule, nonempty, unique = rule
-        if not isinstance(value, list) or nonempty and not value:
+        item_rule, nonempty, unique, length = rule
+        if not isinstance(value, list) or nonempty and not value or length is not None and len(value) != length:
             refuse(path)
         for index, item in enumerate(value):
             _conform_value(item, item_rule, refuse, f"{path}.{index}")
@@ -1490,7 +1495,7 @@ def _conform_value(value, rule, refuse, path):
 
 # R1 TEMPORAL CONTAINMENT. ``_contain`` is the one rule every journal reducer applies to its timestamps.
 def _contain(times, opened, closed, *, kind, source, field, reason="member_order", peer=None,
-             offsets=False, edge_s=None, strict=True):
+             offsets=False, edge_s=None, strict=True, floor=None):
     """Every time is finite, strictly later than the one before it, and inside ``[opened, closed]``.
 
     ``strict=False`` admits a repeat of the time before, for a writer that can record two rows at one
@@ -1506,8 +1511,9 @@ def _contain(times, opened, closed, *, kind, source, field, reason="member_order
     With ``offsets=True`` the times are offsets from an origin the record does not carry
     (``LoadJournal.t0``: ``cpu_busy_t_s`` is ``clock() - t0``). ``Segment.__init__`` takes ``t0`` before
     ``Segment.run`` snapshots the census ``start``, and every sample is taken between the two census
-    snapshots, so ``t0 <= opened`` and ``opened <= t0 + t <= closed`` for every offset ``t``. The origin is
-    bounded from those constraints alone and the bounds are returned. If no origin satisfies them, it
+    snapshots, so ``t0 <= opened`` and ``opened <= t0 + t <= closed`` for every offset ``t``. ``floor`` is
+    the launch order: the segment is built after the previous member closed, so ``t0 >= floor``. The origin
+    is bounded from those constraints alone and the bounds are returned. If no origin satisfies them, it
     cannot be bounded and the evidence is unverifiable.
     """
     def refuse(index, why=reason):
@@ -1528,7 +1534,7 @@ def _contain(times, opened, closed, *, kind, source, field, reason="member_order
         if edge_s is not None and (first - opened > edge_s or closed - last > edge_s):
             refuse(None)
         return None
-    low, high = opened - first, min(opened, closed - last)
+    low, high = max(opened - first, -math.inf if floor is None else floor), min(opened, closed - last)
     if not low <= high:
         refuse(None, "evidence_unverifiable")
     if edge_s is not None:
@@ -1536,6 +1542,24 @@ def _contain(times, opened, closed, *, kind, source, field, reason="member_order
         if not low <= high:
             refuse(None)
     return low, high
+
+
+# The monotonic observation stamps a producer nests inside a journal row's values.
+OBSERVATION_STAMPS = ("monotonic_ns", "pm_observed_ns", "monotonic_before_ns", "monotonic_after_ns")
+
+
+def _nested_stamps(value, path=""):
+    """(dotted field, value) for every well-formed ``OBSERVATION_STAMPS`` value nested in ``value``."""
+    if isinstance(value, dict):
+        for key, item in value.items():
+            here = f"{path}.{key}" if path else str(key)
+            if key in OBSERVATION_STAMPS and _uint(item):
+                yield here, item
+            else:
+                yield from _nested_stamps(item, here)
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            yield from _nested_stamps(item, f"{path}.{index}")
 
 
 def _monotonic_anchors(data):
@@ -1681,6 +1705,15 @@ def _validate_sidecar(rows, sensors, kind, source, *, gated=False):
                   "readings", i)
         check(bool(row["error"]) == bool(errors), "error", i)
         counter.observe(a["monotonic_ns"], b["monotonic_ns"], values)
+    # R1, producer order: ``Sidecar.tick`` stamps the read, then calls the status reader, then writes the row,
+    # all under one lock, and the next row is stamped only after that (``Sidecar.event`` writes a boundary row
+    # the same way). So every observation stamp nested in a row (the status sample, its powermetrics
+    # observation, a gate's paired stamps) is no later than the next row's start, and for the last reading
+    # that is the ``session_end`` row: the session close. A stamp from the row's future refuses.
+    for i, row in enumerate(rows[:-1]):
+        following = rows[i + 1]["started"]["monotonic_ns"]
+        for field, stamp in _nested_stamps(row["values"]):
+            check(stamp <= following, f"values.{field}", i)
     # R1: the readings strictly advance inside their own session (a boundary row may share a stamp).
     _contain([row["started"]["monotonic_ns"] for row in rows[1:-1] if row["kind"] == "reading"],
              begin_ns, end["finished"]["monotonic_ns"], kind=kind, source=source,
@@ -3470,7 +3503,7 @@ def _check_step_derivation(receipt, episode, sensors, readings, configured, band
                 RECEIPT_NAME, field=f"slot_detail.{key}")
 
 
-def _check_load(raw, receipt, kind, wall_s=None, *, anchors=()):
+def _check_load(raw, receipt, kind, wall_s=None, *, anchors=(), after=None):
     """Reconcile the issued journal projection and apply quiet admission when required.
 
     R2: the journal conforms to ``LOAD_JOURNAL`` before any value is compared or counted. R3: its census is
@@ -3478,6 +3511,8 @@ def _check_load(raw, receipt, kind, wall_s=None, *, anchors=()):
     ``anchors`` stamp of the member's other records and every CPU sample lies inside it, and a judged journal
     covers it to its edges. ``wall_s`` is the frozen caller's own interval: the frozen verdict over it is
     still required, and the count minimum is judged a second time over the census session itself.
+    ``after`` is the previous member's monotonic close (launch order): this member's census, and the CPU
+    origin ``LoadJournal.t0`` its segment took when it was built, lie after it.
     """
     from scripts import align_r1_rehearsal as r1
 
@@ -3501,11 +3536,14 @@ def _check_load(raw, receipt, kind, wall_s=None, *, anchors=()):
         if len(fields["cpu_busy_cores"]) != len(times):
             refuse("cpu_busy_t_s")
         opened, closed = _census_session(kind, load["census"], reason)
+        if after is not None:
+            _required(opened >= after, "member_order", kind, LOAD_SOURCE, field="census.t_s", peer="launch_order")
         for source, field, index, stamp in anchors:
             _required(opened <= stamp <= closed, "member_order", kind, source, field=field, index=index,
                       peer=LOAD_SOURCE)
         _contain(times, opened, closed, kind=kind, source=LOAD_SOURCE, field="cpu_busy_t_s", reason=reason,
-                 peer=RECEIPT_NAME, offsets=True, edge_s=None if wall_s is None else r1.CPU_JOURNAL_MAX_GAP_S)
+                 peer=RECEIPT_NAME, offsets=True, edge_s=None if wall_s is None else r1.CPU_JOURNAL_MAX_GAP_S,
+                 floor=after)
         if wall_s is None:
             return
         if load["errors"]:
@@ -3574,6 +3612,9 @@ def _check_battery(raw, receipt, kind, bound):
 
     reason = "battery_evidence"
     records = _jsonl_objects(raw, kind, BATTERY_SOURCE, reason)
+    # R3: ``start_journals`` and ``stop_journals(final=True)`` each take one sample, so a completed member's
+    # journal holds at least the opening and the closing one (the ticker's samples fall between them).
+    _required(len(records) >= 2, reason, kind, BATTERY_SOURCE, field="samples", peer="Segment.run")
     try:
         for index, record in enumerate(records):
             def refuse(field, index=index):
@@ -4181,7 +4222,15 @@ def _check_segment_inventory(root, allowed, *, source):
                   "sequence", "attempt", source, field="segments")
 
 
-def _native_bundle(bound, receipt, configured, gate_inputs, step_binding, descriptor, *, oracle, config_sha):
+def _census_close(raw):
+    """The monotonic close of a load journal ``_check_load`` has already admitted: its census ``end``."""
+    return parse_evidence_json(raw)["census"][-1]["t_s"]
+
+
+def _native_bundle(bound, receipt, configured, gate_inputs, step_binding, descriptor, *, oracle, config_sha,
+                   after=None):
+    """Judge one member's bound records. ``after`` is the previous member's monotonic close (launch order).
+    Returns the bundle, the member's record binding and its own monotonic close, for the member after it."""
     kind = bound.kind
     bundle, data = _bound_member_files(bound, receipt)
     try:
@@ -4193,22 +4242,24 @@ def _native_bundle(bound, receipt, configured, gate_inputs, step_binding, descri
         if kind == "capture-predecessor-30b":
             _check_pinned_trace(kind, bundle, data)
         anchors = _monotonic_anchors(data)
+        load = data[LOAD_SOURCE] if kind in QUIET_MEMBERS else bound.read(LOAD_SOURCE, LOAD_SOURCE)
         if kind in QUIET_MEMBERS:
-            _check_load(data[LOAD_SOURCE], receipt, kind, bound.ended_epoch_s - bound.started_epoch_s,
-                        anchors=anchors)
+            _check_load(load, receipt, kind, bound.ended_epoch_s - bound.started_epoch_s, anchors=anchors,
+                        after=after)
         binding = oracle.decide(f"{kind}/records", kind, _check_member_records, kind, bundle, receipt, data,
                                 configured, gate_inputs, step_binding=step_binding, descriptor=descriptor,
                                 oracle=oracle)
         joined = _episode_from_bound_trace(data)
         _check_battery(bound.read(BATTERY_SOURCE, BATTERY_SOURCE), receipt, kind, bound)
         if kind not in QUIET_MEMBERS:
-            _check_load(bound.read(LOAD_SOURCE, LOAD_SOURCE), receipt, kind, anchors=anchors)
+            _check_load(load, receipt, kind, anchors=anchors, after=after)
             _check_gated_energy(joined, data, receipt, kind)
+        closed = _census_close(load)
     except EvidenceFailure:
         raise
     except (OSError, ArithmeticError, LookupError, TypeError, ValueError, AttributeError) as error:
         raise EvidenceFailure("bundle_binding", kind, "runs") from error
-    return bundle, binding
+    return bundle, binding, closed
 
 
 def _check_native_soak(soak, config_path):
@@ -4252,7 +4303,7 @@ def _check_native_soak(soak, config_path):
     # The row's verdict is the frozen driver's, over the launcher's own interval, and must be reproduced. R1
     # judges the count a second time over the census session the journal itself bounds (``_check_load``).
     load_verdict = _check_load(soak.sources[LOAD_SOURCE], receipt, "idle", (ended - started) / NS,
-                               anchors=_monotonic_anchors({journal: soak.sources[journal]}))
+                               anchors=_monotonic_anchors({journal: soak.sources[journal]}), after=0.0)
     _required(canonical(load_verdict) == canonical(row.get("os_load")),
               "soak_load", "idle", LOAD_SOURCE, peer="soak_row.json")
     soak.verify_reads()
@@ -4287,12 +4338,15 @@ def _derive_soak(raw_journal, receipt, sensors, bound):
                               ("sensor_series_failed_reads", failed), ("sensor_series_end_t_s", end_time)):
             if canonical(receipt[key]) != canonical(expected):
                 raise ValueError("soak readings disagree with their receipt")
-        # R1: the frozen tail window and its read minimum, judged a second time against the bound session
-        # close (the sensor session's ``session_end`` row), never against the last reading.
+        # R1: the frozen tail window, its read minimum and its settling test, judged a second time against the
+        # bound session close (the sensor session's ``session_end`` row), never against the last reading. A
+        # derivation at the close is a verdict like the frozen one: it must pass, never be computed and dropped.
         closed_ns = entries[-1]["started"]["monotonic_ns"]
         _contain([reading["monotonic_ns"] for reading in readings], entries[0]["started"]["monotonic_ns"],
                  closed_ns, kind="idle", source=journal, field="monotonic_ns", reason="soak_readings")
-        r1.soak_detrended(series, times, (closed_ns - first_ns) / 1e9)
+        at_close = r1.soak_detrended(series, times, (closed_ns - first_ns) / 1e9)
+        if any(stat["settled"] is not True for stat in at_close.values()):
+            raise EvidenceFailure("soak_unsettled", "idle", journal, field="session_close", peer=RECEIPT_NAME)
         return r1.soak_detrended(series, times, end_time)
     except EvidenceFailure:
         raise
@@ -4351,13 +4405,14 @@ def _native_verdict(ledger, runtime, invoke, configured, soak, oracle):
     bundles = {}
     step_binding = None
     prior_end = soak.member.ended_epoch_s
+    prior_close = _census_close(soak.sources[LOAD_SOURCE])      # launch order on the monotonic clock
     for kind, receipt in receipts.items():
         member = ledger.member(kind)
         prior_end = _check_terminal_order(member, prior_end)
-        bundles[kind], binding = _native_bundle(member, receipt, configured,
-                                                (step_receipt, bands, s5_bands), step_binding,
-                                                _attested_descriptor(ledger, kind, configured),
-                                                oracle=oracle, config_sha=ledger.config_sha)
+        bundles[kind], binding, prior_close = _native_bundle(
+            member, receipt, configured, (step_receipt, bands, s5_bands), step_binding,
+            _attested_descriptor(ledger, kind, configured), oracle=oracle, config_sha=ledger.config_sha,
+            after=prior_close)
         if kind == "step-d":
             step_binding = binding
     oracle.decide(ISSUED_DRIVER, "attempt", _check_issued_driver, runtime, schedule, soak.row["result"],
