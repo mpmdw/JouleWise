@@ -54,7 +54,7 @@ jobs:
       - name: Interim look fit and two-stage CLI (numpy)
         run: |
           python -m pip install 'numpy==2.2.6'
-          python -B -m unittest tests.cadence.test_fit_interim tests.cadence.test_look_run tests.cadence.test_time_fields tests.cadence.test_predict tests.cadence.test_round6_guards tests.cadence.test_round6_diagnostics tests.cadence.test_round7_admission tests.cadence.test_interim_release tests.cadence.test_content_admission tests.cadence.test_look_layout
+          python -B -m unittest tests.cadence.test_fit_interim tests.cadence.test_look_run tests.cadence.test_time_fields tests.cadence.test_predict tests.cadence.test_round6_guards tests.cadence.test_round6_diagnostics tests.cadence.test_round7_admission tests.cadence.test_interim_release tests.cadence.test_content_admission tests.cadence.test_look_layout tests.cadence.test_merge_audit_c3a0dd9f8
 
   # The frozen stage-1 admission matrix (RL-184 section 3.3): 101,889 generated cases through the real executor, the
   # acceptance of stage-1 admission (lead, PR #795 round 5). Only the suite's driver is adapted

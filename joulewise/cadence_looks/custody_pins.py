@@ -232,20 +232,88 @@ def _label(item, at, floor=0):
     return label[max((match.end() for match in _BOUNDARY.finditer(label)), default=0):]
 
 
+# Merge audit on c3a0dd9f8, finding 2: a Check binds only an OBSERVED offload manifest digest. The words before
+# "offload manifest" in the identification's clause are a closed set: a name (the span, its offload directory) and
+# the words an observation is printed with. Any other word ("Expected", "planned", "target", "not the", ...) makes
+# the digest a statement about the manifest, not an observation of it, and it identifies nothing.
+_OBSERVATION_WORDS = frozenset({"check", "of", "the", "observed", "verified", "read", "back", "readback", "read-back",
+                                "reread", "re-read", "joulewise-offload"})
+_PREFIX_SPLIT = re.compile(r"[\s`'\"()\[\]*,;:=_/]+")
+
+
+def _observation_prefix(prefix):
+    """Whether every word before "offload manifest" in a label is a name or an observation's word."""
+    for word in _PREFIX_SPLIT.split(prefix):
+        if not word or word.lower() in _OBSERVATION_WORDS:
+            continue
+        if not (_NAME.fullmatch(word) and re.search(r"[A-Za-z]", word) and re.search(r"[0-9]", word)):
+            return False
+    return True
+
+
 def _offload_identified(label):
-    """Whether a digest under ``label`` is identified as the span's offload manifest (audit 3, rule P2; RL-195
-    Q2): the label's last manifest word is "offload manifest", and only punctuation, "sha256", a file count or a
-    readback's word stand between it and the digest. A look manifest, a bare "manifest", the SHA256SUMS file by
-    name, an archive, a marker or an ``outer.sha256`` is not; nor is "offload manifest pending, look manifest"."""
+    """Whether a digest under ``label`` is identified as the span's observed offload manifest (audit 3, rule P2;
+    RL-195 Q2; merge audit finding 2): the label's last manifest word is "offload manifest", only names and an
+    observation's words stand before it in the clause, and only punctuation, "sha256", a file count or a readback's
+    word stand between it and the digest. A look manifest, a bare "manifest", the SHA256SUMS file by name, an
+    archive, a marker or an ``outer.sha256`` is not; nor is "offload manifest pending, look manifest", nor an
+    "Expected offload manifest"."""
     if "outer" in label.lower():
         return False
     found = list(_MANIFEST_WORD.finditer(label))
     if not found:
         return False
     last = found[-1]
-    if last.group(0).lower() != "manifest" or _OFFLOAD_BEFORE.search(label[:last.start()]) is None:
+    offload = _OFFLOAD_BEFORE.search(label[:last.start()])
+    if last.group(0).lower() != "manifest" or offload is None or not _observation_prefix(label[:offload.start()]):
         return False
     return all(_IDENTIFIER_FILLER.fullmatch(word) for word in _IDENTIFIER_SPLIT.split(label[last.end():]) if word)
+
+
+# An observation the Check says is not yet made: any of these words in a clause that names the span's offload
+# manifest holds the span, whatever else the item prints for it.
+_PENDING = re.compile(r"(?<![a-z])(?:pending|awaiting|await|tbd|to follow|not yet)(?![a-z])", re.I)
+_OFFLOAD_MENTION = re.compile(r"(?<![a-z])offload[\s_-]+manifest(?![a-z])", re.I)
+# A digest-like token: a run of eight or more hex digits, of any case, standing alone. One that is not a printed
+# digest (_PRINTED: 64 lowercase hex, or an abbreviation) under the span's manifest label is a malformed
+# observation, and it holds the span.
+_HEXISH = re.compile(r"(?<![0-9A-Za-z_-])[0-9A-Za-z]*[0-9A-Fa-f]{8,}[0-9A-Za-z]*(?![0-9A-Za-z_-])")
+
+
+def _clause_bounds(item, at):
+    """The clause around ``at``: from the last ``.``, ``;``, ``,`` or line end before it to the next one after."""
+    start = max((m.end() for m in _BOUNDARY.finditer(item, max(0, at - _LABEL_REACH), at)), default=0)
+    after = _BOUNDARY.search(item, at)
+    return start, after.start() if after else len(item)
+
+
+def _pending_observation(item, names, ids, sid):
+    """Whether a clause of the item that names the span's offload manifest says its observation is pending."""
+    for mention in _OFFLOAD_MENTION.finditer(item):
+        if _owner(names, mention.start(), ids) != sid:
+            continue
+        start, end = _clause_bounds(item, mention.start())
+        if _PENDING.search(item, start, end):
+            return True
+    return False
+
+
+def _malformed_observation(item, names, ids, sid, printed):
+    """The first digest-like token the item prints for the span under a manifest's or a readback's label that is
+    not a printed digest (a wrong length, upper case, a character that is not hex), or None."""
+    covered = [(match.start(), match.end()) for match in printed]
+    floors = [match.end() for match in printed]
+    for token in _HEXISH.finditer(item):
+        if any(a <= token.start() and token.end() <= b for a, b in covered):
+            continue
+        if sum(ch in "0123456789abcdefABCDEF" for ch in token.group(0)) * 4 < len(token.group(0)) * 3:
+            continue                     # a word with a run of hex in it, not a digest: under a quarter non-hex only
+        if _owner(names, token.start(), ids) != sid:
+            continue
+        floor = max((end for end in floors if end <= token.start()), default=0)
+        if _manifest_mentioned(_label(item, token.start(), floor)):
+            return token.group(0)
+    return None
 
 
 _READBACK = re.compile(r"read[\s-]?back|re-?read", re.I)
@@ -299,10 +367,13 @@ def check_binding(span, run_state_text, span_ids=()):
     name belongs to it, and a digest under any other label is not an identification at all.
 
     Equality is exact. Every identification the item prints for the span must match the pin character for
-    character (an abbreviation's prefix and suffix included), and the span binds only on one printed in full hex.
+    character (an abbreviation's prefix and suffix included), and the span binds only on one printed in full hex as
+    an observation (merge audit finding 2: an "Expected offload manifest" is not one). A pending observation or a
+    malformed digest under any of the span's manifest labels holds the span whatever else the item prints for it.
     Returns the item number, the text as printed and the form: ``full`` (bound), ``mismatch`` (``as_printed`` is
     the identification that does not match), ``abbreviated`` (only abbreviations: never bound) or ``absent`` (none,
-    for a pending digest or another label). Every form but ``full`` holds the span."""
+    for a pending or malformed observation, an expected-only digest or another label). Every form but ``full``
+    holds the span."""
     digest, number, sid = span["offload_manifest_sha256"], span["check_item"], span["span_id"]
     ids = set(span_ids) | {sid}
     out = {"check_item": number, "as_printed": None, "form": "absent"}
@@ -331,6 +402,9 @@ def check_binding(span, run_state_text, span_ids=()):
     for match in owned:                 # one contradiction under any manifest label holds the span
         if not matches(match):
             return dict(out, as_printed=match.group(0), form="mismatch")
+    if (_malformed_observation(item, names, ids, sid, printed) is not None
+            or _pending_observation(item, names, ids, sid)):
+        return out                      # observed in no form that can bind: held
     if any(match.group(1) for match in identified):
         return dict(out, as_printed=digest, form="full")
     if identified:

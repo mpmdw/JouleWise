@@ -98,8 +98,9 @@ class FreezeNaming(unittest.TestCase):
         decisions.write_text(f"# {rule}. Generated ruling\n\n{stanza}\n")
         MR.git_commit(mini, "name the generated digest", publish=False)
         audit = MR.git(mini, "rev-parse", "HEAD").stdout.strip()
-        audit_ref = "refs/remotes/" + M._FREEZE2_AUDIT_REF
-        MR.git(mini, "update-ref", audit_ref, audit)
+        # the audit branch is on the copy's origin: freeze 2 fetches it before the ancestry test (RL-184 2.3)
+        MR.run(["git", "-C", str(mini), "push", "-q", "origin",
+                f"{audit}:refs/heads/{M._FREEZE2_AUDIT_REF.split('/', 1)[1]}"], mini, check=True)
         MR.git(mini, "checkout", "-q", "main")
         naming = {"schema": "joulewise.cadence_looks.freeze2_naming.v1", "look_id": LOOK, "ruling": rule,
                   "coefficients_sha256": row["coefficients_sha256"], "public_sha256": row["output_sha256"],

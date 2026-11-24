@@ -1344,13 +1344,21 @@ class LookLayout:
 PUBLIC_RUN_STATE_REF = "refs/remotes/origin/main"
 
 
+def fetch_origin_branch(repo, branch):
+    """Bring ``refs/remotes/origin/<branch>`` up to date from origin before an authority is resolved from it (audit
+    3, rule P3; RL-184 section 2.3, "a failed fetch of either ref holds"; merge audit on c3a0dd9f8, finding 3). A fetch
+    that fails refuses: an authority is never resolved from a stale or a local copy of the ref."""
+    rc, _, err = _git(Path(repo).resolve(), "fetch", "--quiet", "--no-tags", "origin",
+                      f"+refs/heads/{branch}:refs/remotes/origin/{branch}")
+    if rc != 0:
+        raise ManifestError([f"origin/{branch} cannot be fetched: an authority is resolved only from the fetched "
+                             f"ref ({err.strip()[:120]})"])
+
+
 def fetch_public(repo):
     """Bring origin/main up to date from the remote before any public record is read (audit 3, rule P3). A fetch
     that fails refuses: public evidence is never read from a stale or a local copy."""
-    rc, _, err = _git(Path(repo).resolve(), "fetch", "--quiet", "--no-tags", "origin",
-                      f"+refs/heads/main:{PUBLIC_RUN_STATE_REF}")
-    if rc != 0:
-        raise ManifestError([f"origin/main cannot be fetched: public evidence is read only from it ({err.strip()[:120]})"])
+    fetch_origin_branch(repo, "main")
 
 
 def public_run_state(repo, *, fetch=True):
@@ -1739,6 +1747,8 @@ def _freeze2_naming(repo, row, raw):
     commit = record["decisions_commit"]
     if record["stanza"] != stanza or not isinstance(commit, str) or not re.fullmatch(r"[a-f0-9]{40}", commit):
         raise ManifestError(["freeze 2: naming stanza or audit commit is invalid"])
+    # RL-184 section 2.3: "the fetched refs/remotes/origin/audit/2026-11-10-fable"; a failed fetch holds
+    fetch_origin_branch(repo, _FREEZE2_AUDIT_REF.split("/", 1)[1])
     _, audit = shared_ref(repo, _FREEZE2_AUDIT_REF)
     if _git(repo, "merge-base", "--is-ancestor", commit, audit)[0]:
         raise ManifestError(["freeze 2: naming commit is outside the research lead's audit branch"])
@@ -1757,7 +1767,10 @@ def _freeze2_naming(repo, row, raw):
 
 
 def freeze2_authority(repo, *, expected_coefficients_sha256=None):
-    """Authenticate the public freeze against one main commit and return its public evidence."""
+    """Authenticate the public freeze against one main commit and return its public evidence. The commit is
+    origin/main as fetched now (RL-184 section 2.3; merge audit on c3a0dd9f8, finding 3): a failed fetch of main,
+    or on the naming path of the audit branch, refuses before anything is resolved from the ref."""
+    fetch_public(repo)
     _, main = shared_ref(repo, "origin/main")
 
     def main_bytes(path):

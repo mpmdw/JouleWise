@@ -214,6 +214,9 @@ def row(args):
         problems.append("LOOKS.json's row does not name this manifest's sha256")
     changes = {}
     if not problems and (args.output or args.error_type or args.interrupted):
+        # an outcome is recorded against the shared history as fetched now: whether the id is spent, and the
+        # execution commit's ancestry (merge audit on c3a0dd9f8, finding 3: a failed fetch refuses)
+        lm.fetch_public(repo)
         if r.get("status") != "stage1_committed" or lm.look_spent(repo, doc["look_id"], "HEAD"):
             problems.append("only an unspent stage-1 commitment can record an execution outcome")
         elif args.error_type:
@@ -279,7 +282,8 @@ def public_row(repo, row):
             row["look_id"], row["sha256"], row["stage1_sha256"]):
         raise ValueError("the public report names different commitments from the look ledger")
     commit = public["commit"]
-    ref, _ = lm.shared_ref(repo)
+    lm.fetch_public(repo)                 # the shared ref is origin/main as fetched now; a failed fetch refuses
+    ref, _ = lm.shared_ref(repo, "origin/main")
     if lm._git(repo, "merge-base", "--is-ancestor", commit, ref)[0]:
         raise ValueError("the public report's execution commit is not on the shared ref")
     rc, ledger_raw, _ = lm._git(repo, "show", f"{commit}:{lm.LOOK_LEDGER_PATH}")

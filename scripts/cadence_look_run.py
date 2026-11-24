@@ -453,6 +453,17 @@ def token_stamps(bundle):
 
 
 def build_turn(bundle, result, fan_keys):
+    """A leg's level-R turn: its operational half (``turn_operational``), then the native power-management states
+    from rich_telemetry.jsonl and raw/powermetrics.plist, the turn's only protected sources."""
+    turn = turn_operational(bundle, result, fan_keys)
+    turn["native_pm"] = native_states(bundle, turn["turn_start_s"], turn["last_token_s"])
+    return turn
+
+
+def turn_operational(bundle, result, fan_keys):
+    """The turn as the bundle's journals give it (align_turns.jsonl, events.jsonl, align_thermal.jsonl), with no
+    native states: no trace, telemetry, powermetrics or meter file is opened. ``admit_look_input`` runs it for every
+    leg before the first protected source opens; ``build_turn`` adds the native states."""
     turns = _jsonl(bundle / "outputs/align_turns.jsonl")
     if len(turns) != 1:
         raise F.LookInputError("align_turns: not one turn")
@@ -489,8 +500,7 @@ def build_turn(bundle, result, fan_keys):
                       "first_token_s": tok[a]})
     return {"prefill_tokens": P, "decode_tokens": N, "turn_start_s": ts, "first_token_s": tok[0],
             "last_token_s": tok[-1], "segments": segs, "prefix_tails": tails,
-            "journal": journal_readings(bundle, ts - JOURNAL_PRE_S, tok[-1] + JOURNAL_POST_S, fan_keys),
-            "native_pm": native_states(bundle, ts, tok[-1])}
+            "journal": journal_readings(bundle, ts - JOURNAL_PRE_S, tok[-1] + JOURNAL_POST_S, fan_keys)}
 
 
 def meter_offsets(sm):
@@ -589,6 +599,33 @@ def trace_holes(L_turn, bundle, sm, sm_why, leg_key="(leg)"):
 RULED_RULES = ("sidecar_coverage", "km003c_clean")
 
 
+def power_of(entry):
+    return "high_power" if entry["block_id"].startswith("hp-") else "automatic"
+
+
+def soak_reference(sdir):
+    """The span's soak reference TV0h, or None when the file or the field is absent."""
+    try:
+        soak = _json(sdir / "soak/soak_reference.json")["sensors_c"]["TV0h"]
+    except M.ManifestError:
+        raise                                     # duplicate keys or a nonfinite number: never an absent reference
+    except (OSError, KeyError, TypeError, ValueError):
+        soak = None
+    if soak is not None:
+        soak = _real(soak, "soak_reference: sensors_c.TV0h")
+    return soak
+
+
+def operational_inclusion(result, attempts, v34, power):
+    """A leg's six verdicts as its record and the committed rules-3/4 verdict file give them, before the replay and
+    the trace clauses read any protected source. Those later reads can only exclude further."""
+    return {"ran_to_cap": result.get("leg_status") == "complete" and result.get("decode_cap_reached") is True,
+            "g0_released": result.get("g0_released") is True,
+            "sidecar_coverage": v34["sidecar_coverage"] is True, "km003c_clean": v34["km003c_clean"] is True,
+            "not_a_contaminated_attempt": bool(attempts) and not attempts[-1].get("contaminated"),
+            "block_power_mode": _mode(result) == MODE_BY_POWER[power]}
+
+
 def read_span(sdir, entry, rules34, fan_keys, ruled=None):
     """(span, legs) of one roster span, in level-R shape. Opens no energy value: power_trace.csv and the meter
     streams only through the time reader (RL-173 E.1). ``ruled``: {leg_key: (rule, ruling)}, the research lead's
@@ -604,15 +641,8 @@ def read_span(sdir, entry, rules34, fan_keys, ruled=None):
     # decisions remain exclusions. The later trace clauses can only exclude further.
     selected = I34.keys(_json(ROOT / I34.RUNTIME_CONFIG)["sensors"])
     replayed, _, _ = I34.judge_span(sdir, entry["span_id"], selected)
-    try:
-        soak = _json(sdir / "soak/soak_reference.json")["sensors_c"]["TV0h"]
-    except M.ManifestError:
-        raise                                     # duplicate keys or a nonfinite number: never an absent reference
-    except (OSError, KeyError, TypeError, ValueError):
-        soak = None
-    if soak is not None:
-        soak = _real(soak, "soak_reference: sensors_c.TV0h")
-    power = "high_power" if entry["block_id"].startswith("hp-") else "automatic"
+    soak = soak_reference(sdir)
+    power = power_of(entry)
     span = {"span_id": entry["span_id"], "block_id": entry["block_id"],
             "phase": "extension" if entry["role"] == "describe" else "development", "role": entry["role"],
             "power_mode": power, "t0_epoch_s": _real(epoch_s, "runner receipt: started.epoch_s"),
@@ -647,11 +677,7 @@ def read_span(sdir, entry, rules34, fan_keys, ruled=None):
             if ref.get("excluded"):
                 marks.add("reference from an excluded leg")
         leg_type = "T" if spec.get("leg_type") == "T" else "A"          # R-21: spec.leg_type only
-        inc = {"ran_to_cap": result.get("leg_status") == "complete" and result.get("decode_cap_reached") is True,
-               "g0_released": result.get("g0_released") is True,
-               "sidecar_coverage": v34["sidecar_coverage"] is True, "km003c_clean": v34["km003c_clean"] is True,
-               "not_a_contaminated_attempt": bool(attempts) and not attempts[-1].get("contaminated"),
-               "block_power_mode": _mode(result) == MODE_BY_POWER[power]}
+        inc = operational_inclusion(result, attempts, v34, power)
         if leg_type == "A":                     # type-T runtime is never read or rejudged at this look
             for rule in I34.VERDICT_KEYS:
                 inc[rule] = inc[rule] and replayed[key][rule]
@@ -699,12 +725,15 @@ def read_span(sdir, entry, rules34, fan_keys, ruled=None):
     return span, legs
 
 
-def read_look_input(roster, sdir_of, rules34, fan_keys=FAN_KEYS, ruled=None):
+def read_look_input(roster, sdir_of, rules34, fan_keys=FAN_KEYS, ruled=None, *, synthetic_only=False):
     """Level R from the custody copy. `synthetic` is true only when every span's runner receipt says so
-    (the synthetic generator writes it; a real runner never does)."""
+    (the synthetic generator writes it; a real runner never does). Admission (``validate_runtime_bundles``) and
+    then the look's own input checks (``admit_look_input``) run for the whole roster before the first span's
+    protected sources open."""
     if not isinstance(roster, list):                # one shape: validate --roster-out's JSON list
         raise F.LookInputError("roster: not a list of spans")
     validate_runtime_bundles(roster, sdir_of)
+    admit_look_input(roster, sdir_of, rules34, fan_keys, ruled, synthetic_only=synthetic_only)
     spans, legs, synth = [], [], []
     ruled = dict(ruled or {})
     for entry in roster:
@@ -717,6 +746,96 @@ def read_look_input(roster, sdir_of, rules34, fan_keys=FAN_KEYS, ruled=None):
         raise F.LookInputError(f"a ruled exclusion names a leg with no record on the roster: {sorted(ruled)[0]}")
     return {"schema": F.INPUT_SCHEMA, "look_id": F.LOOK_ID, "synthetic": bool(synth) and all(synth),
             "spans": spans, "legs": legs}
+
+
+ROSTER_ENTRY_KEYS = ("span_id", "block_id", "role", "t0_local_date")
+
+
+def admit_look_input(roster, sdir_of, rules34, fan_keys=FAN_KEYS, ruled=None, *, synthetic_only=False):
+    """Validate before open (merge audit on c3a0dd9f8, finding 1; one rule for the class). Every refusal stage 1
+    can decide from the look's inputs and the operational custody files is decided here, for the whole roster,
+    before the first protected source (a trace, telemetry, powermetrics or meter stream) opens:
+
+    * the roster entries: the four fields as text, the role ``fit`` or ``describe``, each span once;
+    * the run mode: under --allow-draft every receipt says ``synthetic`` (Mythos N2);
+    * each span's receipt against its roster entry (the start's Los Angeles day), its soak fields and soak
+      reference, and the names of its meter streams (a desk-compressed copy refuses);
+    * the rules-3/4 verdict file: a verdict of two booleans for every leg of every receipt's roster, each leg once;
+    * each recorded leg's record and summary, its cell and G0 role, its runtime bundle locator, the operational half
+      of its turn (``turn_operational``) and the name of its GPU trace (a desk-compressed copy refuses);
+    * each ruled exclusion names a leg with a record on the roster.
+
+    The reads here are the operational files the pin guard already verified, and directory names. From here on a
+    refusal comes only from a protected time field's own content. ``read_span`` keeps its checks as a backstop."""
+    if not isinstance(rules34, dict):
+        raise F.LookInputError("rules 3 and 4: the verdict file is not an object of leg verdicts")
+    seen, recorded = set(), set()
+    for entry in roster:
+        if (not isinstance(entry, dict) or any(not isinstance(entry.get(k), str) for k in ROSTER_ENTRY_KEYS)
+                or entry["role"] not in ("fit", "describe")):
+            raise F.LookInputError("roster: a span entry is not span_id, block_id, role (fit or describe) and "
+                                   "t0_local_date")
+        sid = entry["span_id"]
+        if sid in seen:
+            raise F.LookInputError("roster: a span appears twice")
+        seen.add(sid)
+        sdir = sdir_of(sid)
+        receipt = _json(sdir / "runner_receipt.json")
+        if synthetic_only and receipt.get("synthetic") is not True:
+            raise F.LookInputError("--allow-draft runs on synthetic input only (Mythos N2)")
+        epoch_s = receipt["started"]["epoch_s"]
+        F.span_day(epoch_s, entry["t0_local_date"], sid)
+        _real(epoch_s, "runner receipt: started.epoch_s")
+        I34.soak_fields(receipt)
+        soak_reference(sdir)
+        try:
+            TF.span_streams(sdir)                # names only: a desk-compressed stream refuses the look
+        except TF.TimeFieldError as exc:
+            raise F.LookInputError(f"custody: {exc}") from None
+        power = power_of(entry)
+        leg_ids = receipt["roster"]
+        if len(set(leg_ids)) != len(leg_ids):
+            raise F.LookInputError(f"{sid}: runner receipt: a leg appears twice on the roster")
+        for leg_id in leg_ids:
+            key = f"{sid}/{leg_id}"
+            v34 = rules34.get(key)
+            if v34 is None:
+                raise F.LookInputError("rules 3 and 4: no verdict for a roster leg")
+            if (not isinstance(v34, dict) or set(v34) != set(I34.VERDICT_KEYS)
+                    or any(type(v34[k]) is not bool for k in I34.VERDICT_KEYS)):
+                raise F.LookInputError("rules 3 and 4: a roster leg's verdict is not sidecar_coverage and "
+                                       "km003c_clean as booleans")
+            ldir = sdir / "legs" / leg_id
+            if not (ldir / "leg_record.json").is_file():
+                continue
+            recorded.add(key)
+            rec = _json(ldir / "leg_record.json")
+            spec, attempts, result = rec["spec"], rec["attempts"], rec.get("result") or {}
+            if (ldir / "leg_summary.json").is_file():
+                _json(ldir / "leg_summary.json")
+            if _whole(spec["prefill_tokens"], "leg record: spec.prefill_tokens") not in F.CELLS:
+                raise F.LookInputError(f"{key}: cell_prompt_tokens is not a registered cell")
+            if spec.get("g0_role") not in (None, "capture", "consume"):
+                raise F.LookInputError(f"{key}: g0_role")
+            bundle = M.runtime_bundle(sdir, leg_id, rec)
+            if bundle is None:
+                continue
+            try:
+                turn_operational(bundle, result, fan_keys)
+            except (M.ManifestError, WriterShape):
+                raise
+            except (OSError, ValueError, KeyError, TypeError, IndexError) as exc:
+                # the replay and the trace clauses can only exclude further: a leg its record and committed
+                # verdicts include must have a readable turn, as read_span requires of an included leg
+                if all(operational_inclusion(result, attempts, v34, power).values()):
+                    raise F.LookInputError(f"an included leg's bundle has no readable turn ({type(exc).__name__})")
+                continue
+            if entry["role"] != "describe" and TF.compressed_siblings([bundle / "power_trace.csv"]):
+                raise F.LookInputError(f"GPU rail: {key}: power_trace.csv.zst is desk-compressed; the look reads "
+                                       "a decompressed custody copy")
+    unknown = sorted(set(ruled or {}) - recorded)
+    if unknown:
+        raise F.LookInputError(f"a ruled exclusion names a leg with no record on the roster: {unknown[0]}")
 
 
 def validate_runtime_bundles(roster, sdir_of):
@@ -1070,10 +1189,11 @@ def _stage1(a, stack):
         rules34 = M.strict_json(rules_raw)
         if ruled and not a.allow_draft:
             old_input, old_ruled = superseded_source(row, layout)
+            admit_look_input(roster, sdir_of, rules34, ruled=ruled)    # the new exclusions too, before any open
             before = read_look_input(roster, sdir_of, rules34, ruled=old_ruled)
             if F.dump(before) != F.dump(old_input):
                 raise F.LookInputError("a ruled rerun changes the superseded level-R source; only the named exclusions may change")
-        look_input = read_look_input(roster, sdir_of, rules34, ruled=ruled)
+        look_input = read_look_input(roster, sdir_of, rules34, ruled=ruled, synthetic_only=a.allow_draft)
         if ruled and not a.allow_draft:
             # The exclusion-aware read may change only named flags and their derived span marks. Verify the
             # second read too, so a changed source between reads cannot enter the new fit.
