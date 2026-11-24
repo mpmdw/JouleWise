@@ -464,6 +464,30 @@ def _is_digest(value):
     return isinstance(value, str) and D.fullmatch(value) is not None
 
 
+def soak_segments(root, source):
+    """EVIDENCE-SPEC row 23: no retry or substituted segment beside the issued soak segment.
+
+    One predicate for the native soak and an archive that holds its soak directory (RL-215 Q2)."""
+    for entry in Path(root).iterdir():
+        if entry.name != SOAK_SEGMENT and (entry.is_dir() or "rejected" in entry.name or "precool" in entry.name):
+            raise EvidenceFailure("sequence", "idle", source, field="segments")
+
+
+def outer_soak_identity(row, reference, result):
+    """The outer soak row and reference name the soak segment at attempt 0, and the row's ``result`` is the
+    saved receipt, whole payload against whole payload (RLD:20771). Common to the native soak and to an
+    archive that holds the row (RL-215 Q2); where the row's directory lies is the native transport's check."""
+    reported_output = row.get("output_dir")
+    if (row.get("name") != SOAK_SEGMENT or type(row.get("attempt")) is not int
+            or row["attempt"] != 0 or not isinstance(reported_output, str)
+            or reference.get("source_segment") != SOAK_SEGMENT
+            or reference.get("source_output") != reported_output
+            or type(reference.get("attempt")) is not int or reference["attempt"] != 0):
+        raise EvidenceFailure("fresh_soak", "idle", SOAK_ROW, field="disagrees", peer=SOAK_REFERENCE)
+    if canonical(row.get("result")) != canonical(result):
+        raise EvidenceFailure("receipt_pair", "idle", SOAK_ROW, field="disagrees", peer=SOAK_FILES[0])
+
+
 class BoundSoak:
     """The launcher-bound soak observation required before the native row 0."""
 
@@ -523,9 +547,10 @@ class BoundSoak:
             raise EvidenceFailure("fresh_soak", "idle", LEDGER_NAME, field="disagrees", peer="issued_inputs")
         self.nonce = attempt["nonce"]
 
-        # 4. Bind both outer files before parsing either one.
+        # 4. Bind both outer files before parsing either one. A missing row is evidence_unverifiable
+        # (RLD:20771); RL-215 Q2 keeps that disposition.
         self.row_sha, self.reference_sha = closed["soak_row_sha256"], closed["soak_reference_sha256"]
-        outer_row = self._read(SOAK_ROW, self.row_sha)
+        outer_row = self._read(SOAK_ROW, self.row_sha, missing="evidence_unverifiable")
         outer_reference = self._read(SOAK_REFERENCE, self.reference_sha)
 
         # 5. Bind the segment's manifest and each required file through it.
@@ -537,27 +562,19 @@ class BoundSoak:
         self.member = BoundMember(self.root / SOAK_SEGMENT, "idle", self.config_sha,
                                   manifest_sha=manifest["sha256"])
         self.sources = {name: self.member.read(name, name) for name in SOAK_FILES}
-        # No retry or substituted segment beside the issued one (EVIDENCE-SPEC row 23).
-        for entry in self.root.iterdir():
-            if entry.name != SOAK_SEGMENT and (entry.is_dir() or "rejected" in entry.name or "precool" in entry.name):
-                raise EvidenceFailure("sequence", "idle", LEDGER_NAME, field="segments")
+        soak_segments(self.root, LEDGER_NAME)
         self.argv_sha256 = returned["argv_sha256"]
 
-        # 6. The outer row, saved receipt and stdout must be the same observation.
+        # 6. The outer row, saved receipt and stdout must be the same observation. Where the row names its
+        # segment is the launcher's own transport (this attempt's root); the rest is common evidence.
         self.row = self._object(outer_row, SOAK_ROW)
         self.reference = self._object(outer_reference, SOAK_REFERENCE)
-        result = self._object(self.sources[SOAK_FILES[0]], SOAK_FILES[0])
-        segment = self.root / SOAK_SEGMENT
+        result = self.receipt = self._object(self.sources[SOAK_FILES[0]], SOAK_FILES[0])
         reported_output = self.row.get("output_dir")
-        if (self.row.get("name") != SOAK_SEGMENT or type(self.row.get("attempt")) is not int
-                or self.row["attempt"] != 0 or not isinstance(reported_output, str)
-                or Path(reported_output).resolve() != segment.resolve()
-                or self.reference.get("source_segment") != SOAK_SEGMENT
-                or self.reference.get("source_output") != reported_output
-                or type(self.reference.get("attempt")) is not int or self.reference["attempt"] != 0):
+        if not isinstance(reported_output, str) or Path(reported_output).resolve() != (
+                self.root / SOAK_SEGMENT).resolve():
             raise EvidenceFailure("fresh_soak", "idle", SOAK_ROW, field="disagrees", peer=SOAK_REFERENCE)
-        if canonical(self.row.get("result")) != canonical(result):
-            raise EvidenceFailure("receipt_pair", "idle", SOAK_ROW, field="disagrees", peer=SOAK_FILES[0])
+        outer_soak_identity(self.row, self.reference, result)
         line = json.dumps(result, sort_keys=True, allow_nan=False) + "\n"
         if _hash_text(line) != returned["stdout_sha256"]:
             raise EvidenceFailure("receipt_pair", "idle", SOAK_FILES[0], field="disagrees", peer="stdout")

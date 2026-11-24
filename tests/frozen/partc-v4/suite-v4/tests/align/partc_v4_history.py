@@ -1,47 +1,9 @@
-"""Audit reproductions for the Part C evaluator, driven through the synthetic launcher.
-
-The reproductions are audit 2's `semantic_probe.py`, rewritten as a regression runner. It loads the frozen
-differential suite by path, uses the suite's own clean control, and changes one input before a member's
-producer closes. Each damaged attempt must end `other_failure` with its expected reason. Where the frozen
-workload disagrees with the damage, the probe first confirms that disagreement itself, so each case is a
-contradiction of the frozen code and not only of the evaluator's own rules.
-
-Two cases are positives and must pass: the clean control, and RL-193 section 1's supplement, a predecessor
-trace that is the six-column D-018 interval header with zero rows.
-
-The audit of 2026-11-21 (pl-809 audit 1) adds its five reproductions, each with the control that separates it
-from a valid input. Four were false passes: an X_G G1 entry whose sensors and slope come from two different
-views of the journal (`x-g-gate-entry-mixed`; `x-g-gate-entry-matched` must pass), a Step D segment closed
-before its member wall (`step-d-close-5179`) or its last recovery reading (`step-d-close-before-recovery`), a
-duplicate key in an issued template (`issued-template-duplicate-key`), and an issued config that names the
-synthetic backend under production receipts (`issued-config-backend-synthetic`). One was a false refusal: a
-coherent one-second offset between the epoch and monotonic clocks (`clock-offset-coherent-*` must pass for the
-predecessor, D_bank with its tool calls and context checks, and X_G; `clock-offset-incoherent-predecessor`
-moves the events alone and must refuse). Step D is not shifted here: its reference record and journal are bound
-by digest into the later members' custody, which a one-member edit cannot keep consistent.
-
-Audit 2 of 2026-11-21 adds four false passes, each a recorded value that frozen R1 derives from a raw record:
-the idle soak's terminal closed one second after it opened (`idle-closed-one-second`), the quiet predecessor's
-census without its closing point, with it twice, or reversed (`predecessor-census-*`), an unobserved X_G G1 whose
-exit slope contradicts the frozen reducer on the same view (`x-g-unobserved-exit-slope-contradicted`; the same
-gate recording the derived value, `x-g-unobserved-exit-slope-derived`, must pass), and an X_G journal whose session
-ID is not the one its opening stamp derives (`x-g-session-id-plus-one`).
-
-Fix round r2 (wide audit round 1 of 2026-11-22) adds ``R2``: the FO and IN reproductions F1 to F11, each damaged
-case with its paired control. Its four rule classes are R1 temporal containment (CPU samples, census, soak tail and
-load, battery rows), R2 raw-domain schemas (busy cores, process tables and PIDs, endpoint identities, finish
-reasons), R3 the complete census and R4 the runtime config resolved once. Until suite v3.2 is issued, the v3.1 clean
-fixture lacks census points that frozen ``Segment.run`` writes; ``census_stand_in`` adds them, and only them.
-
-    python3.13 -IB tests/align/partc_audit_probe.py [case ...]      (JW_PARTC_REPO selects the tree under test)
-
-It prints one `RESULT <case> <verdict> <reasons>` line and one `FIELDS <case> <reason:field ...>` line per case and
-exits 1 on any disagreement (JW_PARTC_PROBE_LOG=1 also prints each refusal's record). The pinned
-commits must be in the local object database (see the suite's docstring).
-"""
+"""Named synthetic regressions on the v4 control."""
+import csv
 import hashlib
 import importlib.util
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -49,7 +11,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-SUITE = Path(__file__).resolve().parent / "test_partc_frozen_differential.py"
+SUITE = Path(__file__).resolve().parent / "test_partc_writer_v4.py"
 EXPECTED = {
     "control": None,
     "interval-header-zero-rows": None,
@@ -101,7 +63,7 @@ R2 = {
     "cpu-instant": ("quiet_load", "cpu_busy_t_s"),
     "cpu-hot": "quiet_load",
     # F5 (R1): battery rows outside the member.
-    "battery-row-ordered": None,
+    "battery-row-ordered": "battery_evidence",
     "battery-row-outside": ("battery_evidence", "epoch_s"),
     "battery-journal-shifted": ("battery_evidence", "epoch_s"),
     "battery-reduced": ("battery_evidence", "epoch_s"),
@@ -157,11 +119,6 @@ R3 = {
     "roots-empty": ("quiet_load", "exclude_roots"),
 }
 EXPECTED.update(R3)
-# Until the lead issues suite v3.2, its v3.1 clean fixture has no closing census on the soak and no census on
-# D_bank or X_G. These are the points frozen ``Segment.run`` writes, added here only where the fixture lacks
-# them (wide audit FO ``census_cardinality.py``'s complete case); on v3.2 this changes nothing.
-CENSUS_ORIGIN = {"idle": 0.0, "d-bank-benign-s1": 6000.0, "x-g": 8000.0}
-ADDED = []                  # (kind, what) of every census point or excluded PID the stand-in added
 DIRECT = ("step-d-member-wall-over-bracket", "episode-stamps-reversed")
 AUDIT_2 = ("control", "interval-header-zero-rows", "raw-runner-fault", "raw-turn-budget-flag", "last-turn-unclosed",
            "other-run-id", "duplicate-predecessor", "predecessor-timeout", "extra-stop-flag", "gate-before-entry",
@@ -180,42 +137,6 @@ def member_wall(s, wall, opened=4_001_000_000_000, closed=4_002_000_000_000):
             "outputs/align_episode.json": json.dumps({"hardware": {"paired_clock_stamps_ns": stamps}}).encode(),
             "outputs/align_turns.jsonl": b""}
     s.pc._check_member_window(bound, {"slot_detail": {"member_wall_s": wall}}, data)
-
-
-def complete_census(s, segment, kind, receipt):
-    """The v3.2 stand-in, only where the v3.1 fixture lacks what frozen ``Segment`` writes: both census points
-    on the soak, D_bank and X_G, and on every member the one excluded PID ``Segment.__init__`` passes
-    (``(os.getpid(),)``; the runtime process of the member's own census)."""
-    import copy
-
-    path = segment / "load_journal.json"
-    load = s.read(path)
-    changed = False
-    if kind in CENSUS_ORIGIN and [point["label"] for point in load["census"]] != ["start", "end"]:
-        opening = copy.deepcopy(load["census"][0]) if load["census"] else {
-            "label": "start", "t_s": CENSUS_ORIGIN[kind],
-            "processes": [{"pid": 12, "ppid": 1, "pcpu": 0.1, "comm": "synthetic"}]}
-        closing = {**copy.deepcopy(opening), "label": "end", "t_s": opening["t_s"] + 1800}
-        ADDED.extend((kind, point["label"]) for point in (opening, closing) if point not in load["census"])
-        load["census"] = receipt["census"] = [opening, closing]
-        changed = True
-    if load.get("exclude_roots") == [] and load["census"]:
-        load["exclude_roots"] = [load["census"][0]["processes"][0]["pid"]]
-        ADDED.append((kind, "exclude_roots"))
-        changed = True
-    if changed:
-        s.write(path, load)
-
-
-def census_stand_in(s):
-    """Patch the suite's member close so every clean attempt carries the complete census (v3.2 stand-in)."""
-    close = s.fixture.write_terminal
-
-    def complete(segment, kind, receipt, sha):
-        complete_census(s, segment, kind, receipt)
-        return close(segment, kind, receipt, sha)
-
-    return patch.object(s.fixture, "write_terminal", complete)
 
 
 def load_suite():
@@ -246,7 +167,22 @@ def shift_epoch(value, seconds):
 
 def run(argv):
     s = load_suite()
+    with (SUITE.parents[2]/"cases-v4.tsv").open() as stream:
+        issued={r["case"].removeprefix("history/"):r["expected"] for r in csv.DictReader(stream,delimiter="\t")
+                if r["case"].startswith("history/")}
+    assert issued=={n:(v[0] if isinstance(v,tuple) else v or "pass") for n,v in EXPECTED.items()}
     wanted = argv or list(EXPECTED)
+    if wanted == ["--inventory"]:
+        for name,expected in EXPECTED.items(): print(name, expected)
+        return 0
+    if not argv:
+        selector=re.compile(os.environ.get("JW_PARTC_CASE","."))
+        index,count=map(int,os.environ.get("JW_PARTC_SHARD","0/1").split("/"))
+        assert 0<=index<count
+        wanted=[n for n in wanted if selector.search("history/"+n)
+                and int.from_bytes(hashlib.sha256(("history/"+n).encode()).digest()[:4])%count==index]
+    assert wanted,"empty historical selection"
+    assert all(name in EXPECTED for name in wanted), "unknown historical ID"
     changed_member = {"raw-runner-fault": s.D, "raw-turn-budget-flag": s.D, "last-turn-unclosed": s.D,
                       "other-run-id": s.X, "duplicate-predecessor": s.S, "predecessor-timeout": s.P,
                       "extra-stop-flag": s.P, "gate-before-entry": s.D, "finalized-after-close": s.D,
@@ -286,7 +222,7 @@ def run(argv):
             amplitude, key = (0.201 if case.endswith("unsettled") else 0.19), sensors["s_fast"]
             for index, row in enumerate(kept):
                 value = 35.0 + amplitude * max(index - 600, 0) / 60
-                row["values"]["sensors"][key] = row["values"]["readings"][key]["value"] = value
+                s.set_sensor_value(row,key,value)
             sampling = s.tg.sample_rows(kept)
             origin = sampling[0]["monotonic_ns"]
             coverage = Coverage(start["started"]["monotonic_ns"], keys(sensors))
@@ -314,7 +250,7 @@ def run(argv):
         elif case.startswith("closing-battery-"):
             path = segment / s.pc.BATTERY_SOURCE
             rows = s.rows(path)
-            assert len(rows) == 2
+            assert len(rows) == 2 + len(s.read(load_path)['cpu_busy_t_s']) // int(s.CONFIG.get('battery_poll_s',30))
             if case.endswith("dropped"):
                 rows.pop()
             receipt["battery"] = s.rt.battery_summary(rows)
@@ -346,7 +282,7 @@ def run(argv):
         elif case.startswith(("census-enclosure-", "census-literal", "cpu-")):
             load = s.read(load_path)
             times, census = load["cpu_busy_t_s"], load["census"]
-            assert ([point["t_s"] for point in census], times[0], times[-1]) == ([2000, 3800], 0, 1800)
+            assert ([point["t_s"] for point in census], times[0], times[-1]) == ([s.EPOCH[kind], s.EPOCH[kind]+1802], 1, 1801)
             width = times[-1] - times[0]
             if case == "census-enclosure-disjoint":
                 times = [500 + t for t in times]
@@ -357,7 +293,7 @@ def run(argv):
                 census[0]["t_s"], census[1]["t_s"] = 0, 100
                 times = [500 + t / 20 for t in times]
             elif case == "cpu-negative-offsets":
-                times = [t - 2000 for t in times]
+                times = [t - 3000 for t in times]
             elif case == "cpu-instant":
                 times = [0] * len(times)
             elif case in ("cpu-hot", "cpu-negative"):
@@ -387,8 +323,8 @@ def run(argv):
             path = segment / s.pc.BATTERY_SOURCE
             rows = s.rows(path)
             if case.startswith("battery-row-"):
-                assert [row["epoch_s"] for row in rows] == [2000, 2120]
-                rows.insert(1, dict(rows[0], epoch_s=2060))
+                assert len(rows) == 62
+                rows.insert(1, dict(rows[0], epoch_s=rows[0]["epoch_s"]+1))
                 receipt["battery"] = s.rt.battery_summary(rows)
                 if case == "battery-row-outside":
                     rows[1]["epoch_s"] = 6100
@@ -478,7 +414,7 @@ def run(argv):
         for clock in ("monotonic_ns", "monotonic_raw_ns", "wall_ns"):
             row["started"][clock] -= 1
         row["values"]["sensors"][key] += 0.001
-        row["values"]["readings"][key]["value"] = row["values"]["sensors"][key]
+        s.set_sensor_value(row,key,row["values"]["sensors"][key])
         journal.sort(key=lambda r: r["started"]["monotonic_ns"])
         for seq, r in enumerate(journal, 1):
             r["seq"] = seq
@@ -625,7 +561,14 @@ def run(argv):
             assert {row["session"] for row in journal} == {f"align-{opening}"}   # Sidecar.start derives it
             s.write_rows(path, [{**row, "session": f"align-{opening + 1}"} for row in journal])
         elif case.startswith("clock-offset-"):
-            clock_offset(bundle, coherent="-coherent-" in case)
+            coherent="-coherent-" in case
+            clock_offset(bundle, coherent=coherent)
+            if coherent:
+                path=segment/"battery.jsonl"
+                samples=s.rows(path)
+                for row in samples: row["epoch_s"]+=1
+                receipt["battery"]=s.rt.battery_summary(samples)
+                s.write_rows(path,samples)
         elif case == "interval-header-zero-rows":
             from joulewise.bundle_read import POWER_TRACE_HEADER, POWER_TRACE_INTERVAL_HEADER, _check_power_trace
 
@@ -646,7 +589,7 @@ def run(argv):
         elif case == "finalized-after-close":
             events_path = bundle / "events.jsonl"
             events = s.rows(events_path)
-            close_epoch = s.EPOCH[kind] + 1800
+            close_epoch = s.terminal_window(kind)[1]
             assert events[-1]["event_type"] == "run_finalized" and events[-1]["timestamp_s"] <= close_epoch
             events[-1]["timestamp_s"] = close_epoch + 1
             s.write_rows(events_path, events)
@@ -724,11 +667,11 @@ def run(argv):
             writer = s.write
 
             def close_soak(path, value):
-                if path.name == s.rt.CUSTODY_NAME and path.parent.name == "idle_soak" and value.get("ended_epoch_s") == 1800:
-                    assert value["started_epoch_s"] == 0
+                if path.name == s.rt.CUSTODY_NAME and path.parent.name == "idle_soak" and value.get("ended_epoch_s") == s.terminal_window("idle")[1]:
+                    assert value["started_epoch_s"] == s.terminal_window("idle")[0]
                     rows = s.rows(path.parent / "sensors/align_thermal.jsonl")
                     assert max(row["finished"]["wall_ns"] for row in rows) > s.N     # the journal runs past it
-                    value = dict(value, ended_epoch_s=1)
+                    value = dict(value, ended_epoch_s=value["started_epoch_s"]+1)
                 return writer(path, value)
 
             stack.enter_context(patch.object(s, "write", close_soak))
@@ -760,19 +703,23 @@ def run(argv):
 
             def close_early(path, value):
                 if (path.name == s.rt.CUSTODY_NAME and path.parent.name == s.pc.KINDS[s.S]
-                        and value.get("ended_epoch_s") == 5800):
-                    assert value["started_epoch_s"] == 4000
+                        and value.get("ended_epoch_s") == s.terminal_window(s.S)[1]):
+                    begin=value["started_epoch_s"]
                     receipt = s.read(path.parent / s.RECEIPT)
                     recovery = s.rows(path.parent / "recovery/align_thermal.jsonl")[-1]["finished"]["wall_ns"] / s.N
-                    end = 5179 if name == "step-d-close-5179" else recovery - 1
+                    end = begin+1179 if name == "step-d-close-5179" else recovery - 1
                     # The frozen suite's RL-186 bound refuses 5179; the recovery journal refuses the later close.
-                    assert (end - 4000 < receipt["slot_detail"]["member_wall_s"]) == (name == "step-d-close-5179")
+                    assert (end - begin < receipt["slot_detail"]["member_wall_s"]) == (name == "step-d-close-5179")
                     value = dict(value, ended_epoch_s=end)
                 return writer(path, value)
 
             stack.enter_context(patch.object(s, "write", close_early))
 
     failures = []
+    # The real outer launcher can decline a short idle before creating Part C's output.
+    # To exercise the Part C finding itself, stage the corrupted return at its public handoff.
+    early_handoff = {"soak-short-load","closing-battery-dropped"}
+
     with tempfile.TemporaryDirectory() as temporary:
         work = Path(temporary)
         finder = s.import_world(work / "src")
@@ -797,13 +744,23 @@ def run(argv):
         s.endpoint_code()
         with s.kit_source(finder), s.compact_control(), patch.object(
                 s.rt, "registered_s6", return_value={"slots": {"S6": 1.}, "s6_tuning": {}}):
+            shared=work/"shared-clean"
+            if wanted: assert s.control(shared)==[]
             for name in wanted:
+                if name in early_handoff:
+                    clean = work / "shared-clean"
+                    if not clean.exists(): assert s.control(clean) == []
+                    case = (s.WriterCase("cpu-min","I","short","soak_load","CPU") if name=="soak-short-load" else
+                            s.WriterCase("one-battery","P","r3-offline-missing-closing-sample","battery_evidence","replay inputs"))
+                    status = s.assess_case(clean,case)
+                    print("RESULT",name,status,"expected",case.expected,flush=True)
+                    if status != "REFUSED": failures.append(name)
+                    continue
                 changed = changed_member[name]
                 terminal, published = s.fixture.write_terminal, s.published
-                edits, verdicts, stdout_lines = [], [], []
+                edits, verdicts, stdout_lines, replay_results = [], [], [], []
 
                 def close(segment, kind, receipt, sha):
-                    complete_census(s, segment, kind, receipt)
                     if kind == changed:
                         mutate(name, kind, segment, receipt)
                         edits.append(kind)
@@ -820,6 +777,19 @@ def run(argv):
                         assert document == s.read(case.attempt.output / "smoke_part_c.json")
                         verdict = document["evaluation"]["verdict"]
                         assert verdict != "pass" and rc != 0, (verdict, rc)
+                    # Only the original launcher can witness argv and process dispatch. For common saved bytes,
+                    # copy the complete native prefix and supply clean peers which the native refusal never ran.
+                    if name not in ("issued-template-duplicate-key","issued-config-backend-synthetic",
+                                    "config-equals","config-repeated","config-separate"):
+                        with tempfile.TemporaryDirectory(dir=work) as tmp:
+                            archive=Path(tmp)/"synthetic-run"
+                            shutil.copytree(case.attempt.root,archive,copy_function=os.link)
+                            dest=archive/case.attempt.output.relative_to(case.attempt.root)
+                            for role in (s.P,s.S,s.D,s.X):
+                                member=dest/s.pc.KINDS[role]
+                                if not member.exists(): s.copy_segment(shared,role,member)
+                            replay=s.pc.replay_archived(dest,case.attempt.config)
+                            replay_results.append(replay)
                     record = s.read(case.attempt.output / "smoke.json")["evaluation"]
                     stdout = (case.attempt.root / "part-c.stdout.log").read_text().splitlines()
                     stdout_lines[:] = [line for line in stdout if line.startswith("{")]
@@ -848,6 +818,13 @@ def run(argv):
                       flush=True)
                 if os.environ.get("JW_PARTC_PROBE_LOG"):
                     print(stdout_lines[-1] if stdout_lines else "", flush=True)
+                for replay in replay_results:
+                    replay_word,reasons_seen=replay["verdict"],replay["failing_checks"]
+                    reason=expected[0] if isinstance(expected,tuple) else expected
+                    primary=set(reasons)
+                    archived=s.archive_refusal_codes(replay,primary)
+                    ok=ok and replay_word==verdict and primary==archived and (reason is None or reason in reasons_seen)
+                    print("REPLAY",name,replay_word,",".join(sorted(archived)) or "-",flush=True)
                 if not ok:
                     failures.append(name)
     return 1 if failures else 0
