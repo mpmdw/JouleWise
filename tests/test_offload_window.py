@@ -24,6 +24,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
+from tests.git_fixture import init_git_fixture
+
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("offload_window", ROOT / "scripts/offload_window.py")
 ow = importlib.util.module_from_spec(SPEC)
@@ -151,7 +153,7 @@ class Runbook(unittest.TestCase):
             def git(*args):
                 return subprocess.check_output(['git', '-C', str(checkout), *args], text=True).strip()
 
-            git('init', '-q')
+            init_git_fixture(checkout, '-q')
             git('add', 'scripts/offload_window.py')
             git('-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.invalid',
                 'commit', '-qm', 'synthetic reviewed checkout')
