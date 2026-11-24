@@ -889,10 +889,14 @@ class BytesAvailabilityTests(unittest.TestCase):
         pack = fixture.archive / "sources/pack"
         pack.mkdir(parents=True, exist_ok=True)
         witness = pack / "smoke-registered-tree.json"
-        # Reuse the registered graph shape with no registered member inputs.
+        # Reuse the registered graph shape. Its member inputs name this fixture's runs, as a real
+        # witness names its own: the harvested roster has no role, so the plan walk supplies them.
         tree = agreement.load(agreement.ROOT / "configs/campaigns" / SESSION / "plan_tree.json")
-        tree["external_inputs"] = []
-        tree["science"] = []
+        walk = {manifest["external_input_id"]: manifest["members"]
+                for manifest in fixture.plan["plan_tree"]["external_inputs"]["manifests"]}
+        for manifest in tree["external_inputs"]["manifests"]:
+            manifest["members"] = walk.get(manifest["external_input_id"], [])
+        tree["science"] = fixture.plan["plan_tree"]["science"]
         keep = {stage["stage_id"]: 1 for stage in tree["stage_graph"] if stage["kind"] == "campaign_collection"}
         plan = pack / "plan_tree.json"
         agreement._write(witness, tree)

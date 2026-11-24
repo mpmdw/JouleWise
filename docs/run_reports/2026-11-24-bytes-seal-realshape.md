@@ -64,6 +64,9 @@ in the registered shape: science rows, one external-input manifest per
 reference stage under the registered input ids, and the stage graph. The
 fixture passes it as the plan's `plan_tree`. Two availability tests that plant
 plan-tree candidates now plant that tree in place of `{"stage_graph": []}`.
+The smoke-witness control keeps the registered `bytes-s2-p1` graph. Its
+member inputs now name the fixture's runs, as a real witness names its own;
+it had emptied them.
 I checked equivalence on a three-session campaign: `bytes-s1-p1`, `bytes-s5-p2`
 and `bytes-s6-p1`. The visible and withheld tables had identical identity
 columns under the base fixture and this one: run, stage, role, order, cells,
