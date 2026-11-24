@@ -2029,3 +2029,56 @@ Local checks, at most four processes:
 
 The full installer suites passed 1100 s locally without finishing, so
 hosted CI runs them. The refusal census is clean.
+
+## Round 21 · lead micro-fix: one C1 window identity (J1 to J3)
+
+The narrow check of `e25e5bb71` found one HIGH. A fresh synthetic 24-member
+kit passed `materialize --check`, but its collection plan declared window
+`C1` while its plan tree's window identity said `align-v4-c1`. The
+reservation's `--window-id` is a tree pointer into that identity, so
+production refused at three stages:
+- the reservation, with `plan_window_mismatch`;
+- the packet builder, with exit 2;
+- the installer, which did not recognise the night plan as C1 and refused
+  its pinned commit as `execution_commit_unexpected`.
+
+The cause was the materializer's `_rewrite`, which maps the W1 pack ID
+onto the C1 pack ID everywhere, including the tree's window identity. The
+adapter hid this, because it passed a literal `C1`. I reproduced all
+three refusals with the narrow check's scripts before changing anything.
+The spec came first, as `2785938d3`; the fix is `5f726ec5a`.
+
+| Item | Change | Named regression | Result |
+| --- | --- | --- | --- |
+| J1 one source | `v4_registration.C1_WINDOW` and `window_identity(window_id, pack_id)` are the only definition of the window a reservation reserves. The materializer writes that identity into the tree and the same window into the collection plan, and the reservation's pointers read it. The C1 preflight (packet builder, install, direct arm), the producer's handoff, the session route and the installer's C1 test all compare with `C1_WINDOW`, and no other `'C1'` literal remains on the route. | `test_j1_one_window_identity_on_the_c1_route` | PASS |
+| J2 no identity literals in the adapter | The adapter's reservation and capture operands are the committed W1 template's (tree pointers and bindings), which the materializer copies. Session and attempt IDs are minted by prepare's own functions (`bytes_h_session.session_id_at`, `plan_inputs.window_identities`). The window comes from the plan, the ledger head from `GENESIS_DIGEST`, and a wrong digest is derived from the right one. A grep test fails on any identity literal in the adapter, and each pattern is checked against a line the old adapter had. | `test_j2_the_adapter_passes_no_identity_literals` | PASS |
+| J3 the reproduction as a regression | A fresh synthetic 24-member kit from the real materializer (`--check` too). The production reservation admits its plan with the values the chain passes. With that identity and those operands, the attempt builds (exit 0), and the real installer admits it through both host checkpoints. The installer's prepared night plan carries the materialized identity, and no git command runs. | `test_j3_a_materialized_kit_builds_reserves_and_installs` | PASS |
+| Frozen suite | Manifest digest, the nine frozen files, all 94 decisions | `shasum -c SUITE.sha256`; `test_frozen_lite_decisions` | 94/94 |
+
+Behaviour-preserving refactors made the minting reusable:
+- `bytes_h_session.session_id_at`;
+- `plan_inputs.window_identities`, which keeps the inputs' key order;
+- `align_v4_session.SESSION_PREFIX`;
+- `w1_operands` in the adapter.
+
+The r13 regression's evidence-root case now gives the reservation its own
+literal evidence root before pointing the identity elsewhere, because a
+pointer cannot disagree with what it points at. The census guard of the
+round 20 `bytes_h_session.install` row moved with its condition.
+
+With the fix, the narrow check's `producer.py` stops at its own
+`AssertionError('producer and reservation now agree')`: the refusal it
+was built to show no longer happens.
+
+Local checks, at most four processes:
+- the J1 to J3 tests and the CAP 10 contract tests pass (7);
+- all 50 `test_c1_closure` tests pass, and the frozen replay ran once
+  (309 s) and matched all 94 decisions byte for byte; `SUITE.sha256`
+  passes for all nine files, unchanged since `3ea3de760`;
+- the v4 series, packet and materializer tests pass (162);
+- the `plan_inputs` users, b6 plan render, registration, smoke and v4 kit
+  tests pass (165);
+- `test_bytes_h_session` with `test_align_pilot_session` pass (52);
+- the refusal census is clean.
+
+Hosted CI runs the full suites.
