@@ -11,7 +11,10 @@ from .controls_layout import (
     DIR_FLAGS, GateRefusal, absolute, held_lock, open_directory, open_file, probe_link,
     registered_directories, require_fresh, require_private, require_unspent_history,
 )
-from .controls_manifest import verify_freeze, verify_stage1
+from .controls_manifest import (
+    BOUND_SPAN_ID_PATTERN, LEG_ID_PATTERN, RosterIdentifierError,
+    require_episode_identifier, require_identifier, validate_stage1_identifiers, verify_freeze, verify_stage1,
+)
 from .controls_print import LOOK_ID, ControlsRefusal, Refusal, _hex_pin
 from .custody_pins import check_chain_problems, load_pin_list, run_state_item
 from .qualification_manifest import _decode
@@ -65,6 +68,8 @@ def _check_inputs(authorization, binding, private, source):
     book = authorization.book
     _require(check_revision in book.git("rev-list", "--first-parent", authorization.revision).decode().splitlines())
     pins_raw = _private(private / "input-pins.json", binding["input_pins_sha256"])
+    for row in _decode(pins_raw)["spans"]:
+        require_identifier(row["span_id"], BOUND_SPAN_ID_PATTERN)
     pins = load_pin_list(pins_raw)
     checks = book.blob(check_revision, "RUN_STATE.md").decode("utf-8")
     _require(not check_chain_problems(pins, checks))
@@ -143,9 +148,12 @@ def _schema(raw, schema):
 def _stage_files(private, freeze, freeze_inputs, source):
     from .controls_inputs import load_canonical
 
-    stage_raw = _private(private / "stage1.json")
+    _require(freeze.stage1_entry is not None, "INPUT_BINDING")
+    stage_raw = _private(private / "stage1.json", freeze.stage1_entry["stage1_sha256"])
     try:
-        stage = verify_stage1(freeze, freeze_inputs["committed"], stage_raw)
+        stage = verify_stage1(freeze, freeze_inputs["committed"], stage_raw, require_native=True)
+    except RosterIdentifierError:
+        raise
     except (ValueError, TypeError, KeyError) as error:
         raise GateRefusal("INPUT_BINDING") from error
     _require(stage.inventory_sha256 is not None, "INPUT_BINDING")
@@ -154,6 +162,14 @@ def _stage_files(private, freeze, freeze_inputs, source):
     snapshot = freeze_inputs["committed"][freeze.revision]
     _schema(stage_raw, snapshot["stage1_schema"])
     _schema(inputs_raw, snapshot["inventory_schema"])
+    for span, row in document["spans"].items():
+        require_identifier(span, BOUND_SPAN_ID_PATTERN)
+        require_identifier(row["capture_leg"], LEG_ID_PATTERN)
+        require_episode_identifier(row["capture_run_id"], row["capture_leg"])
+    for leg_id, row in document["positions"].items():
+        require_identifier(leg_id, LEG_ID_PATTERN)
+        require_identifier(row["span_id"], BOUND_SPAN_ID_PATTERN)
+        require_episode_identifier(row["run_id"], leg_id)
     _stat_registered_entries(source, document)
     return stage_raw, stage, inputs_raw
 
@@ -186,6 +202,7 @@ def _build_stage(private_fd, inputs, freeze_inputs):
 
     freeze = freeze_inputs["committed"][freeze_inputs["current_revision"]]
     stage_raw, inputs_raw = inputs.stage1_bytes()
+    validate_stage1_identifiers(_decode(stage_raw), require_native=True)
     _schema(stage_raw, freeze["stage1_schema"])
     _schema(inputs_raw, freeze["inventory_schema"])
     write_or_compare(private_fd, "inputs.v1.json", inputs_raw)
@@ -272,6 +289,9 @@ def main(argv, root):
     except GateRefusal as error:
         os.write(2, error.notice.encode("ascii"))
         return error.status
+    except RosterIdentifierError:
+        os.write(2, b"REFUSE PREFLIGHT ROSTER_IDENTIFIER\n")
+        return 2
     except Exception:
         # This entry point runs before the dedicated worker's post-start
         # handler. Even a malformed pinned record must fail with a blind token.

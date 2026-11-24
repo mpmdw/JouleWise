@@ -61,6 +61,78 @@ OPERATIONAL_FIELDS = {"host", "uid", "bindings_sha256", "sources_sha256"}
 WITHHELD = ("no_dc_in_floor", "no_prefill_size", "dose_under_floor_at_k2")
 ISSUED_SETTINGS = {"hidden_tokens": (128, 256, 512), "recovery_s": 600, "gap_s": 60, "prefill_tokens": 2000}
 
+# Pinned writer 043b972f9. cadence/kit.py:173-175 generates the leg ID.
+# align/apple/cadence_leg.py:185-186 sets the run ID and
+# align/apple/workload.py:454-455 uses it for the episode and its clock.
+_LEG_TEXT = r"L0(?:0[1-9]|1[0-2])"
+LEG_ID_PATTERN = re.compile(_LEG_TEXT)
+EPISODE_ID_PATTERN = re.compile(rf"cadence-{re.escape(KIT_ID)}-(?P<leg>{_LEG_TEXT})")
+# cadence/ctl.py:265-274 binds the launch to cadence/queue.py:33,83-84,134-140.
+_QUEUE_PLAN_ID = r"cq-[a-z0-9][a-z0-9-]{2,40}-a[1-9]"
+SPAN_ID_PATTERN = re.compile(_QUEUE_PLAN_ID)
+# look_path/suite/make_fixture.py:174 generates the frozen fixture IDs.
+_FIXTURE_SPAN_ID = r"ctl-01-s0[12]"
+FIXTURE_SPAN_ID_PATTERN = re.compile(_FIXTURE_SPAN_ID)
+BOUND_SPAN_ID_PATTERN = re.compile(rf"{_QUEUE_PLAN_ID}|{_FIXTURE_SPAN_ID}")
+# The unversioned frozen print roster uses toy-L001 through toy-L012.
+_LEGACY_EPISODE_ID = re.compile(rf"toy-(?P<leg>{_LEG_TEXT})")
+_SHA256 = re.compile(r"[0-9a-f]{64}")
+_COMMIT_ID = re.compile(r"[0-9a-f]{40}")
+_STAGE_SCHEMA_ID = re.compile(re.escape(STAGE1_SCHEMA))
+_KIT_ID = re.compile(re.escape(KIT_ID))
+# cadence/legs.py:231-232 and cadence/ctl.py:25-27 write these enums.
+_ROLE_ID = re.compile(r"capture|consume")
+_SCRIPT_KIND = re.compile("|".join(map(re.escape, SCRIPT_STEPS)))
+
+
+class RosterIdentifierError(ValueError):
+    """An identifier disagrees with its closed writer format."""
+
+
+def require_identifier(value, pattern):
+    match = pattern.fullmatch(value) if type(value) is str else None
+    if match is None:
+        raise RosterIdentifierError("ROSTER_IDENTIFIER")
+    return match
+
+
+def require_episode_identifier(value, leg_id=None, *, pattern=EPISODE_ID_PATTERN):
+    match = require_identifier(value, pattern)
+    if leg_id is not None and match["leg"] != leg_id:
+        raise RosterIdentifierError("ROSTER_IDENTIFIER")
+
+
+def validate_stage1_identifiers(roster, *, require_native=False):
+    """Check string fields before writing the roster or materializing its rows."""
+    if type(roster) is not dict or type(roster.get("legs")) is not dict:
+        raise ValueError("stage1_roster")
+    native = require_native or "schema" in roster or "input_inventory_sha256" in roster
+    if native:
+        require_identifier(roster.get("schema"), _STAGE_SCHEMA_ID)
+        require_identifier(roster.get("input_inventory_sha256"), _SHA256)
+    for leg_id, row in roster["legs"].items():
+        require_identifier(leg_id, LEG_ID_PATTERN)
+        identity = row.get("identity") if type(row) is dict else None
+        if type(identity) is not list or len(identity) != 6:
+            raise ValueError("stage1_roster")
+        for index, pattern in ((0, _KIT_ID), (1, _SHA256), (2, _COMMIT_ID), (4, LEG_ID_PATTERN)):
+            require_identifier(identity[index], pattern)
+        # The stage writer enumerates two spans. The pinned leg writer starts
+        # attempts at 1 (scripts/cadence_legs_runner.py:622-638).
+        if (identity[4] != leg_id or type(identity[3]) is not int or identity[3] not in (1, 2)
+                or type(identity[5]) is not int or identity[5] < 1):
+            raise RosterIdentifierError("ROSTER_IDENTIFIER")
+        for key, pattern in (("role", _ROLE_ID), ("kind", _SCRIPT_KIND), ("reference", _SHA256)):
+            require_identifier(row.get(key), pattern)
+        if not {"script_sha", "episode_id", "episode_sha256"} <= row.keys():
+            raise RosterIdentifierError("ROSTER_IDENTIFIER")
+        for key in ("script_sha", "episode_sha256"):
+            if row[key] is not None:
+                require_identifier(row[key], _SHA256)
+        if row["episode_id"] is not None:
+            pattern = EPISODE_ID_PATTERN if native else _LEGACY_EPISODE_ID
+            require_episode_identifier(row["episode_id"], leg_id, pattern=pattern)
+
 
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
@@ -179,7 +251,7 @@ class VerifiedStage1:
     inventory_sha256: str | None = None
 
 
-def verify_stage1(freeze, committed, candidate):
+def verify_stage1(freeze, committed, candidate, *, require_native=False):
     """Bind the blind roster and public fields to the authorized ledger entry."""
     entry = freeze.stage1_entry
     if entry is None:
@@ -188,41 +260,37 @@ def verify_stage1(freeze, committed, candidate):
     count = entry.get("n_legs")
     digest = entry.get("stage1_sha256")
     ids = PILOT + REMAINDER
-    if (entry.get("manifest_sha256") != freeze.manifest_sha256 or not _hex_pin(revision, 40)
-            or not _hex_pin(digest, 64) or type(count) is not int or not 0 <= count <= len(ids)):
+    require_identifier(revision, _COMMIT_ID)
+    require_identifier(digest, _SHA256)
+    require_identifier(freeze.manifest_sha256, _SHA256)
+    if (entry.get("manifest_sha256") != freeze.manifest_sha256
+            or type(count) is not int or not 0 <= count <= len(ids)):
         raise ValueError("stage1_commitment")
     raw = committed.get(revision, {}).get("stage1")
     if type(raw) is not bytes or type(candidate) is not bytes or raw != candidate or sha256(raw).hexdigest() != digest:
         raise ValueError("stage1_commitment")
 
     roster = _decode(raw)
+    validate_stage1_identifiers(roster, require_native=require_native)
     roster_keys = {"n_legs", "legs"}
     inventory = None
-    if type(roster) is dict and ("schema" in roster or "input_inventory_sha256" in roster):
+    if "schema" in roster:
         roster_keys |= {"schema", "input_inventory_sha256"}
-        inventory = roster.get("input_inventory_sha256")
-        if (roster.get("schema") != STAGE1_SCHEMA or not _hex_pin(inventory, 64)
-                or canonical(roster) != raw):
+        inventory = roster["input_inventory_sha256"]
+        if canonical(roster) != raw:
             raise ValueError("stage1_roster")
-    if (type(roster) is not dict or roster.keys() != roster_keys
+    if (roster.keys() != roster_keys
             or type(roster["n_legs"]) is not int or roster["n_legs"] != count
-            or type(roster["legs"]) is not dict or roster["legs"].keys() != set(ids)):
+            or roster["legs"].keys() != set(ids)):
         raise ValueError("stage1_roster")
 
     legs = []
     for leg_id in ids:
         row = roster["legs"][leg_id]
-        if (type(row) is not dict
-                or row.keys() != {"identity", "role", "reference", "script_sha", "kind", "admitted",
+        if (row.keys() != {"identity", "role", "reference", "script_sha", "kind", "admitted",
                                   "g0_released", "episode_id", "episode_sha256"}
-                or type(row["identity"]) is not list or len(row["identity"]) != 6
-                or type(row["kind"]) is not str or row["kind"] not in SCRIPT_STEPS
                 or type(row["admitted"]) is not bool or type(row["g0_released"]) is not bool
-                or (row["script_sha"] is not None and not _hex_pin(row["script_sha"], 64))
                 or (row["episode_id"] is None) != (row["episode_sha256"] is None)
-                or (row["episode_id"] is not None
-                    and (type(row["episode_id"]) is not str or not row["episode_id"]
-                         or not _hex_pin(row["episode_sha256"], 64)))
                 or (row["admitted"] and not row["g0_released"])):
             raise ValueError("stage1_roster")
         legs.append(Stage1Leg(
@@ -232,8 +300,6 @@ def verify_stage1(freeze, committed, candidate):
         ))
 
     first = legs[0].binding
-    if not _hex_pin(first.kit_sha256, 64) or not _hex_pin(first.runner_commit, 40):
-        raise ValueError("stage1_roster")
     identity = LookIdentity(LOOK_ID, KIT_ID, first.kit_sha256, first.runner_commit)
     bindings = tuple((leg.binding.leg_id, leg.binding) for leg in legs)
     validate_roster(identity, bindings, dict(bindings))

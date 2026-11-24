@@ -22,6 +22,7 @@ from joulewise.schemas import BenchmarkConfig
 
 from . import controls_analysis as analysis
 from . import controls_metadata as metadata_wire
+from .controls_manifest import require_episode_identifier
 from .controls_time_fields import (
     BOOLEAN, EMPTY_ARRAY, INT64, INTEGER, NUMBER, OPAQUE_BOOLEAN, OPAQUE_FINITE_NUMBER, OPAQUE_INTEGER,
     OPAQUE_NONBLANK_STRING,
@@ -466,6 +467,7 @@ def _one_identity(values):
 
 def episode_timing(episode_raw, metadata):
     view = project_json(episode_raw, EPISODE_FIELDS, strict=True)
+    require_episode_identifier(view["episode_id"])
     hardware = view["hardware"]
     thermal = hardware.get("thermal", {})
     stamp_rows = tuple(hardware["paired_clock_stamps_ns"])
@@ -500,8 +502,7 @@ def episode_timing(episode_raw, metadata):
         raise TimeFieldError("native thermal sensor key is absent from its policy")
     episode_id = view["episode_id"]
     start, end = view["start_ns"], view["end_ns"]
-    if (type(episode_id) is not str or not episode_id
-            or view["clock_domain"] != f"joulewise.monotonic:{episode_id}"
+    if (view["clock_domain"] != f"joulewise.monotonic:{episode_id}"
             or type(start) is not int or type(end) is not int or start >= end
             or not stamp_rows or any(
                 row.keys() != STAMP_FIELDS.keys() or any(type(v) is not int for v in row.values())

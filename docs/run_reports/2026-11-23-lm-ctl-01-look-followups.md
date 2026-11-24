@@ -468,3 +468,31 @@ The frozen trees match PR #951 byte for byte. The exact cumulative receipt
 and v3.1 remain in scope. The existing LOW orphan-marker race remains open.
 Final-head workflow results are linked from
 [draft PR #957](https://github.com/mpmdw/JouleWise/pull/957).
+
+## 2026-11-24 final roster identifier check
+
+`roster.py pair` reproduced the free-form episode identifier on
+`6c6967862`. The source gate now checks the native episode identifier and
+ties it to the issued leg. The same closed formats govern the roster before
+it is written and before preflight constructs a `Stage1Leg` or returns
+the commitment fields. The public look identifier is the fixed
+`lm-ctl-01` literal.
+
+| Identifier | Closed format and writer |
+| --- | --- |
+| Roster key and leg ID | `L0(?:0[1-9]\|1[0-2])` for the twelve issued legs. [Pinned kit writer, lines 173–175](https://github.com/mpmdw/JouleWise/blob/043b972f999913d248769237f1901d78119ceb72/joulewise/cadence/kit.py#L173-L175) |
+| Episode ID and bundle run ID | `cadence-cl-ctl-01-L0(?:0[1-9]\|1[0-2])` with the exact leg suffix. The clock domain derives from the same identifier. [Pinned launch, lines 185–186](https://github.com/mpmdw/JouleWise/blob/043b972f999913d248769237f1901d78119ceb72/joulewise/align/apple/cadence_leg.py#L185-L186) · [Pinned workload, lines 454–455](https://github.com/mpmdw/JouleWise/blob/043b972f999913d248769237f1901d78119ceb72/joulewise/align/apple/workload.py#L454-L455) |
+| Span and attempt | The roster stores integer span ordinals 1 and 2 and positive integer leg attempts. Native inputs use the approved plan ID `cq-[a-z0-9][a-z0-9-]{2,40}-a[1-9]`. [Pinned leg writer, lines 622–638](https://github.com/mpmdw/JouleWise/blob/043b972f999913d248769237f1901d78119ceb72/scripts/cadence_legs_runner.py#L622-L638) · [Pinned queue generator, lines 83–84](https://github.com/mpmdw/JouleWise/blob/043b972f999913d248769237f1901d78119ceb72/joulewise/cadence/queue.py#L83-L84) · [Pinned queue validator, lines 33 and 134–140](https://github.com/mpmdw/JouleWise/blob/043b972f999913d248769237f1901d78119ceb72/joulewise/cadence/queue.py#L134-L140) · [Pinned launch binding, lines 265–276](https://github.com/mpmdw/JouleWise/blob/043b972f999913d248769237f1901d78119ceb72/joulewise/cadence/ctl.py#L265-L276) |
+| Kit, role and kind | Fixed `cl-ctl-01`, `capture` or `consume`, and the five declared script kinds. [Pinned role writer, lines 231–232](https://github.com/mpmdw/JouleWise/blob/043b972f999913d248769237f1901d78119ceb72/joulewise/cadence/legs.py#L231-L232) · [Pinned script writer, lines 25–27](https://github.com/mpmdw/JouleWise/blob/043b972f999913d248769237f1901d78119ceb72/joulewise/cadence/ctl.py#L25-L27) |
+| Protocol, digests and Git revisions | Fixed `joulewise.cadence_ctl_stage1.v2`, 64 lowercase hex digits for SHA-256 fields and 40 for full Git revisions. [Pinned specification digest, lines 33–34](https://github.com/mpmdw/JouleWise/blob/043b972f999913d248769237f1901d78119ceb72/joulewise/cadence/ctl.py#L33-L34) |
+
+The rebound reproduction exercises both labels from the review. The sweep
+substitutes a temperature-bearing string and a path-like string in every
+roster string slot and leg key, including nullable slots and the integer
+span and attempt slots. Stage 1, standalone preflight and direct stage 2
+each refuse with exit 2, empty stdout and `REFUSE PREFLIGHT ROSTER_IDENTIFIER`.
+Status remains fresh, with no reservation, read-start marker or publication.
+The test guards against claim and value-read events. Frozen synthetic
+rosters retain their exact fixture formats. The three frozen trees match
+PR #951 byte for byte, and local v3.1 passed 846/846. Final-head CI is linked from
+[draft PR #957](https://github.com/mpmdw/JouleWise/pull/957).

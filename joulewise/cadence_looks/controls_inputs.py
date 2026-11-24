@@ -10,7 +10,10 @@ import re
 from . import controls_analysis as analysis
 from .controls_analysis import NS, ViewError, has_dose_quorum, script_steps
 from .controls_layout import GateRefusal, open_file, require_private, write_exclusive
-from .controls_manifest import ISSUED_SETTINGS, STAGE1_SCHEMA, canonical
+from .controls_manifest import (
+    FIXTURE_SPAN_ID_PATTERN, ISSUED_SETTINGS, SPAN_ID_PATTERN, STAGE1_SCHEMA, RosterIdentifierError, canonical,
+    require_episode_identifier, require_identifier,
+)
 from .controls_print import CHANNELS, KIT_ID, MASTER_SEED, PILOT, REMAINDER, _hex_pin
 from .controls_reader import (
     AC_POWERMODE,
@@ -202,6 +205,7 @@ def _entry_from_check(check, role, path, expected_sha256=None, *, parent=None):
 def _bind_span(kit_sha, runner_commit, check, root, ids, *, synthetic):
     entry = _entry_from_check(check, "close_receipt", "runner_receipt.json")
     document = project_json(_read(root / entry["path"], entry), CLOSE_FIELDS, strict=True)
+    require_identifier(document["span_id"], FIXTURE_SPAN_ID_PATTERN if synthetic else SPAN_ID_PATTERN)
     _require(document["span_id"] == check["span_id"], "INPUT_CHANNELS")
     _require(document["schema"] == "joulewise.cadence_span_receipt.v1"
              and document["runner_kind"] == "cadence-ctl-v1"
@@ -375,6 +379,7 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
     member_files["script-work.json"] = None
     custody = project_json(terminal_raw, {"files": member_files}, strict=True)
     run_id = bundle.split("/")[1]
+    require_episode_identifier(run_id, leg_id)
     files = {"leg_record": leg_record, "leg_spec": leg_spec, "terminal_map": terminal, "result": result_entry}
     hidden_delivered = work = None
     if dispatched:
@@ -511,6 +516,7 @@ def _make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic):
              and len({row["check_item"] for row in checks}) == len({row["close_item"] for row in checks}) == 2)
     for number, (ids, check) in enumerate(zip((PILOT, REMAINDER), checks, strict=True), 1):
         span_id = check["span_id"]
+        require_identifier(span_id, FIXTURE_SPAN_ID_PATTERN if synthetic else SPAN_ID_PATTERN)
         root = source / span_id
         _require(check["runner_commit"] == runner_commit)
         close_entry, close_legs, streams = _bind_span(kit_sha, runner_commit, check, root, ids, synthetic=synthetic)
@@ -545,6 +551,7 @@ def _make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic):
                 )
                 if timing.episode_id in episode_ids:
                     raise TimeFieldError("duplicate native episode identity")
+                require_episode_identifier(timing.episode_id, leg_id)
                 episode_ids.add(timing.episode_id)
                 rail = rail_timing(payloads["rails"], timing, period, evidence)
                 dc = select_dc(timing, stream_views)
@@ -582,6 +589,8 @@ def _make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic):
 def make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic=False):
     try:
         return _make_inputs(source, private, kit_raw, checks, runner_commit, synthetic=synthetic)
+    except RosterIdentifierError as error:
+        raise GateRefusal("ROSTER_IDENTIFIER") from error
     except (FileNotFoundError, TimeFieldError) as error:
         raise GateRefusal("INPUT_CHANNELS") from error
     except (AttributeError, KeyError, TypeError, ValueError, OSError, OverflowError) as error:

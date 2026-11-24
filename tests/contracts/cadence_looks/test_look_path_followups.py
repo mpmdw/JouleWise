@@ -36,6 +36,7 @@ FROZEN = runpy.run_path(str(Path(__file__).with_name("look_path") / "suite/run_s
 CHANNELS = b"REFUSE PREFLIGHT INPUT_CHANNELS\n"
 BINDING = b"REFUSE PREFLIGHT INPUT_BINDING\n"
 FREEZE = b"REFUSE PREFLIGHT FREEZE\n"
+ROSTER_IDENTIFIER = b"REFUSE PREFLIGHT ROSTER_IDENTIFIER\n"
 EXTENSION_KEY = "synthetic_extension_opaque"
 EXTENSION_VALUE = 91827.375
 OFFLINE_BOOTSTRAP = """
@@ -377,6 +378,84 @@ class LookPathFollowupTests(TestCase):
         self.assertEqual(self.invoke(world, bench, "commit-stage1"), (0, b"", b""))
         for operation in ("preflight", "stage2"):
             self.assertEqual(self.invoke(world, bench, operation, driver_fault), (2, b"", token))
+        self.assert_fresh(world, bench)
+
+    def test_roster_refuses_rebound_source_episode_identifier(self):
+        scaffold = self.stage_scaffold("roster-identifier-control")
+        for label in ("19.8375", "18.625"):
+            episode_id = f"calibration-ambient_temp_c={label}.txt"
+
+            def relabel(episode):
+                episode.update(episode_id=episode_id, clock_domain=f"joulewise.monotonic:{episode_id}")
+
+            world, bench = self.prepare(f"roster-identifier-{label}", role="episode", fault=relabel)
+            self.assert_refuses_at_blind_gates(world, bench, scaffold, token=ROSTER_IDENTIFIER, driver_fault="none")
+            stage = registrar.read(self.private(bench) / "stage1.json")
+            self.assertEqual(stage["legs"]["L002"]["episode_id"], "cadence-cl-ctl-01-L002")
+
+    def test_every_roster_string_refuses_at_all_gates(self):
+        stage = self.stage_scaffold("roster-identifier-sweep")
+        bench = stage.parents[1]
+        world = bench.parent / "source"
+        matrix = wire_matrix.NativeGateMatrix(world, bench)
+        worker = wire_matrix.worker
+        stage_files = worker._stage_files
+        path = stage / "stage1.json"
+        valid, _, inventory = matrix.stage
+        roster = json.loads(valid)
+        operands, freeze = matrix.frozen
+        revision = freeze.stage1_entry["revision"]
+        encoded = valid
+
+        def strings(value, path=()):
+            if type(value) is str or value is None:
+                yield path
+            elif isinstance(value, dict):
+                for key, child in value.items():
+                    yield from strings(child, (*path, key))
+            elif isinstance(value, list):
+                for index, child in enumerate(value):
+                    yield from strings(child, (*path, index))
+
+        def rebound(*args):
+            if args[-1] is None:
+                return operands, replace(freeze, stage1_entry=None)
+            committed = {**operands["committed"],
+                         revision: {**operands["committed"][revision], "stage1": encoded}}
+            selected = replace(freeze, stage1_entry={**freeze.stage1_entry, "stage1_sha256": registrar.digest(encoded)})
+            return {**operands, "committed": committed}, selected
+
+        try:
+            with (
+                matrix.entrypoints(synthetic=True),
+                patch.object(worker, "_stage_files", side_effect=stage_files),
+                patch.object(worker, "_operands", side_effect=rebound),
+                patch.object(worker, "_check_inputs", return_value=SimpleNamespace(
+                    sources=SimpleNamespace(stage1_bytes=lambda: (encoded, inventory)))),
+                patch.object(worker, "_certificates"),
+                patch.object(inputs, "apply_disposition"),
+            ):
+                fields = list(strings(roster))
+                fields.extend(("legs", leg, "identity", slot) for leg in roster["legs"] for slot in (3, 5))
+                fields.extend(("legs", leg) for leg in roster["legs"])
+                for field in fields:
+                    for invalid in ("calibration-ambient_temp_c=19.8375.txt", "calibration/model.txt"):
+                        candidate = deepcopy(roster)
+                        parent = candidate
+                        for key in field[:-1]:
+                            parent = parent[key]
+                        if len(field) == 2 and field[0] == "legs":
+                            parent[invalid] = parent.pop(field[-1])
+                        else:
+                            parent[field[-1]] = invalid
+                        encoded = registrar.manifest.canonical(candidate)
+                        registrar.put(path, encoded, mode=0o600)
+                        for operation in wire_matrix.OPERATIONS:
+                            with self.subTest(operation=operation, field=field, invalid=invalid):
+                                self.assertEqual(matrix.run(operation), (2, b"", ROSTER_IDENTIFIER))
+                matrix.claim.assert_not_called()
+        finally:
+            registrar.put(path, valid, mode=0o600)
         self.assert_fresh(world, bench)
 
     def test_structural_faults_refuse_stage1_and_preflight_fresh(self):
