@@ -1553,24 +1553,63 @@ class C1ClosureTests(unittest.TestCase):
             self.assert_admitted_on_both_routes(attempt)
             self.assertEqual(self.launch_binding(attempt), ('admit', ''))
 
+    def staged_attempt(self, form):
+        work = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        subprocess.run(['git', 'clone', '-q', '--bare', HERE / 'suite/history.bundle', work / 'history.git'], check=True)
+        return adapter.Attempt(work, 'valid_24_closure', form, None)
+
     def test_r16_staged_pack_digest_is_the_committed_d134_digest(self):
-        """The pack digest is D-134's committed digest of the copied pack; a linked pack has none."""
+        """Both admitted staging forms have the committed D-134 pack digest; a pack link has none."""
         from joulewise import window_lineage
 
-        for form in ('copy', 'link'):
+        for form in ('copy', 'link', 'pack-link'):
             with self.subTest(form=form):
-                work = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
-                subprocess.run(['git', 'clone', '-q', '--bare', HERE / 'suite/history.bundle', work / 'history.git'],
-                               check=True)
-                attempt = adapter.Attempt(work, 'valid_24_closure', form, None)
+                attempt = self.staged_attempt(form)
                 staged = attempt.view / closure.PACK
-                committed = self.committed_d134_digest(staged, work)
+                committed = self.committed_d134_digest(staged, attempt.work)
                 self.assertEqual(adapter.staged_pack_digest(staged), committed)
-                if form == 'copy':
-                    self.assertEqual(window_lineage.pack_tree_digest(staged), committed)
-                else:
+                if form == 'pack-link':
                     with self.assertRaisesRegex(ValueError, 'pack_inadmissible'):
                         window_lineage.pack_tree_digest(staged)
+                else:
+                    self.assertEqual(window_lineage.pack_tree_digest(staged), committed)
+
+    def test_r19_link_form_links_the_kit_to_the_pack_and_a_pack_link_refuses(self):
+        """Lead ruling: the frozen link form is an in-view link R/KIT -> S/PACK; S/PACK -> R/KIT refuses."""
+        import stat
+
+        def kinds(attempt):
+            exported = attempt.repo / adapter.KIT / adapter.series.C1_PLAN
+            staged = attempt.stage / closure.PACK / adapter.series.C1_PLAN
+            return exported, staged, stat.S_IFMT(os.lstat(exported).st_mode), stat.S_IFMT(os.lstat(staged).st_mode)
+
+        committed = None
+        for form, expected in (('link', (stat.S_IFLNK, stat.S_IFREG)), ('copy', (stat.S_IFREG, stat.S_IFREG)),
+                               ('pack-link', (stat.S_IFREG, stat.S_IFLNK))):
+            with self.subTest(form=form):
+                attempt = self.staged_attempt(form)
+                exported, staged, *observed = kinds(attempt)
+                self.assertEqual(tuple(observed), expected)
+                blob = attempt.git('show', f'{attempt.execution}:{adapter.KIT / adapter.series.C1_PLAN}')
+                mode = attempt.git('ls-tree', attempt.execution, '--', str(adapter.KIT / adapter.series.C1_PLAN)).split()[0]
+                regular = staged if form != 'pack-link' else exported
+                self.assertEqual(regular.read_bytes(), blob)  # the committed bytes
+                self.assertEqual(b'100755' if os.stat(regular).st_mode & 0o100 else b'100644', mode)  # and mode
+                if form == 'link':
+                    self.assertEqual(exported.resolve(strict=True), staged.resolve(strict=True))
+                if form == 'pack-link':
+                    self.assertEqual(staged.resolve(strict=True), exported.resolve(strict=True))
+                    code, packet = attempt.build()
+                    self.assertEqual(code, 2, attempt.build_error)
+                    self.assertIn('pack_inadmissible', attempt.build_error)
+                    attempt.deliver(packet)
+                    self.assertEqual(self.consumer_outcomes(attempt), (2, 'refuse', 0, 0), attempt.cli_error)
+                    verdict, detail = self.launch_binding(attempt)
+                    self.assertEqual(verdict, 'refuse')
+                    self.assertIn('pack_inadmissible', detail)
+                else:
+                    self.assert_admitted_on_both_routes(attempt)
+                    self.assertEqual(self.launch_binding(attempt), ('admit', ''))
 
     def test_r16_previous_attempt_digest_fields_refuse_before_reservation(self):
         """Round 16 class: each digest the night plan carries is recomputed; a previous value refuses."""
