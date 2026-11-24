@@ -275,12 +275,15 @@ def run(operation, world, bench, fault):
     make_inputs = inputs.make_inputs
     inputs.make_inputs = lambda *args: make_inputs(*args, synthetic=True)
 
-    if fault in ("guard_blind_values", "guard_metadata_extensions", "guard_measured_sizes"):
+    if fault in ("guard_blind_values", "guard_metadata_extensions", "guard_measured_sizes",
+                 "guard_model_filenames"):
         from joulewise.cadence_looks import controls_time_fields as fields
 
         forbidden = ("91827.375", "19.8375")
         if fault == "guard_metadata_extensions":
             forbidden += ("synthetic_extension_opaque",)
+        if fault == "guard_model_filenames":
+            forbidden += ("18.625", "calibration-ambient_temp_c=")
         size_token = re.compile(r"(?<![\w.])(?:99183|876543)(?![\w.])")
 
         def contains_observation(text):
@@ -302,6 +305,11 @@ def run(operation, world, bench, fault):
         def guarded_project(raw, projection, **kwargs):
             result = original_project(raw, projection, **kwargs)
             assert not contains_observation(repr(result)), "observation in blind projection"
+            if fault == "guard_model_filenames" and b"calibration-ambient_temp_c=" in raw:
+                if projection is reader.EPISODE_FIELDS:
+                    put(bench / f"artifact-{operation}-episode.json", manifest.canonical(result))
+                if projection is reader.METADATA_FIELDS:
+                    put(bench / f"artifact-{operation}-metadata.json", manifest.canonical(result))
             return result
 
         json.loads, fields._convert = guarded_loads, guarded_convert

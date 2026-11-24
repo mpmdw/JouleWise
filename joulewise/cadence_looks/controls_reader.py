@@ -107,6 +107,9 @@ ARTIFACT_IDENTITY = WireRecord(
                                         size_bytes=DiscardedField(OPAQUE_INTEGER), symlink=BOOLEAN)],
      "files": KeyedFields(r".+", OPAQUE_STRING)},
 )
+# The bound bytes authenticate provenance. Filenames and paths have no
+# role in the blind timing or admission projections.
+OPAQUE_ARTIFACT_IDENTITY = DiscardedField(Nullable(ARTIFACT_IDENTITY))
 TOKEN_BUDGET = WireRecord(
     {**dict.fromkeys(("max_episode_decode_tokens", "max_context_tokens", "effective_context_cap"), Nullable(OPAQUE_INTEGER)),
      **dict.fromkeys(("max_tokens_per_turn", "decode_tokens_used", "prefill_tokens_used",
@@ -121,7 +124,7 @@ HARDWARE_FIELDS = WireRecord(
                                                      Nullable(OPAQUE_INTEGER)),
      "runtime_identity": RequiredRecordFields(
          mlx_version=Nullable(OPAQUE_STRING), mlx_lm_version=Nullable(OPAQUE_STRING),
-         model_artifact_identity=Nullable(ARTIFACT_IDENTITY)),
+         model_artifact_identity=OPAQUE_ARTIFACT_IDENTITY),
      "task_diagnostics": RequiredRecordFields(
          give_hint=Nullable(OPAQUE_BOOLEAN), main_task_score=Nullable(OPAQUE_FINITE_NUMBER),
          evaluation_outputs=OPAQUE_OBJECT, flags=[OPAQUE_STRING], tool_schemas=[OPAQUE_OBJECT])},
@@ -261,7 +264,7 @@ WORKLOAD_PROVENANCE_FIELDS = WireRecord(
                                         revision=Nullable(OPAQUE_STRING), **{"class": Nullable(OPAQUE_STRING)},
                                         vocab_size=Nullable(OPAQUE_INTEGER)),
      "model": RequiredRecordFields(name=OPAQUE_STRING, source=Nullable(OPAQUE_STRING),
-                                    revision=Nullable(OPAQUE_STRING), artifact_identity=Nullable(ARTIFACT_IDENTITY)),
+                                    revision=Nullable(OPAQUE_STRING), artifact_identity=OPAQUE_ARTIFACT_IDENTITY),
      "sampler": WireRecord(
          {"kind": OPAQUE_STRING, "temperature": OPAQUE_FINITE_NUMBER, "pinned": BOOLEAN,
           "requested_temperature": OPAQUE_FINITE_NUMBER, "max_tokens": OPAQUE_INTEGER},

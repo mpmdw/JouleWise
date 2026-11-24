@@ -27,6 +27,7 @@ from joulewise.cadence_looks import controls_metadata as metadata
 from joulewise.cadence_looks import controls_reader as reader
 from joulewise.cadence_looks import controls_release as release
 from joulewise.cadence_looks import controls_time_fields as blind
+from joulewise.provenance import model_artifact_identity
 from tests.contracts.cadence_looks import look_path_driver as registrar
 from tests.contracts.cadence_looks import look_path_wire_matrix as wire_matrix
 
@@ -1557,6 +1558,269 @@ class LookPathFollowupTests(TestCase):
                 if isinstance(node, ast.keyword) and node.arg in ("disposition", "reason"):
                     self.fail(f"{function.__name__} assigns a fresh {node.arg}")
         self.assertEqual(observed, analysis.VALUE_DEPENDENT_REASONS)
+
+    def test_closing_completed_calls_and_cpu_work_refuse_fresh(self):
+        scaffold = self.stage_scaffold("closing-admitted-control")
+
+        def update_step(kind, field, value):
+            def update(work):
+                step = next(row for row in work["steps"] if row["kind"] == kind)
+                self.assertTrue(step["complete"])
+                step[field] = value(step) if callable(value) else value
+            return update
+
+        cases = (
+            ("hidden-first", "L002", "hidden", "first_token_ns", None),
+            ("visible-first", "L002", "turn", "first_token_ns", None),
+            ("cpu-audit", "L003", "cpu", "thread_cpu_ns", 1),
+            ("cpu-thread-1ns-short", "L003", "cpu", "thread_cpu_ns", 30 * analysis.NS - 1),
+            ("cpu-elapsed-1ns-short", "L003", "cpu", "ended_ns", lambda row: row["ended_ns"] - 1),
+        )
+        for name, leg, kind, field, value in cases:
+            with self.subTest(name=name):
+                world, bench = self.prepare(
+                    f"closing-{name}", configure=lambda world: mutate(
+                        world, "script", update_step(kind, field, value), leg=leg),
+                )
+                self.assert_refuses_at_blind_gates(world, bench, scaffold)
+
+    def test_closing_blind_model_projections_are_invariant_to_file_rename(self):
+        model = self.base / "closing-model"
+        model.mkdir()
+        path = model / "calibration-ambient_temp_c=19.8375.safetensors"
+        path.write_bytes(b"synthetic model artifact")
+        projections, identities = [], []
+        for label, suffix in (("first", "19.8375"), ("renamed", "18.625")):
+            renamed = model / f"calibration-ambient_temp_c={suffix}.safetensors"
+            if path != renamed:
+                path.rename(renamed)
+            path = renamed
+            artifact = model_artifact_identity(str(model))
+            identities.append(artifact["files"][path.name])
+
+            def update(world):
+                mutate(world, "episode", lambda episode: episode["hardware"]["runtime_identity"].update(
+                    model_artifact_identity=artifact))
+                provenance = wire_matrix.sample(reader.WORKLOAD_PROVENANCE_FIELDS)
+                provenance["model"]["artifact_identity"] = artifact
+                mutate(world, "metadata", lambda metadata: metadata.update(workload_provenance=provenance))
+
+            world, bench = self.prepare(f"closing-model-{label}", configure=update)
+            for operation in ("stage1", "commit-stage1", "preflight"):
+                fault = "none" if operation == "commit-stage1" else "guard_model_filenames"
+                result = self.invoke(world, bench, operation, fault)
+                self.assertEqual(result, (0, b"", b""), result[2].decode("utf-8"))
+            self.assert_fresh(world, bench)
+            phases = []
+            for operation in ("stage1", "preflight"):
+                episode, metadata = (bench / f"artifact-{operation}-{role}.json"
+                                     for role in ("episode", "metadata"))
+                self.assertNotIn("model_artifact_identity", registrar.read(episode)["hardware"]["runtime_identity"])
+                self.assertNotIn("artifact_identity", registrar.read(metadata)["workload_provenance"]["model"])
+                phases.append((episode.read_bytes(), metadata.read_bytes()))
+            self.assertEqual(*phases)
+            projections.append(phases[0])
+        self.assertEqual(*identities)
+        self.assertEqual(*projections)
+
+    def test_closing_post_marker_fields_are_covered_by_blind_admission(self):
+        from joulewise.align import attribution, records
+        from joulewise.align.apple import episode_bundle, rl176_phases as phases, sampler
+
+        # Seed the record receivers in the native read and pinned calculation
+        # calls. Include the nested records whose keys the kernel dereferences.
+        episode = {"episode": "episode"}
+        turns = {**episode, "turn": "turn", "t": "turn", "call": "tool", "c": "tool"}
+        surfaces = {
+            reader.first_read: {"leg": "bound", "leg.binding": "binding", "position": "position",
+                                "pin": "file map", "pin['script']": "file", "entry": "file"},
+            inputs.Inputs.read_entry: {"entry": "file"},
+            inputs._read: {"entry": "file"},
+            inputs.Inputs.certificate: {"pin": "file", "self.positions[leg]": "position"},
+            reader._join_native_rails: episode,
+            reader._attach_dc: episode,
+            analysis.print_admitted_controls: {**episode, "leg": "leg", "view": "view"},
+            analysis._format_leg: {"step": "step", "view": "view"},
+            analysis._project_steps: {"step": "step"},
+            analysis.PhysicalView.cpu_dose.fget: {"step": "step"},
+            analysis._baseline: {"recovery": "step"},
+            analysis._channel_values: {**episode, "hidden": "step", "step": "step", "view": "view"},
+            phases.qualify_ctl01: {"leg": "control", "leg.episode": "episode"},
+            phases.selected_trace: episode,
+            phases.with_package: episode,
+            phases.phase_table: turns,
+            phases._event_times: turns,
+            phases.event_profiles: episode,
+            episode_bundle.join_episode_trace: {**episode, "episode.hardware": "hardware"},
+            sampler._restore_stamp: {"record": "stamp"},
+            attribution.attribute_episode: episode,
+            attribution._segments: {**turns, "episode.hardware": "hardware",
+                                    "thermal": "thermal", "interval": "interval"},
+            records.Episode.__post_init__: {**turns, "self": "episode"},
+            records.Episode.logged_turns: {**turns, "self": "episode"},
+            records.Episode.totals: {**turns, "self": "episode"},
+            records.Turn.__post_init__: {"self": "turn"},
+        }
+        access = {}
+        children = {
+            ("leg", "episode"): "episode", ("control", "episode"): "episode",
+            ("view", "episode"): "episode", ("view", "steps"): "step[]",
+            ("episode", "turns"): "turn[]", ("episode", "hardware"): "hardware",
+            ("turn", "tool_calls"): "tool[]", ("hardware", "thermal"): "thermal",
+            ("thermal", "intervals"): "interval[]", ("position", "files"): "file map",
+        }
+        for function, roots in surfaces.items():
+            nodes = list(ast.walk(ast.parse(textwrap.dedent(inspect.getsource(function)))))
+            roots = roots.copy()
+
+            def source(node):
+                known = roots.get(ast.unparse(node))
+                if known is not None:
+                    return known
+                if isinstance(node, ast.Attribute):
+                    return children.get((source(node.value), node.attr))
+                if isinstance(node, ast.Subscript):
+                    owner = source(node.value)
+                    if owner and owner.endswith("[]"):
+                        return owner[:-2]
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                    if node.func.id in ("list", "sorted", "tuple", "replace") and node.args:
+                        return source(node.args[0])
+                return None
+
+            for _ in range(len(nodes)):
+                aliases = {}
+                for node in nodes:
+                    if isinstance(node, ast.Assign) and (role := source(node.value)):
+                        aliases.update((target.id, role) for target in node.targets if isinstance(target, ast.Name))
+                    if isinstance(node, (ast.For, ast.comprehension)) and isinstance(node.target, ast.Name):
+                        role = source(node.iter)
+                        if role and role.endswith("[]"):
+                            aliases[node.target.id] = role[:-2]
+                if aliases.items() <= roots.items():
+                    break
+                roots.update(aliases)
+            for node in nodes:
+                key = None
+                if isinstance(node, ast.Attribute) and (role := source(node.value)):
+                    key = node.attr
+                    if key == "get":
+                        continue
+                elif isinstance(node, ast.Subscript) and (role := source(node.value)) and not role.endswith("[]"):
+                    if role == "file map" and isinstance(node.slice, ast.Name):
+                        comp, = (item for item in nodes if isinstance(item, ast.comprehension)
+                                 and ast.unparse(item.target) == node.slice.id)
+                        access.setdefault(role, set()).update(ast.literal_eval(comp.iter))
+                        continue
+                    key = ast.literal_eval(node.slice)
+                elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "get":
+                    if role := source(node.func.value):
+                        key = ast.literal_eval(node.args[0])
+                elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "getattr":
+                    if role := source(node.args[0]):
+                        key = ast.literal_eval(node.args[1])
+                if key is not None:
+                    access.setdefault(role, set()).add(key)
+
+        # Registered position and file members are validated by the stage-1
+        # schemas and the authenticated terminal map. The printed records
+        # below are constructed from those bindings and the blind verdict.
+        schema_dir = Path(release.__file__).parents[2] / "docs/process/cadence/looks"
+        stage_leg = registrar.read(schema_dir / "lm-ctl-01.stage1.schema.json")["$defs"]["leg"]
+        self.assertLessEqual({"identity", "kind", "g0_released"}, set(stage_leg["required"]))
+        self.assertEqual(stage_leg["properties"]["identity"]["prefixItems"][4]["type"], "string")
+        self.assertEqual(stage_leg["properties"]["kind"]["type"], "string")
+        self.assertEqual(stage_leg["properties"]["g0_released"]["type"], "boolean")
+        inventory = registrar.read(schema_dir / "lm-ctl-01.inputs.schema.json")["$defs"]
+        position = inventory["position"]
+        self.assertEqual(access.pop("position"), {"files", "span_id", "certificate"})
+        self.assertLessEqual({"files", "span_id", "certificate"}, set(position["required"]))
+        self.assertEqual(position["properties"]["span_id"]["type"], "string")
+        self.assertEqual(set(position["properties"]["files"]["properties"]) - {
+            "leg_record", "leg_spec", "terminal_map", "result", "reference",
+        }, access.pop("file map"))
+        self.assertEqual(access.pop("file"), {"path", "size", "sha256"})
+        self.assertLessEqual({"path", "size", "sha256"}, set(inventory["file"]["required"]))
+        self.assertEqual({name: inventory["file"]["properties"][name]["type"]
+                          for name in ("path", "sha256", "size")},
+                         {"path": "string", "sha256": "string", "size": "integer"})
+        for role, fields in {
+            "bound": {"binding", "kind", "g0_released"},
+            "binding": {"leg_id"},
+            "leg": {"admission", "leg_id", "kind", "episode", "g0_released"},
+            "control": {"episode", "cpu_burn_s"},
+            "view": {"episode", "steps", "cpu_dose"},
+        }.items():
+            self.assertEqual(access.pop(role), fields)
+
+        # Direct or conditional wire reads must keep their declared selector.
+        # Phase calls only receive admitted turns, which have no tool calls.
+        episode_keys = access.pop("episode") - {"totals", "logged_turns"}
+        turn_keys = access.pop("turn")
+        self.assertLessEqual(episode_keys, reader.EPISODE_FIELDS.keys())
+        self.assertLessEqual(turn_keys, reader.TURN_FIELDS.keys())
+        self.assertLessEqual(access.pop("tool"), reader.TOOL_FIELDS.keys())
+        self.assertEqual(access.pop("hardware"), {"thermal", "paired_clock_stamps_ns"})
+        self.assertEqual(access.pop("thermal"), {"intervals"})
+        for tag, schema in reader.THERMAL_FIELDS.fields.items():
+            read = access["interval"] - ({"turn"} if tag != "H" else set())
+            self.assertLessEqual(read, schema.required)
+        access.pop("interval")
+        for field in access.pop("stamp"):
+            self.assertIs(reader.STAMP_FIELDS[field], blind.INT64)
+
+        # The projected Step has role-specific names and nullable wire fields
+        # for interrupted work. Exercise each field the consumer actually
+        # reads through the shared admission predicate on completed work.
+        work_fields = {
+            "kind": "kind", "complete": "complete", "start_ns": "started_ns", "end_ns": "ended_ns",
+            "requested_tokens": "requested_tokens", "delivered_tokens": "actual_tokens",
+            "context_tokens": "context_tokens", "first_ns": "first_token_ns", "requested_s": "requested_s",
+        }
+        observed = {work_fields[field] for field in access.pop("step")}
+        self.assertEqual(access, {})
+        position = dict(admitted=True, g0_released=True, script_complete=True)
+        _, runtime, bundle = FROZEN["location"](self.pristine, "L002")
+        original_episode = registrar.read(bundle / "outputs/align_episode.json")
+        original_work = registrar.read(runtime / "script-work.json")
+        for keys, selector in ((episode_keys, lambda ep: ep), (turn_keys, lambda ep: ep["turns"][0])):
+            for field in sorted(keys):
+                for mutation in ("missing", "wrong type", "null"):
+                    candidate = deepcopy(original_episode)
+                    row = selector(candidate)
+                    if mutation == "missing":
+                        del row[field]
+                    else:
+                        row[field] = [] if isinstance(row[field], bool) else False
+                        if mutation == "null":
+                            row[field] = None
+                    raw = registrar.manifest.canonical(candidate)
+                    with self.subTest(episode_field=field, mutation=mutation):
+                        if field == "first_token_ns" and mutation == "null":
+                            timing = reader.episode_timing(raw, {})
+                            plan = SimpleNamespace(episode=timing, trace_timing=lambda: None)
+                            admission = inputs.admit_leg(position, original_work, original_work["script"], plan)
+                            self.assertEqual(admission.reason, "envelope_stamps")
+                        else:
+                            with self.assertRaises(blind.TimeFieldError):
+                                reader.episode_timing(raw, {})
+        for leg in ("L002", "L003", "L006"):
+            _, runtime, _ = FROZEN["location"](self.pristine, leg)
+            work = registrar.read(runtime / "script-work.json")
+            for index, step in enumerate(work["steps"]):
+                for field in sorted(observed & inputs.STEP_VARIANTS[step["kind"]].keys()):
+                    for mutation in ("missing", "wrong type", "null"):
+                        candidate = deepcopy(work)
+                        row = candidate["steps"][index]
+                        if mutation == "missing":
+                            del row[field]
+                        else:
+                            row[field] = [] if mutation == "wrong type" else None
+                        with self.subTest(kind=step["kind"], field=field, mutation=mutation):
+                            with self.assertRaises(blind.TimeFieldError):
+                                projected = blind.project_json(registrar.manifest.canonical(candidate),
+                                                               inputs.WORK_FIELDS, strict=True)
+                                inputs.admit_leg(position, projected, work["script"], None)
 
     def test_incomplete_script_allows_a_native_interrupted_tail(self):
         work = {"steps": [{"kind": "turn", "complete": False, "actual_tokens": None,

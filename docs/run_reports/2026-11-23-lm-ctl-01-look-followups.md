@@ -428,3 +428,18 @@ supersessions. Hosted verification is tracked on
 
 Tier 2 executing review of revision 11, the installed byte pass and the
 bound-host blind preflight remain lead gates before reservation.
+
+## CAP 8 closing step
+
+The three audit 8 reproductions were replayed on `db0945626` using
+synthetic fixtures. The narrow closing check covers the following changes.
+
+| Finding | Change and regression |
+| --- | --- |
+| HIGH. A completed hidden call lacked its first-token stamp | Require a usable stamp on every completed call. The mechanical field inventory checks the native reader and pinned kernel, and exercises missing, mistyped and null inputs at blind admission. The rebound hidden and visible omissions refuse fresh at all three entry points. |
+| HIGH. Model filenames appeared in both blind projections | Validate the closed artifact record and omit it from the episode and metadata projections. The source digests still bind its bytes. Renaming the synthetic file preserves its digest and produces byte-identical guarded projections at both gates. |
+| MED. A 30 s CPU step with one recorded thread nanosecond passed | Apply the pinned writer's inclusive threshold to both monotonic elapsed time and thread CPU time. The audit case and both one-nanosecond shortfalls refuse fresh. The matched exact-threshold control passes. |
+
+The valid interrupted tail, frozen bytes and exact byte-pass receipt remain
+covered. The existing LOW orphan-marker race remains open for the lead.
+Final-head CI is linked from [draft PR #957](https://github.com/mpmdw/JouleWise/pull/957).

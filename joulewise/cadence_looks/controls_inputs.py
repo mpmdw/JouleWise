@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import re
 
-from .controls_analysis import ViewError, has_dose_quorum, prepare_admission, script_steps
+from .controls_analysis import NS, ViewError, has_dose_quorum, prepare_admission, script_steps
 from .controls_layout import GateRefusal, open_file, require_private, write_exclusive
 from .controls_manifest import ISSUED_SETTINGS, STAGE1_SCHEMA, canonical
 from .controls_print import CHANNELS, KIT_ID, MASTER_SEED, PILOT, REMAINDER, _hex_pin
@@ -54,7 +54,7 @@ CALL_FIELDS = WireRecord({**STEP_FIELDS, "requested_tokens": INTEGER, "actual_to
 INTERVAL_TIMES = {**STEP_TIMES, **dict.fromkeys(("started_epoch_s", "ended_epoch_s"), OPAQUE_FINITE_NUMBER)}
 INTERVAL_FIELDS = WireRecord({**STEP_FIELDS, "requested_s": NUMBER}, INTERVAL_TIMES)
 CPU_FIELDS = WireRecord({**STEP_FIELDS, "requested_s": INTEGER},
-                        {**INTERVAL_TIMES, "thread_cpu_ns": OPAQUE_NONNEGATIVE_INTEGER})
+                        {**INTERVAL_TIMES, "thread_cpu_ns": INTEGER})
 STEP_VARIANTS = {**dict.fromkeys(("turn", "hidden"), CALL_FIELDS),
                  **dict.fromkeys(("gap", "recovery"), INTERVAL_FIELDS), "cpu": CPU_FIELDS}
 WORK_FIELDS = WireRecord(
@@ -274,6 +274,7 @@ def _check_script_requests(work, issued):
                 if not trailing or {"first_token_ns", "context_tokens", "cached_prompt_tokens"} & row.keys():
                     raise TimeFieldError("invalid native interrupted call")
             elif (CALL_RETURN_FIELDS.keys() - row.keys()
+                  or (row["complete"] and row["first_token_ns"] is None)
                   or not 0 <= row["cached_prompt_tokens"] <= row["context_tokens"]):
                 raise TimeFieldError("missing or invalid native returned call fields")
         else:
@@ -284,6 +285,8 @@ def _check_script_requests(work, issued):
                     or ("ended_ns" in row) != ("ended_epoch_s" in row)
                     or (kind == "cpu" and ("ended_ns" in row) != ("thread_cpu_ns" in row))):
                 raise TimeFieldError("missing or unmatched native interval stamps")
+            if kind == "cpu" and row.get("thread_cpu_ns", 0) < 0:
+                raise TimeFieldError("negative native thread CPU duration")
         if kind == "turn":
             actual, expected = row["requested_tokens"], next(turns, None)
         elif kind == "hidden":
@@ -292,6 +295,12 @@ def _check_script_requests(work, issued):
             actual, expected = row["requested_s"], issued[intervals[kind]]
         if actual != expected:
             raise TimeFieldError("native script step request differs from issued dose")
+        if kind == "cpu" and row["complete"]:
+            # The pinned writer's completed_step requires both clocks to reach
+            # duration_ns(dose). Issued CPU doses are integer seconds.
+            threshold = expected * NS
+            if min(row["ended_ns"] - row["started_ns"], row["thread_cpu_ns"]) < threshold:
+                raise TimeFieldError("native CPU step did not reach its issued duration")
     if work["complete"] and next(turns, None) is not None:
         raise TimeFieldError("issued visible calls missing from native script")
 
