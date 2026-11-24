@@ -259,8 +259,8 @@ class ValidateBeforeOpen(unittest.TestCase):
 
     def test_the_preflight_knows_when_no_leg_can_enter_the_fit(self):
         """Audit r7 finding 1: with every verdict's sidecar_coverage false, the preflight's plan has no fit candidate
-        and nothing protected was opened. Whether stage 1 refuses here is NEEDS_SPEC (POST_OPEN_REASONS
-        ``no_fit_candidate``; AuditCommittedStageOne.test_audit_r7_1_no_fit_candidate_is_needs_spec_...)."""
+        and nothing protected was opened. Stage 1 still refuses after the first open: a known limitation (lead
+        ruling N1(a); POST_OPEN_REASONS ``no_fit_candidate``; AuditCommittedStageOne.test_audit_r7_1_...)."""
         excluded = {k: dict(v, sidecar_coverage=False) for k, v in self.verdicts.items()}
         root = self.custody()
         with _Opens() as opened:
@@ -330,8 +330,9 @@ class PostOpenAllowlist(unittest.TestCase):
         self.assertLessEqual(codes, set(R.POST_OPEN_REASONS))
         self.assertEqual(codes, set(R.POST_OPEN_REASONS), "an allowlisted code that no protected path raises")
         self.assertGreater(breaches, 0)
-        self.assertEqual(R.NEEDS_SPEC_REASONS, {"no_fit_candidate"})
-        self.assertTrue(all(R.POST_OPEN_REASONS[c].startswith("NEEDS_SPEC") for c in R.NEEDS_SPEC_REASONS))
+        self.assertEqual(R.KNOWN_LIMITATION_REASONS, {"no_fit_candidate"})
+        self.assertTrue(all(R.POST_OPEN_REASONS[c].startswith("Known limitation (lead ruling N1(a)")
+                            for c in R.KNOWN_LIMITATION_REASONS))
 
     def test_a_content_refusal_takes_only_an_allowlisted_code(self):
         with self.assertRaises(ValueError):
@@ -474,21 +475,23 @@ class AuditCommittedStageOne(unittest.TestCase):
         finally:
             self.restore()
 
-    def test_audit_r7_1_no_fit_candidate_is_needs_spec_and_refuses_after_the_first_open(self):
-        """NEEDS_SPEC (PR #795 round 8). Audit on 5a7a3eae0, finding 1: every verdict's sidecar_coverage false leaves
+    def test_audit_r7_1_no_fit_candidate_is_a_known_limitation_and_refuses_after_the_first_open(self):
+        """Known limitation (lead ruling N1(a), 2026-11-24). Audit on 5a7a3eae0, finding 1: every verdict's
+        sidecar_coverage false leaves
         no fit candidate (the preflight knows it: ValidateBeforeOpen.test_the_preflight_knows_when_no_leg_can_enter_
         the_fit), yet stage 1 opens the protected sources and refuses "no leg enters the fit" (POST_OPEN_REASONS
         ``no_fit_candidate``). The refusal is not moved before the first open because the frozen admission matrix's
         negative-arena control (the roster of 101,605 of its 101,889 cases) has every verdict false and must reach a
-        protected open. This test pins today's behaviour until the lead rules: no output, no reservation, no public
-        file, and the refusal after the opens. If the ruling moves the refusal, this test changes with it."""
+        protected open, and the production entry point is the same CLI (ruling N1(c) is not applicable). This test
+        pins the ruled behaviour: no output, no reservation, no public file, no value printed, and the refusal after
+        the opens."""
         try:
             self.register({k: dict(v, sidecar_coverage=False) for k, v in self.verdicts.items()})
             row = self.run_stage1()
             self.assertEqual(row["rc"], 2, row)
-            self.assertIn("stage 1: no leg enters the fit", row["err"])
+            self.assertEqual(row["err"], "REFUSED stage 1: no leg enters the fit\n")      # no value printed
             self.assertFalse(row["output"] or row["public"] or row["spent"] or row["responses"], row)
-            self.assertTrue(row["opens"], "the NEEDS_SPEC refusal moved before the first open without a ruling")
+            self.assertTrue(row["opens"], "the known-limitation refusal moved before the first open without a ruling")
         finally:
             self.restore()
 

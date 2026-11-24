@@ -170,12 +170,13 @@ POST_OPEN_REASONS = {
                          "seconds",
     "ruled_rerun_changed": "a ruled rerun's read of the protected sources differs from the superseded read beyond "
                            "the named exclusions",
-    "no_fit_candidate": "NEEDS_SPEC (PR #795 round 8): the committed verdicts, the records and the ruled exclusions "
-                        "leave no fit candidate. C1 places this refusal before the first open; the frozen admission "
-                        "matrix's negative-arena control (101,605 cases) reaches a protected open with every verdict "
-                        "false, so the refusal stays here until the lead rules",
+    "no_fit_candidate": "Known limitation (lead ruling N1(a), PR #795, 2026-11-24): a roster with no fit candidate "
+                        "opens protected files before refusing; no value is printed. The preflight knows the fit "
+                        "candidates, but this CLI is both the production entry and the frozen admission matrix's "
+                        "driver, whose negative-arena control (101,605 cases) must reach a protected open with every "
+                        "verdict false",
 }
-NEEDS_SPEC_REASONS = frozenset({"no_fit_candidate"})
+KNOWN_LIMITATION_REASONS = frozenset({"no_fit_candidate"})
 _PHASE = {"protected": False}
 
 
