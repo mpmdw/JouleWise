@@ -1631,3 +1631,93 @@ Open, LOW:
   committed pack that preflight cannot recompute from the staged view, and
   the harvest recomputes pack identity.
 - A link placed after arm is outside preflight's reach.
+
+## Round 16 · audit 7, derive every digest and write root from the current attempt
+
+Audit 7 checked head `0999c9ab4` and verified two HIGHs, plus the open MED.
+In both HIGHs build and install exited 0, direct arm admitted, and both
+routes entered their host checkpoint:
+1. **Stale pack digest.** The night plan's
+   `hazard_window.pack.pack_sha256` was set to the previous pack's digest.
+   The lineage writer persisted it in both runs roots, and both campaign
+   readers accepted it.
+2. **Stale operator log root.** The render used an `operator_log_root` that
+   pointed to the previous attempt's logs. The chain appended its C1 start
+   record to the previous `window-chain.log` before reservation.
+
+The lead ruled both HIGHs are one class: a value carried in the night plan
+or the render inputs that names a previous attempt is trusted, when it
+should be derived from the current one. The ruling asked for:
+- the attempt binding of every digest;
+- the write roots;
+- both reproductions plus a generic regression;
+- the MED, if small.
+
+The specs were committed first, as `690726e86` (the HIGHs and the class)
+and `018b8e7f4` (the MED). On the unchanged preflight, these were all
+admitted:
+- both HIGH reproductions;
+- the stale and missing pack digest, both previous heads and an unchecked
+  digest field;
+- every moved write root except the two runs roots, which round 15's
+  freshness check already refuses.
+
+| Finding | Commit | Named regression | Result |
+| --- | --- | --- | --- |
+| HIGH 1: a previous pack's digest in the night plan (the audit's reproduction), refused on both routes before reservation | `f5f0da53c` | `test_audit7_high1_stale_pack_digest_refuses_before_reservation` | PASS |
+| HIGH 2: the previous attempt's operator logs, beside this attempt (the audit's reproduction) and in a previous attempt directory, refused on both routes with the old log unchanged | `f5f0da53c` | `test_audit7_high2_stale_operator_log_root_refuses_before_reservation` | PASS |
+| Generic, every digest field: pack, plan tree, window env, registration, `repo_head`, `measurement_head`, a missing pack digest, an unchecked digest field | `f5f0da53c` | `test_r16_previous_attempt_digest_fields_refuse_before_reservation` | PASS |
+| Generic, every write root: operator log, claim and bound runs roots, both backups, custody, and an operator log reached through a link, each refused with the previous attempt's files unchanged | `f5f0da53c` | `test_r16_previous_attempt_write_roots_refuse_before_reservation` | PASS |
+| The recomputed digest equals `arm_readiness.committed_pack_tree_sha256` of a git-committed copy, in both staging forms | `f5f0da53c` | `test_r16_staged_pack_digest_is_the_committed_d134_digest` | PASS |
+| MED: a mixed launch-marker selection refuses at prepare; all-tagged passes | `4722df351` | `test_audit7_med_mixed_launch_markers_refuse_at_prepare` | PASS |
+
+- **Attempt binding.** `staged_pack_sha256` frames the staged pack bytes
+  with D-134's committed-pack framing (path, mode, length, SHA-256). A
+  file link is framed as its target. A directory link or special entry
+  refuses.
+  - The git-based digest cannot run on a C1 launch view, because the view
+    is not a git checkout. C1 prepare therefore wrote `pack_sha256: null`,
+    and the lineage persisted whatever the plan carried. C1 prepare now
+    passes `staged_pack_sha256` as the plan writer's `pack_digest`.
+  - Preflight recomputes the digest through the fence and requires the
+    plan's value to equal it. A stale or missing value refuses.
+  - `repo_head` and `measurement_head` must be the handoff's execution
+    commit. Prepare reads both from the HEAD the view is exported from.
+  - Any digest field outside the known set refuses. The window env and
+    registration digests are still recomputed in `load_prepared`, and the
+    lineage writer recomputes the plan tree digest itself.
+- **Write roots.** `check_write_roots` derives the attempt's own
+  directory from the verified stage root, never from the plan. That
+  directory is the session root in production and the work directory in
+  the lite fixture. Every write root must resolve (realpath) inside it:
+  both runs roots, the operator log root, both calibration directories,
+  both backups, the ledger, custody and the session root. Both runs roots
+  and the operator log root must still be absent or empty directories
+  that are not links. Prepare creates them empty, and nothing writes to
+  them before the chain. Custody may hold records but no link. All checks
+  run after every earlier check, so frozen refusals keep their reasons.
+- **MED.** `campaign_marker_refusal` applies the runner's own
+  `_config_requires_launch_lineage` to each in-chain collection selection
+  and spare set. C1 prepare calls it right after staging the view.
+  Preflight does not repeat it: the frozen suite's invented first stage
+  is mixed (7 of 11), so judging it at build would change the frozen
+  decisions. No existing test runs C1 prepare end to end, because
+  `test_v4_series` replays prepare without `attempt_c1`. The prepare call
+  itself is therefore covered by review, and the rule by its regression.
+- **Fixture.** The invented adapter now stages the pack before writing the
+  night plan. It records the pack digest from its own independent copy of
+  the D-134 framing, and the execution commit as both heads, as C1 prepare
+  writes them. Its `roots_attempt` hook changes one render input before
+  prepare, as the audit did. The nine frozen files are unchanged.
+- **Tests updated.** Round 15's linked operator log case now refuses at
+  the stricter freshness rule.
+
+Local checks, within the lead's test budget:
+- 35 focused tests pass on the final preflight code. They cover the six
+  round-16 tests and every round-11 to round-15 regression.
+- `tests.align.test_v4_next_arm_packet` (69) and `tests.align.test_v4_series_e2e` (11) pass at `4722df351`.
+- The census scan is clean.
+- The nine frozen files match `SUITE.sha256`.
+- Hosted CI runs the 94-case replay.
+
+Open, LOW: a link or entry placed after arm is outside preflight's reach.

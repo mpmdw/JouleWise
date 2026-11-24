@@ -228,20 +228,42 @@ state at `--series-commit`, with:
   writes `<bound runs root>/neg8-drift-bound.json`. Each path is compared
   as spelled from the launch view, so another root, a previous attempt or
   a parent step refuses.
-  Prepare creates both runs roots empty and never reuses one. Before arm,
-  each runs root must still be absent or an empty directory that is not a
-  link, so no entry placed since can take this attempt's writes. The
-  custody and operator log roots may hold records but no link at or below
-  them. The driver publishes the window lineage from the night plan, so
-  preflight binds each launch field it reads:
+  No value the night plan or render inputs carry is trusted when it can be
+  derived from the current attempt. The attempt's own directory holds its
+  verified staged inputs; it is the session root in production. Every root
+  the launch writes must resolve (realpath) inside that directory:
+  - both runs roots;
+  - the operator log root;
+  - both calibration directories;
+  - both backup destinations;
+  - the ledger;
+  - custody;
+  - the session root.
+
+  Prepare creates both runs roots and the operator log root empty and never
+  reuses one. Before arm, each must still be absent or an empty directory
+  that is not a link. Custody may hold records but no link at or below it.
+  The driver publishes the window lineage from the night plan, so preflight
+  binds each launch field it reads:
   - the pack's window, pack plan id and evidence root, as the reservation
     renders them;
   - the bracket session, read through the driver's own `lineage_identity`;
   - the pack id and the plan tree digest;
+  - `pack_sha256`, which `staged_pack_sha256` recomputes from the staged
+    pack bytes with D-134's committed-pack framing. C1 prepare records the
+    same value, so a stale or missing digest refuses;
+  - `repo_head` and `measurement_head`, as the execution commit;
   - the runs roots, as the chain's bindings;
   - the attempt, window plan id and custody root, as the prepared session
     inputs;
   - the measurement root, as the launch view.
+
+  Any other digest field in the night plan refuses. The window env and
+  registration digests are recomputed when the plan is loaded.
+
+  C1 prepare also refuses a collection selection that mixes configs tagged
+  `launch_lineage_required` with legacy ones, using the runner's own
+  predicate. The campaign would otherwise refuse it only after arm.
 
   Consumers must agree: each capture's `--power-policy`
   equals the policy the reservation records (desk epoch, then desk T1, then
