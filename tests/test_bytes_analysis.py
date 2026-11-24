@@ -2124,6 +2124,7 @@ with patch.object(export_runs, "export", side_effect=grouped):
                 self.assertEqual({p["model"] for p in points}, {m["model"] for m in manifest["models"] if m["role"] == "fit"})
                 self.assertEqual(json.loads((root / "blind-fit/h1.json").read_text()), [])
                 analyze("fit", "before-release", expected=1)
+                analyze("blinded", "legacy-blind", legacy=True)
                 release("fit", fit_keys, "stage1-keys")
                 self.assertEqual({p.name for p in (root / "stage1-keys").iterdir()},
                                  {"pack.json", "release.json", *(blinding._config_filename(k) for k in fit_keys)})
@@ -2139,7 +2140,6 @@ with patch.object(export_runs, "export", side_effect=grouped):
                 # Before releasing held-out factors, run the blinded held-out
                 # agreement ingress. It reads no raw archives or meter values.
                 analyze("blinded", "blind-postcommit", commit=commit)
-                analyze("blinded", "legacy-blind", legacy=True)
                 for name in ("model_estimates.json", "h1.json", "h2.json", "moe.json"):
                     # Exact JSON bytes here test identical inputs and arithmetic:
                     # removing unused clocks must not change a printed number.
