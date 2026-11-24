@@ -1254,7 +1254,8 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
             if (args.window_id != C1_WINDOW or frozen_window != C1_WINDOW
                     or identity.get('window_id') not in (None, C1_WINDOW)):
                 raise ValueError(f'C1 reservation must reserve the frozen C1 window: --window-id '
-                                 f'{args.window_id!r}, frozen plan window {frozen_window!r}')
+                                 f'{args.window_id!r}, frozen plan window {frozen_window!r}, '
+                                 f'window identity {identity.get("window_id")!r}')
             if identity.get('evidence_root_id') not in (None, args.evidence_root_id):
                 raise ValueError('C1 reservation evidence root differs from the frozen window identity')
             if os.path.normpath(view.root / args.runs_root) != os.path.normpath(bindings['claim_runs_root']):
