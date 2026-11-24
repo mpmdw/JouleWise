@@ -560,6 +560,12 @@ def uninstall(adapter, stderr=None, shield=None):
         shield.quiesce()
 
 
+def published_plan_path(plan):
+    """The one place the installer admits ``plan`` from, resolved (night_gate.night_plan_path)."""
+    from joulewise.night_gate import night_plan_path
+    return night_plan_path(plan.custody_root).resolve()
+
+
 @dataclass
 class Prepared:
     plan: object
@@ -611,10 +617,9 @@ class Prepared:
         return "{}: {}; {}".format(reason, summary, detail)
 
     def admit(self, now, require_published=True):
-        if require_published and self.plan_path != (Path(self.plan.custody_root) / "night_plan.json").resolve():
+        if require_published and self.plan_path != published_plan_path(self.plan):
             raise Refused(2, self.timing("plan_outside_custody_root", now,
-                          "plan={}; expected={}".format(self.plan_path,
-                          (Path(self.plan.custody_root) / "night_plan.json").resolve())))
+                          "plan={}; expected={}".format(self.plan_path, published_plan_path(self.plan))))
         if self.schedule["t0_epoch_s"] < now:
             raise Refused(2, self.timing("plan_t0_in_the_past", now))
         if now >= self.schedule["install_close_epoch_s"]:
@@ -645,8 +650,7 @@ class Prepared:
             except (OSError, ValueError):
                 pass  # Routing adds observation; the driver still authenticates launch authority.
         # Validate the future installed argv even when reading staged plan bytes.
-        plan_path = (self.plan_path if require_published else
-                     (Path(self.plan.custody_root) / "night_plan.json").resolve())
+        plan_path = self.plan_path if require_published else published_plan_path(self.plan)
         for index, label in enumerate(labels):
             if label.startswith("com.joulewise.night-probe."):
                 yield render_probe(self, self.probe_timeout_s)
@@ -1004,10 +1008,10 @@ def evidence_probe_bindings(plan, plan_path, python):
     # Prepared.admit does, so an aliased or symlinked custody root (/tmp vs
     # /private/tmp) cannot make the two guards mutually unsatisfiable (Opus 90
     # S1 / refuter 89 R1).
-    published_plan_path = Path(plan.custody_root) / "night_plan.json"
-    if Path(plan_path).resolve() != published_plan_path.resolve():
+    published = night_gate.night_plan_path(plan.custody_root)
+    if Path(plan_path).resolve() != published.resolve():
         raise ValueError("evidence plan not at its published path")
-    if night_gate.chain_literal(chain.read_text(), "EVIDENCE_PLAN_PATH") != str(published_plan_path):
+    if night_gate.chain_literal(chain.read_text(), "EVIDENCE_PLAN_PATH") != str(published):
         raise ValueError("evidence plan path mismatch")
     registration_sha = manifest["files"][PROTOCOL_PATH]
     ruled = night_gate.RULED_REGISTRATIONS.get(registration_sha)
@@ -1209,28 +1213,36 @@ def launchd_probe(prepared, executable, shield, timeout_s=600, max_age_s=PROBE_R
 BATTERY_PROBE_RUNNER = None
 
 
-def validate_install(args, repo):
-    # Import only on the install path, after the shell's MIN_PYTHON probe.
-    from joulewise.night_gate import NightPlan, PLAN_MAX_AGE_S, PlanError
-    from joulewise import battery_float
+EXECUTION_COMMIT = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 
-    template_path = repo / "configs/launchd/com.joulewise.night.plist.template"
-    if not template_path.is_file():
-        raise Refused(2, "template not found: {}".format(template_path))
-    template = template_path.read_text(encoding="utf-8")
-    if "KeepAlive" in template:
-        raise Refused(3, "template must not contain KeepAlive")
-    try:
-        plan = NightPlan.from_mapping(json.loads(args.plan.read_text(encoding="utf-8")))
-        if plan.measurement_root != plan.measurement_root.strip():
-            raise PlanError("night_plan_malformed", "measurement_root must be an absolute path with no surrounding whitespace")
-        now = time.time()
-        if plan.authored_epoch_s > now:
-            raise PlanError("night_plan_malformed", "plan authored_epoch_s is in the future")
-        if now - plan.authored_epoch_s > PLAN_MAX_AGE_S:
-            raise PlanError("night_plan_stale", "plan is older than 36 hours")
-    except (PlanError, ValueError) as exc:
-        raise Refused(3, "{}: {}".format(getattr(exc, "reason", "night_plan_malformed"), exc))
+
+def c1_attempt_plan(plan):
+    """Whether ``plan`` is a C1 attempt's window plan, which runs from a repo export."""
+    window = getattr(plan, "hazard_window", None)
+    pack = window.get("pack") if hasattr(window, "get") else None
+    return hasattr(pack, "get") and pack.get("window_id") == "C1"
+
+
+def check_identity(plan, repo, execution_commit=None):
+    """The plan's repo_head and measurement_head name the code this install runs.
+
+    A C1 attempt runs from its repo export, which has no .git. Its caller
+    passes the pinned execution commit it verified the launch view against
+    (--execution-commit, from v4_registration.execution_commit). Both heads
+    must equal that commit; git is never asked (CAP 10 I1). Every other plan
+    runs from a git checkout, whose HEAD git reads.
+    """
+    if c1_attempt_plan(plan):
+        if not isinstance(execution_commit, str) or not EXECUTION_COMMIT.fullmatch(execution_commit):
+            raise Refused(3, "execution_commit_missing: a C1 attempt plan installs only from its pinned "
+                             "execution commit (--execution-commit), not {!r}".format(execution_commit))
+        for name in ("repo_head", "measurement_head"):
+            if getattr(plan, name) != execution_commit:
+                raise Refused(3, "execution_commit_mismatch: plan {} {} is not the pinned execution commit {}".format(
+                    name, getattr(plan, name), execution_commit))
+        return
+    if execution_commit is not None:
+        raise Refused(2, "execution_commit_unexpected: only a C1 attempt plan installs from a pinned execution commit")
     for name, root, expected in (("repo_head", repo, plan.repo_head),
                                  ("measurement_head", plan.measurement_root, plan.measurement_head)):
         result = subprocess.run(["/usr/bin/git", "-C", str(root), "rev-parse", "HEAD"],
@@ -1240,6 +1252,10 @@ def validate_install(args, repo):
             raise Refused(3, "unable to read {} from {} checkout".format(name, checkout))
         if result.stdout.strip() != expected:
             raise Refused(3, "plan {} does not match {} checkout HEAD".format(name, checkout))
+
+
+def select_courier(args, plan):
+    """The night job's courier and the PATH it runs with."""
     # Never scripts.run_night here: the driver is imported only after its preflight.
     from joulewise.b6 import courier as b6_courier
     block_six = b6_courier.block_six_plan(plan)
@@ -1263,12 +1279,43 @@ def validate_install(args, repo):
     if not courier:
         raise Refused(2, "courier unavailable: command -v claude found no executable")
     system_path = "/usr/bin:/bin:/usr/sbin:/sbin"
-    courier_path = system_path if block_six else str(Path(courier).parent) + ":" + system_path
-    python = args.python or sys.executable
-    result = subprocess.run([python, "-B", str(repo / "scripts/run_night.py"), "preflight", "--plan", str(args.plan)],
+    return courier, system_path if block_six else str(Path(courier).parent) + ":" + system_path
+
+
+def driver_preflight(python, repo, plan_path, courier_path):
+    """Run the night driver's own preflight on this host; a failure refuses the install."""
+    result = subprocess.run([python, "-B", str(repo / "scripts/run_night.py"), "preflight", "--plan", str(plan_path)],
                             env={"PATH": courier_path, "HOME": str(Path.home())}, check=False)
     if result.returncode:
         raise Refused(2, "night driver preflight failed")
+
+
+def validate_install(args, repo):
+    # Import only on the install path, after the shell's MIN_PYTHON probe.
+    from joulewise.night_gate import NightPlan, PLAN_MAX_AGE_S, PlanError
+    from joulewise import battery_float
+
+    template_path = repo / "configs/launchd/com.joulewise.night.plist.template"
+    if not template_path.is_file():
+        raise Refused(2, "template not found: {}".format(template_path))
+    template = template_path.read_text(encoding="utf-8")
+    if "KeepAlive" in template:
+        raise Refused(3, "template must not contain KeepAlive")
+    try:
+        plan = NightPlan.from_mapping(json.loads(args.plan.read_text(encoding="utf-8")))
+        if plan.measurement_root != plan.measurement_root.strip():
+            raise PlanError("night_plan_malformed", "measurement_root must be an absolute path with no surrounding whitespace")
+        now = time.time()
+        if plan.authored_epoch_s > now:
+            raise PlanError("night_plan_malformed", "plan authored_epoch_s is in the future")
+        if now - plan.authored_epoch_s > PLAN_MAX_AGE_S:
+            raise PlanError("night_plan_stale", "plan is older than 36 hours")
+    except (PlanError, ValueError) as exc:
+        raise Refused(3, "{}: {}".format(getattr(exc, "reason", "night_plan_malformed"), exc))
+    check_identity(plan, repo, getattr(args, "execution_commit", None))
+    courier, courier_path = select_courier(args, plan)
+    python = args.python or sys.executable
+    driver_preflight(python, repo, args.plan, courier_path)
     from scripts import run_night
     try:
         schedule = run_night.schedule(plan)
@@ -1369,7 +1416,7 @@ def validate_install(args, repo):
                 manifest_path, manifest, manifest_sha = verify_manifest(plan, chain_text)
             except (OSError, ValueError) as exc:
                 raise Refused(2, "evidence manifest verification failed: " + str(exc))
-            if night_gate.chain_literal(chain_text, "EVIDENCE_PLAN_PATH") != str(Path(plan.custody_root) / "night_plan.json"):
+            if night_gate.chain_literal(chain_text, "EVIDENCE_PLAN_PATH") != str(night_gate.night_plan_path(plan.custody_root)):
                 raise Refused(2, "evidence plan path mismatch")
             ruled = night_gate.RULED_REGISTRATIONS.get(manifest["files"][PROTOCOL_PATH])
             if ruled is None or not ruled["binds_chain"]:
@@ -1423,7 +1470,8 @@ def main(argv=None):
         usage="%(prog)s --plan PLAN.json [--python ABS_PATH] "
               "[--launchd-probe] [--probe-timeout-s S] [--probe-max-age-s S] "
               "[--hour H] [--minute M] [--uninstall] "
-              "[--render-only DIR] [--launchctl-bin PATH] [--courier-bin ABS_PATH]")
+              "[--render-only DIR] [--launchctl-bin PATH] [--courier-bin ABS_PATH] "
+              "[--execution-commit OID]")
     parser.add_argument("--plan", required=True, type=Path)
     parser.add_argument("--python")
     parser.add_argument("--launchd-probe", action="store_true")
@@ -1435,6 +1483,8 @@ def main(argv=None):
     parser.add_argument("--render-only", type=render_directory)
     parser.add_argument("--launchctl-bin", default="launchctl")
     parser.add_argument("--courier-bin")
+    # A C1 attempt's pinned execution commit (CAP 10 I1; see check_identity).
+    parser.add_argument("--execution-commit")
     try:
         args = parser.parse_args(argv)
         import math

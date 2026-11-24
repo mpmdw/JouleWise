@@ -26,6 +26,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+from joulewise import night_gate
 from joulewise.b5 import chain, plan
 from joulewise.b5.harvest import member_spans
 from joulewise.b6 import desk_identity, plan_inputs, registration
@@ -505,6 +506,8 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
             from joulewise import window_lineage
             # The C1 pack is staged, not a git checkout: record the digest of its
             # own bytes, which every later stage recomputes (window_lineage.admit_pack).
+            # The chain controls go to S; the night plan is published at
+            # night_plan_path(custody_root), where the installer admits it (CAP 10 I2).
             options = {'controls_root': stage / 'controls', 'c1_inputs': runtime_inputs,
                        'pack_digest': window_lineage.pack_tree_digest}
         record = plan.write_window_plan(inputs, now=now, **options)
@@ -515,6 +518,9 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
         notes.append({'kind': 'plan.not_written', 'detail': str(exc)})
     if record and record['window_max_s'] != expected_max:
         raise ValueError('prepared and written window_max_s disagree')
+    published = night_gate.night_plan_path(inputs['custody_root'])
+    if record and Path(record['plan']['path']) != published:
+        raise ValueError(f"the plan writer published the night plan at {record['plan']['path']}, not {published}")
     status = run(['git', '-C', str(measurement), 'status', '--porcelain'],
                  capture_output=True, text=True, check=False, timeout=30)
     if status.returncode or status.stdout.strip():
@@ -527,13 +533,15 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
         'session_id': session_id, 'source_measurement_root': str(measurement),
         'measurement_root': str(view), 'registration_dir': str(view / kit / 'registration'),
         'session_root': str(session), 'preparation_status': 'STAGED' if record else 'INPUTS_ONLY',
-        'plan_path': record['plan']['path'] if record else str(session / 'custody/night_plan.json'),
+        'plan_path': str(published),
         'plan_sha256': record['plan']['sha256'] if record else None, 'inputs': inputs, 'disk': disk, 'flags': notes,
         'runs_roots': record['runs_roots'] if record else {}, 't0_epoch_s': t0,
         'window_max_s': expected_max}
     if c1 and record:
         outputs.extend(Path(desc['path']).relative_to(stage) for desc in identities.values())
-        outputs.extend(Path(record[name]['path']).relative_to(stage) for name in ('plan', 'chain', 'sidecar', 'window_env'))
+        # The night plan is not a staged input: it is published in custody and
+        # bound by plan_sha256 in the staged session.json.
+        outputs.extend(Path(record[name]['path']).relative_to(stage) for name in ('chain', 'sidecar', 'window_env'))
         state['source_measurement_root'] = handoff['repo']
         state['c1_prepare'] = {'handoff': handoff, 'outputs': [path.as_posix() for path in outputs]}
     write(session / 'staging/plan-inputs.json', inputs)
@@ -545,9 +553,21 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
     return state
 
 
-def install(session_root, *, run=subprocess.run, home=None, now=time.time, state=None):
+def install(session_root, *, run=subprocess.run, home=None, now=time.time, state=None, execution_commit=None):
+    """Call the night-job installer for a prepared session.
+
+    A C1 attempt runs from its repo export, which has no .git. Its caller
+    passes the pinned execution commit that the launch view verified
+    (v4_registration.execution_commit). The installer checks the plan's
+    heads against that commit, never against git (CAP 10 I1).
+    """
     session = Path(session_root).resolve()
     state = read(session / 'session.json') if state is None else state
+    if (state.get('v4_series') or {}).get('window_id') == 'C1':
+        from joulewise.align.apple import v4_registration as c1_closure
+        execution_commit = c1_closure.execution_commit({'execution_commit': execution_commit})
+    elif execution_commit is not None:
+        raise ValueError('only a C1 attempt installs from a pinned execution commit')
     installed = state.get('install', {})
     # Same durable idempotency key as DriverLane.launch. A terminal receipt
     # or a loaded calendar job also survives a crash before install recording.
@@ -575,6 +595,8 @@ def install(session_root, *, run=subprocess.run, home=None, now=time.time, state
     argv = [str(measurement / 'scripts/install_night_agent.sh'), '--plan', str(plan_path),
             '--python', str(measurement / '.venv/bin/python'), '--courier-bin',
             str(measurement / 'scripts/b6_courier.sh'), '--launchctl-bin', 'launchctl']
+    if execution_commit is not None:
+        argv += ['--execution-commit', execution_commit]
     attempt = 1
     # Existing logs reserve their number even if a crash lost session.json.
     while any((session / f'staging/install-{attempt:03d}.{suffix}').exists() for suffix in ('stdout', 'stderr')):

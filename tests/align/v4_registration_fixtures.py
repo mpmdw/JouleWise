@@ -80,8 +80,12 @@ def fixture_c1_preflight(state, supplied, packet_builder):
                                         current_artifact_set_sha256=current)
         if not matches:
             raise AssertionError('the cadence fixture builder did not match')
+        # The real preflight binds the plan's heads to the pinned execution
+        # commit and hands that commit to the installer (CAP 10 I1). A
+        # synthetic plan without heads only reaches a stand-in installer.
+        night = json.loads(Path(state['plan_path']).read_bytes())
         return {'authority': root, 'state': state, 'plan': plan, 'packet': packet, 'packet_sha256': None,
-                'current_digest': current, 'kit': {'ok': True},
+                'current_digest': current, 'kit': {'ok': True}, 'execution_commit': night.get('repo_head'),
                 'view': SimpleNamespace(root=view, roots=SimpleNamespace(repo=root))}
 
     return preflight

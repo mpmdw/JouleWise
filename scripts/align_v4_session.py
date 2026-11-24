@@ -1275,10 +1275,13 @@ def c1_arm_preflight(handoff, *, now_epoch_s, measurement_root=None, plan=None, 
         if handoff['window'] != 'C1':
             raise ValueError('the handoff does not select C1')
         authority = Path(handoff['git'])
+        # The one pinned commit (CAP 10 I1): the launch view is verified
+        # against it, and the installer receives it from this context.
+        execution_commit = c1_closure.execution_commit(handoff)
         verified = c1_closure.verify_view(authority, handoff['repo'], handoff['stage'],
                                           delivery_ref=handoff['delivery_ref'],
                                           delivery_commit=handoff['delivery_commit'],
-                                          execution_commit=handoff['execution_commit'])
+                                          execution_commit=execution_commit)
         if packet_path is not None and Path(packet_path).absolute() != verified.roots.stage / c1_closure.PACKET:
             raise ValueError('packet pointer differs from the fixed C1 staging path')
         closure, state, night, tree, view, _ = c1_closure.prepared_closure(
@@ -1303,7 +1306,7 @@ def c1_arm_preflight(handoff, *, now_epoch_s, measurement_root=None, plan=None, 
         series.bind_packet(view.roots.repo, 'C1', built, authenticated_by_rebuild=True)
         return {'authority': authority, 'state': state, 'night': night, 'plan': source_plan,
                 'view': view, 'packet': built, 'packet_sha256': verified.packet_sha256,
-                'current_digest': current, 'kit': kit_result}
+                'current_digest': current, 'kit': kit_result, 'execution_commit': execution_commit}
     except (OSError, ValueError, KeyError, TypeError, AttributeError, IndexError) as exc:
         raise PacketKitMismatch(str(exc)) from exc
 
@@ -1875,6 +1878,9 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
                 state[name] = cached[name]
         if Path(state['source_measurement_root']) != source_root:
             raise PacketKitMismatch('prepared execution export differs from the handoff')
+        # The installer checks the plan's heads against the commit the launch
+        # view was just verified against (bytes_h_session.install).
+        kwargs['execution_commit'] = context['execution_commit']
     else:
         if (session / 'c1-prepared.json').is_file():
             raise PacketKitMismatch('an explicit committed C1 handoff is required')

@@ -1,16 +1,21 @@
 """Run the frozen C1 decisions through the production packet and arm entry points."""
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from copy import deepcopy
+from functools import partial
 import hashlib
+import importlib.util
 import io
 import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
+import time
 from unittest.mock import patch
 
 from tests.align.test_v4_cadence import write_battery_log
+from joulewise import night_gate
 from joulewise.align.apple import powermode, v4_registration as closure
 from joulewise.b5 import chain
 from scripts import align_v4_next_arm_packet as builder, align_v4_series as series
@@ -27,6 +32,10 @@ HEAD = Path('configs/calibration/calibration_ledger_head.json')
 DERIVATION = Path('configs/campaigns/fixture-derivation/settled_corpus.json')
 KIT = series.kit_path('C1')
 SELECTED = {'ledger': LEDGER, 'head_pin': HEAD, 'policy': POLICY, 'derivation': DERIVATION}
+# The installer module and the launchd templates it reads (CAP 10 I3).
+INSTALLER_FILES = ('joulewise/night_agent_install.py', 'configs/launchd/com.joulewise.night.plist.template',
+                   'configs/launchd/com.joulewise.night-probe.plist.template')
+SYSTEM_PATH = '/usr/bin:/bin:/usr/sbin:/sbin'
 
 
 def put(root, name, data):
@@ -85,7 +94,7 @@ class Attempt:
         self.repo = work / 'R'
         self.stage = work / 'S'
         self.view = work / 'launch'
-        self.night = self.stage / 'controls/night.json'
+        self.night = None  # night_plan_path(custody_path()), set by prepare (CAP 10 I2)
         self.host = work / 'host'
         self.handoff_file = work / 'handoff.json'
         self.prepared_file = work / 'prepared.json'
@@ -161,6 +170,26 @@ class Attempt:
 
     def edit_night(self, night):
         """A test hook: change the prepared night plan before it is sealed."""
+
+    def complete_night(self, night):
+        """The rest of a HAZARD_PACK night plan, so the real installer parses it (CAP 10 I3).
+
+        The values are the shape b5.plan writes; no C1 gate reads them.
+        """
+        window = night['hazard_window']
+        try:
+            stages = [stage.summary() for stage in chain.stage_plan(self.tree, c1=True)]
+        except chain.ChainRenderError:
+            stages = []  # an invalid tree refuses before any installer
+        window.update(schema=night_gate.HAZARD_WINDOW_SCHEMA, planned_bytes=1000,
+                      member_count=len(self.plan['members']), g10=False, programmed_span_s=3600,
+                      t0_stage_cap_s=60, registration=None, chain_deviations=list(chain.DEVIATIONS),
+                      disk_volumes=list(window['runs_roots'].values()), stages=stages)
+        for module in night_gate.HAZARD_MODULES:
+            window['thresholds'].setdefault(module, {})
+        night.update(schema=night_gate.HAZARD_PLAN_SCHEMA, schema_version=night_gate.HAZARD_PLAN_SCHEMA_VERSION,
+                     receipt_class=night_gate.HAZARD_PACK, authored_epoch_s=100, window_max_s=7200,
+                     registration_path=None)
 
     def custody_path(self):
         """This attempt's custody root (prepare's custody_root input)."""
@@ -382,8 +411,9 @@ class Attempt:
             exported.unlink()
             exported.symlink_to(staged)
         custody_root = str(self.custody_path())
+        self.night = night_gate.night_plan_path(custody_root)
         # The launch identity and locations b5.plan writes from the same inputs.
-        self.night_data = {'plan_id': plan_id, 't0_epoch_s': 1000, 'chain_path': str(chain_path),
+        self.night_data = {'plan_id': plan_id, 't0_epoch_s': 1020, 'chain_path': str(chain_path),
                            'chain_sha256_path': str(chain_path) + '.sha256', 'measurement_root': str(self.view),
                            'repo_head': self.execution, 'measurement_head': self.execution,
                            'custody_root': custody_root, 'hazard_window': {
@@ -397,8 +427,12 @@ class Attempt:
                      'pack_id': closure.PACK.name, 'pack_plan_id': plan_id,
                      'window_id': self.reserved_value('--window-id', 'C1'),
                      'evidence_root_id': self.reserved_value('--evidence-root-id', 'fixture-evidence')}}}
+        self.complete_night(self.night_data)
         self.edit_night(self.night_data)
-        late = {self.night.relative_to(self.stage): series.raw_json(self.night_data)}
+        # Published where the installer admits it, not staged (CAP 10 I2): the
+        # staged session.json binds its bytes by plan_sha256.
+        put(self.night.parent, self.night.name, self.night_data)
+        late = {}
         self.state = {'session_root': str(self.install_root()), 'measurement_root': str(self.view), 'source_measurement_root': str(self.repo),
                       'plan_path': str(self.night), 'plan_sha256': closure.digest(series.raw_json(self.night_data)),
                       'v4_series': {'window_id': 'W1' if self.fixture == 'session_downgrade' else 'C1'},
@@ -536,13 +570,114 @@ class Attempt:
             stack.enter_context(patch.object(session, '_require_night_job_absent'))
         if install:
             stack.enter_context(patch.object(session, 'w1_disk_check', return_value={'fixture': True}))
-            stack.enter_context(patch.object(session.pilot, 'install', return_value={'exit_code': 0}))
+            # No installer stub (CAP 10 I3): the real bytes_h_session.install
+            # builds the argv, and the real installer validates it in this
+            # process (run_installer). Only its host commands are replaced.
+            stack.enter_context(patch.object(staging, 'install', partial(
+                staging.install, run=self.installer_command, home=self.work / 'fixture-home')))
             stack.enter_context(patch.object(session, '_watchdog_post_install'))
         return stack
+
+    def installer_command(self, argv, **_):
+        """bytes_h_session.install's two commands: the launchd job census, then the installer."""
+        if argv[:2] == ['launchctl', 'print']:
+            return subprocess.CompletedProcess(argv, 113, '', 'Could not find service "com.joulewise.night" '
+                                               f'in domain for user gui: {os.getuid()}\n')
+        if argv[0] != str(Path(self.state['measurement_root']) / 'scripts/install_night_agent.sh'):
+            raise AssertionError(f'unexpected install command: {argv}')
+        call = self.run_installer(argv)
+        self.installer_calls.append(call)
+        return subprocess.CompletedProcess(argv, call['exit'], '', call['stderr'])
+
+    def installer_module(self):
+        """The real installer module, loaded from a directory with no .git.
+
+        In production the module resolves into the C1 repo export, which has
+        no .git. The synthetic export cannot hold the installer's files: they
+        are registered artifacts, and adding them would move the artifact-set
+        digest that the frozen W1 desk pins. So the module and the two launchd
+        templates it reads are copied byte for byte into a sibling directory.
+        """
+        root = self.work / 'installer-export'
+        if not root.exists():
+            for name in INSTALLER_FILES:
+                put(root, name, (ROOT / name).read_bytes())
+        spec = importlib.util.spec_from_file_location('c1_lite_installer', root / INSTALLER_FILES[0])
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def run_installer(self, argv):
+        """Run the real installer on ``argv`` through the end of its validation.
+
+        Real here: its argument parser, plan parse, identity check, schedule,
+        battery custody record, plist render, night-record check and
+        admission, whose publication check is first. Replaced, because each is
+        a host step:
+        - the launchd transaction, which publishes and loads the plists;
+        - the launchctl lookup;
+        - the courier program lookup and the night driver's preflight, which
+          run programs of the measurement checkout that this export lacks;
+        - the battery probe, and the clock (this attempt's synthetic now).
+        Every git command is recorded, and so is the prepared install.
+        """
+        installer = self.installer_module()
+        record = {'argv': list(argv), 'git': [], 'prepared': None, 'courier': [], 'preflight': [],
+                  'module_root': Path(installer.__file__).resolve().parents[1]}
+        real_run, real_which = subprocess.run, shutil.which
+
+        def command(argv, *args, **kwargs):
+            if argv[:1] == ['/usr/bin/git']:
+                record['git'].append(list(argv))
+                return real_run(argv, *args, **kwargs)
+            raise AssertionError(f'unexpected installer subprocess: {argv}')
+
+        def courier(args, plan):
+            record['courier'].append(args.courier_bin)
+            return str(args.courier_bin), SYSTEM_PATH
+
+        class Transaction:
+            def __init__(self, adapter, validate, **_):
+                self.validate = validate
+
+            def run(self):
+                record['prepared'] = self.validate()
+                return 0
+
+        good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
+                    current_capacity_pct=100, instant_amperage_ma=0, update_age_s=1,
+                    monotonic_before_ns=time.monotonic_ns())  # names this run's battery record
+        saved = {number: signal.getsignal(number) for number in installer.SIGNALS}
+        errors = io.StringIO()
+        try:
+            with ExitStack() as stack:
+                stack.enter_context(patch.dict(os.environ, {'GIT_CEILING_DIRECTORIES': str(self.work)}))
+                stack.enter_context(patch.object(subprocess, 'run', side_effect=command))
+                stack.enter_context(patch.object(shutil, 'which', side_effect=lambda name, *args, **kwargs: (
+                    '/fixture/launchctl' if name == 'launchctl' else real_which(name, *args, **kwargs))))
+                stack.enter_context(patch.object(installer, 'LaunchctlAdapter', lambda *args, **kwargs: None))
+                stack.enter_context(patch.object(installer, 'Transaction', Transaction))
+                stack.enter_context(patch.object(installer, 'select_courier', side_effect=courier))
+                stack.enter_context(patch.object(installer, 'driver_preflight', side_effect=lambda *args: (
+                    record['preflight'].append([str(arg) for arg in args]))))
+                stack.enter_context(patch('joulewise.battery_float.observe', return_value=(good, b'invented')))
+                stack.enter_context(patch.object(Path, 'home', return_value=self.work / 'fixture-home'))
+                stack.enter_context(patch('time.time', return_value=self.now))
+                stack.enter_context(redirect_stderr(errors))
+                stack.enter_context(redirect_stdout(io.StringIO()))
+                record['exit'] = installer.main(list(argv[1:]))
+        finally:
+            for number, handler in saved.items():
+                signal.signal(number, handler)
+        record['stderr'] = errors.getvalue()
+        return record
 
     def install(self, entered):
         self.session = self.install_root()
         self.session.mkdir()
+        # prepare creates the session's staging directory; the install logs go there.
+        (self.session / 'staging').mkdir()
+        self.installer_calls = []
         opts = self.host_args()
         opts.pop('battery_log')
         opts.pop('obc_off_attested_by')

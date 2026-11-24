@@ -67,7 +67,7 @@ PAUSE_LIMIT_S = 7200
 SESSION_WAIT_BUDGET_S = 7200
 DEFAULT_LEDGER_RELATIVE = "runs/calibration_observation_ledger.jsonl"
 HEAD_PIN_RELATIVE = "configs/calibration/calibration_ledger_head.json"
-PLAN_BASENAME = "night_plan.json"
+PLAN_BASENAME = night_gate.PLAN_BASENAME
 CHAIN_BASENAME = "chain.zsh"
 WINDOW_ENV_BASENAME = "window.env"
 RECORD_BASENAME = "b5-window-plan-record.json"
@@ -923,6 +923,9 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
     for key in ("capture_screen", "spare_retries"):
         if key in inputs:
             bindings[key] = inputs[key]
+    # A controls root (C1: the attempt's staged inputs) holds the chain, its
+    # sidecar and the window env. The night plan always goes to the custody
+    # root, where the installer and the driver read it (CAP 10 I2).
     controls = controls_root or custody
     chain_path = controls / CHAIN_BASENAME
     try:
@@ -1024,7 +1027,7 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
     window_env = _create_once(controls / WINDOW_ENV_BASENAME, env_raw)
     chain = _create_once(chain_path, chain_raw)
     sidecar = _create_once(Path(str(chain_path) + ".sha256"), b5_chain.sidecar_bytes(chain_raw, chain_path.name))
-    plan = _create_once(controls / PLAN_BASENAME, plan_raw)
+    plan = _create_once(night_gate.night_plan_path(custody), plan_raw)
     record = {
         "schema": RECORD_SCHEMA, "status": "STAGED", "plan": plan, "chain": chain, "sidecar": sidecar,
         "window_env": window_env, "runs_roots": {"claim": str(claim_root), "bound": str(bound_root)},

@@ -1008,10 +1008,7 @@ def load_prepared(view, read):
     if (Path(state['source_measurement_root']) != view.roots.repo
             or Path(state['measurement_root']) != view.root):
         raise ValueError('prepared launch view differs from the C1 handoff')
-    night_path = view.roots.regular(state['plan_path'])
-    if not night_path.is_relative_to(view.roots.stage):
-        raise ValueError('the prepared night plan must reside in S')
-    raw = read(night_path.relative_to(view.roots.stage))
+    raw = published_night_plan(state)
     if digest(raw) != state['plan_sha256']:
         raise ValueError('prepared night plan digest differs')
     night = decode(raw)
@@ -1027,6 +1024,33 @@ def load_prepared(view, read):
             if digest(path.read_bytes()) != descriptor['sha256']:
                 raise ValueError(f'prepared control SHA-256 mismatch: {path}')
     return state, night
+
+
+def published_night_plan(state):
+    """The night plan's bytes, read where it is published (CAP 10 I2).
+
+    The plan is not a staged input. It lives at night_plan_path(custody_root),
+    the one place the installer and the driver read it. Its bytes are bound by
+    plan_sha256 in the staged session.json, which the caller checks. The
+    custody root and everything below it must hold no link.
+    """
+    from joulewise import night_gate
+
+    custody_root = (state.get('inputs') or {}).get('custody_root')
+    if not isinstance(custody_root, str) or not os.path.isabs(custody_root):
+        raise ValueError(f'the prepared C1 session names no absolute custody root: {custody_root!r}')
+    published = night_gate.night_plan_path(custody_root)
+    if Path(state.get('plan_path') or '') != published:
+        raise ValueError(f"the prepared night plan must be published at {published}, not {state.get('plan_path')!r}")
+    check_no_links('custody_root', custody_root)
+    try:
+        descriptor = os.open(published, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError as exc:
+        raise ValueError(f'the published night plan is unreadable: {published}: {exc}') from exc
+    with os.fdopen(descriptor, 'rb') as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise ValueError(f'the published night plan is not a regular file: {published}')
+        return stream.read()
 
 
 def shade_dependency(spec):
@@ -1414,6 +1438,24 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
     return selections
 
 
+EXECUTION_COMMIT_MISSING = 'execution_commit_missing'
+
+
+def execution_commit(handoff):
+    """The pinned execution commit of a C1 attempt, as a full object id.
+
+    This one function supplies the commit to the launch view (verify_view,
+    the prepared closure, the launch records) and to the installer
+    (bytes_h_session.install passes it as --execution-commit). The installer
+    never reads its identity with git in the directory its module resolves
+    to: for C1 that is the repo export, which has no .git (CAP 10 I1).
+    """
+    commit = handoff.get('execution_commit') if isinstance(handoff, dict) else None
+    if not isinstance(commit, str) or not re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', commit):
+        raise ValueError(f'{EXECUTION_COMMIT_MISSING}: the C1 attempt pins no full execution commit: {commit!r}')
+    return commit
+
+
 def execution_inputs(handoff, ledger):
     names = ('git', 'repo', 'stage', 'view', 'execution_commit', 'cache_home')
     return {**{name: handoff[name] for name in names if name in handoff}, 'ledger': ledger}
@@ -1624,7 +1666,7 @@ def prepared_closure(authority, verified_roots, handoff, read):
     verify_chain(view, handoff, ledger, tree, digest(tree_raw), night)
     # Last, so every earlier refusal keeps its own reason.
     check_launch_records(view, tree_raw, night, state, selections.get('reservation'),
-                         handoff['execution_commit'])
+                         execution_commit(handoff))
     # The one pack predicate (window_lineage.admit_pack). The launch binding
     # runs the same call on the lineage's copy of these values.
     from joulewise import window_lineage
@@ -1632,7 +1674,7 @@ def prepared_closure(authority, verified_roots, handoff, read):
     window_lineage.admit_pack(view.root / PACK, pack_sha256=(night['hazard_window'].get('pack') or {}).get('pack_sha256'),
                               plan_tree_sha256=digest(tree_raw), config_paths=selections.get('dispatched_configs', ()))
     check_write_roots(verified_roots.stage, night, state)
-    closure = {'schema': SCHEMA, 'repo': tree_identity(authority, handoff['execution_commit']),
+    closure = {'schema': SCHEMA, 'repo': tree_identity(authority, execution_commit(handoff)),
                'stage_files': pins, 'ledger': ledger}
     return closure, state, night, tree, view, selections
 
@@ -1640,7 +1682,7 @@ def prepared_closure(authority, verified_roots, handoff, read):
 def finalize(authority, handoff):
     """Read only declared outputs when finalizing an attempt's packet."""
     roots = Roots(handoff['repo'], handoff['stage'])
-    verify_repo(authority, roots, tree_identity(authority, handoff['execution_commit']))
+    verify_repo(authority, roots, tree_identity(authority, execution_commit(handoff)))
     pins = declared_pins(roots.repo, roots.stage)
     prepared = VerifiedView(roots, {}, '', pins)
     return prepared_closure(authority, roots, handoff, prepared.stage_read)[0]

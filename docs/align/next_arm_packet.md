@@ -275,6 +275,17 @@ state at `--series-commit`, with:
   Any other digest field in the night plan refuses. The window env and
   registration digests are recomputed when the plan is loaded.
 
+  The night plan is not a staged input. Prepare publishes it at
+  `night_gate.night_plan_path(custody_root)`, the custody root's
+  `night_plan.json`. That is the one place the installer admits it and
+  the driver reads it. The staged `session.json` binds its bytes through
+  `plan_sha256`, and custody holds no link. The installer checks
+  `repo_head` and `measurement_head` against the same pinned commit as the
+  launch view: `v4_registration.execution_commit`, passed as
+  `--execution-commit`. It never asks git in the export where its own
+  module resolves. A missing commit refuses as `execution_commit_missing`,
+  and a head that differs from it refuses as `execution_commit_mismatch`.
+
   C1 prepare also refuses a collection selection that mixes configs tagged
   `launch_lineage_required` with legacy ones, using the runner's own
   predicate. The campaign would otherwise refuse it only after arm.

@@ -71,7 +71,7 @@ def run_closed_environment(environment, ambient, work, *, block=None):
 
 def rendered_environment(attempt):
     """The closed environment that the attempt's chain renders."""
-    night = closure.decode((attempt.stage / 'controls/night.json').read_bytes())
+    night = closure.decode(attempt.night.read_bytes())
     ledger = attempt.stage / adapter.LEDGER
     pin = {'path': str(ledger), 'sha256': closure.digest(ledger.read_bytes())}
     environment, _ = adapter.chain.c1_chain_environment(
@@ -231,7 +231,6 @@ class PublicInputAttempt(adapter.Attempt):
             self.git_dir, target, kit=adapter.KIT, public_inputs=manifest)
         self.repo = Path(self.handoff['repo'])
         self.stage = Path(self.handoff['stage'])
-        self.night = self.stage / self.night.relative_to(old_stage)
         for key, value in self.bindings.items():
             path = Path(value)
             for previous, current in ((old_view, self.view), (old_stage, self.stage)):
@@ -753,7 +752,7 @@ class C1ClosureTests(unittest.TestCase):
             code, packet = attempt.build()
         self.assertEqual(code, 2)
         self.assertIn('no cache_home binds its cache', attempt.build_error)
-        bindings = closure.decode((attempt.stage / 'controls/night.json').read_bytes())['hazard_window']['bindings']
+        bindings = closure.decode(attempt.night.read_bytes())['hazard_window']['bindings']
         stages = adapter.chain.stage_plan(attempt.tree, c1=True)
         environment, _ = adapter.chain.c1_chain_environment(
             stages=stages, bindings=bindings, tree=attempt.tree, measurement_root=attempt.view,
@@ -1255,11 +1254,14 @@ class C1ClosureTests(unittest.TestCase):
             return attempt.work / 'attempt-custody'
 
         def linked_night(attempt):
-            custody(attempt).mkdir()
             (custody(attempt) / 'night').symlink_to(previous(attempt), target_is_directory=True)
 
         def linked_custody(attempt):
-            custody(attempt).symlink_to(previous(attempt).parent, target_is_directory=True)
+            # Prepare published the plan in the custody root (CAP 10 I2). Move
+            # that directory into the previous attempt and link to it.
+            moved = previous(attempt).parent / 'custody'
+            custody(attempt).rename(moved)
+            custody(attempt).symlink_to(moved, target_is_directory=True)
 
         def linked_operator_log(attempt):
             logs = Path(attempt.bindings['operator_log_root'])
@@ -1281,7 +1283,7 @@ class C1ClosureTests(unittest.TestCase):
                 self.assertIn(detail, attempt.build_error)
         with self.subTest(control='custody holding ordinary records'):
             attempt = self.attempt()
-            (custody(attempt) / 'operator-logs').mkdir(parents=True)
+            (custody(attempt) / 'operator-logs').mkdir()
             adapter.put(custody(attempt), 'install-record.json', {'invented': True})
             code, _ = attempt.build()
             self.assertEqual(code, 0, attempt.build_error)
@@ -1665,6 +1667,14 @@ class C1ClosureTests(unittest.TestCase):
                 before = self.tree_bytes(previous)
                 if field == 'custody_root':
                     attempt = self.roots_attempt(custody=target)
+                    # Prepare (the producer) publishes the attempt's night plan
+                    # in the custody root it was given (CAP 10 I2), and touches
+                    # nothing else there. The build must then change nothing.
+                    published = self.tree_bytes(previous)
+                    self.assertEqual(before, {name: raw for name, raw in published.items()
+                                              if name != 'custody_root/night_plan.json'})
+                    self.assertEqual(attempt.night, target / 'night_plan.json')
+                    before = published
                 elif name.endswith('through a link'):
                     def through_link(attempt, previous=previous):
                         (attempt.work / 'logs-link').symlink_to(previous, target_is_directory=True)
