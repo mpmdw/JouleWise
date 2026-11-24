@@ -189,3 +189,33 @@ is recorded in the gate ledger on [draft PR #957](https://github.com/mpmdw/Joule
 The revision 6 freeze and its executed head are routed to the lead
 for independent Tier 2 executing review. The installed byte pass
 and bound-host blind preflight remain lead gates before reservation.
+
+## Follow-up report after revision 6
+
+The automated handoff labeled the follow-up report round 4. Its
+executing evidence was against `1a9e9692249d244e9b07c0e956a76953a06c530c`.
+The review cycle closed in round 3 under PIPELINE §3. The remediation
+freeze is `d0081e493fe2b64d8a456dfa26fd223bb41170b3`.
+The failed-first run used the audited production source with the new
+regressions and produced 12 failed assertions. [Revision 7](../process/cadence/looks/lm-ctl-01.print-spec.v7.md)
+
+| Verified finding | Root cause and change in `841859890` | Regression |
+| --- | --- | --- |
+| HIGH. A completed native script could contain an incomplete CPU step. | `impl-bug`. Require every reached step in completed native work to be marked complete. Preserve the native interrupted-tail path and scientific dispositions. | `cpu-completion`, `call-completion`, `recovery-completion`, and `test_incomplete_script_allows_a_native_interrupted_tail` |
+| HIGH. Negative rail clock uncertainty reached attribution. | `impl-bug`. Validate paired clock resolutions and bounded anchor inputs before mapping. Check the mapped uncertainty before certifying support. | `bound-negative`, `wall-resolution-negative`, `mono-resolution-masked-by-rounding`, and `inverted-anchor-bracket` |
+| HIGH. The blind projection converted observations in a recovery step and config. | `fix-regression`. Select applicable fields by step role and validate irrelevant fields as opaque JSON. Check numerical shape and range on config tokens and project only placeholders for the observations. | `test_inapplicable_script_fields_and_config_link_rate_are_opaque`, role and key-order coverage, lexical numeric boundary checks, and guarded publication |
+| LOW. Claim reported `HALF_MADE` after binding the marker. | `impl-bug`. Share marker matching between claim recovery and subsequent freshness checks. The error path uses the verified stage-1 record and the observed reservation identity. | `test_claim_sync_failure_after_bound_marker_reports_spent_immediately` injects the post-sync error and checks `SPENT` at claim, status and retry. |
+
+Every malformed structural fixture is rebound and checked at stage 1,
+standalone preflight, and direct stage 2. The tests assert the exact
+fresh refusal and absent claim and read events. The valid opacity
+fixtures separately check both blind gates with the conversion and
+projection guard. The marker test uses a synthetic directory name on
+the production claim path so it can run on the local host.
+
+Local v3.1 passed 846/846. All four checksum manifests verified, both
+frozen tree IDs match PR #951, and 29 adjacent tests passed, including
+the exact supersession receipt. The gate ledger on [draft PR #957](https://github.com/mpmdw/JouleWise/pull/957)
+records final-head CI. Revision 7 and its executed head are routed to
+the lead for independent Tier 2 executing review. The installed byte
+pass and bound-host blind preflight remain lead gates before reservation.
