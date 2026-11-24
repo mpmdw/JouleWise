@@ -1584,6 +1584,29 @@ class LookPathFollowupTests(TestCase):
                 )
                 self.assert_refuses_at_blind_gates(world, bench, scaffold)
 
+    def test_revision12_dry_run_catches_zero_prefill_denominator(self):
+        def no_prefill(world):
+            def script(work):
+                visible = next(step for step in work["steps"] if step["kind"] == "turn")
+                visible.update(context_tokens=0, cached_prompt_tokens=0)
+
+            mutate(world, "script", script)
+            mutate(world, "episode", lambda episode: episode["turns"][0].update(
+                context_tokens=0, prefill_tokens=0))
+            mutate(world, "result", lambda result: result.update(prefill_tokens=0))
+            mutate(world, "leg-record", lambda record: record["result"].update(prefill_tokens=0))
+
+        world, bench = self.prepare("v12-zero-prefill", configure=no_prefill)
+        for operation in ("stage1", "commit-stage1", "preflight"):
+            self.assertEqual(self.invoke(world, bench, operation), (0, b"", b""))
+        self.assert_fresh(world, bench)
+        certificate = registrar.read(self.private(bench) / "certificates/L002.json")
+        self.assertEqual((certificate["admission"], certificate["admission_reason"]),
+                         ("not_evaluable", "phase_denominator"))
+        report = self.round8_release(world, bench)
+        row = next(row for row in report["legs"] if row["leg_id"] == "L002")
+        self.assertEqual((row["disposition"], row["reason"]), ("not_evaluable", "phase_denominator"))
+
     def test_closing_blind_model_projections_are_invariant_to_file_rename(self):
         model = self.base / "closing-model"
         model.mkdir()
