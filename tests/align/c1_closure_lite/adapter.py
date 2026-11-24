@@ -138,6 +138,19 @@ class Attempt:
         self.git('commit', '-qm', summary)
         return self.rev()
 
+    def edit_night(self, night):
+        """A test hook: change the prepared night plan before it is sealed."""
+
+    def reserved_value(self, flag, default):
+        """The value the tree's reservation passes for ``flag``, as rendered."""
+        for stage in self.tree['stage_graph']:
+            if stage['kind'] == 'bracket_reservation':
+                args = arguments(stage)
+                if literal(flag) in args:
+                    item = args[args.index(literal(flag)) + 1]
+                    return self.bindings[item['value']] if item['kind'] == 'binding' else item['value']
+        return default
+
     def complete_arguments(self):
         for stage in self.source['stage_graph']:
             args = arguments(stage)
@@ -314,17 +327,26 @@ class Attempt:
             chain_raw = b'# invalid binding refuses before launch\n'
         files[chain_path.relative_to(self.stage)] = chain_raw
         files[Path(str(chain_path.relative_to(self.stage)) + '.sha256')] = chain.sidecar_bytes(chain_raw, chain_path.name)
+        custody_root = str(self.work / 'attempt-custody')
+        # The launch identity and locations b5.plan writes from the same inputs.
         self.night_data = {'plan_id': plan_id, 't0_epoch_s': 1000, 'chain_path': str(chain_path),
-                           'chain_sha256_path': str(chain_path) + '.sha256', 'hazard_window': {
+                           'chain_sha256_path': str(chain_path) + '.sha256', 'measurement_root': str(self.view),
+                           'custody_root': custody_root, 'hazard_window': {
+            'attempt': 1, 'bracket_session_id': self.bindings['bracket_session_id'],
+            'runs_roots': {'claim': self.bindings['claim_runs_root'], 'bound': self.bindings['bound_runs_root']},
             'bindings': self.bindings, 'T_stream_max_s': 10, 'settle_s': chain.SETTLE_S,
             'window_env': {'path': str(window_env), 'sha256': closure.digest(window_env_raw)},
             'thresholds': {'clock': {'frequency_error_budget_s': 1}},
-            'pack': {'pack_root': str(self.view / closure.PACK), 'plan_tree_sha256': tree_digest}}}
+            'pack': {'pack_root': str(self.view / closure.PACK), 'plan_tree_sha256': tree_digest,
+                     'pack_id': closure.PACK.name, 'pack_plan_id': plan_id,
+                     'window_id': self.reserved_value('--window-id', 'C1'),
+                     'evidence_root_id': self.reserved_value('--evidence-root-id', 'fixture-evidence')}}}
+        self.edit_night(self.night_data)
         files[self.night.relative_to(self.stage)] = series.raw_json(self.night_data)
         self.state = {'session_root': str(self.work / 'install'), 'measurement_root': str(self.view), 'source_measurement_root': str(self.repo),
                       'plan_path': str(self.night), 'plan_sha256': closure.digest(series.raw_json(self.night_data)),
                       'v4_series': {'window_id': 'W1' if self.fixture == 'session_downgrade' else 'C1'},
-                      'inputs': {'custody_root': str(self.work / 'attempt-custody')}}
+                      'inputs': {'custody_root': custody_root, 'attempt': 1, 'plan_id': plan_id}}
         files[Path('session.json')] = series.raw_json(self.state)
         for name, raw in files.items():
             if self.form == 'link' and name == closure.PACK / series.C1_PLAN:

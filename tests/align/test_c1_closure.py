@@ -1084,6 +1084,120 @@ class C1ClosureTests(unittest.TestCase):
             code, _ = attempt.build()
             self.assertEqual(code, 0, attempt.build_error)
 
+    def night_attempt(self, change):
+        class NightAttempt(adapter.Attempt):
+            def edit_night(self, night):
+                change(self, night)
+
+        return self.attempt(make_attempt=NightAttempt)
+
+    def test_audit6_high1_night_plan_window_is_the_reserved_window(self):
+        """Audit 6 HIGH 1: a night plan whose pack names C2 refuses on both routes before host entry."""
+        def to_c2(attempt, night):
+            self.assertEqual(night['hazard_window']['pack']['window_id'], 'C1')
+            night['hazard_window']['pack']['window_id'] = 'C2'
+
+        self.assert_refused_on_both_routes(self.night_attempt(to_c2),
+                                           "night plan hazard_window.pack.window_id is 'C2'")
+
+    def test_r15_night_plan_launch_identity_and_locations_are_this_attempts(self):
+        """Round 15 class: each launch field the driver reads from the night plan is this attempt's."""
+        def pack(field, value):
+            return lambda attempt, night: night['hazard_window']['pack'].__setitem__(field, value)
+
+        def window(field, value):
+            return lambda attempt, night: night['hazard_window'].__setitem__(field, value)
+
+        def top(field, value):
+            return lambda attempt, night: night.__setitem__(field, value)
+
+        def previous_claim_root(attempt, night):
+            night['hazard_window']['runs_roots'] = dict(night['hazard_window']['runs_roots'],
+                                                        claim=str(attempt.work / 'previous-attempt/claim_runs_root'))
+
+        cases = (
+            ('pack plan id', pack('pack_plan_id', 'align-v4-c2'), 'hazard_window.pack.pack_plan_id'),
+            ('pack id', pack('pack_id', 'align-v4-c2'), 'hazard_window.pack.pack_id'),
+            ('evidence root', pack('evidence_root_id', 'synthetic-other-evidence'), 'hazard_window.pack.evidence_root_id'),
+            ('plan tree digest', pack('plan_tree_sha256', '0' * 64), 'hazard_window.pack.plan_tree_sha256'),
+            ('bracket session', window('bracket_session_id', 'fixture-previous-session'),
+             'hazard_window.bracket_session_id'),
+            ('claim runs root of a previous attempt', previous_claim_root, 'hazard_window.runs_roots'),
+            ('attempt ordinal', window('attempt', 2), 'hazard_window.attempt'),
+            # Already bound: the chain is re-rendered with this plan id and compared.
+            ('window plan id', top('plan_id', 'synthetic-previous-window-plan'),
+             'prepared chain differs from the resolved C1 dispatch'),
+            ('custody root of a previous attempt', top('custody_root', '/synthetic-previous-attempt/custody'),
+             'night plan custody_root'),
+            ('measurement root', top('measurement_root', '/synthetic-other-measurement'), 'night plan measurement_root'),
+        )
+        for name, change, detail in cases:
+            with self.subTest(case=name):
+                attempt = self.night_attempt(change)
+                code, _ = attempt.build()
+                self.assertEqual(code, 2, attempt.build_error)
+                self.assertIn(detail, attempt.build_error)
+
+    def test_audit6_high2_linked_default_log_refuses_before_host(self):
+        """Audit 6 HIGH 2: a link at the default campaign log refuses on both routes; the old log is untouched."""
+        attempt = self.attempt()
+        previous = attempt.work / 'previous-attempt' / 'campaign_log.jsonl'
+        previous.parent.mkdir()
+        previous.write_bytes(b'{"record_type": "campaign_provenance_attestation", "invented": true}\n')
+        before = previous.read_bytes()
+        claim = Path(attempt.bindings['claim_runs_root'])
+        claim.mkdir()
+        (claim / 'campaign_log.jsonl').symlink_to(previous)
+        self.assert_refused_on_both_routes(attempt, 'claim_runs_root is not empty')
+        self.assertEqual(previous.read_bytes(), before)
+        self.assertTrue((claim / 'campaign_log.jsonl').is_symlink())
+
+    def test_r15_runs_roots_are_fresh_before_arm(self):
+        """Round 15 class: each runs root is absent or the empty real directory prepare made."""
+        def previous_log(attempt):
+            previous = attempt.work / 'previous-attempt' / 'campaign_log.jsonl'
+            previous.parent.mkdir(exist_ok=True)
+            previous.write_bytes(b'{"invented": true}\n')
+            return previous
+
+        def hard_linked_log(attempt):
+            claim = Path(attempt.bindings['claim_runs_root'])
+            claim.mkdir()
+            os.link(previous_log(attempt), claim / 'campaign_log.jsonl')
+
+        def linked_root(attempt):
+            previous = previous_log(attempt).parent
+            Path(attempt.bindings['claim_runs_root']).symlink_to(previous, target_is_directory=True)
+
+        def stale_bound(attempt):
+            bound = Path(attempt.bindings['bound_runs_root'])
+            bound.mkdir()
+            (bound / closure.NEG8_BOUND_NAME).write_bytes(b'{"invented": true}\n')
+
+        def linked_capture_root(attempt):
+            claim = Path(attempt.bindings['claim_runs_root'])
+            claim.mkdir()
+            (claim / 'instrument_validation').symlink_to(previous_log(attempt).parent, target_is_directory=True)
+
+        cases = (
+            ('log hard-linked to a previous attempt', hard_linked_log, 'claim_runs_root is not empty'),
+            ('claim runs root links to a previous attempt', linked_root, 'claim_runs_root is a link'),
+            ('stale bound in the bound runs root', stale_bound, 'bound_runs_root is not empty'),
+            ('capture root links to a previous attempt', linked_capture_root, 'claim_runs_root is not empty'),
+        )
+        for name, place, detail in cases:
+            with self.subTest(case=name):
+                attempt = self.attempt()
+                place(attempt)
+                code, _ = attempt.build()
+                self.assertEqual(code, 2, attempt.build_error)
+                self.assertIn(detail, attempt.build_error)
+        with self.subTest(control='both runs roots exist empty, as prepare leaves them'):
+            attempt = self.attempt()
+            for name in ('claim_runs_root', 'bound_runs_root'):
+                Path(attempt.bindings[name]).mkdir()
+            self.assert_admitted_on_both_routes(attempt)
+
     def test_r13_arguments_a_consumer_rejects_or_that_disagree_with_the_plan(self):
         """Round 13 sweep: each such rendered argument refuses at the shared preflight (builder exit 2)."""
         def stage(kind, slot=None):
