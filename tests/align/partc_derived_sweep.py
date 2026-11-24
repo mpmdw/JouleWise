@@ -46,8 +46,8 @@ INVENTORY = {
     "gate.exit_slope": ("slow_slope at the final poll, same view", "_gate_witnesses exit view"),
     "gate.reference": ("ThermalSession._wait: the window reference, or G0's release", "_gate_witnesses"),
     "gate.outcome": ("ThermalSession._wait: released, timeout, unobserved or deadman", "_gate_witnesses"),
-    "census.points": ("Segment.run: start then end, once each", "_check_census"),
-    "census.order": ("LoadJournal.snapshot on one monotonic clock around the samples", "_check_census"),
+    "census.points": ("Segment.run: start then end, once each", "_census_session"),
+    "census.order": ("LoadJournal.snapshot on one monotonic clock around the samples", "_census_session, _contain"),
     "load.fields": ("LoadJournal.fields: the receipt's copy of the journal", "_check_load"),
     "window.member": ("r1_runtime.main: terminal bracket around the segment", "_check_member_window"),
     "window.step_wall": ("RL-186: member_wall_s inside the bracket", "_check_member_window"),
@@ -62,6 +62,14 @@ def load_suite():
     sys.modules[spec.name] = suite
     spec.loader.exec_module(suite)
     return suite
+
+
+def load_probe():
+    """The named-case runner beside this file, for its v3.2 census stand-in (``census_stand_in``)."""
+    spec = importlib.util.spec_from_file_location("partc_probe", Path(__file__).resolve().parent / "partc_audit_probe.py")
+    probe = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(probe)
+    return probe
 
 
 def run():
@@ -79,7 +87,8 @@ def run():
         s.issue_model_source()
         s.endpoint_code()
         with s.kit_source(finder), s.compact_control(), patch.object(
-                s.rt, "registered_s6", return_value={"slots": {"S6": 1.}, "s6_tuning": {}}):
+                s.rt, "registered_s6", return_value={"slots": {"S6": 1.}, "s6_tuning": {}}), \
+                load_probe().census_stand_in(s):
             base = work / "base"
             assert not s.control(base), "the clean control lost a descriptor binding"
         pc, EvidenceFailure = s.pc, s.evidence.EvidenceFailure
@@ -251,10 +260,8 @@ def run():
                     claim[key][-1] += 1
                     expect("load.fields", f"{kind} receipt {key}", lambda claim=claim, kind=kind, load=load, wall=wall:
                            pc._check_load(json.dumps(load).encode(), claim, kind, wall))
-            # The structure each member must keep (``_check_census``): the quiet members both points; the soak
-            # at least ``start``; the gated members any prefix of start, end.
-            allowed = ([["start", "end"]] if kind in (s.P, s.S) else [["start"], ["start", "end"]] if kind == "idle"
-                       else [[], ["start"], ["start", "end"]])
+            # The structure every completed member keeps (R3, ``_census_session``): start then end, once each.
+            allowed = [["start", "end"]]
             point = {"t_s": census[0]["t_s"] if census else 0.0, "processes": census[0]["processes"] if census else []}
             start, end = {**point, "label": "start"}, {**point, "label": "end", "t_s": point["t_s"]}
             variants = {"end omitted": census[:-1], "end twice": census + census[-1:],

@@ -1,0 +1,135 @@
+name: partc-frozen-differential
+
+# Part C's frozen differential acceptance suite, tests/align/test_partc_frozen_differential.py (PR #809).
+# tests/align has no __init__.py, so the ordinary CI shards' unittest discovery never collects it. Lead test
+# budget of 2026-11-22: a full frozen suite runs in hosted CI, not on the shared Air. This workflow runs the
+# whole matrix on a pull request that changes the evaluator, the suite or this file: sixteen shards by the
+# suite's own partition (JW_PARTC_SHARD=i/16), four workers each (one per hosted vCPU), then one job that adds
+# the shards' counts and fails unless every shard reported its matrix. The suite itself reads only the two
+# pinned public commits from the object database, so the checkout keeps the whole history.
+#
+# It runs the suite file through tests/align/partc_suite_census.py, which executes it byte for byte and adds only
+# the census points frozen Segment.run writes that the v3.1 clean fixture lacks (lead fix round r2, R3 and its
+# LEAD GATE). On the lead's v3.2 fixture, which carries them, it adds none and the run is the suite's own; every
+# shard prints the suite's digest and the number of points added, and the totals job adds them up.
+
+on:
+  pull_request:
+    paths:
+      - "scripts/align_r1_part_c.py"
+      - "scripts/align_r1_part_c_evidence.py"
+      - "tests/align/test_partc_frozen_differential.py"
+      - "tests/align/partc_suite_census.py"
+      - "tests/align/partc_audit_probe.py"
+      - ".github/workflows/partc-frozen-differential.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: partc-frozen-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Swap for the frozen oracle's largest case
+        # Two v3.1 cases retype D_bank's recorded gate cap (hardware.thermal.policy.g0_cap_s/type and
+        # turn_cap_s/type). Frozen R1 code multiplies it by 10**9 before anything refuses it, so the oracle builds
+        # a 14 GB string and then raises TypeError, which the suite records as a refusal. A Mac pages it out; a
+        # 16 GB runner without swap loses its VM (shard 2 of 16, twice). The suite and frozen code are not ours
+        # to change, so the runner gets swap on /mnt, sized to the free space (two such cases may run at once).
+        run: |
+          avail=$(df -BG --output=avail /mnt | tail -1 | tr -dc 0-9)
+          size=$(( avail > 44 ? 36 : avail - 8 ))
+          sudo fallocate -l "${size}G" /mnt/partc.swap
+          sudo chmod 600 /mnt/partc.swap
+          sudo mkswap /mnt/partc.swap >/dev/null
+          sudo swapon /mnt/partc.swap
+          free -m
+      - name: The R1 pin and the fixture commit are in the object database
+        run: |
+          git cat-file -e b2e01464d6d4fbf2901ff4d4154df9455104a12a^{commit}
+          git cat-file -e 2d02a6f0e42b7ac7a51ea5d5830867eea9ff2911^{commit}
+      - name: Frozen differential, shard ${{ matrix.shard }} of 16
+        env:
+          JW_PARTC_SHARD: "${{ matrix.shard }}/16"
+          JW_PARTC_WORKERS: "4"
+          JW_PARTC_REPO: ${{ github.workspace }}
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -o pipefail
+          # The job log keeps the runner's memory every 10 s and the suite's unbuffered progress, so a shard that
+          # loses its runner still shows how far it got and what it held.
+          ( while sleep 10; do echo "MEM $(date +%T) $(free -m | awk '/Mem:/{print $3 " MB used, " $7 " MB available"}')";
+              ps -eo rss=,comm= --sort=-rss | head -3 | awk '{printf "  rss %d MB %s\n", $1/1024, $2}'; done ) &
+          trap "kill $! 2>/dev/null" EXIT
+          sha256sum tests/align/test_partc_frozen_differential.py | tee shard.log
+          python -IB tests/align/partc_suite_census.py 2>&1 | tee -a shard.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: partc-shard-${{ matrix.shard }}
+          path: shard.log
+
+  totals:
+    needs: shard
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: partc-shard-*
+          path: shards
+      - name: Add the shards' matrix counts
+        # The inventory is pinned: each shard's case count and the total, as enumerated from the suite file under
+        # the census runner (sha256 12ca35d3...1588 plus the stand-in: 25,300 cases). Each shard must report the
+        # count it generated, a matrix of that size whose status counts add up to it, its clean control and 4/4
+        # bindings, and no false pass, wrong verdict or harness error. A lead-issued suite changes these numbers.
+        env:
+          EXPECTED_SHARDS: "1560 1641 1588 1612 1530 1499 1537 1602 1553 1640 1612 1639 1595 1582 1562 1548"
+          EXPECTED_TOTAL: "25300"
+        run: |
+          python3 - <<'EOF'
+          import ast, collections, os, pathlib, re, sys
+          expected = list(map(int, os.environ["EXPECTED_SHARDS"].split()))
+          assert sum(expected) == int(os.environ["EXPECTED_TOTAL"]) and len(expected) == 16
+          totals, problems, controls, added = collections.Counter(), [], 0, 0
+          for index, count in enumerate(expected):
+              log = pathlib.Path("shards") / f"partc-shard-{index}" / "shard.log"
+              if not log.is_file():
+                  problems.append(f"shard {index}: no log")
+                  continue
+              text = log.read_text()
+              generated = re.findall(r"(?m)^generated (\d+) case IDs$", text)
+              found = re.findall(r"(?m)^matrix (\d+) (\[.*\])$", text)
+              if len(generated) != 1 or len(found) != 1:
+                  problems.append(f"shard {index}: {len(generated)} generated lines, {len(found)} matrix lines")
+                  continue
+              statuses = dict(ast.literal_eval(found[0][1]))
+              if not int(generated[0]) == int(found[0][0]) == sum(statuses.values()) == count:
+                  problems.append(f"shard {index}: generated {generated[0]}, matrix {found[0][0]}, "
+                                  f"statuses {sum(statuses.values())}, pinned {count}")
+              totals.update(statuses)
+              controls += "clean control verdict=pass; descriptor rows PASS (4/4)" in text
+              added += sum(int(n) for n in re.findall(r"census stand-in points added (\d+)", text))
+          print("shards with a clean control and 4/4 bindings:", controls)
+          print("matrix", sum(totals.values()), sorted(totals.items()))
+          print("census stand-in additions over all shards:", added, "(0 on a fixture that carries them)")
+          bad = {key: totals[key] for key in ("FALSE_PASS", "WRONG_VERDICT", "HARNESS_ERROR") if totals[key]}
+          if problems or controls != 16 or bad or sum(totals.values()) != int(os.environ["EXPECTED_TOTAL"]):
+              print("::error::incomplete or failing matrix:", problems, bad)
+              sys.exit(1)
+          EOF

@@ -27,13 +27,21 @@ exit slope contradicts the frozen reducer on the same view (`x-g-unobserved-exit
 gate recording the derived value, `x-g-unobserved-exit-slope-derived`, must pass), and an X_G journal whose session
 ID is not the one its opening stamp derives (`x-g-session-id-plus-one`).
 
+Fix round r2 (wide audit round 1 of 2026-11-22) adds ``R2``: the FO and IN reproductions F1 to F11, each damaged
+case with its paired control. Its four rule classes are R1 temporal containment (CPU samples, census, soak tail and
+load, battery rows), R2 raw-domain schemas (busy cores, process tables and PIDs, endpoint identities, finish
+reasons), R3 the complete census and R4 the runtime config resolved once. Until suite v3.2 is issued, the v3.1 clean
+fixture lacks census points that frozen ``Segment.run`` writes; ``census_stand_in`` adds them, and only them.
+
     python3.13 -IB tests/align/partc_audit_probe.py [case ...]      (JW_PARTC_REPO selects the tree under test)
 
-It prints one `RESULT <case> <verdict> <reasons>` line per case and exits 1 on any disagreement. The pinned
+It prints one `RESULT <case> <verdict> <reasons>` line and one `FIELDS <case> <reason:field ...>` line per case and
+exits 1 on any disagreement (JW_PARTC_PROBE_LOG=1 also prints each refusal's record). The pinned
 commits must be in the local object database (see the suite's docstring).
 """
 import hashlib
 import importlib.util
+import os
 import shutil
 import sys
 import tempfile
@@ -79,6 +87,81 @@ EXPECTED = {
     # `paired_clock_stamps_ns.0.epoch_ns/shift`, which a first draft of the window check let through).
     "episode-stamps-reversed": ("member_order", "episode_bracket"),
 }
+# Fix round r2 (wide audit round 1 of 2026-11-22). Each damaged case refuses; each control passes.
+R2 = {
+    # F1 (R1): CPU samples that cannot lie inside the census.
+    "census-enclosure-disjoint": "member_order",
+    "census-enclosure-too-narrow": ("evidence_unverifiable", "cpu_busy_t_s"),
+    "census-literal": "member_order",
+    "cpu-negative-offsets": ("evidence_unverifiable", "cpu_busy_t_s"),
+    # F2, F3 (R1): the soak's tail and load judged against its own session.
+    "soak-tail-missing": "soak_readings",
+    "soak-short-load": ("soak_load", "cpu_busy_t_s"),
+    # F4 (R1): repeated t=0 samples, cool and hot.
+    "cpu-instant": ("quiet_load", "cpu_busy_t_s"),
+    "cpu-hot": "quiet_load",
+    # F5 (R1): battery rows outside the member.
+    "battery-row-ordered": None,
+    "battery-row-outside": ("battery_evidence", "epoch_s"),
+    "battery-journal-shifted": ("battery_evidence", "epoch_s"),
+    "battery-reduced": ("battery_evidence", "epoch_s"),
+    # F6 (R2): endpoint identities that are not one nonempty string in both records.
+    "endpoint-list": ("episode_binding", "endpoint"),
+    "endpoint-mixed-type": ("episode_binding", "endpoint"),
+    "endpoint-integer-pair": ("episode_binding", "endpoint"),
+    "endpoint-boolean-pair": ("episode_binding", "endpoint"),
+    "endpoint-array-pair": ("episode_binding", "endpoint"),
+    "endpoint-one-copy": ("episode_binding", "endpoint"),
+    # F7 (R2): the own-stop exception for a clean finish only.
+    "ownstop-short-clean": None,
+    "ownstop-short-cut": ("member_cut", "finish_reason"),
+    "stop-cut": ("member_cut", "finish_reason"),
+    "stop-unknown": "stop_evidence",
+    "stop-deadman": ("member_cut", "finish_reason"),
+    # F8, F9 (R2): busy cores, process tables and PIDs.
+    "cpu-negative": ("quiet_load", "cpu_busy_cores.0"),
+    "process-empty": ("quiet_load", "census.0.processes"),
+    "census-pid-distinct": None,
+    "census-pid-conflicting": ("quiet_load", "census.0.processes.pid"),
+    "census-pid-duplicate-row": ("quiet_load", "census.0.processes.pid"),
+    # F10 (R3): every completed member's census is start then end.
+    "census-complete": None,
+    "census-omit-idle": ("soak_load", "census"),
+    "census-omit-d-bank-benign-s1": ("load_evidence", "census"),
+    "census-omit-x-g": ("load_evidence", "census"),
+    # F11 (R4): the runtime config the ledgers record is the one the child consumes.
+    "config-separate": None,
+    "config-equals": ("issued_inputs", "--config"),
+    "config-repeated": ("issued_inputs", "--config"),
+}
+EXPECTED.update(R2)
+# Fix round r3 (confirmation audit of 2026-11-23). Each damaged case refuses; each control passes.
+R3 = {
+    # A derivation at the bound session close is a verdict: the soak's tail must be settled there too.
+    "soak-close-settled": None,
+    "soak-close-unsettled": ("soak_unsettled", "session_close"),
+    # Launch order on the monotonic clock: the predecessor's CPU origin lies after the soak closed.
+    "origin-control": None,
+    "origin-during-soak": ("evidence_unverifiable", "cpu_busy_t_s"),
+    "origin-negative": ("evidence_unverifiable", "cpu_busy_t_s"),
+    # Nested observation stamps lie no later than the next row (producer order) and the session close.
+    "status-control": None,
+    "status-future": ("reading_record", "values.status.monotonic_ns"),
+    "status-pm-future": ("reading_record", "values.status.pm_observed_ns"),
+    # Structural completeness: the opening and closing battery samples Segment.run takes.
+    "closing-battery-kept": None,
+    "closing-battery-dropped": ("battery_evidence", "samples"),
+    # Exactly the one excluded PID Segment.__init__ passes.
+    "roots-single": None,
+    "roots-repeated": ("quiet_load", "exclude_roots"),
+    "roots-empty": ("quiet_load", "exclude_roots"),
+}
+EXPECTED.update(R3)
+# Until the lead issues suite v3.2, its v3.1 clean fixture has no closing census on the soak and no census on
+# D_bank or X_G. These are the points frozen ``Segment.run`` writes, added here only where the fixture lacks
+# them (wide audit FO ``census_cardinality.py``'s complete case); on v3.2 this changes nothing.
+CENSUS_ORIGIN = {"idle": 0.0, "d-bank-benign-s1": 6000.0, "x-g": 8000.0}
+ADDED = []                  # (kind, what) of every census point or excluded PID the stand-in added
 DIRECT = ("step-d-member-wall-over-bracket", "episode-stamps-reversed")
 AUDIT_2 = ("control", "interval-header-zero-rows", "raw-runner-fault", "raw-turn-budget-flag", "last-turn-unclosed",
            "other-run-id", "duplicate-predecessor", "predecessor-timeout", "extra-stop-flag", "gate-before-entry",
@@ -97,6 +180,42 @@ def member_wall(s, wall, opened=4_001_000_000_000, closed=4_002_000_000_000):
             "outputs/align_episode.json": json.dumps({"hardware": {"paired_clock_stamps_ns": stamps}}).encode(),
             "outputs/align_turns.jsonl": b""}
     s.pc._check_member_window(bound, {"slot_detail": {"member_wall_s": wall}}, data)
+
+
+def complete_census(s, segment, kind, receipt):
+    """The v3.2 stand-in, only where the v3.1 fixture lacks what frozen ``Segment`` writes: both census points
+    on the soak, D_bank and X_G, and on every member the one excluded PID ``Segment.__init__`` passes
+    (``(os.getpid(),)``; the runtime process of the member's own census)."""
+    import copy
+
+    path = segment / "load_journal.json"
+    load = s.read(path)
+    changed = False
+    if kind in CENSUS_ORIGIN and [point["label"] for point in load["census"]] != ["start", "end"]:
+        opening = copy.deepcopy(load["census"][0]) if load["census"] else {
+            "label": "start", "t_s": CENSUS_ORIGIN[kind],
+            "processes": [{"pid": 12, "ppid": 1, "pcpu": 0.1, "comm": "synthetic"}]}
+        closing = {**copy.deepcopy(opening), "label": "end", "t_s": opening["t_s"] + 1800}
+        ADDED.extend((kind, point["label"]) for point in (opening, closing) if point not in load["census"])
+        load["census"] = receipt["census"] = [opening, closing]
+        changed = True
+    if load.get("exclude_roots") == [] and load["census"]:
+        load["exclude_roots"] = [load["census"][0]["processes"][0]["pid"]]
+        ADDED.append((kind, "exclude_roots"))
+        changed = True
+    if changed:
+        s.write(path, load)
+
+
+def census_stand_in(s):
+    """Patch the suite's member close so every clean attempt carries the complete census (v3.2 stand-in)."""
+    close = s.fixture.write_terminal
+
+    def complete(segment, kind, receipt, sha):
+        complete_census(s, segment, kind, receipt)
+        return close(segment, kind, receipt, sha)
+
+    return patch.object(s.fixture, "write_terminal", complete)
 
 
 def load_suite():
@@ -141,6 +260,199 @@ def run(argv):
                       "predecessor-census-end-twice": s.P, "predecessor-census-reversed": s.P,
                       "x-g-unobserved-exit-slope-derived": s.X, "x-g-unobserved-exit-slope-contradicted": s.X,
                       "x-g-session-id-plus-one": s.X}
+    changed_member.update({name: s.P for name in R2})
+    changed_member.update({name: "idle" for name in ("soak-tail-missing", "soak-short-load", "census-omit-idle")})
+    changed_member.update({name: s.S for name in ("battery-reduced",)})
+    changed_member.update({name: s.D for name in ("ownstop-short-clean", "ownstop-short-cut", "stop-cut",
+                                                  "stop-unknown", "stop-deadman", "census-omit-d-bank-benign-s1")})
+    changed_member.update({"census-omit-x-g": s.X, "census-complete": None, "config-separate": None,
+                           "config-equals": None, "config-repeated": None})
+    changed_member.update({name: s.P for name in R3})
+    changed_member.update({"soak-close-settled": "idle", "soak-close-unsettled": "idle", "status-control": s.X,
+                           "status-future": s.X, "status-pm-future": s.X})
+
+    def mutate_r3(case, kind, segment, receipt):
+        """The r3 reproductions (confirmation audit's bound_tail, regressions and status_cases scripts)."""
+        load_path = segment / "load_journal.json"
+        if case.startswith("soak-close-"):
+            from joulewise.align.apple.thermal import Coverage, keys
+
+            path = segment / "sensors/align_thermal.jsonl"
+            records = s.rows(path)
+            start, close = records[0], records[-1]
+            sensors = start["values"]["thermal"]
+            kept = [row for row in records if row["kind"] == "reading"][:1701]
+            # A flat baseline, then a linear rise whose slope over the window at the close straddles 0.2 C/min.
+            amplitude, key = (0.201 if case.endswith("unsettled") else 0.19), sensors["s_fast"]
+            for index, row in enumerate(kept):
+                value = 35.0 + amplitude * max(index - 600, 0) / 60
+                row["values"]["sensors"][key] = row["values"]["readings"][key]["value"] = value
+            sampling = s.tg.sample_rows(kept)
+            origin = sampling[0]["monotonic_ns"]
+            coverage = Coverage(start["started"]["monotonic_ns"], keys(sensors))
+            for row in kept:
+                coverage.observe(row["started"]["monotonic_ns"], row["finished"]["monotonic_ns"], row["values"])
+            close["values"]["coverage"] = coverage.report(close["values"]["coverage"]["span_ns"][1])
+            close["seq"] = len(kept) + 2
+            s.write_rows(path, [start, *kept, close])
+            for name in (sensors["s_fast"], sensors["s_slow"]):
+                good = s.rt.valid_series(sampling, name)
+                receipt["sensor_series_c"][name] = [v for _, v in good]
+                receipt["sensor_series_t_s"][name] = [(ns - origin) / s.N for ns, _ in good]
+                receipt["sensor_series_failed_reads"][name] = len(kept) - len(good)
+            receipt["sensor_series_end_t_s"] = round((sampling[-1]["monotonic_ns"] - origin) / s.N, 9)
+        elif case.startswith("origin-"):
+            load = s.read(load_path)
+            delay = {"origin-control": 0, "origin-during-soak": 500, "origin-negative": 4000}[case]
+            load["cpu_busy_t_s"] = receipt["cpu_busy_t_s"] = [t + delay for t in load["cpu_busy_t_s"]]
+            s.write(load_path, load)
+        elif case.startswith("roots-"):
+            load = s.read(load_path)
+            valid = load["census"][0]["processes"][0]["pid"]
+            load["exclude_roots"] = {"roots-single": [valid], "roots-repeated": [valid, valid], "roots-empty": []}[case]
+            s.write(load_path, load)
+        elif case.startswith("closing-battery-"):
+            path = segment / s.pc.BATTERY_SOURCE
+            rows = s.rows(path)
+            assert len(rows) == 2
+            if case.endswith("dropped"):
+                rows.pop()
+            receipt["battery"] = s.rt.battery_summary(rows)
+            if "battery_drain_pct_per_h" in receipt:
+                receipt["battery_drain_pct_per_h"] = receipt["battery"]["drain_pct_per_h"]
+            s.write_rows(path, rows)
+        elif case.startswith("status-"):
+            journal = segment / receipt["bundle"] / "outputs/align_thermal.jsonl"
+            rows = s.rows(journal)
+            row = [r for r in rows if r["kind"] == "reading" and r["values"].get("status")][1]
+            key = "pm_observed_ns" if "-pm-" in case else "monotonic_ns"
+            if case != "status-control":
+                row["values"]["status"][key] = rows[-1]["finished"]["monotonic_ns"] + 60 * s.N
+                s.write_rows(journal, rows)
+        else:
+            return False
+        return True
+
+    def mutate_r2(case, kind, segment, receipt):
+        """The r2 reproductions (wide audit FO and IN scripts), one change before the member's producer closes."""
+        import copy
+
+        bundle = segment / receipt["bundle"] if "bundle" in receipt else None
+        load_path = segment / "load_journal.json"
+        if case.startswith("census-omit-"):
+            load = s.read(load_path)
+            load["census"] = receipt["census"] = load["census"][:1]
+            s.write(load_path, load)
+        elif case.startswith(("census-enclosure-", "census-literal", "cpu-")):
+            load = s.read(load_path)
+            times, census = load["cpu_busy_t_s"], load["census"]
+            assert ([point["t_s"] for point in census], times[0], times[-1]) == ([2000, 3800], 0, 1800)
+            width = times[-1] - times[0]
+            if case == "census-enclosure-disjoint":
+                times = [500 + t for t in times]
+                census[0]["t_s"], census[1]["t_s"] = 0, width
+            elif case == "census-enclosure-too-narrow":
+                census[1]["t_s"] = census[0]["t_s"] + width - 1
+            elif case == "census-literal":
+                census[0]["t_s"], census[1]["t_s"] = 0, 100
+                times = [500 + t / 20 for t in times]
+            elif case == "cpu-negative-offsets":
+                times = [t - 2000 for t in times]
+            elif case == "cpu-instant":
+                times = [0] * len(times)
+            elif case in ("cpu-hot", "cpu-negative"):
+                load["cpu_busy_cores"] = [3 if case == "cpu-hot" else -10] * len(times)
+            load["cpu_busy_t_s"] = times
+            for key in ("cpu_busy_t_s", "cpu_busy_cores", "census"):
+                receipt[key] = load[key]
+            s.write(load_path, load)
+        elif case == "process-empty":
+            load = s.read(load_path)
+            for point in load["census"]:
+                point["processes"] = []
+            receipt["census"] = load["census"]
+            s.write(load_path, load)
+        elif case.startswith("census-pid-"):
+            load = s.read(load_path)
+            processes = load["census"][0]["processes"]
+            original = processes[0]
+            second = dict(original, pid=max(row["pid"] for row in processes) + 1 if case.endswith("distinct")
+                          else original["pid"])
+            if not case.endswith("duplicate-row"):
+                second["comm"] = "another-fixture-process"
+            processes.append(second)
+            receipt["census"] = load["census"]
+            s.write(load_path, load)
+        elif case.startswith("battery-"):
+            path = segment / s.pc.BATTERY_SOURCE
+            rows = s.rows(path)
+            if case.startswith("battery-row-"):
+                assert [row["epoch_s"] for row in rows] == [2000, 2120]
+                rows.insert(1, dict(rows[0], epoch_s=2060))
+                receipt["battery"] = s.rt.battery_summary(rows)
+                if case == "battery-row-outside":
+                    rows[1]["epoch_s"] = 6100
+                assert s.encode(receipt["battery"]) == s.encode(s.rt.battery_summary(rows))   # receipt unchanged
+            else:
+                shift = {"battery-journal-shifted": None, "battery-reduced": 1_000_000}[case]
+                rows = [dict(row, epoch_s=6100 + index if shift is None else row["epoch_s"] + shift)
+                        for index, row in enumerate(rows)]
+                receipt["battery"] = s.rt.battery_summary(rows)
+                if "battery_drain_pct_per_h" in receipt:
+                    receipt["battery_drain_pct_per_h"] = receipt["battery"]["drain_pct_per_h"]
+            s.write_rows(path, rows)
+        elif case.startswith("endpoint-"):
+            episode_path, meta_path = bundle / "outputs/align_episode.json", bundle / "metadata.json"
+            episode, meta = s.read(episode_path), s.read(meta_path)
+            provenance = meta["workload_provenance"]
+            assert isinstance(episode["endpoint"], str) and episode["endpoint"] == provenance["endpoint_identity"]
+            value = {"endpoint-list": [17], "endpoint-mixed-type": True, "endpoint-integer-pair": 17,
+                     "endpoint-boolean-pair": True, "endpoint-array-pair": ["id"], "endpoint-one-copy": True}[case]
+            episode["endpoint"] = value
+            if case != "endpoint-one-copy":
+                provenance["endpoint_identity"] = 1 if case == "endpoint-mixed-type" else copy.deepcopy(value)
+            s.write(episode_path, episode)
+            s.write(meta_path, meta)
+        elif case.startswith(("ownstop-", "stop-")):
+            path = bundle / "outputs/align_turns.jsonl"
+            turns = s.rows(path)
+            generation = turns[-1]["generation"]
+            assert generation["finish_reason"] == "stop"
+            assert (len(turns) == 2) == case.startswith("ownstop-")
+            generation["finish_reason"] = {"ownstop-short-clean": "stop", "ownstop-short-cut": "episode.time_guard",
+                                           "stop-cut": "episode.time_guard", "stop-unknown": "synthetic.unknown_stop",
+                                           "stop-deadman": "episode.deadman"}[case]
+            s.write_rows(path, turns)
+        elif case == "soak-tail-missing":
+            from joulewise.align.apple.thermal import Coverage, keys
+
+            path = segment / "sensors/align_thermal.jsonl"
+            records = s.rows(path)
+            start, close = records[0], records[-1]
+            sensors = start["values"]["thermal"]
+            kept = [row for row in records if row["kind"] == "reading"][:1201]
+            sampling = s.tg.sample_rows(kept)
+            origin = sampling[0]["monotonic_ns"]
+            coverage = Coverage(start["started"]["monotonic_ns"], keys(sensors))
+            for row in kept:
+                coverage.observe(row["started"]["monotonic_ns"], row["finished"]["monotonic_ns"], row["values"])
+            close["values"]["coverage"] = coverage.report(close["values"]["coverage"]["span_ns"][1])
+            close["seq"] = len(kept) + 2
+            s.write_rows(path, [start, *kept, close])
+            for key in (sensors["s_fast"], sensors["s_slow"]):
+                good = s.rt.valid_series(sampling, key)
+                receipt["sensor_series_c"][key] = [value for _, value in good]
+                receipt["sensor_series_t_s"][key] = [(ns - origin) / s.N for ns, _ in good]
+                receipt["sensor_series_failed_reads"][key] = len(kept) - len(good)
+            receipt["sensor_series_end_t_s"] = round((sampling[-1]["monotonic_ns"] - origin) / s.N, 9)
+        elif case == "soak-short-load":
+            load = s.read(load_path)
+            for key in ("cpu_busy_cores", "cpu_busy_t_s"):
+                load[key] = receipt[key] = load[key][:5]
+            s.write(load_path, load)
+        else:
+            return False
+        return True
 
     def frozen_refuses(segment, kind):
         try:
@@ -288,6 +600,8 @@ def run(argv):
         s.write_rows(bundle / "outputs/align_turns.jsonl", turns)
 
     def mutate(case, kind, segment, receipt):
+        if mutate_r3(case, kind, segment, receipt) or mutate_r2(case, kind, segment, receipt):
+            return
         bundle = segment / receipt["bundle"]
         episode_path = bundle / "outputs/align_episode.json"
         turns_path = bundle / "outputs/align_turns.jsonl"
@@ -418,6 +732,29 @@ def run(argv):
                 return writer(path, value)
 
             stack.enter_context(patch.object(s, "write", close_soak))
+        elif name.startswith("ownstop-"):
+            # Wide audit FO ``ownstop.py``: a two-admission D_bank (RL-149), its last turn and interval dropped.
+            import copy
+
+            bank = copy.deepcopy(s.fixture.bank())
+            bank["turns"].pop()
+            bank["intervals"].pop()
+            stack.enter_context(patch.object(s.fixture, "bank", return_value=bank))
+        elif name.startswith("config-"):
+            # Wide audit IN ``config_path.py``: the launcher's runtime argv names an equal copy of the config.
+            fresh = s.new_fixture
+
+            def fixture():
+                case = fresh()
+                config = case.attempt.config
+                copied = config.parent / "copied-runtime.json"
+                copied.write_bytes(config.read_bytes())
+                case.runtime = ["synthetic-runtime", *{
+                    "config-separate": ["--config", str(copied)], "config-equals": ["--config=" + str(copied)],
+                    "config-repeated": ["--config", str(config), "--config", str(copied)]}[name]]
+                return case
+
+            stack.enter_context(patch.object(s, "new_fixture", fixture))
         elif name.startswith("step-d-close-"):
             writer = s.write
 
@@ -463,9 +800,10 @@ def run(argv):
             for name in wanted:
                 changed = changed_member[name]
                 terminal, published = s.fixture.write_terminal, s.published
-                edits, verdicts = [], []
+                edits, verdicts, stdout_lines = [], [], []
 
                 def close(segment, kind, receipt, sha):
+                    complete_census(s, segment, kind, receipt)
                     if kind == changed:
                         mutate(name, kind, segment, receipt)
                         edits.append(kind)
@@ -474,9 +812,17 @@ def run(argv):
                 def observe(case, rc):
                     import json
 
-                    verdict = published(case, rc)
+                    if (case.attempt.output / "evidence_ledger.jsonl").exists():
+                        verdict = published(case, rc)
+                    else:
+                        # R4 refuses before Part C opens its ledger: both publications agree, and never on pass.
+                        document = s.read(case.attempt.output / "smoke.json")
+                        assert document == s.read(case.attempt.output / "smoke_part_c.json")
+                        verdict = document["evaluation"]["verdict"]
+                        assert verdict != "pass" and rc != 0, (verdict, rc)
                     record = s.read(case.attempt.output / "smoke.json")["evaluation"]
                     stdout = (case.attempt.root / "part-c.stdout.log").read_text().splitlines()
+                    stdout_lines[:] = [line for line in stdout if line.startswith("{")]
                     found = {(item["reason"], item["field"]) for item in map(json.loads, (
                         line for line in stdout if line.startswith("{")))}
                     verdicts.append((verdict, record["pass"], rc, sorted(record["evidence_failures"]), found))
@@ -498,6 +844,10 @@ def run(argv):
                 ok = (verdict, passed, code) == ("pass", True, 0) if expected is None else (
                     refused and expected in found if isinstance(expected, tuple) else refused and expected in reasons)
                 print("RESULT", name, verdict, ",".join(reasons) or "-", flush=True)
+                print("FIELDS", name, " ".join(sorted(f"{reason}:{field}" for reason, field in found)) or "-",
+                      flush=True)
+                if os.environ.get("JW_PARTC_PROBE_LOG"):
+                    print(stdout_lines[-1] if stdout_lines else "", flush=True)
                 if not ok:
                     failures.append(name)
     return 1 if failures else 0
