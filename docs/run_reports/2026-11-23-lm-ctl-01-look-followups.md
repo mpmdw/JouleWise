@@ -258,3 +258,37 @@ The draft [PR gate ledger](https://github.com/mpmdw/JouleWise/pull/957)
 records final-head CI and the frozen verification. Tier 2 executing
 review, the installed byte pass, and bound-host blind preflight
 remain lead gates before reservation.
+
+## 2026-11-24 revision 9 numeric and wire schema
+
+Revision 9 implements the lead's resolution for binary64 rounding,
+exact integers, conditional record members and the approved task
+diagnostic boundaries. The specification and failing synthetic tests
+froze at `b3dac76baa91e7c8fa4843983e54574807b27471`. The unchanged
+revision 8 code produced 17 failed assertions and one raw
+`struct.error` in the failed-first run. The implementation is
+`b940cf1497920f23d0744797a2d943079e9e5882`.
+[Revision 9](../process/cadence/looks/lm-ctl-01.print-spec.v9.md)
+
+| Requirement | Executed synthetic acceptance |
+| --- | --- |
+| Numeric role | The existing `0.0001` clock bound and overflow-midpoint predecessor pass. The midpoint, nonfinite values and overflowing observation tokens refuse. Exact adjacent integer nanoseconds retain one-nanosecond separation, fractional and exponent integer spellings refuse, and both packed-time helpers reject signed 64-bit overflow. Test subnormals and signed zero in the opaque binary64 selector. |
+| Conditional closed roles | The typed matrix mutates every declared member at the shared parser, including required nullable fields and optional absence. Returned calls and CPU, gap and recovery intervals have a second presence matrix driven by the exact synthetic script variants. The valid interrupted tail and G0 annotation continue to pass. |
+| Diagnostic opacity | The paired task-defined key passes under evaluation outputs and tool schema objects, and refuses as an undeclared sibling. The lexical guard also tests duplicate keys, invalid containers, nesting and nonfinite or overflowing tokens. SMC uses the pinned vocabulary. |
+| Launcher state | Nineteen rebound malformed fixtures refuse with the exact input-channel notice at stage 1, standalone preflight, and direct stage 2. Status is fresh, with no reservation, marker, public artifact, claim or value-read event. The per-field matrix exercises the shared validator directly. |
+
+The metadata envelope and consumed nested records are closed. Some
+declared ancillary metadata payloads still enforce object shape,
+strict syntax, unique keys and numeric form without a closed inner
+vocabulary. In particular, the controller merges caller and adapter
+dictionaries under `metadata.extra` and `metadata.adapters`, and
+that merge has no nested schema. An approved key inventory or opaque
+boundary is needed for those payloads. The all-field matrix at each
+launcher entry point is also outstanding. The prior orphan-marker
+race remains a LOW follow-up. [Controller metadata producers](../../joulewise/controller.py)
+
+The frozen trees match PR #951 byte for byte, all four checksum
+manifests verify and local v3.1 passed 846/846. The dated handoff and
+the final-head verification are linked from [draft PR #957](https://github.com/mpmdw/JouleWise/pull/957).
+Independent Tier 2 executing review, the installed byte pass and
+bound-host blind preflight remain lead gates before reservation.
