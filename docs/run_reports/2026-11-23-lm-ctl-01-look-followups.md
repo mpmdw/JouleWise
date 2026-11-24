@@ -150,3 +150,42 @@ v3.1 suite and hand vectors passed 846/846, and 27 adjacent controls,
 reservation and cumulative-gate tests passed. The local runner
 denied creation of the synthetic reservation directory in the
 publication test, so hosted Linux owns the publication witness.
+
+## Round 3 and revision 6
+
+Round 3 audited `c660b754136a391e44ac49d3804cb2bf61cfe1b9` and
+verified four HIGHs, one MED and one LOW. A HIGH in round 3 closes
+the cycle under PIPELINE §3. Revision 6 and its synthetic acceptance
+tests were committed at `0e38cc13489ea2d3c9c26387416892556f16daf6`
+before implementation. The failed-first run used the audited
+production tree with the new tests and recorded 16 assertion
+failures. The audit independently showed the old stage 1 and
+preflight accepting each structural mutation and the config guard
+failing at both blind gates. [Revision 6](../process/cadence/looks/lm-ctl-01.print-spec.v6.md)
+
+| Verified finding | Root cause and change in `2ad570728` | Regression |
+| --- | --- | --- |
+| HIGH. Visible token totals overflowed during calculation or report validation. | `impl-bug`. Add exact visible prompt and decode totals to the shared step validator and check the same range as the individual counts. Validate report numbers without converting out-of-range integers. | `count-sum`, `count-shape-only`, `decode-sum`, and `test_aggregate_token_bounds_cover_both_totals_before_numerical_work` |
+| HIGH. A project description exposed an embedded observation. | `fix-regression`. Match the typed shape of descriptive strings in their JSON tokens and pass placeholders to the constructor. | `test_descriptive_config_strings_are_validated_without_conversion` and `test_blind_stamp_disposition_and_opacity_survive_native_publication` |
+| HIGH. Overlapping rail windows reached attribution. | `impl-bug`. Check the common support grid against the frozen edge-snapping tolerance using only native timestamps. | `rail-overlap` and `test_rail_edge_snapping_preserves_rounded_edges_and_gaps` |
+| HIGH. The qualifier first detected duplicate episode IDs and substituted CPU requests. | `impl-bug`. Require distinct IDs across dispatched positions and bind each reached script step's requested dose to the issued script. | `duplicate-episode`, `cpu-dose`, `recovery-dose`, `turn-dose`, and the positive interrupted-tail case |
+| MED. A whitespace-only note passed the opaque projection. | `fix-regression`. Preserve the typed nonblank predicate for literal and escaped whitespace. | `blank-notes` and `unicode-blank-notes` |
+| LOW. A regular-file collision disagreed with status. | `impl-bug`. Match the freshness check's treatment of an occupied reservation pathname. | `test_regular_file_collision_agrees_with_freshness_check` |
+
+The structural cases use freshly rebound synthetic inputs and cover
+stage 1, standalone preflight and direct stage 2. They check the
+exact refusal, fresh status, and absent marker and publication. The
+guarded opacity cases exercise valid config at both blind gates. The
+rail test accepts an edge within conversion tolerance and allows a
+gap. The issued-dose check uses requested values from the runner's
+pinned script definition. Scientific dose ordering and closure still
+use the authenticated inputs, as do the ruled stamp and G0 dispositions.
+
+The frozen v1/v2/v3 and v3.1 trees match PR #951, and all four
+manifests verify. The adjacent controls and cumulative-gate run
+passed 27 tests, including the exact receipt and lead-record digest.
+Final-head CI, including the frozen paired-release and v3.1 runs,
+is recorded in the gate ledger on [draft PR #957](https://github.com/mpmdw/JouleWise/pull/957).
+The revision 6 freeze and its executed head are routed to the lead
+for independent Tier 2 executing review. The installed byte pass
+and bound-host blind preflight remain lead gates before reservation.
