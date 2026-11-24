@@ -433,7 +433,9 @@ class C1ClosureTests(unittest.TestCase):
         name = closure.PACK / '.stray-prepared-input'
         adapter.put(attempt.stage, name, b'unused fixture')
         code, packet = attempt.build()
-        self.assertEqual(code, 0, attempt.build_error)
+        # Lead L2: the one pack predicate refuses the stray at the first stage.
+        self.assertEqual(code, 2, attempt.build_error)
+        self.assertIn('pack_inadmissible', attempt.build_error)
         self.assertNotIn(str(name), packet['c1_closure']['stage_files'])
         attempt.deliver(packet)
         self.assert_refuses_before_host(attempt, 'unlisted staged file')
@@ -1325,7 +1327,7 @@ class C1ClosureTests(unittest.TestCase):
             night['hazard_window']['pack']['pack_sha256'] = previous
 
         attempt = self.night_attempt(previous_digest)
-        self.assert_refused_on_both_routes(attempt, 'night plan hazard_window.pack.pack_sha256')
+        self.assert_refused_on_both_routes(attempt, 'pack_inadmissible')
         for name in ('claim_runs_root', 'bound_runs_root'):
             self.assertFalse(os.path.lexists(attempt.bindings[name]))
 
@@ -1404,21 +1406,157 @@ class C1ClosureTests(unittest.TestCase):
             subprocess.run(['git', '-C', str(reference), *argv], check=True, capture_output=True)
         return committed_pack_tree_sha256(reference / 'pack')
 
-    def test_audit8_high_permitted_directory_link_in_the_pack_admits(self):
-        """Audit 8 HIGH: a pack directory linked inside the verified roots hashes through the verified walk."""
-        copied = self.attempt()
+    def test_audit8_directory_link_in_the_pack_refuses_at_build(self):
+        """Round 8's directory link, now refused at the first stage: a pack holds no link (lead L1)."""
         linked = self.attempt(make_attempt=LinkedDirectoryAttempt)
         self.assertTrue((linked.stage / closure.PACK / LinkedDirectoryAttempt.subdirectory).is_symlink())
-        digests = [closure.decode(a.night.read_bytes())['hazard_window']['pack']['pack_sha256'] for a in (copied, linked)]
-        self.assertEqual(digests, [self.committed_d134_digest(linked.stage / closure.PACK, linked.work)] * 2)
-        self.assert_admitted_on_both_routes(linked)
-        with self.subTest(case='a directory link leaving the verified roots still refuses'):
-            # Prepare's own output declaration walks the fence, so it refuses first.
+        code, _ = linked.build()
+        self.assertEqual(code, 2, linked.build_error)
+        self.assertIn('pack_inadmissible', linked.build_error)
+        self.assert_refused_on_both_routes(linked, 'pack_inadmissible')
+        with self.subTest(case='a directory link leaving the verified roots refuses at prepare'):
             with self.assertRaisesRegex(ValueError, 'escapes R/S'):
                 self.attempt(make_attempt=type('Outside', (LinkedDirectoryAttempt,), {'outside': True}))
 
+    LAUNCH_BOOT = '11111111-1111-4111-8111-111111111111'
+
+    @staticmethod
+    def dispatched_configs(attempt):
+        """The configs each in-chain collection stage dispatches, as the runner selects them."""
+        from scripts import run_campaign as runner
+
+        configs = []
+        for stage in adapter.chain.stage_plan(attempt.tree, c1=True):
+            if stage.kind == 'campaign_collection' and stage.in_chain:
+                selected, _ = adapter.chain.c1_dispatch_selection(stage, attempt.tree)
+                directory = attempt.view / selected
+                order, _ = runner.load_order_entries(directory)
+                configs += runner.apply_order_manifest(runner.discover_configs(directory), order)
+        return configs
+
+    def launch_binding(self, attempt):
+        """The launch binding's own verdict, on a lineage published from this attempt's night plan."""
+        from joulewise import window_lineage
+
+        night = closure.decode(attempt.night.read_bytes())
+        hazard = night['hazard_window']
+        bindings = hazard['bindings']
+        claim, bound = Path(bindings['claim_runs_root']), Path(bindings['bound_runs_root'])
+        custody = attempt.work / 'launch-custody'
+        for root in (claim, bound, custody):
+            root.mkdir(parents=True, exist_ok=True)
+        try:
+            window_lineage.publish_window_lineage(
+                pack_root=attempt.view / closure.PACK, pack_id=hazard['pack']['pack_id'],
+                plan_id=hazard['pack']['pack_plan_id'], window_id=hazard['pack']['window_id'],
+                bracket_session_id=hazard['bracket_session_id'], pre_attempt_id=bindings['pre_attempt_id'],
+                post_attempt_id=bindings['post_attempt_id'], claim_runs_root=claim, bound_runs_root=bound,
+                custody_root=custody, pack_sha256=hazard['pack']['pack_sha256'], boot_session_id=self.LAUNCH_BOOT)
+            window_lineage.authenticate_campaign(claim, config_paths=self.dispatched_configs(attempt),
+                                                 boot_reader=lambda: self.LAUNCH_BOOT)
+        except (window_lineage.HazardLineageError, window_lineage.LineagePublicationError) as exc:
+            return 'refuse', str(exc)
+        return 'admit', ''
+
+    @staticmethod
+    def pack_paths(attempt):
+        """The pack, the first dispatched config, and its identical stage copy inside the pack."""
+        stage = next(s for s in attempt.source['stage_graph'] if s['kind'] == 'campaign_collection')
+        manifest = Path(stage['input']['path'])
+        name = closure.decode((attempt.repo / manifest).read_bytes())['executed_order'][0]['config']
+        pack = attempt.stage / closure.PACK
+        return pack, pack / closure.C1_DISPATCH / stage['stage_id'] / name, pack / manifest.parent.relative_to(adapter.KIT) / name
+
+    def test_r18_pack_admission_is_the_same_at_every_stage(self):
+        """Lead L3: each pack mutation gets one verdict, first at build and again at launch binding."""
+        def relink(path, target):
+            path.unlink()
+            path.symlink_to(target)
+
+        def file_link_in_pack(attempt):
+            _, dispatched, copy = self.pack_paths(attempt)
+            relink(copy, os.path.relpath(dispatched, copy.parent))
+
+        def round9_dispatched_config_link(attempt):
+            _, dispatched, copy = self.pack_paths(attempt)
+            relink(dispatched, os.path.relpath(copy, dispatched.parent))
+
+        def dir_link_in_pack(attempt):
+            pack, _, copy = self.pack_paths(attempt)
+            directory = copy.parent
+            real = directory.parent / ('.' + directory.name + '-real')
+            shutil.copytree(directory, real)
+            shutil.rmtree(directory)
+            directory.symlink_to(real.name, target_is_directory=True)
+
+        def link_outside_roots(attempt):
+            _, _, copy = self.pack_paths(attempt)
+            outside = adapter.put(attempt.work / 'outside', copy.name, copy.read_bytes())
+            relink(copy, outside)
+
+        def link_to_identical_repository_file(attempt):
+            pack, _, _ = self.pack_paths(attempt)
+            relink(pack / adapter.series.C1_PLAN, attempt.repo / adapter.KIT / adapter.series.C1_PLAN)
+
+        def stray_file(attempt):
+            pack, _, _ = self.pack_paths(attempt)
+            adapter.put(pack, '.stray-prepared-input', b'unused fixture')
+
+        def mode_change(attempt):
+            _, _, copy = self.pack_paths(attempt)
+            copy.chmod(0o755)
+
+        def byte_change(attempt):
+            _, _, copy = self.pack_paths(attempt)
+            copy.write_bytes(copy.read_bytes() + b'\n')
+
+        def fifo(attempt):
+            _, _, copy = self.pack_paths(attempt)
+            os.mkfifo(copy.parent / '.named-pipe')
+
+        # Mutations after prepare, each with the reason the first stage gives.
+        cases = (
+            ('file link inside the pack', file_link_in_pack, 'pack_inadmissible'),
+            ('round 9: dispatched config linked inside the pack', round9_dispatched_config_link, 'pack_inadmissible'),
+            ('directory link inside the pack', dir_link_in_pack, 'pack_inadmissible'),
+            ('link outside the roots', link_outside_roots, 'escapes R/S'),
+            ('link to an identical repository file', link_to_identical_repository_file, 'pack_inadmissible'),
+            ('stray file', stray_file, 'pack_inadmissible'),
+            ('mode change', mode_change, 'pack_inadmissible'),
+            ('byte change', byte_change, 'prepared output changed'),
+            ('FIFO', fifo, 'pack_inadmissible'),
+            ('round 8: directory linked to the repository export', None, 'pack_inadmissible'),
+        )
+        for name, mutate, reason in cases:
+            with self.subTest(case=name):
+                if mutate is None:
+                    attempt = self.attempt(make_attempt=LinkedDirectoryAttempt)
+                else:
+                    attempt = self.attempt()
+                    mutate(attempt)
+                try:
+                    code, packet = attempt.build()
+                    error = attempt.build_error
+                except ValueError as exc:
+                    # The finalizer's own pin check refused: not even an incomplete packet exists.
+                    code, packet, error = 2, None, str(exc)
+                self.assertEqual(code, 2, error)
+                self.assertIn(reason, error)
+                if packet is not None:
+                    attempt.deliver(packet)
+                    self.assertEqual(self.consumer_outcomes(attempt), (2, 'refuse', 0, 0), attempt.cli_error)
+                verdict, detail = self.launch_binding(attempt)
+                self.assertEqual(verdict, 'refuse', f'launch binding admitted what build refused: {name}')
+                self.assertIn('pack_inadmissible', detail)
+        with self.subTest(control='the copied pack'):
+            attempt = self.attempt()
+            self.assert_admitted_on_both_routes(attempt)
+            self.assertEqual(self.launch_binding(attempt), ('admit', ''))
+
     def test_r16_staged_pack_digest_is_the_committed_d134_digest(self):
-        """The recomputed pack digest is D-134's committed digest of the same bytes, in both forms."""
+        """The pack digest is D-134's committed digest of the copied pack; a linked pack has none."""
+        from joulewise import window_lineage
+
         for form in ('copy', 'link'):
             with self.subTest(form=form):
                 work = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
@@ -1427,10 +1565,12 @@ class C1ClosureTests(unittest.TestCase):
                 attempt = adapter.Attempt(work, 'valid_24_closure', form, None)
                 staged = attempt.view / closure.PACK
                 committed = self.committed_d134_digest(staged, work)
-                self.assertEqual(closure.staged_pack_sha256(closure.Roots(attempt.repo, attempt.stage)), committed)
                 self.assertEqual(adapter.staged_pack_digest(staged), committed)
-                night = closure.decode(attempt.night.read_bytes())
-                self.assertEqual(night['hazard_window']['pack']['pack_sha256'], committed)
+                if form == 'copy':
+                    self.assertEqual(window_lineage.pack_tree_digest(staged), committed)
+                else:
+                    with self.assertRaisesRegex(ValueError, 'pack_inadmissible'):
+                        window_lineage.pack_tree_digest(staged)
 
     def test_r16_previous_attempt_digest_fields_refuse_before_reservation(self):
         """Round 16 class: each digest the night plan carries is recomputed; a previous value refuses."""
@@ -1458,8 +1598,8 @@ class C1ClosureTests(unittest.TestCase):
         tree_digest = lambda attempt, night: closure.digest(  # noqa: E731
             (attempt.stage / closure.PACK / 'plan_tree.json').read_bytes() + b'\n')
         cases = (
-            ('pack digest', pack('pack_sha256', '42' * 32), 'night plan hazard_window.pack.pack_sha256'),
-            ('pack digest absent', pack('pack_sha256', None), 'night plan hazard_window.pack.pack_sha256'),
+            ('pack digest', pack('pack_sha256', '42' * 32), 'pack_inadmissible'),
+            ('pack digest absent', pack('pack_sha256', None), 'pack_inadmissible'),
             ('plan tree digest', pack('plan_tree_sha256', tree_digest), 'night plan hazard_window.pack.plan_tree_sha256'),
             ('window env digest', window_env, 'prepared control SHA-256 mismatch'),
             ('registration digest', registration, 'prepared control SHA-256 mismatch'),
