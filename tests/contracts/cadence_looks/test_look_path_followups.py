@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import runpy
 import shutil
+import stat
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
@@ -35,8 +36,8 @@ raise SystemExit(main(["stage2"]))
 """
 
 
-def mutate(world, role, fault):
-    span, runtime, bundle = FROZEN["location"](world, "L002")
+def mutate(world, role, fault, *, leg="L002"):
+    span, runtime, bundle = FROZEN["location"](world, leg)
     path = {
         "stream": FROZEN["meter"](span),
         "stream-order": FROZEN["meter"](span),
@@ -102,6 +103,56 @@ def blind_values(world):
 
 def add_diagnostic_flag(document):
     document["flags"].append("task.synthetic_telemetry.power_w=91827.375")
+
+
+def project_label(document):
+    document["run_metadata"]["project"] = "JouleWise (synthetic ambient_temp_c=19.8375)"
+
+
+def overlapping_support(raw):
+    header, *lines = raw.splitlines()
+    rows = [line.split(b",") for line in lines]
+    stamps = sorted({row[0] for row in rows}, key=float)
+    midpoint = stamps[len(stamps) // 2]
+    for row in rows:
+        if row[0] == midpoint:
+            row[4] = str(float(row[4]) - 0.5).encode()
+    return b"\n".join([header, *(b",".join(row) for row in rows)]) + b"\n"
+
+
+def overflowing_counts(world, *, shape_only=False, decode=False):
+    def work(record):
+        visible = [step for step in record["steps"] if step["kind"] == "turn"]
+        for step in visible:
+            if decode:
+                step.update(requested_tokens=10**308, actual_tokens=10**308)
+            else:
+                step["context_tokens"] = 10**308
+        if shape_only:
+            visible[-1]["first_token_ns"] = None
+
+    def episode(record):
+        if decode:
+            record["turns"][0]["decode_tokens"] = 2 * 10**308
+        else:
+            record["turns"][0].update(context_tokens=0, prefill_tokens=2 * 10**308)
+
+    mutate(world, "script", work, leg="L001")
+    mutate(world, "episode", episode, leg="L001")
+
+
+def duplicate_episode(world):
+    _, _, bundle = FROZEN["location"](world, "L001")
+    other = registrar.read(bundle / "outputs/align_episode.json")
+    identity = {name: other[name] for name in ("episode_id", "clock_domain")}
+    mutate(world, "episode", lambda episode: episode.update(identity))
+
+
+def recorded_request(world, leg, kind, key, value):
+    def change(work):
+        next(row for row in work["steps"] if row["kind"] == kind)[key] = value
+
+    mutate(world, "script", change, leg=leg)
 
 
 def single_support(raw):
@@ -395,9 +446,59 @@ class LookPathFollowupTests(TestCase):
         self.assertEqual(self.invoke(world, bench, "preflight", "guard_blind_values"), (0, b"", b""))
         self.assert_fresh(world, bench)
 
+    def test_round3_structural_faults_refuse_fresh_at_three_entry_points(self):
+        scaffold = self.stage_scaffold("round3-scaffold")
+        cases = (
+            ("count-sum", overflowing_counts),
+            ("count-shape-only", lambda world: overflowing_counts(world, shape_only=True)),
+            ("decode-sum", lambda world: overflowing_counts(world, decode=True)),
+            ("rail-overlap", lambda world: mutate(world, "rails", overlapping_support)),
+            ("duplicate-episode", duplicate_episode),
+            ("cpu-dose", lambda world: recorded_request(world, "L003", "cpu", "requested_s", 10)),
+            ("recovery-dose", lambda world: recorded_request(world, "L002", "recovery", "requested_s", 599)),
+            ("turn-dose", lambda world: recorded_request(world, "L002", "turn", "requested_tokens", 4097)),
+            ("blank-notes", lambda world: mutate(world, "config", lambda cfg: cfg["run_metadata"].update(notes=" "))),
+            ("unicode-blank-notes", lambda world: mutate(
+                world, "config", lambda cfg: cfg["run_metadata"].update(notes="\t\u2003\r"))),
+        )
+        for name, configure in cases:
+            with self.subTest(name=name):
+                world, bench = self.prepare("round3-" + name, configure=configure)
+                self.assert_refuses_at_blind_gates(world, bench, scaffold)
+
+    def test_descriptive_config_strings_are_validated_without_conversion(self):
+        def other_labels(document):
+            document["model"].update(name="\t synthetic 19.8375 \u2003", revision="19.8375")
+            document["hardware_target"]["notes"] = "synthetic 91827.375"
+            document["workload_profile"]["name"] = "synthetic 19.8375"
+            document["run_metadata"]["tags"] = ["", "\t", "synthetic 91827.375"]
+
+        for label, fault in (("project", project_label), ("other-labels", other_labels)):
+            world, bench = self.prepare("opaque-" + label, role="config", fault=fault)
+            with self.subTest(label=label, operation="stage1"):
+                self.assertEqual(self.invoke(world, bench, "stage1", "guard_blind_values"), (0, b"", b""))
+            self.assertEqual(self.invoke(world, bench, "stage1"), (0, b"", b""))
+            self.assertEqual(self.invoke(world, bench, "commit-stage1"), (0, b"", b""))
+            with self.subTest(label=label, operation="preflight"):
+                self.assertEqual(self.invoke(world, bench, "preflight", "guard_blind_values"), (0, b"", b""))
+            self.assert_fresh(world, bench)
+
+    def test_rail_edge_snapping_preserves_rounded_edges_and_gaps(self):
+        def rows(start):
+            for rail in reader.RAILS:
+                yield "10", "opaque", "powermetrics", rail, "9", "10"
+                yield "11", "opaque", "powermetrics", rail, start, "11"
+
+        for start in ("9.999999999", "10", "10.01"):
+            with self.subTest(start=start):
+                self.assertEqual(len(reader._native_grid(rows(start))), 2)
+        with self.assertRaises(blind.TimeFieldError):
+            reader._native_grid(rows("9.999999998"))
+
     def test_blind_stamp_disposition_and_opacity_survive_native_publication(self):
         def configure(world):
             blind_values(world)
+            mutate(world, "config", project_label)
             mutate(world, "episode", add_diagnostic_flag)
 
             def mismatch(work):
@@ -523,6 +624,17 @@ class LookPathFollowupTests(TestCase):
                 layout.claim(123, 456, {}, Mock())
         rmdir.assert_not_called()
         self.assertEqual((caught.exception.status, caught.exception.notice), (4, "REFUSE HALF_MADE\n"))
+
+    def test_regular_file_collision_agrees_with_freshness_check(self):
+        entry = SimpleNamespace(st_mode=stat.S_IFREG | 0o600)
+        with (patch.object(layout.os, "mkdir", side_effect=FileExistsError),
+              patch.object(layout, "_observation", return_value=entry),
+              patch.object(layout, "marker_valid", return_value=False)):
+            for call in (lambda: layout.claim(123, 456, {}, Mock()),
+                         lambda: layout.require_fresh(123, 456, [])):
+                with self.subTest(call=call), self.assertRaises(layout.GateRefusal) as caught:
+                    call()
+                self.assertEqual((caught.exception.status, caught.exception.notice), (4, "REFUSE HALF_MADE\n"))
 
     def test_bootstrap_reports_spent_before_source_layout_and_offline_checks(self):
         world, bench = self.prepare("spent")
