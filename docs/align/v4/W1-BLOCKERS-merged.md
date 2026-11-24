@@ -133,17 +133,17 @@ Steps 4-5 print two integers to stdout, `pairs` and `unavailable`, and nothing e
     step4=$(git -C "$J" rev-parse --verify --end-of-options "$STEP4_CHECKOUT^{commit}") || exit 2
     signing=$(git -C "$J" rev-parse --verify --end-of-options "$SIGNING_COMMIT^{commit}") || exit 2
     result=0
-    for path in \
+    for blob_path in \
       scripts/align_v4_u3_export.py \
       configs/campaigns/align_v4/registration/u3_sources/selection.json \
       configs/campaigns/align_v4/collection_plan.json
     do
-      used=$(git -C "$J" rev-parse --verify --end-of-options "$step4:$path") || exit 2
-      proposed=$(git -C "$J" rev-parse --verify --end-of-options "$signing:$path") || exit 2
+      used=$(git -C "$J" rev-parse --verify --end-of-options "$step4:$blob_path") || exit 2
+      proposed=$(git -C "$J" rev-parse --verify --end-of-options "$signing:$blob_path") || exit 2
       [ "$(git -C "$J" cat-file -t "$used")" = blob ] &&
         [ "$(git -C "$J" cat-file -t "$proposed")" = blob ] || exit 2
       if [ "$used" != "$proposed" ]; then
-        printf 'Changed blob: %s\n' "$path"
+        printf 'Changed blob: %s\n' "$blob_path"
         result=1
       fi
     done

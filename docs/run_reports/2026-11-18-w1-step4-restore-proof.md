@@ -16,6 +16,10 @@ and desk child used that source revision throughout. The ruling was read from
 `origin/audit/2026-11-10-fable` at
 `61e8c9c2ccfd023c82e0da048dd89f4ed854a5bc`. [RL-184 §4](https://github.com/mpmdw/JouleWise/blob/61e8c9c2ccfd023c82e0da048dd89f4ed854a5bc/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L21171-L21175)
 
+The report pin `3dfeadc0c` differs from `1fc28324d` only in three test files:
+`tests/align/test_smoke_delta3_sol1.py`, `tests/align/test_smoke_delta3_sol2.py`,
+and `tests/test_offload_window.py`.
+
 ## Step 4 blob comparison
 
 The [signing checklist](../align/v4/W1-BLOCKERS-merged.md#w1-signing-checklist-additions)
