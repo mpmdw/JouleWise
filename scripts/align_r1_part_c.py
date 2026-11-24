@@ -3873,7 +3873,7 @@ def _check_callbacks(records, load, kind, data, period, after):
     """RL-215 Q4 and EI 2, 3 and 7: the battery journal of one completed ticker against its own tick history.
 
     ``Segment._tick`` counts an attempt, samples the load (``ps`` then the monotonic stamp) or journals a load
-    error, and on every ``period``-th attempt samples the battery (the epoch stamp, then ``pmset``).
+    error, and on every ``period``-th attempt samples the battery (the epoch stamp, then the battery read).
     ``start_journals`` takes the census ``start`` then the opening battery sample; ``stop_journals`` stops the
     ticker, takes the census ``end`` then the closing sample. So, exactly:
 
