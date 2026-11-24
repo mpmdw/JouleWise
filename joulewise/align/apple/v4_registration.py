@@ -1431,13 +1431,81 @@ def verify_chain(view, handoff, ledger, tree, tree_sha256, night):
         raise ValueError('prepared chain differs from the resolved C1 dispatch')
 
 
-def check_launch_records(view, tree_raw, night, state, reserved):
-    """Bind the launch identity and locations the driver takes from the night plan.
+# The digests a night plan carries, each recomputed from this attempt before
+# launch: the pack and plan tree here, the window env and registration in
+# load_prepared. Any other digest field refuses rather than pass unchecked.
+NIGHT_DIGEST_FIELDS = frozenset({
+    ('hazard_window', 'pack', 'pack_sha256'), ('hazard_window', 'pack', 'plan_tree_sha256'),
+    ('hazard_window', 'window_env', 'sha256'), ('hazard_window', 'registration', 'sha256'),
+})
+# Every binding that names a place the chain or the launch writes.
+WRITE_ROOT_BINDINGS = ('claim_runs_root', 'bound_runs_root', 'operator_log_root', 'pre_calibration_dir',
+                       'post_calibration_dir', 'claim_backup_destination', 'bound_backup_destination',
+                       'ledger_path')
+# Roots prepare creates empty and nothing writes before the chain.
+FRESH_ROOT_BINDINGS = ('claim_runs_root', 'bound_runs_root', 'operator_log_root')
+
+
+def staged_pack_sha256(pack_root, read=None):
+    """The D-134 pack digest of the staged pack bytes this attempt launches.
+
+    This is the framing of ``arm_readiness.committed_pack_tree_sha256``. Each
+    regular file under the pack is sorted by relative path and framed as its
+    path, mode (``100755`` when executable), length and SHA-256. The bytes
+    come from the pack itself, not a git object, so C1 prepare (as
+    ``pack_digest``) and preflight compute the same value. A file link
+    frames its target, which is what every consumer reads. A directory link
+    or a special entry refuses. ``read(relative)`` may supply verified bytes.
+    """
+    from joulewise.arm_readiness import PACK_DIGEST_DOMAIN
+
+    root = Path(os.path.realpath(pack_root))
+    entries = []
+    for parent, directories, files in os.walk(root):  # never descends through a link
+        for name in directories:
+            if os.path.islink(path := os.path.join(parent, name)):
+                raise ValueError(f'C1 pack holds a directory link: {path}')
+        for name in files:
+            path = Path(parent) / name
+            try:
+                status = path.stat()
+            except OSError as exc:
+                raise ValueError(f'C1 pack entry is unreadable: {path}: {exc}') from exc
+            if not stat.S_ISREG(status.st_mode):
+                raise ValueError(f'C1 pack holds a special entry: {path}')
+            relative = path.relative_to(root)
+            raw = read(relative) if read is not None else path.read_bytes()
+            entries.append((relative.as_posix().encode('utf-8'),
+                            b'100755' if status.st_mode & 0o111 else b'100644', raw))
+    framed = bytearray(PACK_DIGEST_DOMAIN)
+    for relative, mode, raw in sorted(entries, key=lambda entry: entry[0]):
+        framed += relative + b'\0' + mode + b'\0' + str(len(raw)).encode() + b'\0' + digest(raw).encode() + b'\n'
+    return digest(bytes(framed))
+
+
+def digest_fields(value, path=()):
+    """Every (path, value) whose key names a SHA-256 digest, anywhere in ``value``."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key == 'sha256' or key.endswith('_sha256'):
+                yield path + (key,), child
+            yield from digest_fields(child, path + (key,))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            yield from digest_fields(child, path + (index,))
+
+
+def check_launch_records(view, tree_raw, night, state, reserved, execution_commit):
+    """Bind the launch identity, digests and locations the driver takes from the night plan.
 
     The driver publishes the window lineage and routes its records from the
-    night plan, not from the chain. Each field must be the value b5.plan
-    writes from this attempt's inputs. That means the rendered reservation,
-    the staged tree, the prepared session inputs and the launch view.
+    night plan, not from the chain. Each value must be derived from this
+    attempt, never trusted as the plan carries it:
+    - the rendered reservation;
+    - the staged tree and pack bytes, recomputed here;
+    - the prepared session inputs;
+    - the execution commit;
+    - the launch view.
     """
     from joulewise.b5 import driver
 
@@ -1449,21 +1517,31 @@ def check_launch_records(view, tree_raw, night, state, reserved):
     hazard = night['hazard_window']
     pack, bindings = hazard.get('pack') or {}, hazard['bindings']
     inputs = state.get('inputs') or {}
+    for field, _ in digest_fields(night):
+        if field not in NIGHT_DIGEST_FIELDS:
+            raise ValueError(f"C1 night plan carries an unverified digest field: {'.'.join(map(str, field))}")
     try:
         identity = driver.lineage_identity(hazard)  # what the lineage publisher writes
     except (KeyError, TypeError) as exc:
         raise ValueError(f'C1 night plan lacks its launch identity: {exc!r}') from exc
+    pack_root = view.root / PACK
+    # The lineage persists this digest as the plan carries it, so it must be
+    # the digest of the bytes this attempt stages, recomputed through the fence.
+    staged_pack = staged_pack_sha256(pack_root, read=lambda relative: view.locate(pack_root / relative).read_bytes())
     rows = (
         ('hazard_window.pack.window_id', identity['window_id'], reserved['window_id']),
         ('hazard_window.pack.pack_plan_id', identity['plan_id'], reserved['plan_id']),
         ('hazard_window.bracket_session_id', identity['bracket_session_id'], reserved['bracket_session_id']),
         ('hazard_window.pack.evidence_root_id', pack.get('evidence_root_id'), reserved['evidence_root_id']),
         ('hazard_window.pack.pack_id', pack.get('pack_id'), PACK.name),
+        ('hazard_window.pack.pack_sha256', pack.get('pack_sha256'), staged_pack),
         ('hazard_window.pack.plan_tree_sha256', pack.get('plan_tree_sha256'), digest(tree_raw)),
         ('hazard_window.runs_roots', hazard.get('runs_roots'),
          {'claim': bindings['claim_runs_root'], 'bound': bindings['bound_runs_root']}),
         ('hazard_window.attempt', hazard.get('attempt'), inputs.get('attempt')),
         ('plan_id', night.get('plan_id'), inputs.get('plan_id')),
+        ('repo_head', night.get('repo_head'), execution_commit),
+        ('measurement_head', night.get('measurement_head'), execution_commit),
         ('custody_root', as_path(night.get('custody_root')), as_path(inputs.get('custody_root'))),
         ('measurement_root', as_path(night.get('measurement_root')), view.root),
     )
@@ -1472,34 +1550,59 @@ def check_launch_records(view, tree_raw, night, state, reserved):
             raise ValueError(f"C1 night plan {field} is {observed!r}, not this attempt's {expected!r}")
 
 
-def check_fresh_runs_roots(bindings):
-    """Each runs root is still absent, or the empty real directory prepare made.
+def check_write_roots(stage_root, night, state):
+    """Every root the launch writes is this attempt's own, and still fresh.
 
-    b5.plan refuses an existing runs root and creates both empty, since a
-    window never reuses a runs root. Preflight re-asserts that before arm.
-    An entry placed there since would take this attempt's writes. That
-    covers a link, a copied or hard-linked log, a stale bound, bundle or
-    lock, or a linked capture root.
+    The attempt's own directory is the one that holds its verified staged
+    inputs (the session root in production). It is derived from the handoff,
+    never taken from the plan. Each write root must resolve (realpath)
+    inside it. The runs roots and the operator log root are created empty
+    by prepare and nothing writes to them before the chain, so each must
+    still be absent or an empty directory that is not a link. The custody
+    root may hold records, but no link at or below it.
     """
-    for name in ('claim_runs_root', 'bound_runs_root'):
-        root = Path(bindings[name])
-        if os.path.islink(root):
-            raise ValueError(f'C1 {name} is a link: {root} -> {os.readlink(root)}')
-        if not os.path.lexists(root):
-            continue
-        if not root.is_dir():
-            raise ValueError(f'C1 {name} is not a directory: {root}')
-        if entries := sorted(os.listdir(root)):
-            raise ValueError(f'C1 {name} is not empty, so this attempt would write through '
-                             f'{entries[0]!r}: {root}')
+    attempt = Path(os.path.realpath(stage_root)).parent
+    bindings = night['hazard_window']['bindings']
+    roots = []
+    for name in WRITE_ROOT_BINDINGS:
+        if not isinstance(bindings.get(name), str) or not bindings[name]:
+            raise ValueError(f'C1 binding {name} is missing')
+        roots.append((name, bindings[name]))
+    roots += [('custody_root', night['custody_root']), ('session_root', state['session_root'])]
+    for name, value in roots:
+        if not Path(real := os.path.realpath(value)).is_relative_to(attempt):
+            raise ValueError(f"C1 {name} resolves outside this attempt's directory {attempt}: {value} -> {real}")
+    for name in FRESH_ROOT_BINDINGS:
+        check_fresh_root(name, bindings[name])
+    check_no_links('custody_root', night['custody_root'])
+
+
+def check_fresh_root(name, value):
+    """A root prepare created empty is still absent, or an empty directory that is not a link.
+
+    b5.plan creates both runs roots and the operator log root empty, and a
+    window never reuses one. An entry placed there since would take this
+    attempt's writes. That covers a link, a copied or hard-linked log, a
+    stale bound, bundle or lock, or a linked capture root.
+    """
+    root = Path(value)
+    if os.path.islink(root):
+        raise ValueError(f'C1 {name} is a link: {root} -> {os.readlink(root)}')
+    if not os.path.lexists(root):
+        return
+    if not root.is_dir():
+        raise ValueError(f'C1 {name} is not a directory: {root}')
+    if entries := sorted(os.listdir(root)):
+        raise ValueError(f'C1 {name} is not empty, so this attempt would write through '
+                         f'{entries[0]!r}: {root}')
 
 
 def check_no_links(name, root):
     """A record root the launch writes into holds no link at or below it.
 
-    The custody root takes the lineage and night records, and the operator
-    log root takes the chain's logs. Both may already hold ordinary records,
-    but a link there would send this attempt's writes to another place.
+    The custody root takes the lineage and night records. It may already
+    hold ordinary records, but a link there would send this attempt's writes
+    to another place.
     """
     root = Path(root)
     if os.path.islink(root):
@@ -1529,11 +1632,9 @@ def prepared_closure(authority, verified_roots, handoff, read):
     selections = check_selections(view, tree, night, ledger, c1_inputs=execution_inputs(handoff, ledger))
     verify_chain(view, handoff, ledger, tree, digest(tree_raw), night)
     # Last, so every earlier refusal keeps its own reason.
-    check_launch_records(view, tree_raw, night, state, selections.get('reservation'))
-    check_fresh_runs_roots(night['hazard_window']['bindings'])
-    for name, root in (('custody_root', night['custody_root']),
-                       ('operator_log_root', night['hazard_window']['bindings']['operator_log_root'])):
-        check_no_links(name, root)
+    check_launch_records(view, tree_raw, night, state, selections.get('reservation'),
+                         handoff['execution_commit'])
+    check_write_roots(verified_roots.stage, night, state)
     closure = {'schema': SCHEMA, 'repo': tree_identity(authority, handoff['execution_commit']),
                'stage_files': pins, 'ledger': ledger}
     return closure, state, night, tree, view, selections

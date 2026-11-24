@@ -485,7 +485,13 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
         inputs['ac_powermode'] = ac_powermode
     record = None
     try:
-        options = {'controls_root': stage / 'controls', 'c1_inputs': runtime_inputs} if c1 else {}
+        options = {}
+        if c1:
+            from joulewise.align.apple import v4_registration as c1_closure
+            # The C1 pack is staged, not a git checkout: record the digest of the
+            # staged bytes, which preflight recomputes before reservation.
+            options = {'controls_root': stage / 'controls', 'c1_inputs': runtime_inputs,
+                       'pack_digest': c1_closure.staged_pack_sha256}
         record = plan.write_window_plan(inputs, now=now, **options)
     except plan.WindowPlanError as exc:
         # A missing/stale calibration ledger or another record condition is a

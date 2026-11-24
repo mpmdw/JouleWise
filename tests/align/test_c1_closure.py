@@ -1226,7 +1226,8 @@ class C1ClosureTests(unittest.TestCase):
         cases = (
             ('custody night directory links to a previous attempt', linked_night, 'custody_root holds a link'),
             ('custody root is a link', linked_custody, 'custody_root is a link'),
-            ('operator log links to a previous attempt', linked_operator_log, 'operator_log_root holds a link'),
+            # Since round 16 the operator log root must be fresh, so any entry refuses.
+            ('operator log links to a previous attempt', linked_operator_log, 'operator_log_root is not empty'),
         )
         for name, place, detail in cases:
             with self.subTest(case=name):
@@ -1311,6 +1312,28 @@ class C1ClosureTests(unittest.TestCase):
                 self.assert_refused_on_both_routes(attempt, detail)
                 self.assertEqual(self.tree_bytes(previous), before)
                 self.assertEqual((previous / 'operator-logs/window-chain.log').read_bytes(), record)
+
+    def test_r16_staged_pack_digest_is_the_committed_d134_digest(self):
+        """The recomputed pack digest is D-134's committed digest of the same bytes, in both forms."""
+        from joulewise.arm_readiness import committed_pack_tree_sha256
+
+        for form in ('copy', 'link'):
+            with self.subTest(form=form):
+                work = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+                subprocess.run(['git', 'clone', '-q', '--bare', HERE / 'suite/history.bundle', work / 'history.git'],
+                               check=True)
+                attempt = adapter.Attempt(work, 'valid_24_closure', form, None)
+                staged = attempt.view / closure.PACK
+                reference = work / 'committed'
+                shutil.copytree(staged, reference / 'pack', symlinks=False)
+                for argv in (['init', '-q'], ['add', '-f', 'pack'], ['-c', 'user.name=invented', '-c',
+                             'user.email=invented@invalid', 'commit', '-qm', 'invented pack']):
+                    subprocess.run(['git', '-C', str(reference), *argv], check=True, capture_output=True)
+                committed = committed_pack_tree_sha256(reference / 'pack')
+                self.assertEqual(closure.staged_pack_sha256(staged), committed)
+                self.assertEqual(adapter.staged_pack_digest(staged), committed)
+                night = closure.decode(attempt.night.read_bytes())
+                self.assertEqual(night['hazard_window']['pack']['pack_sha256'], committed)
 
     def test_r16_previous_attempt_digest_fields_refuse_before_reservation(self):
         """Round 16 class: each digest the night plan carries is recomputed; a previous value refuses."""
