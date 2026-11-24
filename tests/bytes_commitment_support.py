@@ -94,10 +94,13 @@ def commit_journal(repo):
 def commitment_command(command):
     """Patch ROOT only in test processes, never add a production bypass for R-04."""
     args = list(map(str, command))
-    if '--commitment-repo' not in args or '-c' in args:
+    if '-c' in args:
         return args
     script = next((i for i, a in enumerate(args) if a.endswith('.py')), None)
     if script is None:
+        return args
+    if '--commitment-repo' not in args and (Path(args[script]).name not in {'bytes_analyze.py', 'bytes_twin.py'}
+                                            or '--export-seal-repo' in args):
         return args
     return [*args[:script], str(Path(__file__).resolve()), '--run-cli', *args[script:]]
 
@@ -107,20 +110,27 @@ def synthetic_checkout(options):
     """Bind the loaded guard to a temporary repo; emulate committing after each command."""
     from scripts import bytes_commitment as bc
     args = list(map(str, options))
-    if '--commitment-repo' not in args:
-        yield
-        return
-    repo = Path(args[args.index('--commitment-repo') + 1])
-    run = subprocess.run
-
-    def wrapped(command, *positional, **kwargs):
-        return run(commitment_command(command), *positional, **kwargs)
-
-    with mock.patch.object(bc, 'ROOT', repo), mock.patch.object(subprocess, 'run', side_effect=wrapped):
-        try:
+    with contextlib.ExitStack() as stack:
+        if '--export-seal-repo' not in args:
+            # Legacy arithmetic fixtures directly test reader behavior below the seal.
+            from scripts import bytes_analyze, bytes_twin
+            stack.enter_context(mock.patch.object(bytes_analyze, '_check_export', create=True))
+            stack.enter_context(mock.patch.object(bytes_twin, '_check_export', create=True))
+            if hasattr(bc, 'bytes_integrity'):
+                stack.enter_context(mock.patch.object(bc.bytes_integrity, 'verify'))
+        if '--commitment-repo' not in args:
             yield
-        finally:
-            commit_journal(repo)
+            return
+        repo = Path(args[args.index('--commitment-repo') + 1])
+        run = subprocess.run
+
+        def wrapped(command, *positional, **kwargs):
+            return run(commitment_command(command), *positional, **kwargs)
+
+        stack.enter_context(mock.patch.object(bc, 'ROOT', repo))
+        stack.enter_context(mock.patch.object(subprocess, 'run', side_effect=wrapped))
+        stack.callback(commit_journal, repo)
+        yield
 
 
 if __name__ == '__main__':
@@ -131,7 +141,8 @@ if __name__ == '__main__':
     sys.path.insert(0, str(Path(script).resolve().parents[1]))
     sys.argv = [script, *arguments]
     with synthetic_checkout(arguments):
-        if Path(script).name == 'bytes_commitment.py':
-            from scripts import bytes_commitment as bc
-            raise SystemExit(bc.main(arguments))
+        if Path(script).name in {'bytes_analyze.py', 'bytes_twin.py', 'bytes_commitment.py'}:
+            import importlib
+            module = importlib.import_module('scripts.' + Path(script).stem)
+            raise SystemExit(module.main(arguments))
         runpy.run_path(script, run_name='__main__')

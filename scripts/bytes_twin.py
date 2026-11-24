@@ -2855,6 +2855,24 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
             "stage1_commit": {"content": stage1, "sha256": stage1_hash}}
 
 
+def _check_export(args, read_withheld):
+    checker = Path(__file__).resolve().parents[1] / "joulewise/b6/bytes_integrity.py"
+    stage = "heldout" if read_withheld else "fit" if args.stage == "1" else "blinded"
+    command = [sys.executable, str(checker), "--stage", stage, "--manifest", str(args.manifest)]
+    for flag, paths in (("--table", args.export), ("--archive", args.archive)):
+        for path in paths:
+            command += [flag, str(path)]
+    for flag, value in (("--export-dir", args.export_dir), ("--key-dir", args.key_dir),
+                        ("--export-seal-repo", args.export_seal_repo), ("--export-seal-commit", args.export_seal_commit)):
+        if value is not None:
+            command += [flag, str(value)]
+    if args.no_key_probe:
+        command.append("--no-key-probe")
+    checked = subprocess.run(command, capture_output=True, text=True, check=False)
+    if checked.returncode:
+        raise ValueError(checked.stderr.strip() or "BYTES export manifest refused")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--export", action="append", default=[], type=Path, help="a <session>.runs.csv (repeatable)")
@@ -2869,25 +2887,27 @@ def main(argv=None):
     parser.add_argument("--predictions", type=Path, help="committed stage-1 predictions (default: receipt locator)")
     parser.add_argument("--commitment-repo", type=Path)
     parser.add_argument("--stage1-receipt", type=Path)
+    parser.add_argument("--export-seal-repo", type=Path)
+    parser.add_argument("--export-seal-commit")
+    parser.add_argument("--no-key-probe", action="store_true")
     args = parser.parse_args(argv)
-    exports = list(args.export)
-    if args.export_dir:
-        exports += sorted(args.export_dir.rglob("*.runs.csv"))
-        exports += sorted(p.with_name(p.name.removesuffix(".session.json") + ".runs.csv")
-                          for p in args.export_dir.rglob("*.session.json"))
-    # Each file is read once.  A withheld store may also be named with --export (the convention
-    # before the store was located through the sidecar); its rows then enter once, not twice.
-    named, unique = set(), []
-    for path in exports:
-        if path.resolve() not in named:
-            named.add(path.resolve())
-            unique.append(path)
-    exports = unique
     # Lead ruling 2026-10-20 item 1: a held-out configuration's withheld rows enter only after the
     # stage-1 commit (stage 2, or the blinded post-commit agreement run named by --stage1-commit).
     read_withheld = args.stage == "2" or (args.stage == "blinded" and bool(args.stage1_commit))
     # Addendum 7 D7: a refusal is printed as "refused: <reason>" with exit 1, never a traceback.
     try:
+        _check_export(args, read_withheld)
+        exports = list(args.export)
+        if args.export_dir:
+            exports += sorted(args.export_dir.rglob("*.runs.csv"))
+            exports += sorted(p.with_name(p.name.removesuffix(".session.json") + ".runs.csv")
+                              for p in args.export_dir.rglob("*.session.json"))
+        named, unique = set(), []
+        for path in exports:
+            if path.resolve() not in named:
+                named.add(path.resolve())
+                unique.append(path)
+        exports = unique
         if not exports:
             raise ValueError("no export given")
         verification = None
@@ -2898,7 +2918,8 @@ def main(argv=None):
                      "--event", "heldout_rows" if args.stage == "blinded" else "heldout_analysis",
                      "--stage1-commit", args.stage1_commit or ""]
             for flag, value in (("--predictions", args.predictions), ("--commitment-repo", args.commitment_repo),
-                                ("--stage1-receipt", args.stage1_receipt)):
+                                ("--stage1-receipt", args.stage1_receipt), ("--export-seal-repo", args.export_seal_repo),
+                                ("--export-seal-commit", args.export_seal_commit)):
                 if value is not None:
                     guard += [flag, str(value)]
             if args.key_dir:

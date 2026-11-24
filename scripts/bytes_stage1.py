@@ -44,6 +44,7 @@ if str(ROOT) not in sys.path:
 
 from joulewise import bytes_analysis as ba  # noqa: E402
 from joulewise.b6 import blinding  # noqa: E402
+from joulewise.b6 import bytes_integrity  # noqa: E402
 
 GROUP = "bytes"
 # Registration section 13 / section 21 item 2: the agreeing estimator digest both passes bind.
@@ -294,7 +295,7 @@ def _expected_no_key_refusals(out, exits, empty, manifest):
 
 def run_stage1(manifest_path, export_dirs, pack_records_root, out_root, *, python=sys.executable,
                release_fn=_release_fit, require_registered_estimator=True, wrap=lambda command: command,
-               census_sessions=None, census_warnings=(), check_registered_models=True):
+               census_sessions=None, census_warnings=(), check_registered_models=True, export_seal_repo=None):
     """Pre-commit stage-1 sequence. Returns (exit code, summary).
 
     The summary is written even when a later step raises (verdict ABORTED_ON_ERROR)."""
@@ -314,6 +315,8 @@ def run_stage1(manifest_path, export_dirs, pack_records_root, out_root, *, pytho
     if census_sessions is not None and sorted(s["session_id"] for s in manifest["sessions"]) != sorted(census_sessions):
         raise Stage1Error("manifest sessions differ from the census sessions")
     heads = _git_state()
+    seal_repo = Path(export_seal_repo or export_dirs[0]).resolve()
+    captured = bytes_integrity.capture(seal_repo, manifest_path, export_dirs, pack_records_root)
     o = out_root / "out"
     o.mkdir(parents=True)
     empty = out_root / "no-keys"
@@ -323,6 +326,7 @@ def run_stage1(manifest_path, export_dirs, pack_records_root, out_root, *, pytho
                "producing_tree_dirty": heads[1], "bytes_analysis_sha256": estimator,
                "manifest_file_sha256": sha256_file(manifest_path), "manifest_sha256": ba.digest(manifest),
                "exports": [str(Path(d).resolve()) for d in export_dirs], "exits": {},
+               "export_seal_repo": str(seal_repo), "export_capture_commit": captured,
                "census_warnings": list(census_warnings)}
     analysis = [python, str(ROOT / "scripts/bytes_analyze.py"), "--manifest", str(manifest_path), "--export",
                 *[str(d) for d in export_dirs]]
@@ -334,6 +338,7 @@ def run_stage1(manifest_path, export_dirs, pack_records_root, out_root, *, pytho
             twin += ["--export", str(table)]
     for session in manifest["sessions"]:
         twin += ["--archive", session["archive"]]
+    capture_options = bytes_integrity.options(seal_repo, captured)
 
     def run(tag, command):
         result = subprocess.run(wrap(command), cwd=ROOT, capture_output=True, text=True, check=False)
@@ -349,8 +354,8 @@ def run_stage1(manifest_path, export_dirs, pack_records_root, out_root, *, pytho
         return code, summary
 
     try:
-        run("a-blinded", analysis + ["--stage", "blinded", "--out", str(o / "a-blinded")])
-        run("t-blinded", twin + ["--stage", "blinded", "--out", str(o / "t-blinded.json")])
+        run("a-blinded", analysis + capture_options + ["--stage", "blinded", "--out", str(o / "a-blinded")])
+        run("t-blinded", twin + capture_options + ["--stage", "blinded", "--out", str(o / "t-blinded.json")])
         recorder = compare_campaign(out_root)
         summary["blinded_agreement"] = _counts(recorder)
         (out_root / "agreement-blinded.json").write_text(json.dumps(recorder.rows, sort_keys=True, indent=1, default=str) + "\n")
@@ -361,8 +366,8 @@ def run_stage1(manifest_path, export_dirs, pack_records_root, out_root, *, pytho
         summary["blinded_completeness"] = _agreement_complete(o, recorder, "blinded")
         if any(summary["blinded_completeness"].values()):
             return finish(8, "STOPPED_BLINDED_INCOMPLETE")
-        run("a-fit-nokeys", analysis + ["--stage", "fit", "--key-dir", str(empty), "--out", str(o / "a-fit-nokeys")])
-        run("t-1-nokeys", twin + ["--stage", "1", "--key-dir", str(empty), "--out", str(o / "t-1-nokeys.json")])
+        run("a-fit-nokeys", analysis + capture_options + ["--no-key-probe", "--stage", "fit", "--key-dir", str(empty), "--out", str(o / "a-fit-nokeys")])
+        run("t-1-nokeys", twin + capture_options + ["--no-key-probe", "--stage", "1", "--key-dir", str(empty), "--out", str(o / "t-1-nokeys.json")])
         if summary["exits"]["a-fit-nokeys"] == 0 or summary["exits"]["t-1-nokeys"] == 0:
             return finish(4, "STOPPED_STAGE1_RAN_WITHOUT_KEYS")
         if not _expected_no_key_refusals(o, summary["exits"], empty, manifest):
@@ -370,8 +375,11 @@ def run_stage1(manifest_path, export_dirs, pack_records_root, out_root, *, pytho
         keys = sorted({blinding.REFERENCE_KEY, *(m["config_key"] for m in manifest["models"] if m["role"] == "fit")})
         record = release_fn(pack_records_root, keys, released)
         summary["release"] = {"keys": keys, "record": {k: record.get(k) for k in ("stage", "keys", "sha256", "released_utc")}}
-        run("a-fit", analysis + ["--stage", "fit", "--key-dir", str(released), "--out", str(o / "a-fit")])
-        run("t-1", twin + ["--stage", "1", "--key-dir", str(released), "--out", str(o / "t-1.json")])
+        finalized = bytes_integrity.finalize(seal_repo, captured, released)
+        summary["export_seal_commit"] = finalized
+        fit_options = bytes_integrity.options(seal_repo, finalized)
+        run("a-fit", analysis + fit_options + ["--stage", "fit", "--key-dir", str(released), "--out", str(o / "a-fit")])
+        run("t-1", twin + fit_options + ["--stage", "1", "--key-dir", str(released), "--out", str(o / "t-1.json")])
         recorder = compare_campaign(out_root)
         summary["stage1_agreement"] = _counts(recorder)
         (out_root / "agreement-stage1.json").write_text(json.dumps(recorder.rows, sort_keys=True, indent=1, default=str) + "\n")
@@ -416,6 +424,7 @@ def main(argv=None):
     r.add_argument("--manifest", required=True, type=Path)
     r.add_argument("--export", nargs="+", required=True, type=Path)
     r.add_argument("--pack-records-root", required=True, type=Path)
+    r.add_argument("--export-seal-repo", type=Path, help="private export Git root (default: first export directory)")
     r.add_argument("--out", required=True, type=Path)
     args = parser.parse_args(argv)
     try:
@@ -442,8 +451,9 @@ def main(argv=None):
             raise Stage1Error("census refused; stage 1 not started")
         code, summary = run_stage1(args.manifest, args.export, args.pack_records_root, args.out,
                                    census_sessions=[s["session_id"] for s in record["sessions"]],
-                                   census_warnings=record["warnings"])
-        print(json.dumps({k: summary.get(k) for k in ("verdict", "exit", "predictions_sha256", "exits")}, sort_keys=True))
+                                   census_warnings=record["warnings"], export_seal_repo=args.export_seal_repo)
+        print(json.dumps({k: summary.get(k) for k in ("verdict", "exit", "predictions_sha256", "exits",
+                                                      "export_seal_repo", "export_seal_commit")}, sort_keys=True))
         return code
     except (Stage1Error, ba.AnalysisError, OSError, ValueError, KeyError) as exc:
         print(f"bytes stage 1 refused: {exc}", file=sys.stderr)

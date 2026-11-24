@@ -182,7 +182,8 @@ class EntryPointTests(unittest.TestCase):
             fixture.touch()
             args = SimpleNamespace(export=[fixture], export_dir=None, stage='blinded', stage1_commit=None,
                                    manifest=Path(tmp) / 'manifest.json', key_dir=None)
-            with mock.patch.object(bytes_twin, 'read_manifest', return_value={}):
+            with mock.patch.object(bytes_twin, 'read_manifest', return_value={}), \
+                    mock.patch.object(bytes_twin, '_check_export'):
                 self.check_main(bytes_twin, args, 'read_export', 1, stdout=True, error_type=bytes_twin.StorageStop)
 
     def test_operator_restore_formats_storage_stop(self):

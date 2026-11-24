@@ -31,6 +31,13 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests/fixtures/bytes"
 
 
+def setUpModule():
+    # Estimator fixtures in this module exercise the readers beneath the seal.
+    patcher = patch.object(bytes_analyze, '_check_export')
+    patcher.start()
+    unittest.addModuleCleanup(patcher.stop)
+
+
 class NumericTestCase(unittest.TestCase):
     def assertAlmostEqual(self, first, second, places=None, msg=None, delta=None):
         # With no printed half-width, the brief specifies 1e-6 relative or

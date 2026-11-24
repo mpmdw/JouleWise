@@ -87,12 +87,13 @@ def run(root: Path, out_name="out", *, two_stage=True):
             shutil.rmtree(d)
     err = io.StringIO()
     codes = []
-    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+    from tests.bytes_commitment_support import synthetic_checkout
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err), synthetic_checkout([]):
         codes.append(bytes_analyze.main(["--export", str(root / "export"), "--manifest", str(root / "manifest.json"),
                                          "--stage", "fit", "--out", str(out_fit)]))
         if codes[-1] == 0 and two_stage:
             # RL-7a: the held-out stage runs against a synthetic commitment of the fit predictions.
-            from tests.bytes_commitment_support import fixture_options, synthetic_checkout
+            from tests.bytes_commitment_support import fixture_options
             options = fixture_options(root, out_fit / "predictions.json")
             with synthetic_checkout(options):
                 codes.append(bytes_analyze.main(["--export", str(root / "export"), "--manifest", str(root / "manifest.json"),

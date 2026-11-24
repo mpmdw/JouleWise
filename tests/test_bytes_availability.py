@@ -26,7 +26,7 @@ from joulewise.b6.smoke import reduce_tree
 from joulewise.reduce import _verify_instrument_calibration
 from scripts import bytes_analyze, bytes_commitment, bytes_twin
 from tests import test_bytes_agreement as agreement
-from tests.bytes_commitment_support import commitment_fixture
+from tests.bytes_commitment_support import commitment_fixture, commit_journal
 from tests.desk_restore_support import compress_member
 
 TABLE = agreement.FIXTURES / "availability_contract.json"
@@ -152,7 +152,10 @@ class AvailabilityFixture:
         try:
             if fit_cli:
                 primary_out = scratch / "primary"
-                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                # This matrix exercises faults below the seal. The real entry
+                # gates are exercised on the separate, committed seal fixture.
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()), \
+                        patch.object(bytes_analyze, "_check_export"):
                     primary_status = bytes_analyze.main(["--export", str(export.parents[1]), "--manifest",
                         str(self.manifest_path), "--key-dir", str(keys), "--stage", "fit", "--out", str(primary_out)])
                 passes = agreement.load(primary_out / "fit_pass_estimates.json")
@@ -169,7 +172,8 @@ class AvailabilityFixture:
         if stage == "heldout":
             twin_status, twin = self.heldout_twin(export, keys)
         else:
-            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()), \
+                    patch.object(bytes_twin, "_check_export"):
                 twin_status = bytes_twin.main(["--export-dir", str(export.parents[1]), "--manifest", str(self.manifest_path),
                     *[arg for archive in self.archives for arg in ("--archive", str(archive))],
                     "--key-dir", str(keys), "--stage", modes[stage], "--out", str(output)])
@@ -960,7 +964,7 @@ class BytesAvailabilityTests(unittest.TestCase):
                                 target = (private / "bytes/blinding-sessions" / f"{SESSION}.json"
                                           if row_id == "export_key_binding" else file)
                                 with file_fault(target, fault):
-                                    if row_id == "export_key_binding" and fault != "absent":
+                                    if row_id == "export_key_binding":
                                         with self.assertRaises(ValueError):
                                             fixture.export_again(scratch / "export", private)
                                         compared += 1
@@ -993,7 +997,9 @@ class BytesAvailabilityTests(unittest.TestCase):
             journal = repo / bytes_commitment.JOURNAL
             release = root / "release.json"
             release.write_text('{"stage":"fit"}')
-            journal.write_text("\n\n")
+            entry = {"event": "heldout_rows", "unblinded_utc": "2026-11-02T10:00:00+00:00", "stage1_commit": commit}
+            journal.write_text((json.dumps(entry) + "\n") * 2)
+            commit_journal(repo)
             source = repo / "joulewise/bytes_analysis.py"
             locator = {"prediction": (prediction, prediction.with_suffix(".sha256")), "push_receipt": (receipt,),
                        "journal": (journal,), "release_record": (release,), "source_digests": (source,)}
@@ -1011,10 +1017,10 @@ class BytesAvailabilityTests(unittest.TestCase):
                     for fault in CONTRACT[row_id]["faults"]:
                         for phase in PHASES:
                             with self.subTest(timing=timing, file=file.name, fault=fault, phase=phase):
-                                expected = (row_id == "journal" and fault in {"zero", "half"}
-                                            or row_id == "release_record" and fault == "absent")
+                                expected = row_id == "release_record" and fault == "absent"
                                 with file_fault(file, fault), patch.object(bytes_commitment, "ROOT", repo), patch.object(
-                                        bytes_commitment, "_blob", side_effect=blob):
+                                        bytes_commitment, "_blob", side_effect=blob), patch.object(
+                                        bytes_commitment.bytes_integrity, "verify"):
                                     if phase == "before_export":
                                         scratch = root / f"{file.name}-{fault}-{phase}"
                                         fixture.export_again(scratch / "export", scratch / "private")

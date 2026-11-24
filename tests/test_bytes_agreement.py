@@ -1530,6 +1530,13 @@ def run_both(root, manifest, *, verify_fit_rerun=False):
     private = root / "private-keys/bytes/blinding"
     released = root / "released-keys/bytes/blinding"
     assert list(released.iterdir()) == []
+    from joulewise.b6 import bytes_integrity
+    export = root / "export"
+    capture_options, fit_options, probe = [], [], []
+    if (private.parent / "blinding-sessions").is_dir():
+        captured = bytes_integrity.capture(export, root / "manifest.json", [export], root / "private-keys")
+        capture_options = bytes_integrity.options(export, captured)
+        probe = ["--no-key-probe"]
     analysis = [sys.executable, str(ROOT / "scripts/bytes_analyze.py"),
                 "--export", str(root / "export"), "--manifest", str(root / "manifest.json")]
     twin = [sys.executable, str(ROOT / "scripts/bytes_twin.py"),
@@ -1544,15 +1551,19 @@ def run_both(root, manifest, *, verify_fit_rerun=False):
         (o / (tag + ".stderr")).write_text(result.stderr)
         return result.returncode
 
-    run("a-blinded", analysis + ["--stage", "blinded", "--out", str(o / "a-blinded")])
-    run("t-blinded", twin + ["--stage", "blinded", "--out", str(o / "t-blinded.json")])
+    run("a-blinded", analysis + capture_options + ["--stage", "blinded", "--out", str(o / "a-blinded")])
+    run("t-blinded", twin + capture_options + ["--stage", "blinded", "--out", str(o / "t-blinded.json")])
     # Stage 1 before any release must refuse on both sides.
-    run("a-fit-nokeys", analysis + ["--stage", "fit", "--key-dir", str(released), "--out", str(o / "a-fit-nokeys")])
-    run("t-1-nokeys", twin + ["--stage", "1", "--key-dir", str(released), "--out", str(o / "t-1-nokeys.json")])
+    run("a-fit-nokeys", analysis + capture_options + probe + ["--stage", "fit", "--key-dir", str(released), "--out", str(o / "a-fit-nokeys")])
+    run("t-1-nokeys", twin + capture_options + probe + ["--stage", "1", "--key-dir", str(released), "--out", str(o / "t-1-nokeys.json")])
     # Stage-1 release: the fit set's keys and the NEG-8 reference key (Addendum 3 item 1).
     fit_keys = {"neg8_reference", *(m["model"] + "|bytes-synthetic|512" for m in manifest["models"] if m["role"] == "fit")}
     for name in sorted({"pack.json", *(blinding._config_filename(k) for k in fit_keys)}):
         shutil.copyfile(private / name, released / name)
+    if capture_options:
+        fit_options = bytes_integrity.options(export, bytes_integrity.finalize(export, captured, released))
+    analysis += fit_options
+    twin += fit_options
     run("a-fit", analysis + ["--stage", "fit", "--key-dir", str(released), "--out", str(o / "a-fit")])
     run("t-1", twin + ["--stage", "1", "--key-dir", str(released), "--out", str(o / "t-1.json")])
     predictions = o / "a-fit/predictions.json"
@@ -1591,6 +1602,11 @@ def run_both(root, manifest, *, verify_fit_rerun=False):
 
 
 def setUpModule():
+    # Direct entry calls in this module probe reader internals. Subprocess
+    # campaigns use the real seal whenever they have grouped export bindings.
+    patcher = mock.patch.object(bt, '_check_export')
+    patcher.start()
+    unittest.addModuleCleanup(patcher.stop)
     WORK["dir"] = tempfile.TemporaryDirectory(prefix="bytes-agreement-")
     WORK["root"] = Path(WORK["dir"].name)
 

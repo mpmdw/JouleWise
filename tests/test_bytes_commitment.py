@@ -9,7 +9,14 @@ from unittest import mock
 
 from scripts import bytes_analyze as analysis
 from scripts import bytes_commitment as bc
-from tests.bytes_commitment_support import commitment_fixture, git, activity_json, ORIGIN_REF, REMOTE_REF
+from tests.bytes_commitment_support import commitment_fixture, commit_journal, git, activity_json, ORIGIN_REF, REMOTE_REF
+
+
+def setUpModule():
+    # These fixtures target prediction and journal checks beyond the export seal.
+    for patcher in (mock.patch.object(bc.bytes_integrity, 'verify'), mock.patch.object(analysis, '_check_export')):
+        patcher.start()
+        unittest.addModuleCleanup(patcher.stop)
 
 
 class CommitmentGateTests(unittest.TestCase):
@@ -226,6 +233,58 @@ class CommitmentGateTests(unittest.TestCase):
         self.assertEqual(len(self.journal.read_text().splitlines()), 2)
         self.assertIn('commit and push', error.getvalue())
 
+    def test_verification_and_admission_refuse_journal_truncation_or_replacement(self):
+        from types import SimpleNamespace
+        args = SimpleNamespace(stage1_commit=self.commit, commitment_repo=self.repo, stage1_receipt=self.receipt)
+        with contextlib.redirect_stderr(io.StringIO()):
+            for event in ('heldout_rows', 'heldout_keys'):
+                bc.admit(args, event)
+                commit_journal(self.repo)
+
+        complete = self.journal.read_bytes()
+        first, second = complete.splitlines(keepends=True)
+        self.assertEqual(len(first), len(second))
+        self.assertEqual(first, complete[:len(complete) // 2])
+        for damaged in (b'', first, complete.replace(b'heldout_rows', b'heldout_keys', 1)):
+            with self.subTest(size=len(damaged)):
+                self.journal.write_bytes(damaged)
+                with self.assertRaisesRegex(ValueError, 'commit and push'):
+                    bc.verify_commitment(self.commit, repo=self.repo)
+                with self.assertRaisesRegex(ValueError, 'commit and push'):
+                    bc.admit(args, 'heldout_analysis')
+                self.assertEqual(self.journal.read_bytes(), damaged)
+
+        self.journal.write_bytes(complete)
+        bc.verify_commitment(self.commit, repo=self.repo)
+        with contextlib.redirect_stderr(io.StringIO()):
+            bc.admit(args, 'heldout_analysis')
+        self.assertEqual(len(self.journal.read_bytes().splitlines()), 3)
+
+    def test_verification_and_admission_refuse_committed_journal_rewrites(self):
+        from types import SimpleNamespace
+        for fault in ('empty', 'prefix', 'edit'):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory(prefix='bytes-journal-rollback-') as directory:
+                repo, predictions, receipt, commit = commitment_fixture(directory)
+                args = SimpleNamespace(stage1_commit=commit, commitment_repo=repo, stage1_receipt=receipt)
+                journal = repo / bc.JOURNAL
+                with mock.patch.object(bc, 'ROOT', repo), contextlib.redirect_stderr(io.StringIO()):
+                    bc.verify_commitment(commit, predictions, repo=repo)
+                    for event in ('heldout_rows', 'heldout_keys'):
+                        bc.admit(args, event)
+                        commit_journal(repo)
+                    complete = journal.read_bytes()
+                    bc.verify_commitment(commit, predictions, repo=repo)
+                    damaged = {'empty': b'', 'prefix': complete.splitlines(keepends=True)[0],
+                               'edit': complete.replace(b'heldout_rows', b'heldout_keys', 1)}[fault]
+                    journal.write_bytes(damaged)
+                    commit_journal(repo)
+                    self.assertEqual(bc._blob(repo, 'HEAD', bc.JOURNAL), damaged)
+                    with self.assertRaisesRegex(ValueError, 'must extend every committed version'):
+                        bc.verify_commitment(commit, predictions, repo=repo)
+                    with self.assertRaisesRegex(ValueError, 'must extend every committed version'):
+                        bc.admit(args, 'heldout_analysis')
+                    self.assertEqual(journal.read_bytes(), damaged)
+
     def test_foreign_commitment_checkout_is_refused_even_when_valid(self):
         other = self.repo.parent / 'other'
         other.mkdir()
@@ -294,7 +353,7 @@ class EntrypointGateTests(unittest.TestCase):
                         contextlib.redirect_stderr(io.StringIO()) as err, \
                         mock.patch.object(Path, 'open', side_effect=AssertionError('source opened before preflight')) as opened:
                     self.assertEqual(main(args), 1)
-                    self.assertIn('BYTES commitment', out.getvalue() + err.getvalue())
+                    self.assertRegex(out.getvalue() + err.getvalue(), r'BYTES (commitment|export manifest)')
                     opened.assert_not_called()
             self.assertEqual(list(root.iterdir()), [])
 

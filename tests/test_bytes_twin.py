@@ -45,6 +45,9 @@ WORLD = {}
 
 
 def setUpModule():
+    patcher = patch.object(bt, '_check_export')
+    patcher.start()
+    unittest.addModuleCleanup(patcher.stop)
     WORLD["dir"] = tempfile.TemporaryDirectory(prefix="bytes-twin-")
     root = Path(WORLD["dir"].name)
     WORLD["one"] = root / "one"

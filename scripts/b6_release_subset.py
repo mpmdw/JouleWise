@@ -21,13 +21,15 @@ from scripts import bytes_commitment as bc
 
 
 def release(pack_records_root, group, registrations_root, project_root, keys, stage, out, stage1_commit=None,
-            *, predictions=None, commitment_repo=None, stage1_receipt=None):
+            *, predictions=None, commitment_repo=None, stage1_receipt=None, export_seal_repo=None,
+            export_seal_commit=None):
     if group != "bytes" and stage == "heldout" and not re.fullmatch(r"[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?", stage1_commit or ""):
         raise ValueError("stage 2 requires the stage-1 commit hash")
     verification = None
     if group == "bytes" and stage == "heldout":
         verification = bc.admit(SimpleNamespace(stage1_commit=stage1_commit, predictions=predictions,
-                                commitment_repo=commitment_repo, stage1_receipt=stage1_receipt),
+                                commitment_repo=commitment_repo, stage1_receipt=stage1_receipt,
+                                export_seal_repo=export_seal_repo, export_seal_commit=export_seal_commit),
                                 "heldout_keys", repo=ROOT)
 
     keys = sorted(set(keys))
@@ -89,7 +91,8 @@ def main(argv=None):
     try:
         record = release(args.pack_records_root, args.blinding_group, args.registrations_root,
                          args.project_root, args.keys, args.stage, args.out, args.stage1_commit,
-                         predictions=args.predictions, commitment_repo=args.commitment_repo, stage1_receipt=args.stage1_receipt)
+                         predictions=args.predictions, commitment_repo=args.commitment_repo, stage1_receipt=args.stage1_receipt,
+                         export_seal_repo=args.export_seal_repo, export_seal_commit=args.export_seal_commit)
         print(json.dumps({"release": str(args.out), "stage": record["stage"], "keys": record["keys"]}, sort_keys=True))
         return 0
     except (OSError, ValueError, KeyError, TypeError) as exc:

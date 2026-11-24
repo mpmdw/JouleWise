@@ -514,19 +514,33 @@
   {
     "id": "export_key_binding",
     "path": "blinding-sessions/<session>.json",
-    "phase": "export",
-    "primary": "joulewise/b6/blinding.py:18\u201338,90\u201398",
+    "phase": "both",
+    "primary": "joulewise/b6/export_runs.py:589\u2013593; joulewise/b6/bytes_integrity.py:192\u2013221,269\u2013333,336\u2013350",
     "scope": "conditional_campaign",
     "faults": {
-      "absent": "No existing binding selects this fingerprint.",
-      "zero": "Export cannot trust a damaged key binding.",
+      "absent": "Re-export refuses a missing binding when the session's publication lock or sidecar exists. Campaign capture and verification require each expected session's binding.",
+      "zero": "Capture cannot authenticate a malformed binding and all finalized consumers refuse changed bytes.",
       "half": "Same as zero.",
       "garbage": "Same as zero."
     },
-    "flags": "Export refuses malformed evidence; this is not a released analysis key.",
+    "flags": "BYTES export manifest refusal for a missing, stale or malformed expected session binding.",
     "read_paths": [
       "*-keys/*/blinding-sessions/*.json"
     ]
+  },
+  {
+    "id": "export_integrity_manifest",
+    "path": "private bytes-export-integrity.json and its authorized input set",
+    "phase": "both",
+    "primary": "joulewise/b6/bytes_integrity.py:192\u2013221,269\u2013350,367\u2013389",
+    "scope": "integrity",
+    "faults": {
+      "absent": "A keyed fit, commitment check or admission requires a finalized manifest and all of its committed entries.",
+      "zero": "Truncating a nonempty file changes its byte length and digest. A valid zero-byte entry is bound by both fields.",
+      "half": "Truncation changes length or digest and refuses before analysis or journal append.",
+      "garbage": "Working manifest bytes must equal the designated Git blob. Any entry mutation, extra, duplicate or escaped path refuses."
+    },
+    "flags": "The captured commit authorizes the blinded and empty-key probes. Finalization verifies it, then adds only fit and reference release entries. The live journal and post-fit receipts use their separate Git checks."
   },
   {
     "id": "prediction",
@@ -560,15 +574,15 @@
     "id": "journal",
     "path": "unblinding.jsonl",
     "phase": "analysis",
-    "primary": "scripts/bytes_commitment.py:157\u2013173",
+    "primary": "scripts/bytes_commitment.py:109\u2013120,157,217\u2013224",
     "scope": "commitment",
     "faults": {
       "absent": "Refuse when the explicitly initialized journal is absent.",
-      "zero": "An initialized empty journal contains no unblinding event.",
-      "half": "Malformed event lines refuse; a valid prefix is checked against retained history.",
+      "zero": "Only the tracked zero-byte bootstrap before the first guarded command is accepted. Resetting a journal with retained committed entries to zero refuses even when HEAD tracks the reset.",
+      "half": "Malformed event lines refuse. A complete prefix refuses if it differs from HEAD or drops bytes from an earlier committed version.",
       "garbage": "Refuse malformed journal."
     },
-    "flags": "Commitment guard refusal or admission. Both CLIs invoke the same guard."
+    "flags": "Verification and admission share the check against HEAD and every retained committed version. Admission repeats it under the append lock. The live journal is outside the export manifest."
   },
   {
     "id": "release_record",
