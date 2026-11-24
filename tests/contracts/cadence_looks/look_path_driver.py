@@ -274,10 +274,12 @@ def run(operation, world, bench, fault):
     make_inputs = inputs.make_inputs
     inputs.make_inputs = lambda *args: make_inputs(*args, synthetic=True)
 
-    if fault == "guard_blind_values":
+    if fault in ("guard_blind_values", "guard_metadata_extensions"):
         from joulewise.cadence_looks import controls_time_fields as fields
 
         forbidden = ("91827.375", "19.8375")
+        if fault == "guard_metadata_extensions":
+            forbidden += ("synthetic_extension_opaque",)
         original_loads, original_convert = json.loads, fields._convert
         original_project = fields.project_json
 

@@ -27,6 +27,8 @@ FROZEN = runpy.run_path(str(Path(__file__).with_name("look_path") / "suite/run_s
 CHANNELS = b"REFUSE PREFLIGHT INPUT_CHANNELS\n"
 BINDING = b"REFUSE PREFLIGHT INPUT_BINDING\n"
 FREEZE = b"REFUSE PREFLIGHT FREEZE\n"
+EXTENSION_KEY = "synthetic_extension_opaque"
+EXTENSION_VALUE = 91827.375
 OFFLINE_BOOTSTRAP = """
 import runpy
 import sys
@@ -91,6 +93,26 @@ def blind_values(world):
     mutate(world, "config", lambda cfg: cfg["run_metadata"].update(ambient_temp_c=19.8375))
     mutate(world, "episode", lambda ep: ep["hardware"]["task_diagnostics"]["evaluation_outputs"].update(
         synthetic_telemetry={"power_w": 91827.375}))
+
+
+def raw_metadata_extension(world, raw):
+    span, _, bundle = FROZEN["location"](world, "L002")
+    path = bundle / "metadata.json"
+    original = path.read_bytes().rstrip()
+    assert original.endswith(b"}") and b'"extra"' not in original
+    path.write_bytes(original[:-1] + b',"extra":' + raw + b"}\n")
+    FROZEN["reanchor"](world, span)
+
+
+def extension_metadata():
+    return {
+        "extra": {EXTENSION_KEY: {"numeric": EXTENSION_VALUE}},
+        "adapters": {
+            "runtime": {"name": "synthetic-runtime", "prepare_metadata": {},
+                        EXTENSION_KEY: {"numeric": EXTENSION_VALUE}},
+            "telemetry": {"name": "synthetic-telemetry", EXTENSION_KEY: {"numeric": EXTENSION_VALUE}},
+        },
+    }
 
 
 def add_diagnostic_flag(document):
@@ -657,6 +679,81 @@ class LookPathFollowupTests(TestCase):
             for raw in (b"100.00000000000001", b"-0.01", b'"100"', b"true"):
                 with self.subTest(raw=raw), self.assertRaises(blind.TimeFieldError):
                     blind.project_json(raw, blind.OPAQUE_PERCENT)
+
+    def test_v10_metadata_extensions_stay_out_of_projection_and_output(self):
+        world, bench = self.prepare(
+            "v10-extension-opacity", role="metadata", fault=lambda data: data.update(extension_metadata()))
+        for operation in ("stage1", "commit-stage1", "preflight"):
+            with self.subTest(operation=operation):
+                self.assertEqual(self.invoke(world, bench, operation, "guard_metadata_extensions"), (0, b"", b""))
+        self.assert_fresh(world, bench)
+        self.assertEqual(self.invoke(world, bench, "stage2", "synthetic_reservation"), (0, b"", b""))
+        outputs = (
+            bench / "public" / registrar.LOOK / layout.PUBLIC_NAME,
+            self.private(bench) / "SYNTHETIC-RESERVATION" / "controls.json",
+        )
+        for path in outputs:
+            for sentinel in (EXTENSION_KEY, str(EXTENSION_VALUE)):
+                self.assertNotIn(sentinel.encode(), path.read_bytes())
+
+    def test_v10_adapter_declared_inventory_has_typed_members(self):
+        schema = reader.METADATA_FIELDS["adapters"]
+        valid_runtime = {"name": "synthetic-runtime", "prepare_metadata": {}}
+        valid_telemetry = {"name": "synthetic-telemetry"}
+        for kind, row in (("runtime", valid_runtime), ("telemetry", valid_telemetry)):
+            for member in row:
+                missing = {key: value for key, value in row.items() if key != member}
+                wrong = dict(row, **{member: []})
+                for mutation, changed in (("missing", missing), ("type", wrong)):
+                    with self.subTest(kind=kind, member=member, mutation=mutation):
+                        with self.assertRaises(blind.TimeFieldError):
+                            blind.project_json(registrar.manifest.canonical({kind: changed}), schema, strict=True)
+
+    def test_v10_metadata_extension_faults_refuse_at_every_entry_point(self):
+        scaffold = self.stage_scaffold("v10-extension-scaffold")
+
+        def adapter(kind, field, value, *, absent=False):
+            def change(document):
+                document.update(extension_metadata())
+                row = document["adapters"][kind]
+                if absent:
+                    row.pop(field)
+                else:
+                    row[field] = value
+            return change
+
+        cases = (
+            ("metadata-sibling", lambda row: row.update({EXTENSION_KEY: EXTENSION_VALUE})),
+            ("adapters-sibling", lambda row: row.update(adapters={EXTENSION_KEY: EXTENSION_VALUE})),
+            ("extra-object", lambda row: row.update(extra=None)),
+            ("adapters-object", lambda row: row.update(adapters=[])),
+            ("runtime-object", lambda row: row.update(adapters={"runtime": []})),
+            ("telemetry-object", lambda row: row.update(adapters={"telemetry": []})),
+            ("runtime-name-missing", adapter("runtime", "name", None, absent=True)),
+            ("runtime-name-type", adapter("runtime", "name", False)),
+            ("telemetry-name-missing", adapter("telemetry", "name", None, absent=True)),
+            ("telemetry-name-type", adapter("telemetry", "name", False)),
+            ("runtime-prepare-missing", adapter("runtime", "prepare_metadata", None, absent=True)),
+            ("runtime-prepare-type", adapter("runtime", "prepare_metadata", [])),
+            ("runtime-cleanup-type", adapter("runtime", "cleanup_metadata", True)),
+            ("runtime-alignments-type", adapter("runtime", "clock_alignments", {})),
+            ("telemetry-alignments-type", adapter("telemetry", "clock_alignments", {})),
+            ("window-margins-sibling", lambda row: row.update(trace_window_margins={
+                "requested_post_window_dwell_s": 0, "achieved_pre_window_margin_s": 0,
+                "achieved_post_window_margin_s": 0, EXTENSION_KEY: EXTENSION_VALUE})),
+        )
+        for name, fault in cases:
+            with self.subTest(name=name):
+                world, bench = self.prepare("v10-" + name, role="metadata", fault=fault)
+                self.assert_refuses_at_blind_gates(world, bench, scaffold)
+        for name, raw in (
+            ("escaped-duplicate", br'{"extension":{"a":0,"\u0061":1}}'),
+            ("depth", b'{"extension":' + b"[" * 65 + b"0" + b"]" * 65 + b"}"),
+            ("overflow", b'{"extension":1e309}'),
+        ):
+            with self.subTest(name=name):
+                world, bench = self.prepare("v10-" + name, configure=lambda world: raw_metadata_extension(world, raw))
+                self.assert_refuses_at_blind_gates(world, bench, scaffold)
 
     def test_v9_role_schema_member_matrix(self):
         def sample(schema):
