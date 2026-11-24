@@ -1,7 +1,6 @@
 """Generated sweeps for Part C's temporal containment (R1) and raw-domain schemas (R2).
 
-Lead fix round r2 of 2026-11-22. One clean synthetic attempt is built with the frozen differential suite's own
-control (with the census both points carry, ``partc_audit_probe.census_stand_in``). Then:
+Lead fix round r2 of 2026-11-22. The frozen v4 suite builds one clean synthetic control (RL-215 Q1).
 
 - TEMPORAL: for every timestamped source the evaluator reduces, one row shifted outside the member's bound
   interval, one stamp repeated, and, where a count or tail minimum is judged, the tail (or head) dropped. The
@@ -34,7 +33,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
-SUITE = HERE / "test_partc_frozen_differential.py"
+# RL-215 Q1: the writer-produced v4 control succeeds v3.2's, whose clean control exact battery counting refuses.
+SUITE = HERE.parents[1] / "tests/frozen/partc-v4/suite-v4/tests/align/test_partc_writer_v4.py"
 
 TEMPORAL = ("cpu.samples", "census.session", "battery.rows", "events.timestamp", "turns.stamps",
             "episode.paired_stamps", "sensor.wall", "sensor.monotonic", "soak.tail")
@@ -128,7 +128,6 @@ def duplicate_key(raw_object, key, value):
 
 def run():
     s = load("partc_suite", SUITE)
-    probe = load("partc_probe", HERE / "partc_audit_probe.py")
     generated = {name: 0 for name in (*TEMPORAL, *R3_CLASSES, *SCHEMA)}
     refused = {name: 0 for name in generated}
     failures = []
@@ -142,7 +141,7 @@ def run():
         s.issue_model_source()
         s.endpoint_code()
         with s.kit_source(finder), s.compact_control(), patch.object(
-                s.rt, "registered_s6", return_value={"slots": {"S6": 1.}, "s6_tuning": {}}), probe.census_stand_in(s):
+                s.rt, "registered_s6", return_value={"slots": {"S6": 1.}, "s6_tuning": {}}):
             base = work / "base"
             assert not s.control(base), "the clean control lost a descriptor binding"
         pc, EvidenceFailure = s.pc, s.evidence.EvidenceFailure
@@ -392,8 +391,8 @@ def run():
             for amplitude in (0.15, 0.19, 0.199, 0.2005, 0.201, 0.21, 0.3):
                 kept = copy.deepcopy(observed[:keep])
                 for index, row in enumerate(kept):
-                    value = 35.0 + amplitude * max(index - 600, 0) / 60
-                    row["values"]["sensors"][fast] = row["values"]["readings"][fast]["value"] = value
+                    # The issued ALIGN reader's bytes for the value (EI ``smc-wire``), as the suite's control writes.
+                    s.set_sensor_value(row, fast, 35.0 + amplitude * max(index - 600, 0) / 60)
                 sampling = s.tg.sample_rows(kept)
                 origin = sampling[0]["monotonic_ns"]
                 coverage = Coverage(start["started"]["monotonic_ns"], keys(start["values"]["thermal"]))
@@ -459,7 +458,9 @@ def run():
             prior = closed
 
         # Producer order inside a journal row: every nested observation stamp is no later than the next row's
-        # start (for the last reading, the session_end row). One past it refuses; exactly at it passes.
+        # start (for the last reading, the session_end row). One past it refuses; exactly at it passes. A PM
+        # stamp is taken inside the status call, so its own bound is the row's status stamp (EI ``pm-before``,
+        # RL-215 Q4): exactly at that passes.
         def place(root, field, value):
             parts = [int(part) if part.isdigit() else part for part in field.split(".")]
             at(root, parts[:-1])[parts[-1]] = value
@@ -471,7 +472,9 @@ def run():
             for i in sorted({*stamped[:2], *stamped[len(stamped) // 2:][:1], *stamped[-2:]}):
                 following = rows[i + 1]["started"]["monotonic_ns"]
                 for field, _ in pc._nested_stamps(rows[i]["values"]):
-                    for value, refuses in ((following + 1, True), (following, False)):
+                    ceiling = (rows[i]["values"]["status"]["monotonic_ns"] if field == "status.pm_observed_ns"
+                               else following)
+                    for value, refuses in ((following + 1, True), (ceiling, False)):
                         if not refuses and not field.startswith("status."):
                             continue                 # a gate row's paired stamps have their own later checks
                         mutated = copy.deepcopy(rows)
@@ -480,15 +483,21 @@ def run():
                               lambda mutated=mutated, kind=kind, source=source, gated=gated:
                               pc._validate_sidecar(mutated, sensors, kind, source, gated=gated), refuses)
 
-        # Structural completeness: Segment.run's opening and closing battery samples, for every member.
+        # Structural completeness, RL-215 Q4: Segment.run's opening and closing battery samples and one periodic
+        # sample per ``battery_poll_s`` ticks, exactly 2 + T // p rows for every member. Any row dropped refuses.
+        period = int(s.CONFIG.get("battery_poll_s", 30))
         for kind in kinds:
-            receipt, _ = member(kind)
+            receipt, data = member(kind)
             bound, battery = terminal(kind), s.rows(base / kind / s.pc.BATTERY_SOURCE)
+            load_raw = (base / kind / "load_journal.json").read_bytes()
+            ticks = len(json.loads(load_raw)["cpu_busy_t_s"]) + len(json.loads(load_raw)["errors"])
             for dropped in range(len(battery)):
                 rows = [row for index, row in enumerate(battery) if index != dropped]
                 claim = {**receipt, "battery": s.rt.battery_summary(rows)}
                 judge("battery.samples", f"{kind} row {dropped} dropped", lambda rows=rows, claim=claim, kind=kind,
-                      bound=bound: pc._check_battery(raw_rows(rows), claim, kind, bound), len(rows) < 2)
+                      bound=bound, load_raw=load_raw, data=data: pc._check_battery(
+                          raw_rows(rows), claim, kind, bound, load=load_raw, configured=s.CONFIG, data=data),
+                      len(rows) != 2 + ticks // period)
 
         # ================= R2 SCHEMA =================
         def refuse(field):
