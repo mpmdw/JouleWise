@@ -263,6 +263,44 @@ def render_measurement_files(kit, pack_id, read_file, optional_file, *, dispatch
     external_ids = {m['manifest']['path']: m['external_input_id']
                     for m in template['external_inputs']['manifests']}
     units, manifests, relocated = {}, [], {}
+
+    def inventory(raw, run_id, target, digest):
+        """Record one dispatched config in its identity unit's config inventory.
+
+        The launch binding admits only an inventoried config, and a spare
+        retry dispatches its spare set's configs. So members and spares are
+        inventoried by this one rule.
+        """
+        typed = BenchmarkConfig.from_mapping(json.loads(raw)).to_dict()
+        model, hardware = typed['model'], typed['hardware_target']
+        unit_id = model_ids.get(model['source'], 'neg8_reference')
+        if typed['workload_profile']['name'] == ALIGN_EPISODE:
+            # ALIGN's D model is absent from the older BYTES model roster.
+            # Its existing frozen config tag owns this ID, just as in the
+            # kit's identity_pins; falling back to neg8_reference misbinds D.
+            tags = [t.removeprefix('align-model=') for t in typed['run_metadata']['tags']
+                    if t.startswith('align-model=')]
+            if len(tags) != 1 or not tags[0]:
+                raise ValueError('ALIGN config needs one model identity tag: ' + run_id)
+            unit_id = tags[0]
+            # Each episode spec is its own declared workload, so its own unit.
+            unit_id = align_unit_id(unit_id, run_id)
+        declared = {
+            'hardware_target': hardware['id'], 'runtime_backend': hardware['runtime_backend'],
+            'telemetry_backend': hardware['telemetry_backend'], 'model_name': model['name'],
+            'model_source': model['source'], 'model_revision': model.get('revision'),
+            'quantization': typed['quantization'], 'workload_profile': typed['workload_profile']}
+        unit = units.setdefault(unit_id, {
+            'identity_unit_id': unit_id,
+            'producer_plan_reference': {'plan_id': tree['plan']['plan_id'], 'path': tree['plan']['path']},
+            'consumer_bindings': [{'arm': unit_id, 'family': unit_id,
+                                   'measurement_arm': typed['workload_profile']['name']}],
+            'declared_identity': declared, 'config_inventory': [],
+            'model_runtime_config': dict.fromkeys(MODEL_RUNTIME_CONFIG_FIELDS)})
+        if unit['declared_identity'] != declared:
+            raise ValueError('dispatched configs disagree on declared identity: ' + unit_id)
+        unit['config_inventory'].append({'path': target.relative_to(pack).as_posix(), 'sha256': digest})
+
     dispatches = {d.stage_id: d for d in plan.resolve_stage_dispatches(tree, '.', read_manifest=read_file)}
     for stage in tree['stage_graph']:
         if stage['kind'] != 'campaign_collection':
@@ -293,6 +331,7 @@ def render_measurement_files(kit, pack_id, read_file, optional_file, *, dispatch
                     path = target.parent / name
                     files[path] = data
                     plan.relocate_order_entry(row, path, hashlib.sha256(data).hexdigest())
+                    inventory(data, row['run_id'], path, hashlib.sha256(data).hexdigest())
                 files[target] = encoded_json(order)
                 descriptor.update(path=target.as_posix(), sha256=hashlib.sha256(files[target]).hexdigest())
 
@@ -306,35 +345,7 @@ def render_measurement_files(kit, pack_id, read_file, optional_file, *, dispatch
             relative = target.as_posix()
             relocated[config.as_posix()] = relative
             plan.relocate_order_entry(row, Path(relative), digest)
-            typed = BenchmarkConfig.from_mapping(json.loads(raw)).to_dict()
-            model, hardware = typed['model'], typed['hardware_target']
-            unit_id = model_ids.get(model['source'], 'neg8_reference')
-            if typed['workload_profile']['name'] == ALIGN_EPISODE:
-                # ALIGN's D model is absent from the older BYTES model roster.
-                # Its existing frozen config tag owns this ID, just as in the
-                # kit's identity_pins; falling back to neg8_reference misbinds D.
-                tags = [t.removeprefix('align-model=') for t in typed['run_metadata']['tags']
-                        if t.startswith('align-model=')]
-                if len(tags) != 1 or not tags[0]:
-                    raise ValueError('ALIGN config needs one model identity tag: ' + row['run_id'])
-                unit_id = tags[0]
-                # Each episode spec is its own declared workload, so its own unit.
-                unit_id = align_unit_id(unit_id, row['run_id'])
-            declared = {
-                'hardware_target': hardware['id'], 'runtime_backend': hardware['runtime_backend'],
-                'telemetry_backend': hardware['telemetry_backend'], 'model_name': model['name'],
-                'model_source': model['source'], 'model_revision': model.get('revision'),
-                'quantization': typed['quantization'], 'workload_profile': typed['workload_profile']}
-            unit = units.setdefault(unit_id, {
-                'identity_unit_id': unit_id,
-                'producer_plan_reference': {'plan_id': tree['plan']['plan_id'], 'path': tree['plan']['path']},
-                'consumer_bindings': [{'arm': unit_id, 'family': unit_id,
-                                       'measurement_arm': typed['workload_profile']['name']}],
-                'declared_identity': declared, 'config_inventory': [],
-                'model_runtime_config': dict.fromkeys(MODEL_RUNTIME_CONFIG_FIELDS)})
-            if unit['declared_identity'] != declared:
-                raise ValueError('dispatched configs disagree on declared identity: ' + unit_id)
-            unit['config_inventory'].append({'path': target.relative_to(pack).as_posix(), 'sha256': digest})
+            inventory(raw, row['run_id'], target, digest)
             if row['run_id'] not in science:
                 members.append({'run_id': row['run_id'], 'ordinal': row.get('index'),
                                 'path': relative, 'sha256': digest})
@@ -491,11 +502,11 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
         options = {}
         if c1:
             from joulewise.align.apple import v4_registration as c1_closure
-            # The C1 pack is staged, not a git checkout: record the digest of the
-            # staged bytes (the verified walk), which preflight recomputes.
-            c1_roots = c1_closure.Roots(handoff['repo'], handoff['stage'])
+            from joulewise import window_lineage
+            # The C1 pack is staged, not a git checkout: record the digest of its
+            # own bytes, which every later stage recomputes (window_lineage.admit_pack).
             options = {'controls_root': stage / 'controls', 'c1_inputs': runtime_inputs,
-                       'pack_digest': lambda _pack_root: c1_closure.staged_pack_sha256(c1_roots)}
+                       'pack_digest': window_lineage.pack_tree_digest}
         record = plan.write_window_plan(inputs, now=now, **options)
     except plan.WindowPlanError as exc:
         # A missing/stale calibration ledger or another record condition is a
