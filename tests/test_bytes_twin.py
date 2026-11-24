@@ -791,22 +791,21 @@ class DeskBundleReadTests(unittest.TestCase):
             self.assertEqual(bt.read_json(bundle / "metadata.json"), {"plain": True})
 
     @unittest.skipUnless(shutil.which("zstd"), "compressed twin reader requires zstd on PATH")
-    def test_existing_unreadable_compressed_files_refuse_instead_of_defaulting(self):
+    def test_existing_unreadable_compressed_files_raise_read_errors_instead_of_defaulting(self):
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp)
             (bundle / "metadata.json.zst").write_bytes(b"not a zstd frame")
-            with self.assertRaisesRegex(bt.StorageStop, "compressed file unreadable: "):
+            with self.assertRaisesRegex(OSError, "compressed file unreadable: "):
                 bt.read_json(bundle / "metadata.json", {"missing": True})
-            with self.assertRaisesRegex(bt.StorageStop, "compressed file unreadable: "):
+            with self.assertRaisesRegex(OSError, "compressed file unreadable: "):
                 bt.member_spans(bundle)
             (bundle / "metadata.json").write_text(json.dumps({"uncertainty_evidence": {
                 "clock_anchor": {"clock_stamps": {"sampling_started": {
                     "epoch_s": 2000, "monotonic_before_s": 1000}}}}}), encoding="utf-8")
             (bundle / "events.jsonl.zst").write_bytes(b"not a zstd frame")
-            with self.assertRaisesRegex(bt.StorageStop, "compressed file unreadable: "):
+            with self.assertRaisesRegex(OSError, "compressed file unreadable: "):
                 bt.member_spans(bundle)
-            # Analysis marks these runs unusable; the independent twin refuses
-            # under D7, as it does for a truncated plain events.jsonl.
+            # A readable frame preserves the payload's decode or parse error.
             for name in ("metadata.json", "events.jsonl"):
                 path = bundle / name
                 raw = path.read_bytes() if path.exists() else None
@@ -816,7 +815,7 @@ class DeskBundleReadTests(unittest.TestCase):
                                                 capture_output=True, check=True)
                         Path(str(path) + ".zst").write_bytes(result.stdout)
                         path.unlink(missing_ok=True)
-                        with self.assertRaises((bt.StorageStop, ValueError)):
+                        with self.assertRaises(ValueError):
                             bt.read_json(path) if name == "metadata.json" else bt.member_spans(bundle)
                 if raw is not None:
                     path.write_bytes(raw)
@@ -838,7 +837,7 @@ class DeskBundleReadTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "metadata.json"
             Path(str(path) + ".zst").mkdir()
-            with self.assertRaisesRegex(bt.StorageStop, "compressed file unreadable: "):
+            with self.assertRaisesRegex(OSError, "compressed file unreadable: "):
                 bt.read_json(path, {"missing": True})
 
     def test_compressed_reader_resolves_path_or_homebrew_fallback_independently(self):
@@ -865,9 +864,9 @@ class DeskBundleReadTests(unittest.TestCase):
                     with self.subTest(name=name, error=type(error).__name__), \
                             patch.object(shutil, "which", return_value=None), \
                             patch.object(bt.subprocess, "run", side_effect=error):
-                        with self.assertRaisesRegex(bt.StorageStop, "zstd unavailable: ") as caught:
+                        with self.assertRaisesRegex(OSError, "zstd unavailable: ") as caught:
                             bt.read_json(path) if name == "metadata.json" else bt.member_spans(bundle)
-                        self.assertEqual(str(caught.exception), "restore_refused: zstd unavailable: " + str(compressed))
+                        self.assertEqual(str(caught.exception), "zstd unavailable: " + str(compressed))
                 # Supply the anchor for the events reader, without a decompressor.
                 if name == "metadata.json":
                     path.write_text(json.dumps({"uncertainty_evidence": {"clock_anchor": {

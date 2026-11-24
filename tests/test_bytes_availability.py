@@ -11,6 +11,7 @@ from pathlib import Path
 import plistlib
 import re
 import shutil
+import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -21,6 +22,7 @@ from joulewise.axi_decode_config import RequestDescriptor, RequestRoster
 from joulewise.bundle_read import BundleReader
 from joulewise.desk_restore import RestoreRefused, StorageStop, readable_run
 from joulewise.b6.acceptance import evidence_from_archive
+from joulewise.b6.smoke import reduce_tree
 from joulewise.reduce import _verify_instrument_calibration
 from scripts import bytes_analyze, bytes_commitment, bytes_twin
 from tests import test_bytes_agreement as agreement
@@ -137,10 +139,10 @@ class AvailabilityFixture:
                 "withheld_csv": export.parent / withheld, "pack_key": keys / "pack.json",
                 "config_key": keys / agreement.blinding._config_filename(model["config_key"])}
 
-    def export_again(self, destination, private, *, read_registration=False, grouped=True, read_evidence=False):
+    def export_again(self, destination, private, *, read_registration=False, grouped=True, read_evidence=False, plan=None):
         pack = {"blinding_group": "bytes", "bytes_pass": 1} if grouped else {"pack_id": SESSION}
         with patch("os.fsync", return_value=None):
-            agreement.export_runs.export(self.archive, {}, self.root / "registration", private, destination,
+            agreement.export_runs.export(self.archive, plan or {}, self.root / "registration", private, destination,
                                          evidence=None if read_evidence else self.evidence,
                                          pack_registration=None if read_registration else pack)
         return self.export_path(destination), private / ("bytes" if grouped else SESSION) / "blinding"
@@ -226,6 +228,25 @@ def event_v2_inputs(fixture, *, sparse=False):
     for key in ("request_rows", "request_tokens"):
         paths[key].write_bytes(b"" if sparse else b"{}\n")
     return paths
+
+
+def optional_inventory_prefix(optional, target_bytes):
+    """Select whole checksum rows to end an exact byte half at a newline."""
+    mask = (1 << (target_bytes + 1)) - 1
+    reachable = [1]
+    for row in optional:
+        previous = reachable[-1]
+        reachable.append((previous | (previous << len(row))) & mask)
+    if not ((reachable[-1] >> target_bytes) & 1):
+        raise AssertionError("the fixture cannot put an inventory row boundary at the midpoint")
+    chosen, remaining = [], []
+    for row, before in zip(reversed(optional), reversed(reachable[:-1]), strict=True):
+        if (before >> target_bytes) & 1:
+            remaining.append(row)
+        else:
+            chosen.append(row)
+            target_bytes -= len(row)
+    return chosen, remaining
 
 
 class BytesAvailabilityTests(unittest.TestCase):
@@ -349,6 +370,94 @@ class BytesAvailabilityTests(unittest.TestCase):
         for row in CONTRACT.values():
             fields = [f'`{row["path"]}`', row["phase"], row["primary"], *row["faults"].values(), row["flags"]]
             self.assertIn("| " + " | ".join(field.replace("|", r"\|") for field in fields) + " |", documented)
+
+    def test_source_inventory_half_allows_export_when_required_proofs_survive(self):
+        for timing in ("mock", "native"):
+            with self.subTest(timing=timing), tempfile.TemporaryDirectory(prefix="bytes-inventory-prefix-") as directory:
+                root = Path(directory)
+                fixture = AvailabilityFixture(root / "base", timing)
+                inventory = fixture.archive / "sources/SHA256SUMS"
+                original = inventory.read_bytes()
+                members = agreement.load(fixture.archive / "derived/roster.json")["members"]
+                science = {member["run_id"] for member in members if member["role"] == "science"}
+                reference = next(member["run_id"] for member in members if member["role"] == "start")
+                reference_config = f"claim-runs/{reference}/config.json".encode()
+                required, optional = [], []
+                for row in original.splitlines(keepends=True):
+                    path = Path(row.decode().strip().split("  ", 1)[1])
+                    if len(path.parts) > 2 and path.parts[0] == "claim-runs" and path.parts[1] in science:
+                        optional.append(row)
+                    else:
+                        required.append(row)
+                target_bytes = len(original) // 2 - sum(map(len, required))
+                self.assertGreaterEqual(target_bytes, 0)
+                kept, lost = optional_inventory_prefix(optional, target_bytes)
+                self.assertTrue(lost)
+                prefix = b"".join(required + kept)
+                reordered = prefix + b"".join(lost)
+                self.assertCountEqual(reordered.splitlines(keepends=True), original.splitlines(keepends=True))
+                self.assertEqual(len(prefix), len(reordered) // 2)
+                inventory.write_bytes(reordered)
+                fixture.export_again(root / "clean-export", root / "clean-private")
+                with file_fault(inventory, "half"):
+                    self.assertEqual(inventory.read_bytes(), prefix)
+                    fixture.export_again(root / "half-export", root / "half-private")
+
+                inventory.write_bytes(prefix + b"0123456789")
+                with self.assertRaisesRegex(StorageStop, "reference inventory"):
+                    fixture.export_again(root / "malformed-export", root / "malformed-private")
+                without_proof = [row for row in required if row.rstrip().split(b"  ", 1)[1] != reference_config]
+                self.assertEqual(len(without_proof), len(required) - 1)
+                inventory.write_bytes(b"".join(without_proof + kept))
+                with self.assertRaisesRegex(StorageStop, "config.json.*no SHA256SUMS proof"):
+                    fixture.export_again(root / "missing-proof-export", root / "missing-proof-private")
+                print(f"\nBYTES {timing} inventory: exact half omitted {len(lost)} optional science proofs", flush=True)
+
+    def test_export_reads_chain_inputs_from_bound_custody_root(self):
+        for timing in ("mock", "native"):
+            with self.subTest(timing=timing), tempfile.TemporaryDirectory(prefix="bytes-bound-chain-") as directory:
+                root = Path(directory)
+                fixture = AvailabilityFixture(root / "base", timing)
+                custody = root / "custom-controls"
+                night = custody / "night"
+                night.mkdir(parents=True)
+                journal, result, hazard_result = (night / name for name in
+                                                  ("chain-stages.jsonl", "result.json", "hazard_result.json"))
+                journal.write_text('{"stage_id":"chain.complete","exit_code":0}\n')
+                result.write_text('{"chain_exit_code":999999}\n')
+                aliases = {path: f"custody_root/night/{path.name}" for path in (journal, result, hazard_result)}
+                aliases[fixture.root / "registration"] = "registration_path"
+
+                def export(tag):
+                    reasons = []
+
+                    def record_evidence(*args, **kwargs):
+                        evidence = evidence_from_archive(*args, **kwargs)
+                        reasons.append(evidence.stop_reason)
+                        return evidence
+
+                    with trace_primary_inputs(fixture, aliases=aliases) as reads, \
+                            patch.object(agreement.export_runs, "evidence_from_archive", side_effect=record_evidence):
+                        fixture.export_again(root / f"{tag}-export", root / f"{tag}-private", read_evidence=True,
+                                             plan={"custody_root": str(custody)})
+                    self.assert_contract_covers_reads(reads, "export")
+                    reason, = reasons
+                    return reads, reason
+
+                reads, reason = export("bound-controls")
+                self.assertEqual(reason, "chain_crashed")
+                self.assertTrue(set(aliases.values()) <= reads)
+                for fault in CONTRACT["chain_result"]["faults"]:
+                    with self.subTest(result_fault=fault), file_fault(result, fault):
+                        self.assertEqual(export(f"result-{fault}")[1], "completed")
+                result.unlink()
+                for fault in CONTRACT["chain_journal"]["faults"]:
+                    with self.subTest(journal_fault=fault), file_fault(journal, fault):
+                        self.assertEqual(export(f"journal-{fault}")[1], "chain_crashed")
+                # The other terminal result filename is searched at the same bound root.
+                journal.unlink()
+                hazard_result.write_text('{"chain_exit_code":0}\n')
+                self.assertEqual(export("hazard-result")[1], "completed")
 
     def test_bound_pack_plan_tree_is_authenticated_only_when_selected(self):
         with tempfile.TemporaryDirectory(prefix="bytes-bound-plan-contract-") as directory:
@@ -670,6 +779,63 @@ class BytesAvailabilityTests(unittest.TestCase):
                 print(f"\nBYTES {timing} historical summary with event-v2 fields: {count} comparisons, zero above bar",
                       flush=True)
 
+    @unittest.skipUnless(shutil.which("zstd"), "logical reduction regression needs zstd")
+    def test_compressed_archive_reduction_faults_drop_only_the_member(self):
+        for timing in ("mock", "native"):
+            with self.subTest(timing=timing), tempfile.TemporaryDirectory(prefix="bytes-logical-reduction-") as directory:
+                root = Path(directory)
+                fixture = AvailabilityFixture(root / "base", timing, complete_fit=True)
+                reduction = fixture.targets(fixture.export)["reduction"]
+                subprocess.run(["zstd", "-q", "--rm", str(reduction)], check=True)
+                compressed = reduction.with_name(reduction.name + ".zst")
+                self.assert_contract_covers_reads({compressed.relative_to(fixture.archive).as_posix()}, "analysis")
+                control = root / "control"
+                control.mkdir()
+                compared = fixture.compare(self, fixture.export, fixture.keys, control, fit_cli=True,
+                                           expect_exit=0, expect_kept=True)
+                for fault in CONTRACT["reduction"]["faults"]:
+                    with self.subTest(fault=fault), file_fault(compressed, fault):
+                        scratch = root / fault
+                        scratch.mkdir()
+                        compared += fixture.compare(self, fixture.export, fixture.keys, scratch, fit_cli=True,
+                                                    expect_exit=0, expect_kept=False)
+                invalid_text = subprocess.run(["zstd", "-qc"], input=b"\xffbroken input\n",
+                                              capture_output=True, check=True).stdout
+                compressed.write_bytes(invalid_text)
+                scratch = root / "decode"
+                scratch.mkdir()
+                compared += fixture.compare(self, fixture.export, fixture.keys, scratch, fit_cli=True,
+                                            expect_exit=0, expect_kept=False)
+                print(f"\nBYTES {timing} compressed reduction: {compared} comparisons, zero above bar", flush=True)
+
+    def test_non_object_member_metadata_refuses_both_fit_clis(self):
+        malformed_shapes = {"array": [], "null": None, "boolean": False, "number": 0, "string": "",
+                            "nested_array": {"workload_observed": []}}
+        for timing in ("mock", "native"):
+            with self.subTest(timing=timing), tempfile.TemporaryDirectory(prefix="bytes-metadata-shape-") as directory:
+                root = Path(directory)
+                fixture = AvailabilityFixture(root / "base", timing, complete_fit=True)
+                target = fixture.bundle / "metadata.json"
+                control = root / "control"
+                control.mkdir()
+                compared = fixture.compare(self, fixture.export, fixture.keys, control, fit_cli=True,
+                                           expect_exit=0, expect_kept=True)
+                for shape, document in malformed_shapes.items():
+                    with self.subTest(shape=shape):
+                        agreement._write(target, document)
+                        scratch = root / shape
+                        scratch.mkdir()
+                        compared += fixture.compare(self, fixture.export, fixture.keys, scratch, fit_cli=True,
+                                                    expect_exit=1)
+                        self.assertFalse((scratch / "primary").exists())
+                        self.assertFalse((scratch / "twin.json").exists())
+                agreement._write(target, {})
+                scratch = root / "empty-object"
+                scratch.mkdir()
+                compared += fixture.compare(self, fixture.export, fixture.keys, scratch, fit_cli=True,
+                                            expect_exit=0, expect_kept=False)
+                print(f"\nBYTES {timing} metadata shape: {compared} comparisons, zero above bar", flush=True)
+
     def test_bundle_restored_after_export_supplies_unblinded_science_record(self):
         for timing in ("mock", "native"):
             with self.subTest(timing=timing), tempfile.TemporaryDirectory(prefix="bytes-bundle-return-") as directory:
@@ -704,6 +870,45 @@ class BytesAvailabilityTests(unittest.TestCase):
                         checked += 1
         print(f"\nBYTES restored export inputs: {checked} cases, {compared} comparisons", flush=True)
 
+    def check_smoke_witness_faults(self, fixture, root):
+        pack = fixture.archive / "sources/pack"
+        pack.mkdir(parents=True, exist_ok=True)
+        witness = pack / "smoke-registered-tree.json"
+        # Reuse the registered graph shape with no registered member inputs.
+        tree = agreement.load(agreement.ROOT / "configs/campaigns" / SESSION / "plan_tree.json")
+        tree["external_inputs"] = []
+        tree["science"] = []
+        keep = {stage["stage_id"]: 1 for stage in tree["stage_graph"] if stage["kind"] == "campaign_collection"}
+        plan = pack / "plan_tree.json"
+        agreement._write(witness, tree)
+        agreement._write(plan, reduce_tree(tree, keep))
+        with (fixture.archive / "sources/SHA256SUMS").open("a") as inventory:
+            for path in (plan, witness):
+                inventory.write(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  pack/{path.name}\n")
+
+        with trace_primary_inputs(fixture) as reads:
+            export, keys = fixture.export_again(root / "smoke-control-export", root / "smoke-control-private")
+        key = "sources/pack/smoke-registered-tree.json"
+        self.assertIn(key, reads)
+        self.assert_contract_covers_reads(reads, "export")
+        cases = compared = 0
+        for fault in CONTRACT["smoke_witness"]["faults"]:
+            for phase in PHASES:
+                with self.subTest(file="smoke_witness", fault=fault, phase=phase):
+                    scratch = root / f"smoke-{fault}-{phase}"
+                    scratch.mkdir()
+                    with file_fault(witness, fault), trace_primary_inputs(fixture) as reads:
+                        if phase == "before_export":
+                            with self.assertRaisesRegex(StorageStop, r"smoke-registered-tree\.json"):
+                                fixture.export_again(scratch / "export", scratch / "private")
+                            self.assertIn(key, reads)
+                            compared += 1
+                        else:
+                            compared += fixture.compare(self, export, keys, scratch)
+                            self.assertNotIn(key, reads)
+                    cases += 1
+        return cases, compared
+
     def check_control_files(self, timing):
         with tempfile.TemporaryDirectory(prefix=f"bytes-availability-controls-{timing}-") as directory:
             root = Path(directory)
@@ -719,7 +924,6 @@ class BytesAvailabilityTests(unittest.TestCase):
                 "export_registration": (archive / "sources/pack/registration.json",
                     json.dumps({"pack_id": SESSION, "blinding_group": "bytes", "bytes_pass": 1}).encode()),
                 "export_key_binding": (fixture.private.parent / "blinding-sessions" / f"{SESSION}.json", None),
-                "smoke_witness": (archive / "sources/pack/smoke-registered-tree.json", b'{"stage_graph":[]}'),
                 "spans": (archive / "withheld/spans.json", b'{"spans": {}}'),
                 "chain_journal": (archive / "night/chain-stages.jsonl", b'{"stage_id":"chain.complete","exit_code":0}\n'),
                 "chain_result": (archive / "night/result.json", b'{"chain_exit_code":0}'),
@@ -727,7 +931,7 @@ class BytesAvailabilityTests(unittest.TestCase):
                 "capture_evidence": (capture / "instrument_evidence.json", b'{"b_fiducial_s":0.04}'),
                 "capture_raw": (capture / "raw/powermetrics.plist", b"synthetic optional capture"),
             }
-            self.assertEqual(set(controls) | {"compression", "registered_manifest"}, {
+            self.assertEqual(set(controls) | {"compression", "registered_manifest", "smoke_witness"}, {
                 row_id for row_id, row in CONTRACT.items() if row["scope"].startswith("conditional_")})
             for file, seed in controls.values():
                 if seed is not None:
@@ -750,7 +954,7 @@ class BytesAvailabilityTests(unittest.TestCase):
                             scratch = root / f"{row_id}-{fault}-{phase}"
                             scratch.mkdir()
                             if phase == "before_export" and row_id in {"member_assessments", "export_registration",
-                                                                      "export_key_binding", "smoke_witness"}:
+                                                                      "export_key_binding"}:
                                 private = scratch / "private"
                                 shutil.copytree(fixture.root / "private-keys", private)
                                 target = (private / "bytes/blinding-sessions" / f"{SESSION}.json"
@@ -771,7 +975,9 @@ class BytesAvailabilityTests(unittest.TestCase):
                                     else:
                                         export, keys = fixture.export, fixture.keys
                                     compared += fixture.compare(self, export, keys, scratch)
-            print(f"\nBYTES {timing} optional controls: {cases} cases, {compared} comparisons", flush=True)
+            smoke_cases, smoke_compared = self.check_smoke_witness_faults(fixture, root)
+            print(f"\nBYTES {timing} optional controls: {cases + smoke_cases} cases, "
+                  f"{compared + smoke_compared} comparisons", flush=True)
 
     def test_mock_timing_control_faults(self):
         self.check_control_files("mock")

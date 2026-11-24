@@ -28,7 +28,7 @@
       "half": "Science export substitutes its empty default; authenticated reference export refuses. Analysis JSON parse fails and keeps the planned member as unusable. Skip a reference archive join.",
       "garbage": "Science export substitutes its empty default; authenticated reference export refuses. Analysis JSON parse fails and keeps the planned member as unusable. Skip a reference archive join."
     },
-    "flags": "Recorded codes only for an unusable science member; a reference without a join gets the generic meter request drop reason. Missing metadata at active restore is StorageStop / restore_refused.",
+    "flags": "Recorded codes only for an unusable science member; a reference without a join gets the generic meter request drop reason. Missing metadata at active restore is StorageStop / restore_refused. A parsed non-object at the metadata root or at workload_observed stops science fit via AttributeError. An empty object makes only that member unusable.",
     "read_paths": [
       "bundle/metadata.json"
     ]
@@ -52,19 +52,20 @@
   },
   {
     "id": "reduction",
-    "path": "withheld/reductions/<run>.summary_metrics.rereduced.json",
+    "path": "withheld/reductions/<run>.summary_metrics.rereduced.json and its .zst sibling",
     "phase": "both",
-    "primary": "joulewise/b6/export_runs.py:677\u2013679; joulewise/bytes_analysis.py:998\u20131009",
+    "primary": "joulewise/b6/export_runs.py:677\u2013679; joulewise/bytes_analysis.py:998\u20131009; joulewise/desk_compress.py:90\u2013144",
     "scope": "member",
     "faults": {
       "absent": "Science export substitutes its empty default; authenticated reference export refuses. Analysis keeps the planned member as unusable before any meter evaluation.",
       "zero": "Science export substitutes its empty default; authenticated reference export refuses. Analysis JSON parse fails and keeps the planned member as unusable.",
-      "half": "Science export substitutes its empty default; authenticated reference export refuses. Analysis JSON parse fails and keeps the planned member as unusable.",
+      "half": "Science export substitutes its empty default; authenticated reference export refuses. Analysis JSON parse fails and keeps the planned member as unusable. A truncated compressed frame is an I/O failure handled at the same member boundary.",
       "garbage": "Science export substitutes its empty default; authenticated reference export refuses. Analysis JSON parse fails and keeps the planned member as unusable."
     },
-    "flags": "Recorded codes only on unusable member. Parsing precedes the synthetic override.",
+    "flags": "Recorded codes only on unusable member. Parsing precedes the synthetic override. Archive-side logical decompression or UTF-8 failures follow the member error handler. Verified restoration of the bundle directory has a separate stage-wide storage gate.",
     "read_paths": [
-      "withheld/reductions/*.summary_metrics.rereduced.json"
+      "withheld/reductions/*.summary_metrics.rereduced.json",
+      "withheld/reductions/*.summary_metrics.rereduced.json.zst"
     ]
   },
   {
@@ -305,13 +306,13 @@
     "id": "source_inventory",
     "path": "sources/SHA256SUMS and every digest-listed reference bundle file",
     "phase": "export",
-    "primary": "joulewise/b6/export_runs.py:72\u2013105,307\u2013330",
+    "primary": "joulewise/b6/export_runs.py:72\u2013105,130\u2013142,307\u2013330",
     "scope": "campaign",
     "faults": {
-      "absent": "Refuse export with StorageStop when the file is an authenticated input.",
-      "zero": "Refuse export with StorageStop when the file is an authenticated input.",
-      "half": "Refuse export with StorageStop when the file is an authenticated input.",
-      "garbage": "Refuse export with StorageStop when the file is an authenticated input."
+      "absent": "Export refuses a missing inventory.",
+      "zero": "The inventory parser refuses an empty ledger.",
+      "half": "A syntactically valid surviving prefix can export when all required proofs remain. Malformed ledger entries or loss of proof for an authenticated input refuse. Missing science-only checksum rows do not stop the reference parser.",
+      "garbage": "Export refuses malformed UTF-8 or an invalid inventory record."
     },
     "flags": "StorageStop on missing inventory proof or bytes; unrelated science files are not authenticated through the reference parser.",
     "read_paths": [
@@ -634,43 +635,46 @@
   },
   {
     "id": "chain_journal",
-    "path": "night chain-stages.jsonl",
+    "path": "night chain-stages.jsonl including custody_root/night/chain-stages.jsonl",
     "phase": "export",
-    "primary": "joulewise/b6/acceptance.py:526\u2013550",
+    "primary": "joulewise/b6/archive.py:16\u201332; joulewise/b6/acceptance.py:526\u2013550",
     "scope": "conditional_campaign",
     "faults": {
       "absent": "Try the next location. If no exit can be read, use the terminal-result fallback.",
-      "zero": "Existing file supplies no records, then terminal-result fallback.",
+      "zero": "The first existing file supplies no records and shadows later journal candidates. Apply the result or declared-exit fallback.",
       "half": "Keep complete records and skip malformed lines.",
       "garbage": "Skip malformed lines and use the terminal-result fallback."
     },
-    "flags": "Acceptance evidence may change the stop reason, with no new analysis flag.",
+    "flags": "Acceptance evidence may change the stop reason without adding an analysis flag. A parsed non-object journal row can fail evidence assembly.",
     "read_paths": [
       "night/chain-stages.jsonl",
       "sources/night*/night/chain-stages.jsonl",
-      "sources/night/chain-stages.jsonl"
+      "sources/night/chain-stages.jsonl",
+      "custody_root/night/chain-stages.jsonl"
     ]
   },
   {
     "id": "chain_result",
-    "path": "night hazard_result.json or result.json",
+    "path": "night hazard_result.json or result.json including custody_root/night",
     "phase": "export",
-    "primary": "joulewise/b6/acceptance.py:539\u2013558",
+    "primary": "joulewise/b6/archive.py:16\u201332; joulewise/b6/acceptance.py:539\u2013558",
     "scope": "conditional_campaign",
     "faults": {
-      "absent": "Skip optional result and use the next result or declared exit.",
-      "zero": "Same as absent.",
-      "half": "Same as absent.",
-      "garbage": "Same as absent."
+      "absent": "When no journal stop was found, try all result roots and both names. Prefer a recognized abort reason, then the first result with an exit code. The declared exit overrides the exit-code fallback.",
+      "zero": "Use an empty mapping for an unparseable result. Continue classification with other results or the journal.",
+      "half": "Use the empty mapping fallback for an invalid prefix. A parseable object supplies its surviving fields.",
+      "garbage": "Use the empty mapping fallback for an unparseable result."
     },
-    "flags": "Acceptance may report an unknown chain exit; no direct analysis read.",
+    "flags": "The result can change the exported acceptance stop reason without a direct analysis read. A parsed non-object result can fail evidence assembly.",
     "read_paths": [
       "night/hazard_result.json",
       "night/result.json",
       "sources/night*/night/hazard_result.json",
       "sources/night*/night/result.json",
       "sources/night/hazard_result.json",
-      "sources/night/result.json"
+      "sources/night/result.json",
+      "custody_root/night/hazard_result.json",
+      "custody_root/night/result.json"
     ]
   },
   {
@@ -720,7 +724,7 @@
   },
   {
     "id": "acceptance_registration",
-    "path": "registration/acceptance.json",
+    "path": "registration/acceptance.json or the supplied registration file path",
     "phase": "export",
     "primary": "joulewise/b6/acceptance.py:427,562\u2013565; joulewise/b6/registration.py:52\u201364",
     "scope": "observed_branch",
@@ -732,7 +736,8 @@
     },
     "flags": "Optional fallback adds no member flag. Required pack registration failure becomes StorageStop in export.",
     "read_paths": [
-      "registration/acceptance.json"
+      "registration/acceptance.json",
+      "registration_path"
     ]
   },
   {

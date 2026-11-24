@@ -972,8 +972,8 @@ def _read_text(path):
     Keep this reader independent of joulewise: the twin's no-shared-code
     fence applies to archive I/O as well as arithmetic. Resolve zstd by PATH
     or the desk's literal Homebrew fallback, independently of the analysis.
-    Only an absent sibling follows the caller's missing-file path. An
-    existing unreadable file propagates to main's Addendum 7 D7 refusal.
+    Logical file read and decode failures propagate to the owning reader.
+    Verified bundle restoration has its own stage-wide storage gate.
     """
     path = Path(path)
     try:
@@ -986,10 +986,10 @@ def _read_text(path):
         result = subprocess.run([shutil.which("zstd") or "/opt/homebrew/bin/zstd", "-dc", str(compressed)],
                                 capture_output=True, check=True)
         return result.stdout.decode("utf-8")
-    except OSError:
-        raise StorageStop("zstd unavailable: " + str(compressed)) from None
-    except (subprocess.CalledProcessError, UnicodeDecodeError):
-        raise StorageStop("compressed file unreadable: " + str(compressed)) from None
+    except OSError as exc:
+        raise OSError("zstd unavailable: " + str(compressed)) from exc
+    except subprocess.CalledProcessError as exc:
+        raise OSError("compressed file unreadable: " + str(compressed)) from exc
 
 
 def read_json(path, default=None):
@@ -1501,8 +1501,10 @@ def _science_inputs(archive, row, registered_model, *, synthetic=False):
         config = read_json(plain / "config.json")
         if not config or config["model"]["name"] != registered_model:
             raise ValueError("roster/config model mismatch")
-        metadata = read_json(plain / "metadata.json")
-        if not metadata or metadata.get("workload_observed", {}).get("output_token_count") != PRINTED_TOKENS:
+        metadata = json.loads(_read_text(plain / "metadata.json"))
+        # Preserve the distinction between unreadable JSON and a parsed value
+        # that cannot supply metadata fields, including falsey non-objects.
+        if metadata.get("workload_observed", {}).get("output_token_count") != PRINTED_TOKENS:
             raise ValueError("runtime-observed output count must be 512")
         try:
             events = _member_events(plain)
