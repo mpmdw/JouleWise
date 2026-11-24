@@ -609,7 +609,9 @@ class AuditCommittedStageOne(unittest.TestCase):
         for label in ("\n\n   - Observed offload manifest `{sha}`", "\n\n   * Observed offload manifest `{sha}`",
                       "\n\n+ **Observed offload manifest** `{sha}`",
                       # closing decision F1 (final confirm audit on 2a3752363, C3 HIGH): the bold adjective and noun
-                      "\n\n- Observed **offload** manifest `{sha}`", "\n\n- Observed offload **manifest** `{sha}`"):
+                      "\n\n- Observed **offload** manifest `{sha}`", "\n\n- Observed offload **manifest** `{sha}`",
+                      # micro-fix G1 (narrow check on ac5a44818): a sentence ended by "!" before the observation
+                      "\n\n- Verified! Observed **offload** manifest `{sha}` (6 files)."):
             with self.subTest(label):
                 row = self.run_stage1(label)
                 self.assertEqual((row["rc"], row["output"]), (0, True), row)
@@ -792,9 +794,38 @@ class ObservedNotExpected(unittest.TestCase):
                     states = P.check_states({"schema": P.SCHEMA, "spans": [self.span]},
                                             f"1. **Check of dev-03-s01 (generated).** {text}\n")
                     self.assertEqual(states["dev-03-s01"]["state"], P.HELD)
-        # a qualifier in another sentence of the item leaves the observation's statement alone
-        self.assertEqual(self.form(f"Expected copy done. Offload manifest `{d}`."), "full")
+        # the statement is the digest's whole line (micro-fix G1): a qualifier in an earlier sentence of the same
+        # line holds the span; a qualifier on another line leaves it alone
+        self.assertEqual(self.form(f"Expected copy done. Offload manifest `{d}`."), "absent")
         self.assertEqual(self.form(f"Planned at 02:00.\n- Observed offload manifest `{d}`"), "full")
+
+    def test_g1_every_sentence_terminator_ends_the_observation_sentence(self):
+        """Lead micro-fix G1 (narrow check on ac5a44818, tmp/check-sentences.py): "- Verified! Observed **offload**
+        manifest <the pin>" held a span that "- Verified. ..." bound. A sentence before the observation ends at any of
+        ".", "!", "?", ";", ":" followed by whitespace, or a line break, after the Markdown normalization. A qualified
+        line still binds nothing, whatever ends its sentences."""
+        pin = "91f18fc93b5a5a8789b0b15d9cb1d3dbe6b846afe51cc1e914ea90dad87df71a"
+        span = dict(check_item=3, span_id="dev-03-s01", offload_manifest_sha256=pin)
+        heading = "3. **Check of dev-03-s01 (generated).**\n\n"
+        for mark in (".", "!", "?", ";", ":"):
+            binds = (f"- Verified{mark} Observed **offload** manifest `{pin}` (6 files).",       # the reproduction
+                     f"- **Verified{mark}** Observed offload manifest `{pin}`",
+                     f"- Copy checked{mark} Offload manifest `{pin}` (6 files){mark} Read back OK",
+                     f"Verified{mark}\n- Observed offload **manifest** `{pin}`")
+            held = (f"- Expected{mark} Observed **offload** manifest `{pin}` (6 files).",
+                    f"- Verified{mark} Expected **offload** manifest `{pin}`",
+                    f"- Verified{mark} Observed offload manifest `{pin}`{mark} Planned",
+                    f"- Target{mark} offload manifest `{pin}`",
+                    f"- Verified{mark} Planned offload manifest{mark} `{pin}`")
+            for line, form in [(x, "full") for x in binds] + [(x, "absent") for x in held]:
+                with self.subTest(line=line):
+                    self.assertEqual(P.check_binding(span, heading + line)["form"], form)
+            # whatever ends the sentence before it, a contradicting readback "offload manifest readback: <digest>"
+            # keeps its label (the words from "manifest" to the digest are never cut) and holds the span
+            other = pin[:-1] + "0"
+            line = f"- Verified{mark} Observed offload manifest `{pin}`{mark} Offload manifest readback: `{other}`"
+            with self.subTest(line=line):
+                self.assertEqual(P.check_binding(span, heading + line)["form"], "mismatch")
 
     def test_a_pending_malformed_conflicting_or_expected_only_observation_holds_the_span(self):
         d = self.digest

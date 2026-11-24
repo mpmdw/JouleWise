@@ -572,7 +572,7 @@
       },
       {
         "path": "joulewise/cadence_looks/custody_pins.py",
-        "sha256": "ef58bc12c8cb104d2ec9e3b7e49483d8df57efcc322bb285147983858740d0cf"
+        "sha256": "0baa4071fc511334b7066bf3cd61bb8a30b12fdd76d8277325c57f2bcb0f9de5"
       },
       {
         "path": "scripts/cadence_look_verify_inputs.py",

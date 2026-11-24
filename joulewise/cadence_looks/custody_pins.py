@@ -244,9 +244,19 @@ _PREFIX_SPLIT = re.compile(r"[\s`'\"()\[\]*,;:=_/]+")
 _MARKDOWN_LEAD = re.compile(r"\s*(?:(?:[-+*]|[0-9]+[.)])\s+)?(?:(?:\*\*|__|\*|_)\s*)*")
 
 
+# The end of an observation sentence before "offload manifest": ".", "!", "?", ";" or ":" followed by whitespace (a
+# line break already ends the label). Lead micro-fix G1 (narrow check on ac5a44818): "- Verified! Observed **offload**
+# manifest <the pin>" held a correct span, because "!" did not end the sentence "Verified!".
+_SENTENCE_END = re.compile(r"[.!?;:](?=\s)")
+
+
 def _observation_prefix(prefix):
-    """Whether every word before "offload manifest" in a label is a name or an observation's word, once the line's
-    Markdown list marker, emphasis and surrounding whitespace are stripped (lead, PR #795 round 8, C3)."""
+    """Whether every word of the observation sentence before "offload manifest" is a name or an observation's word,
+    once the sentences before it, the line's Markdown list marker, emphasis and surrounding whitespace are stripped
+    (lead, PR #795 round 8, C3; micro-fix G1). Only the words before "offload manifest" are cut at a sentence's end:
+    the label from "manifest" to its digest is never cut, so a contradicting digest after "manifest:" stays the
+    span's and holds it."""
+    prefix = prefix[max((match.end() for match in _SENTENCE_END.finditer(prefix)), default=0):]
     prefix = prefix[_MARKDOWN_LEAD.match(prefix).end():]
     for word in _PREFIX_SPLIT.split(prefix):
         if not word or word.lower() in _OBSERVATION_WORDS:
@@ -268,11 +278,12 @@ def plain_text(text):
     return _INLINE_MARKDOWN.sub("", text)
 
 
-# A statement ends at a sentence's end (".", "!" or "?" before whitespace or the end) or a line's end; a comma, a
-# semicolon or a colon does not end it. A qualifier anywhere in a digest's statement makes the digest a statement about
-# the offload manifest rather than an observation of it (F1: "- Expected, offload manifest <the pin>" bound, because the
-# comma cut "Expected" from the clause the identification reads).
-_STATEMENT_END = re.compile(r"[.!?](?=\s|$)|\n")
+# A digest's statement is its whole line: a sentence end inside the line does not end it (micro-fix G1: "qualified
+# lines must still bind nothing", so "- Expected! Observed offload manifest <the pin>" holds as "- Expected, ..." does).
+# A qualifier anywhere in the line makes the digest a statement about the offload manifest rather than an observation
+# of it (F1: "- Expected, offload manifest <the pin>" bound, because the comma cut "Expected" from the clause the
+# identification reads).
+_STATEMENT_END = re.compile(r"\n")
 _QUALIFIER = re.compile(
     r"(?<![a-z])(?:expect(?:s|ed|ing)?|plan(?:s|ned)?|target(?:s|ed)?|intend(?:s|ed)?|anticipat(?:e|es|ed)"
     r"|predict(?:s|ed)?|project(?:s|ed)|estimat(?:e|es|ed)|assum(?:e|es|ed)|presum(?:e|es|ed)|suppos(?:e|es|ed)"
@@ -280,8 +291,8 @@ _QUALIFIER = re.compile(
 
 
 def qualified_statement(item, start, end):
-    """Whether the complete statement around ``item[start:end]`` (a digest) carries a qualifier: "Expected",
-    "Planned", "Target" or any such word, before or after the digest, across every clause of the statement."""
+    """Whether the complete statement around ``item[start:end]`` (a digest), its whole line, carries a qualifier:
+    "Expected", "Planned", "Target" or any such word, before or after the digest, in any sentence or clause of it."""
     begin = max((m.end() for m in _STATEMENT_END.finditer(item, 0, start)), default=0)
     after = _STATEMENT_END.search(item, end)
     return _QUALIFIER.search(item, begin, after.start() if after else len(item)) is not None
