@@ -269,6 +269,31 @@ class ReservationPlanDigestAttempt(adapter.Attempt):
         argv[position + 1] = adapter.literal(closure.digest(raw if self.exact else raw[:-1]))
 
 
+class LinkedDirectoryAttempt(adapter.Attempt):
+    """Audit 8: stage one pack directory as a link to the identical directory in the repository export."""
+    subdirectory = Path('stages/episodes-a')
+    outside = False  # link to an identical copy outside the verified roots instead
+
+    def prepare(self):
+        logical = self.stage / closure.PACK / self.subdirectory
+        target = self.repo / adapter.KIT / self.subdirectory
+        if self.outside:
+            target = shutil.copytree(target, self.work / 'outside-copy' / self.subdirectory)
+        logical.parent.mkdir(parents=True, exist_ok=True)
+        logical.symlink_to(target, target_is_directory=True)
+        put = adapter.put
+
+        def stage_file(root, name, data):
+            path = Path(root) / name
+            if path.is_relative_to(logical):  # already present through the link
+                assert path.read_bytes() == data
+                return path
+            return put(root, name, data)
+
+        with patch.object(adapter, 'put', side_effect=stage_file):
+            super().prepare()
+
+
 class ShadeCacheAttempt(PublicInputAttempt):
     data = b'Synthetic cache export.\n'
     revision = '4' * 40
@@ -1349,6 +1374,27 @@ class C1ClosureTests(unittest.TestCase):
 
             attempt = self.attempt(make_attempt=Tagged, edit_source=tag_all(holder))
             closure.campaign_marker_refusal(attempt.view, staged(attempt))
+
+    def test_audit8_high_permitted_directory_link_in_the_pack_admits(self):
+        """Audit 8 HIGH: a pack directory linked inside the verified roots hashes through the verified walk."""
+        from joulewise.arm_readiness import committed_pack_tree_sha256
+
+        copied = self.attempt()
+        linked = self.attempt(make_attempt=LinkedDirectoryAttempt)
+        self.assertTrue((linked.stage / closure.PACK / LinkedDirectoryAttempt.subdirectory).is_symlink())
+        digests = [closure.decode(a.night.read_bytes())['hazard_window']['pack']['pack_sha256'] for a in (copied, linked)]
+        reference = linked.work / 'committed'
+        shutil.copytree(linked.stage / closure.PACK, reference / 'pack', symlinks=False)
+        for argv in (['init', '-q'], ['add', '-f', 'pack'], ['-c', 'user.name=invented', '-c',
+                     'user.email=invented@invalid', 'commit', '-qm', 'invented pack']):
+            subprocess.run(['git', '-C', str(reference), *argv], check=True, capture_output=True)
+        self.assertEqual(digests, [committed_pack_tree_sha256(reference / 'pack')] * 2)
+        self.assert_admitted_on_both_routes(linked)
+        with self.subTest(case='a directory link leaving the verified roots still refuses'):
+            outside = self.attempt(make_attempt=type('Outside', (LinkedDirectoryAttempt,), {'outside': True}))
+            code, _ = outside.build()
+            self.assertEqual(code, 2, outside.build_error)
+            self.assertIn('escapes R/S', outside.build_error)
 
     def test_r16_staged_pack_digest_is_the_committed_d134_digest(self):
         """The recomputed pack digest is D-134's committed digest of the same bytes, in both forms."""

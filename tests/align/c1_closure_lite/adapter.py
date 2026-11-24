@@ -64,10 +64,11 @@ def staged_pack_digest(root):
 
     root = Path(os.path.realpath(root))
     framed = bytearray(PACK_DIGEST_DOMAIN)
-    for path in sorted((p for p in root.rglob('*') if p.is_file()),
-                       key=lambda p: p.relative_to(root).as_posix().encode()):
+    # Logical names: a linked file or directory is framed as what it reaches.
+    files = [Path(parent) / name for parent, _, names in os.walk(root, followlinks=True) for name in names]
+    for path in sorted((p for p in files if p.is_file()), key=lambda p: p.relative_to(root).as_posix().encode()):
         raw = path.read_bytes()
-        mode = b'100755' if path.stat().st_mode & 0o111 else b'100644'
+        mode = b'100755' if path.stat().st_mode & 0o100 else b'100644'
         framed += (path.relative_to(root).as_posix().encode() + b'\0' + mode + b'\0'
                    + str(len(raw)).encode() + b'\0' + hashlib.sha256(raw).hexdigest().encode() + b'\n')
     return hashlib.sha256(bytes(framed)).hexdigest()
