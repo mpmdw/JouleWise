@@ -1298,10 +1298,13 @@ class RawEvidenceTests(unittest.TestCase):
 
         def reading(seq, at):
             temps = {key: 35.0 for key in sensors.values()}
+            # The issued ALIGN reader keeps the type, size and bytes of a success (RL-215, EI ``smc-wire``); a
+            # PM frame consumed during this status call is stamped at or after the read finished (``pm-cache``).
             return row(seq, "reading", at, at + 10, {
                 "source": "smc", "units": {key: "degC" for key in temps}, "sensors": temps, "errors": {},
-                "readings": {key: {"value": value, "error": None} for key, value in temps.items()},
-                "status": {"os_level": 0, "pm_state": "Nominal", "pm_observed_ns": at, "monotonic_ns": at + 10}})
+                "readings": {key: {"value": value, "error": None, "data_type": "flt ", "data_size": 4,
+                                   "raw_hex": "00000000"} for key, value in temps.items()},
+                "status": {"os_level": 0, "pm_state": "Nominal", "pm_observed_ns": at + 10, "monotonic_ns": at + 10}})
 
         gate = {"kind": "G0", "turn": 0, "token_count": None}
         rows = [row(1, "session_start", 0, 0, {"thermal": sensors}), reading(2, 100),
@@ -1319,13 +1322,15 @@ class RawEvidenceTests(unittest.TestCase):
         thermal.valid_value = lambda key, value: type(value) in (int, float)
         thermal.Coverage = lambda begin, selected: SimpleNamespace(
             observe=lambda *args: None, report=lambda end: {"span_ns": [begin, end]})
+        smc_reader = ModuleType("joulewise.align.apple.smc_reader")
+        smc_reader.decode = lambda data_type, raw, key=None: 35.0
         apple = ModuleType("joulewise.align.apple")
-        apple.thermal = thermal
+        apple.thermal, apple.smc_reader = thermal, smc_reader
         align = ModuleType("joulewise.align")
         align.apple = apple
         # This double has no Sidecar. The row-order rule is judged here alone; the frozen Sidecar's replay of
         # every row (``_replay_frozen_sidecar``) is judged on frozen sources by tests/align/partc_derived_sweep.py.
-        with patch.dict(sys.modules, {module.__name__: module for module in (align, apple, thermal)}), \
+        with patch.dict(sys.modules, {module.__name__: module for module in (align, apple, thermal, smc_reader)}), \
                 patch.object(pc, "_replay_frozen_sidecar", lambda *args, **kwargs: None):
             yield
 
@@ -2104,11 +2109,15 @@ class FrozenOracleTests(unittest.TestCase):
             return sorted({where for callee, where, _ in calls if callee == name})
 
         self.assertEqual(callers("_adjudicate"), ["_judge_observations"])
-        self.assertEqual(callers("_judge_observations"), ["_native_verdict", "replay_archived"])
+        # RL-215 Q2: one close for both paths; the native evaluation and the archive replay each call it.
+        self.assertEqual(callers("_judge_observations"), ["_judge_close"])
+        self.assertEqual(callers("_judge_close"), ["_native_verdict", "replay_archived"])
         self.assertTrue(all(any(keyword.arg == "oracle" for keyword in node.keywords)
                             for callee, _, node in calls if callee == "_judge_observations"))
         self.assertEqual(callers("_NativeEvaluation"), ["_native_verdict"])
-        self.assertEqual(callers("_release_table"), ["_emit_part_c", "evaluate"])
+        # The replay projects its typed reason list through the native publication's own projection (RL-215 Q2);
+        # it writes no release copy and binds no ledger, so its verdict is never a Part C (RLD:20144).
+        self.assertEqual(callers("_release_table"), ["_emit_part_c", "evaluate", "replay_archived"])
         self.assertEqual(callers("_emit_part_c"), ["run_bound_part_c"])
         self.assertEqual(callers("finish"), ["_emit_part_c"])
         self.assertEqual(callers("oracle_refusal"), ["_emit_part_c"])
@@ -2282,41 +2291,94 @@ class PlannedRunIdTests(unittest.TestCase):
 
 
 class FrozenDifferentialNamedCasesTests(unittest.TestCase):
-    """The frozen differential suite's audit-named cases, run from this checkout against its own evaluator.
+    """The frozen v4 suite's named regressions, run from this checkout against its own evaluator (RL-215).
 
-    The suite materializes the issued R1 sources from Git, so it needs the two pinned commits in the local
-    object database. A shallow checkout lacks them and this test skips. The full matrix runs in hosted CI
-    (.github/workflows/partc-frozen-differential.yml). These cases are the regressions of audits 1 and 2 that need the frozen workload, driver and D-018
-    validator: the five named audit reproductions, the eight predecessor CSV cases, the orphan tokenize event,
-    the empty final phase, and the turn-flag classes the frozen workload decides. The eight CSV cases are the
-    seven RL-193 section 1 confirmed and its supplement, the six-column header with zero rows, which passes.
+    The suite (tests/frozen/partc-v4, verified against its SUITE-v4.sha256) materializes the issued R1 sources
+    from Git, so it needs the two pinned commits in the local object database. A shallow checkout lacks them and
+    these tests skip. The 1,550 v4 cases and the 25,300 inherited operands run in hosted CI
+    (.github/workflows/partc-frozen-differential.yml). RL-215 Q1: the v4 writer-produced control succeeds
+    v3.2's, whose clean control (1,801 load samples beside two battery rows) exact battery counting refuses by
+    design; v3.2 stays committed as the baseline of 532654cf0 and is no longer run as a gate here. The named
+    audit reproductions run through the suite's own history runner, which holds the same 78 cases as the
+    retired tests/align/partc_audit_probe.py on the v4 control.
     """
 
-    SUITE = Path(__file__).resolve().parent / "align" / "test_partc_frozen_differential.py"
-    SELECTOR = (r"audit-|predecessor-30b/v3/raw/runs/[^/]+/power_trace\.csv/file/|orphan-tokenize|empty-final-phase"
-                r"|runner\.error|0\.flags/set-turn_budget_reached")
+    FROZEN = Path(__file__).resolve().parent / "frozen" / "partc-v4" / "suite-v4"
+    SUITE = FROZEN / "tests" / "align" / "test_partc_writer_v4.py"
     PINS = ("b2e01464d6d4fbf2901ff4d4154df9455104a12a", "2d02a6f0e42b7ac7a51ea5d5830867eea9ff2911")
 
-    def test_named_audit_cases_have_no_false_pass_and_the_clean_control_passes(self):
-        import os
+    def require_pins(self, *paths):
         import subprocess
 
         root = Path(__file__).resolve().parents[1]
-        if not self.SUITE.is_file() or any(
+        if not all(path.is_file() for path in paths) or any(
                 subprocess.run(["git", "-C", str(root), "cat-file", "-e", pin + "^{commit}"],
                                capture_output=True).returncode for pin in self.PINS):
             self.skipTest("the pinned R1 commits are not in this object database")
-        env = {**os.environ, "JW_PARTC_CASE": self.SELECTOR, "JW_PARTC_WORKERS": "1", "JW_PARTC_REPO": str(root),
-               "PYTHONDONTWRITEBYTECODE": "1"}
+        return root
+
+    def test_the_writer_clean_proof_issues_62_62_82_62_62_battery_rows(self):
+        """RL-215 builder item 9: the v4 control's clean proof. Each member's battery journal has exactly
+        ``2 + T // 30`` rows for its tick history (idle, predecessor, Step D, D_bank, X_G), and the native and
+        archived evaluations of the control both pass."""
+        import os
+        import subprocess
+
+        root = self.require_pins(self.SUITE)
         with TemporaryDirectory() as tmp:
-            proc = subprocess.run([sys.executable, "-IB", str(self.SUITE)], cwd=tmp,
-                                  env={**env, "TMPDIR": tmp}, capture_output=True, text=True)
+            proc = subprocess.run([sys.executable, "-IB", str(self.SUITE)], cwd=tmp, capture_output=True, text=True,
+                                  env={**os.environ, "JW_V4_PROOF": "1", "JW_PARTC_REPO": str(root), "TMPDIR": tmp,
+                                       "PYTHONDONTWRITEBYTECODE": "1"})
         output = proc.stdout + proc.stderr
         self.assertEqual(proc.returncode, 0, output[-3000:])
-        self.assertIn("descriptor rows PASS (4/4)", output)
-        self.assertNotRegex(output, r"(?m)^(FALSE_PASS|WRONG_VERDICT|HARNESS_ERROR)")
+        proof = [line.split()[1:] for line in proc.stdout.splitlines() if line.startswith("PROOF ") and
+                 not line.startswith("PROOF frozen_checks")]
+        self.assertEqual(proof, [["idle", "1801", "62", "2"], ["capture-predecessor-30b", "1801", "62", "2"],
+                                 ["step-d", "2401", "82", "2"], ["d-bank-benign-s1", "1801", "62", "2"],
+                                 ["x-g", "1801", "62", "2"]], output[-3000:])
+        self.assertIn("PROOF frozen_checks, frozen driver, issued verdict, four bindings, native and archive: pass",
+                      proc.stdout)
 
-    PROBE = Path(__file__).resolve().parent / "align" / "partc_audit_probe.py"
+    RL215 = Path(__file__).resolve().parent / "align" / "partc_rl215_checks.py"
+
+    def run_rl215(self, *cases):
+        import os
+        import subprocess
+
+        root = self.require_pins(self.SUITE, self.RL215)
+        with TemporaryDirectory() as tmp:
+            proc = subprocess.run([sys.executable, "-IB", str(self.RL215), *cases], cwd=tmp, capture_output=True,
+                                  text=True, env={**os.environ, "JW_PARTC_REPO": str(root), "TMPDIR": tmp,
+                                                  "PYTHONDONTWRITEBYTECODE": "1"})
+        output = proc.stdout + proc.stderr
+        seen = {line.split()[1]: " ".join(line.split()[2:]) for line in proc.stdout.splitlines()
+                if line.startswith("RESULT ")}
+        return proc, output, seen
+
+    def test_outer_row_absent_in_an_archive_and_in_a_native_run(self):
+        """RL-215 Q2, outer row absent. An archive without the soak row binds the soak to archived custody and
+        passes, its members' terminal order still judged (an overlapping predecessor is refused); an archive that
+        holds the row passes as native does; one outer file without the other is unverifiable. A native run
+        whose row is missing at Part C is ``evidence_unverifiable`` (RLD:20771)."""
+        expected = {"archive-with-row": "pass -", "archive-without-row": "pass -",
+                    "archive-without-row-overlapping-member": "other_failure member_order",
+                    "archive-row-without-reference": "other_failure evidence_unverifiable",
+                    "native-without-row": "other_failure evidence_unverifiable"}
+        proc, output, seen = self.run_rl215(*expected)
+        self.assertEqual(seen, expected, output[-3000:])
+        self.assertEqual(proc.returncode, 0, output[-3000:])
+
+    def test_no_class_rule_finding_or_emitted_line_carries_a_planted_value(self):
+        """RL-183c test 3 (RLD:20654) extended to RL-215's class rules: a marker planted in the values the battery
+        count and callback order, the excluded PID in both census snapshots, the gated status wire, its clocks
+        and PM cache, the SMC raw reading and the inventory sweep read is in no finding and no emitted line."""
+        proc, output, seen = self.run_rl215("marker-class-rules")
+        self.assertEqual(seen, {"marker-class-rules":
+                                "no-value battery_evidence,load_evidence,reading_record,step_thermometry"},
+                         output[-3000:])
+        self.assertEqual(proc.returncode, 0, output[-3000:])
+
+    PROBE = FROZEN / "tests" / "align" / "partc_v4_history.py"
     EXPECTED = {"control": "pass -", "interval-header-zero-rows": "pass -",
                 "raw-runner-fault": "other_failure workload_replay",
                 "raw-turn-budget-flag": "other_failure workload_replay",
@@ -2331,11 +2393,7 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
         import os
         import subprocess
 
-        root = Path(__file__).resolve().parents[1]
-        if not self.PROBE.is_file() or any(
-                subprocess.run(["git", "-C", str(root), "cat-file", "-e", pin + "^{commit}"],
-                               capture_output=True).returncode for pin in self.PINS):
-            self.skipTest("the pinned R1 commits are not in this object database")
+        root = self.require_pins(self.PROBE)
         with TemporaryDirectory() as tmp:
             proc = subprocess.run([sys.executable, "-IB", str(self.PROBE), *cases], cwd=tmp, capture_output=True,
                                   text=True, env={**os.environ, "JW_PARTC_REPO": str(root), "TMPDIR": tmp,
@@ -2394,11 +2452,7 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
         import os
         import subprocess
 
-        root = Path(__file__).resolve().parents[1]
-        if not self.SWEEP.is_file() or any(
-                subprocess.run(["git", "-C", str(root), "cat-file", "-e", pin + "^{commit}"],
-                               capture_output=True).returncode for pin in self.PINS):
-            self.skipTest("the pinned R1 commits are not in this object database")
+        root = self.require_pins(self.SWEEP, self.SUITE)
         with TemporaryDirectory() as tmp:
             proc = subprocess.run([sys.executable, "-IB", str(self.SWEEP)], cwd=tmp, capture_output=True, text=True,
                                   env={**os.environ, "JW_PARTC_REPO": str(root), "TMPDIR": tmp,
@@ -2415,7 +2469,7 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, output[-3000:])
 
     # Fix round r2 (wide audit round 1 of 2026-11-22): F1 to F11, each damaged case refused and each paired
-    # control passing, through the native launcher (tests/align/partc_audit_probe.py, ``R2``).
+    # control passing, through the native launcher (the frozen v4 history runner, ``R2``).
     def check_probe(self, expected):
         proc, output, seen = self.run_probe(list(expected))
         self.assertEqual(seen, expected, output[-3000:])
@@ -2433,10 +2487,13 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
 
     def test_r2_f2_f3_f5_soak_and_battery_are_judged_against_their_bound_session(self):
         """F2: a soak missing its last 600 s of readings; F3: a soak with 5 CPU samples; F5: a battery row or a
-        whole battery journal outside the member. A battery row added in order passes."""
+        whole battery journal outside the member. A battery row added in order, which no tick issued, is
+        refused (RL-215 Q1)."""
         self.check_probe({"soak-tail-missing": "other_failure soak_readings",
                           "soak-short-load": "other_failure soak_load",
-                          "battery-row-ordered": "pass -",
+                          # RL-215 Q1: a third ordered row no tick issued is refused; a positive needs the ticks
+                          # that issue it (PROBE:389-391).
+                          "battery-row-ordered": "other_failure battery_evidence",
                           "battery-row-outside": "other_failure battery_evidence",
                           "battery-journal-shifted": "other_failure battery_evidence",
                           "battery-reduced": "other_failure battery_evidence"})
@@ -2471,7 +2528,7 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
                           "config-repeated": "other_failure issued_inputs"})
 
     # Fix round r3 (confirmation audit of 2026-11-23): five more contradictions that passed, each refused for
-    # its own reason, each beside its control (tests/align/partc_audit_probe.py, ``R3``).
+    # its own reason, each beside its control (the frozen v4 history runner, ``R3``).
     def test_r3_soak_close_and_launch_order(self):
         """A soak tail whose slope at the session close is 0.201 C/min is unsettled there and refused; at 0.19 it
         passes. Predecessor CPU offsets that put its origin inside the soak (+500 s) or before zero (+4,000 s)
@@ -2501,11 +2558,7 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
         import os
         import subprocess
 
-        root = Path(__file__).resolve().parents[1]
-        if not self.DOMAIN_SWEEP.is_file() or any(
-                subprocess.run(["git", "-C", str(root), "cat-file", "-e", pin + "^{commit}"],
-                               capture_output=True).returncode for pin in self.PINS):
-            self.skipTest("the pinned R1 commits are not in this object database")
+        root = self.require_pins(self.DOMAIN_SWEEP, self.SUITE)
         with TemporaryDirectory() as tmp:
             proc = subprocess.run([sys.executable, "-IB", str(self.DOMAIN_SWEEP)], cwd=tmp, capture_output=True,
                                   text=True, env={**os.environ, "JW_PARTC_REPO": str(root), "TMPDIR": tmp,
@@ -2530,11 +2583,7 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
         import os
         import subprocess
 
-        root = Path(__file__).resolve().parents[1]
-        if not self.PROBE.is_file() or any(
-                subprocess.run(["git", "-C", str(root), "cat-file", "-e", pin + "^{commit}"],
-                               capture_output=True).returncode for pin in self.PINS):
-            self.skipTest("the pinned R1 commits are not in this object database")
+        root = self.require_pins(self.PROBE)
         with TemporaryDirectory() as tmp:
             proc = subprocess.run([sys.executable, "-IB", str(self.PROBE), *self.EXPECTED], cwd=tmp,
                                   capture_output=True, text=True,

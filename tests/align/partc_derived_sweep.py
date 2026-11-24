@@ -4,11 +4,11 @@ Lead directive of 2026-11-21 (fix-2), D1 to D3. Part C derives each such field a
 and compares; it never takes the recorded value on trust, never passes a required check whose input is missing
 or unobservable, and holds the census to the structure ``r1_runtime.Segment.run`` writes.
 
-One clean synthetic attempt is built with the frozen differential suite's own control. ``INVENTORY`` names each
-derived field, the frozen code that derives it and the evaluator check that derives it again. For each entry the
-sweep generates mutations that change only the recorded value, so the record no longer equals its derivation,
-and calls that check on the mutated record. Every mutation must refuse, the clean record must pass, and every
-inventory entry must have generated at least one mutation.
+One clean synthetic attempt is built with the frozen v4 suite's own writer-produced control (RL-215 Q1).
+``INVENTORY`` names each derived field, the frozen code that derives it and the evaluator check that derives it
+again. For each entry the sweep generates mutations that change only the recorded value, so the record no longer
+equals its derivation, and calls that check on the mutated record. Every mutation must refuse, the clean record
+must pass, and every inventory entry must have generated at least one mutation.
 
     python3.13 -IB tests/align/partc_derived_sweep.py      (JW_PARTC_REPO selects the tree under test)
 
@@ -25,7 +25,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-SUITE = Path(__file__).resolve().parent / "test_partc_frozen_differential.py"
+# RL-215 Q1: the writer-produced v4 control succeeds v3.2's, whose clean control exact battery counting refuses.
+SUITE = Path(__file__).resolve().parents[2] / "tests/frozen/partc-v4/suite-v4/tests/align/test_partc_writer_v4.py"
 
 # name: (frozen derivation, evaluator check)
 INVENTORY = {
@@ -314,7 +315,8 @@ def run():
                                                                      ended_epoch_s=soak_window.ended_epoch_s),
                  soak_receipt),
                 ("duration one second over the session", soak_window,
-                 {**soak_receipt, "duration_s": soak_receipt["duration_s"] + 1})):
+                 {**soak_receipt, "duration_s": (soak_rows[-1]["started"]["monotonic_ns"]
+                                                 - soak_rows[0]["started"]["monotonic_ns"]) / 1e9 + 1})):
             expect("window.soak", label, lambda bound=bound, claim=claim: pc._check_soak_window(bound, claim, soak_rows))
         raw_soak = (base / "idle" / "sensors/align_thermal.jsonl").read_bytes()
         expect("soak.series", "clean", lambda: pc._derive_soak(raw_soak, soak_receipt, sensors, soak_window), clean=True)
