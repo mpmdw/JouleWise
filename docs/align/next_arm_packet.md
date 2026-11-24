@@ -250,8 +250,12 @@ state at `--series-commit`, with:
   - the bracket session, read through the driver's own `lineage_identity`;
   - the pack id and the plan tree digest;
   - `pack_sha256`, which `staged_pack_sha256` recomputes from the staged
-    pack bytes with D-134's committed-pack framing. C1 prepare records the
-    same value, so a stale or missing digest refuses;
+    pack bytes with D-134's committed-pack framing. It walks the pack with
+    the consumers' own verified walk (`Roots.walk`). That walk follows a
+    file or directory link inside the verified roots and refuses one that
+    leaves them, and it skips an unpinned staged name, which the consumers
+    refuse as unlisted. C1 prepare records the same value, so a stale or
+    missing digest refuses;
   - `repo_head` and `measurement_head`, as the execution commit;
   - the runs roots, as the chain's bindings;
   - the attempt, window plan id and custody root, as the prepared session

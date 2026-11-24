@@ -1721,3 +1721,68 @@ Local checks, within the lead's test budget:
 - Hosted CI runs the 94-case replay.
 
 Open, LOW: a link or entry placed after arm is outside preflight's reach.
+
+## Round 17 · audit 8, the verified walk for the pack digest, and unblocking CI
+
+Audit 8 checked head `6731601c4` against `ecf718b4d` and found two items:
+- **HIGH.** A permitted directory link blocked a correct C1 attempt. With
+  `pack/stages/episodes-a` staged as a link to the identical directory in
+  the repository export, the 12 files, their modes and the recomputed
+  digest all matched the copied control. Yet `staged_pack_sha256`
+  refused the link: build and install exited 2, and direct arm refused.
+- **LOW (A4).** This head had a merge conflict and no CI. Two focused
+  tests also failed:
+  - C2a, which expects a stray pack file present at finalization to be
+    left for the consumers;
+  - the SHADE clean control, whose fixture placed its write roots
+    outside its prepared session.
+
+The case was committed first, as spec `57725b1ba`. On the unchanged code,
+the linked attempt was refused with "C1 pack holds a directory link",
+although its digest already matched the copied control's.
+
+| Finding | Commit | Named regression | Result |
+| --- | --- | --- | --- |
+| HIGH: a pack directory linked to the identical repository directory (the audit's reproduction) is admitted on both routes. Its digest equals the copied control's and D-134's committed digest. A link leaving the verified roots still refuses. | `b948708b3` | `test_audit8_high_permitted_directory_link_in_the_pack_admits` | PASS |
+| LOW: a stray in the pack at finalization is left unpinned and is refused by the consumers as "unlisted staged file" | `b948708b3` | `test_c2a_finalizer_cannot_pin_a_stray_present_at_finalization` | PASS |
+| LOW: the SHADE clean control admits once its fixture's write roots are inside its session | `b948708b3` | `test_shade_uses_the_rendered_cache_instead_of_stale_xdg_cache_home` | PASS |
+| LOW: no CI, because of the review-ledger conflict | `adf752d4b` | merge check (`git merge-tree` against `ecf718b4d`) | clean |
+
+- **Root cause.** Round 16's digest walked the raw filesystem. The
+  consumers instead verify the stage with `Roots.walk`, which follows a
+  link inside R/S and refuses one that leaves them. Round 16 therefore
+  refused a link the fence permits, and hashed a stray that the
+  consumers, not the finalizer, are meant to refuse.
+  `staged_pack_sha256(roots, pins)` now frames exactly what `Roots.walk`
+  reaches under the pack, by logical path and with the walk's mode.
+  Given the staged pins, it skips an unpinned staged name. Preflight
+  passes `declared_pins`. C1 prepare passes the session's `Roots` and no
+  pins, so it records the same value from the same bytes. A link leaving
+  the verified roots refuses at prepare's own output declaration, before
+  any digest.
+- **SHADE fixture.** `PublicInputAttempt` prepares its staged inputs under
+  a session directory, through the production `c1_measurement_view`, but
+  left its runs roots, logs, backups, custody and install root under the
+  outer work directory. It now places them under the session, as
+  production prepare does. The adapter gains an `install_root` hook with
+  an unchanged default, and the C2a helper uses it.
+- **CI unblocked.** The base had appended two review rows (PRs #960 and
+  #961) at the same point as this PR's seven, and no `pull_request` run
+  could start. `adf752d4b` moves this PR's seven rows, byte for byte,
+  ahead of the base's last row. A merge with the moved base then yields
+  exactly the union of 80 rows. The 15-row pinned prefix stays intact and
+  every commit still appears once. This was an ordinary commit, with no
+  merge and no force push, and the branch now merges cleanly with
+  `ecf718b4d`.
+
+Local checks, within the lead's test budget:
+- All 48 tests in `tests.align.test_c1_closure` other than the frozen
+  replay pass, in four processes. That covers the two tests audit 8 saw
+  fail.
+- `tests.align.test_v4_next_arm_packet` (69) and `tests.align.test_v4_series_e2e` (11) pass at `b948708b3`.
+- The census scan is clean.
+- The review-ledger test (`test_review_rows_are_append_only_and_load_in_the_code_check`)
+  could not run here, because it reads an archive this machine denies.
+  Its prefix and uniqueness properties were checked directly, and CI
+  shard 12 runs it.
+- The nine frozen files are unchanged. Hosted CI runs the 94-case replay.
