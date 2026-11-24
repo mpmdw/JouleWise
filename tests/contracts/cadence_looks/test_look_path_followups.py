@@ -484,6 +484,67 @@ class LookPathFollowupTests(TestCase):
                 self.assertEqual(self.invoke(world, bench, "preflight", "guard_blind_values"), (0, b"", b""))
             self.assert_fresh(world, bench)
 
+    def test_native_script_completion_and_clock_bounds_refuse_fresh(self):
+        scaffold = self.stage_scaffold("completion-clock-scaffold")
+
+        def step_complete(world, leg, kind):
+            def change(work):
+                next(step for step in work["steps"] if step["kind"] == kind)["complete"] = False
+            mutate(world, "script", change, leg=leg)
+
+        def anchor(world, **changes):
+            mutate(world, "metadata", lambda doc: doc["uncertainty_evidence"]["clock_anchor"].update(changes))
+
+        def resolution(world, key, value):
+            def change(episode):
+                for stamp in episode["hardware"]["paired_clock_stamps_ns"]:
+                    stamp[key] = value
+            mutate(world, "episode", change)
+
+        cases = (
+            ("cpu-completion", lambda world: step_complete(world, "L003", "cpu")),
+            ("call-completion", lambda world: step_complete(world, "L002", "turn")),
+            ("recovery-completion", lambda world: step_complete(world, "L002", "recovery")),
+            ("bound-negative", lambda world: anchor(world, effective_clock_anchor_bound_s=-0.25)),
+            ("wall-resolution-negative", lambda world: resolution(world, "wall_resolution_ns", -250000000)),
+            ("mono-resolution-masked-by-rounding", lambda world: resolution(world, "monotonic_resolution_ns", -1)),
+            ("inverted-anchor-bracket", lambda world: anchor(world, wall_minus_monotonic_lower_s=18001)),
+            ("link-negative", lambda world: mutate(
+                world, "config", lambda cfg: cfg["interconnect"].update(link_speed_mbps=-0.25))),
+            ("link-overflow", lambda world: mutate(
+                world, "config", lambda cfg: cfg["interconnect"].update(link_speed_mbps=10**309))),
+        )
+        for name, configure in cases:
+            with self.subTest(name=name):
+                world, bench = self.prepare(name, configure=configure)
+                self.assert_refuses_at_blind_gates(world, bench, scaffold)
+
+    def test_inapplicable_script_fields_and_config_link_rate_are_opaque(self):
+        def annotate(world):
+            def work(record):
+                recovery = next(step for step in record["steps"] if step["kind"] == "recovery")
+                recovery["first_token_ns"] = "no first token during recovery; synthetic power_w=91827.375"
+                visible = next(step for step in record["steps"] if step["kind"] == "turn")
+                visible["requested_s"] = "synthetic diagnostic 91827.375"
+
+            mutate(world, "script", work)
+
+        def link_rate(world):
+            def config(document):
+                document["interconnect"].update(name="synthetic test link", link_speed_mbps=91827.375)
+
+            mutate(world, "config", config)
+
+        for name, configure in (("script-incidental", annotate), ("config-link-rate", link_rate)):
+            world, bench = self.prepare(name, configure=configure)
+            with self.subTest(name=name, operation="stage1"):
+                self.assertEqual(self.invoke(world, bench, "stage1", "guard_blind_values"), (0, b"", b""))
+            self.assertEqual(self.invoke(world, bench, "stage1"), (0, b"", b""))
+            self.assertEqual(self.invoke(world, bench, "commit-stage1"), (0, b"", b""))
+            with self.subTest(name=name, operation="preflight"):
+                self.assertEqual(self.invoke(world, bench, "preflight", "guard_blind_values"), (0, b"", b""))
+            self.assert_fresh(world, bench)
+
     def test_rail_edge_snapping_preserves_rounded_edges_and_gaps(self):
         def rows(start):
             for rail in reader.RAILS:
@@ -655,6 +716,18 @@ class LookPathFollowupTests(TestCase):
                     with self.assertRaises(layout.GateRefusal) as caught:
                         call()
                     self.assertEqual((caught.exception.status, caught.exception.notice), (4, "REFUSE HALF_MADE\n"))
+
+    def test_claim_sync_failure_after_bound_marker_reports_spent_immediately(self):
+        world, bench = self.prepare("marker-final-sync")
+        self.assertEqual(self.invoke(world, bench, "stage1"), (0, b"", b""))
+        self.assertEqual(self.invoke(world, bench, "commit-stage1"), (0, b"", b""))
+        for operation in ("stage2", "status", "stage2"):
+            with self.subTest(operation=operation):
+                self.assertEqual(self.invoke(world, bench, operation, "marker_final_sync"),
+                                 (3, b"", b"REFUSE SPENT\n"))
+        self.assertTrue((self.private(bench) / layout.MARKER_NAME).is_file())
+        self.assertEqual(list((bench / "public" / registrar.LOOK).iterdir()), [])
+        self.assertEqual((bench / "events.jsonl").read_text().splitlines(), ['"claim"'])
 
     def test_bootstrap_reports_spent_before_source_layout_and_offline_checks(self):
         world, bench = self.prepare("spent")

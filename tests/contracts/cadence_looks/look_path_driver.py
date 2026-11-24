@@ -313,6 +313,10 @@ def run(operation, world, bench, fault):
         with (bench/"events.jsonl").open("ab") as stream:
             stream.write(manifest.canonical(value) + b"\n")
 
+    if fault == "marker_final_sync":
+        # Keep the production claim path usable on hosts that deny the
+        # literal reservation name even in a synthetic temporary directory.
+        layout.PRIVATE_NAME = "SYNTHETIC-RESERVATION"
     os_mkdir, os_fsync, original_claim = os.mkdir, os.fsync, layout.claim
     claim_parent = None
 
@@ -331,7 +335,11 @@ def run(operation, world, bench, fault):
         if fault == "mkdir_sync_once" and fd == claim_parent:
             claim_parent = None
             raise OSError("synthetic reservation directory sync")
-        return os_fsync(fd)
+        result = os_fsync(fd)
+        if fault == "marker_final_sync" and fd == claim_parent and (private / layout.MARKER_NAME).is_file():
+            claim_parent = None
+            raise OSError("synthetic error after syncing the bound marker")
+        return result
 
     def claim(*args):
         restricted = original_claim(*args)
