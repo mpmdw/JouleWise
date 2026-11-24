@@ -1097,6 +1097,24 @@ class SoakLauncherBindingTests(unittest.TestCase):
                                    pmset_bin="synthetic", deadline=time.time() + 90_000)
             return smoke.run(args, feeds=[])
 
+    def check_writer_handoff(self, *fault):
+        probe = Path(__file__).with_name("rl145_w1_handoff.py").resolve()
+        with tempfile.TemporaryDirectory() as tmp:
+            result = subprocess.run(
+                [sys.executable, "-IB", str(probe), str(kit.ROOT), str(Path(smoke.__file__).resolve()), *fault],
+                cwd=tmp, capture_output=True, text=True,
+                env={**os.environ, "JW_PARTC_REPO": str(kit.ROOT), "TMPDIR": tmp},
+            )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_current_w1_launcher_passes_the_bound_soak_handoff(self):
+        self.check_writer_handoff()
+
+    def test_current_w1_launcher_rejects_wrong_forwarded_hashes(self):
+        for fault in ("handoff-ledger", "publication-ledger", "publication-reference"):
+            with self.subTest(fault=fault):
+                self.check_writer_handoff(fault)
+
     def test_idle_argv_matches_frozen_invoker_with_and_without_the_host_lock(self):
         for held in (False, True):
             with self.subTest(held=held), tempfile.TemporaryDirectory() as tmp:
