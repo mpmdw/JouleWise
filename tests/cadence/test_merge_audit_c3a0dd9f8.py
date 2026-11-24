@@ -260,7 +260,7 @@ class ValidateBeforeOpen(unittest.TestCase):
     def test_the_preflight_knows_when_no_leg_can_enter_the_fit(self):
         """Audit r7 finding 1: with every verdict's sidecar_coverage false, the preflight's plan has no fit candidate
         and nothing protected was opened. Whether stage 1 refuses here is NEEDS_SPEC (POST_OPEN_REASONS
-        ``no_fit_candidate``; AuditCommittedStageOne.test_audit_r7_1_no_fit_candidate_refuses_before_any_open)."""
+        ``no_fit_candidate``; AuditCommittedStageOne.test_audit_r7_1_no_fit_candidate_is_needs_spec_...)."""
         excluded = {k: dict(v, sidecar_coverage=False) for k, v in self.verdicts.items()}
         root = self.custody()
         with _Opens() as opened:
@@ -474,16 +474,21 @@ class AuditCommittedStageOne(unittest.TestCase):
         finally:
             self.restore()
 
-    @unittest.expectedFailure
-    def test_audit_r7_1_no_fit_candidate_refuses_before_any_open(self):
+    def test_audit_r7_1_no_fit_candidate_is_needs_spec_and_refuses_after_the_first_open(self):
         """NEEDS_SPEC (PR #795 round 8). Audit on 5a7a3eae0, finding 1: every verdict's sidecar_coverage false leaves
-        no fit candidate; stage 1 still opens the four protected sources and refuses ``no leg enters the fit``. The
-        refusal is not moved before the first open because the frozen admission matrix's negative-arena control (the
-        roster of 101,605 of its 101,889 cases) has every verdict false and must reach a protected open. This test
-        fails until the lead rules; it then passes and unittest reports an unexpected success."""
+        no fit candidate (the preflight knows it: ValidateBeforeOpen.test_the_preflight_knows_when_no_leg_can_enter_
+        the_fit), yet stage 1 opens the protected sources and refuses "no leg enters the fit" (POST_OPEN_REASONS
+        ``no_fit_candidate``). The refusal is not moved before the first open because the frozen admission matrix's
+        negative-arena control (the roster of 101,605 of its 101,889 cases) has every verdict false and must reach a
+        protected open. This test pins today's behaviour until the lead rules: no output, no reservation, no public
+        file, and the refusal after the opens. If the ruling moves the refusal, this test changes with it."""
         try:
             self.register({k: dict(v, sidecar_coverage=False) for k, v in self.verdicts.items()})
-            self.assert_refused_before_any_open(self.run_stage1(), "no leg")
+            row = self.run_stage1()
+            self.assertEqual(row["rc"], 2, row)
+            self.assertIn("stage 1: no leg enters the fit", row["err"])
+            self.assertFalse(row["output"] or row["public"] or row["spent"] or row["responses"], row)
+            self.assertTrue(row["opens"], "the NEEDS_SPEC refusal moved before the first open without a ruling")
         finally:
             self.restore()
 
