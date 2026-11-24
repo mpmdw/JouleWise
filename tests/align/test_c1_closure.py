@@ -1,10 +1,12 @@
 """The frozen acceptance tape and additional prepare/ledger contract cases."""
 import argparse
 import ast
+import contextlib
 import fnmatch
 import functools
 from functools import partial
 import hashlib
+import io
 import json
 import os
 import re
@@ -911,6 +913,111 @@ class C1ClosureTests(unittest.TestCase):
 
                 self.assert_refused_on_both_routes(self.attempt(edit_source=edit),
                                                    'calibration_reserved_slot_mismatch')
+
+    def test_audit4_h1_reservation_window_is_the_frozen_c1_window(self):
+        """Audit 4 H1: --window-id C2 beside plan_id align-v4-c1 refuses, and the writer asserts it."""
+        from joulewise.flags import core
+        from joulewise.powermetrics_fiducial import V2_BINDING_FIELDS
+        from scripts import reserve_calibration_window_bracket as reservation
+
+        def edit(flag, value):
+            def apply(tree):
+                row = next(row for row in tree['stage_graph'] if row['kind'] == 'bracket_reservation')
+                set_option(adapter.arguments(row), flag, 'literal', value)
+                return {}
+            return apply
+
+        with self.subTest(case='plan id of another window'):
+            self.assert_refused_on_both_routes(self.attempt(edit_source=edit('--plan-id', 'align-v4-c2')),
+                                               'calibration_plan_hash_mismatch')
+        attempt = self.attempt(edit_source=edit('--window-id', 'C2'))
+        with self.subTest(case='window id C2 with the C1 plan (audit reproduction)'):
+            self.assert_refused_on_both_routes(attempt, 'frozen C1 window')
+        with self.subTest(case='the reservation writer refuses the rendered C2 argv'):
+            # The audit's writer replay: host identity and the flag sink are simulated.
+            name = str(attempt.view / 'scripts/reserve_calibration_window_bracket.py')
+            text = (attempt.stage / 'controls/chain.zsh').read_text().replace('\\\n', ' ')
+            argv = next(words[words.index(name) + 1:] for line in text.splitlines()
+                        if name in line and name in (words := shlex.split(line)))
+            self.assertEqual(argv[argv.index('--window-id') + 1], 'C2')
+            epoch = dict(os_build='invented', hardware_model='fixture', power_policy='ac_high_power',
+                         sampling_interval_ms=100, estimator_revision='fixture', pulse_protocol_id='fixture')
+            t1 = {**dict.fromkeys(V2_BINDING_FIELDS, 'invented'), **epoch}
+            ledger = attempt.stage / adapter.LEDGER
+            before = ledger.read_bytes()
+            error = io.StringIO()
+            context = core.HazardFlagContext(writer='core-reservation', custody_root=None,
+                                             plan_id=attempt.plan['plan_id'], attempt=None, scope_resolved=False)
+            with closure.consumer_environment(rendered_environment(attempt), attempt.view), \
+                    patch.object(core, 'hazard_flag_context', return_value=context), patch.object(core, 'emit'), \
+                    patch.object(reservation, '_hazard_measured_identity', return_value=(epoch, t1, None)), \
+                    contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(error):
+                code = reservation.main(argv)
+            self.assertEqual(code, 2, error.getvalue())
+            self.assertIn('plan_window_mismatch', error.getvalue())
+            self.assertEqual(ledger.read_bytes(), before)
+
+    def test_audit4_m1_max_blocks_below_one_refuses_before_host(self):
+        """Audit 4 M1: preflight refuses --max-blocks 0 with the campaign's own message."""
+        def edit(tree):
+            row = next(row for row in tree['stage_graph'] if row['kind'] == 'campaign_collection')
+            set_option(adapter.arguments(row), '--max-blocks', 'literal', '0')
+            return {}
+
+        self.assert_refused_on_both_routes(self.attempt(edit_source=edit), '--max-blocks must be >= 1')
+
+    def test_r13_arguments_a_consumer_rejects_or_that_disagree_with_the_plan(self):
+        """Round 13 sweep: each such rendered argument refuses at the shared preflight (builder exit 2)."""
+        def stage(kind, slot=None):
+            def select(tree):
+                if slot is not None:
+                    return capture_arguments(tree, slot)
+                return adapter.arguments(next(row for row in tree['stage_graph'] if row['kind'] == kind))
+            return select
+
+        def flag(name):
+            return [adapter.literal(name)]
+
+        def value(name, item, kind='literal'):
+            return [adapter.literal(name), {'kind': kind, 'value': item}]
+
+        reservation, collection = stage('bracket_reservation'), stage('campaign_collection')
+        pre, post = stage(None, 'pre'), stage(None, 'post')
+        instrument = value('--instrument-calibration-dir', 'pre_calibration_dir', 'binding')
+        cases = (
+            ('reservation runs root', reservation, ('--runs-root', '/synthetic-other-runs'),
+             "runs root differs from the window's claim runs root"),
+            ('derivation-only capture', pre, flag('--derivation-only'), 'C1 capture is a bracket capture'),
+            ('test-only sampler', pre, flag('--sampler-direct-for-test'), 'test-only capture option'),
+            ('test-only time scale', post, value('--time-scale-for-test', '0.5'), 'test-only capture option'),
+            ('pulse count', pre, value('--pulse-count', '40'), "frozen protocol's pulse count"),
+            ('sampler timeout', post, value('--sampler-ready-timeout-s', '0'), 'must be finite and positive'),
+            ('dry run', collection, flag('--dry-run'), 'unsupported C1 campaign mode'),
+            ('block limit', collection, value('--max-blocks', '1'), 'G2B_SHAKEDOWN'),
+            ('instrument power policy', collection, instrument + value('--instrument-power-policy', 'ac_low_power'),
+             'instrument power policy differs from the reserved policy'),
+        )
+        for name, select, extra, detail in cases:
+            with self.subTest(case=name):
+                def edit(tree, select=select, extra=extra):
+                    if isinstance(extra, tuple):  # replace an option the template already carries
+                        set_option(select(tree), extra[0], 'literal', extra[1])
+                    else:
+                        select(tree).extend(extra)
+                    return {}
+
+                attempt = self.attempt(edit_source=edit)
+                code, _ = attempt.build()
+                self.assertEqual(code, 2, attempt.build_error)
+                self.assertIn(detail, attempt.build_error)
+        with self.subTest(control='instrument power policy equal to the reserved policy'):
+            def matched(tree):
+                collection(tree).extend(instrument + value('--instrument-power-policy', 'ac_high_power'))
+                return {}
+
+            attempt = self.attempt(edit_source=matched)
+            code, _ = attempt.build()
+            self.assertEqual(code, 0, attempt.build_error)
 
     def test_r11_caller_ledger_pointer_is_refusal_only(self):
         """Ruling item 2: a caller's CALIBRATION_LEDGER may only refuse; unset imposes nothing."""
