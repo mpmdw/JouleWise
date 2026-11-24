@@ -1955,3 +1955,77 @@ Local checks: all 50 `test_c1_closure` tests pass in three processes.
 The frozen replay ran once (9 m 21 s) and matched the tape byte for byte.
 `shasum -c SUITE.sha256` passes for all nine files, and they are
 unchanged since `3ea3de760`.
+
+## Round 20 · CAP 10 closing step: the C1 attempt installs through the real installer
+
+Audit 10 replayed two fresh synthetic C1 attempts at `8e121fe35`. Both
+passed build and reached both mocked host checkpoints, and the production
+installer then refused each correct attempt twice:
+- **Identity.** `validate_install` read `repo_head` with git in the
+  directory where its own module resolves. For C1 that is the repo export,
+  which has no `.git`, so it exited 3 with `unable to read repo_head from
+  driver checkout`.
+- **Publication.** C1 prepare wrote the night plan to
+  `attempt-inputs/controls/night_plan.json`. The installer's publication
+  check admits only the custody root's plan, so it exited 2 with
+  `plan_outside_custody_root`.
+
+The lite adapter hid both, because it stubbed `pilot.install`. The lead
+decided this as non-paper engineering, with no audit round. The spec came
+first, as `fc8e460ea`; the fix is ``04437b04d``.
+
+| Item | Change | Named regression | Result |
+| --- | --- | --- | --- |
+| I1 installer identity | One function, `v4_registration.execution_commit(handoff)`, supplies the pinned commit to the launch view (`verify_view`, the prepared closure, the launch records) and to the installer. The C1 install route passes the commit it just verified as `--execution-commit`. For a C1 plan the installer requires `repo_head` and `measurement_head` to equal that commit and never runs git. A missing or malformed commit refuses as `execution_commit_missing`, and a differing head as `execution_commit_mismatch`. A commit supplied for a non-C1 plan refuses as `execution_commit_unexpected`, so other installs keep their git check. | `test_cap10_audit_identity_is_the_pinned_execution_commit` | PASS |
+| I2 one plan location | One function, `night_gate.night_plan_path(custody_root)`, defines where a plan lives. The b5 writer publishes there even when a controls root is given, so C1 keeps only the chain, sidecar and window env in S. `bytes_h_session.prepare` refuses a plan the writer published anywhere else and records that path. The installer's publication check (`Prepared.admit`), its render and both evidence checks use the same function. The C1 closure (`load_prepared`) reads the plan there: no link at or below custody, a regular file, and bytes bound by `plan_sha256` in the staged `session.json`. A plan outside the custody root still refuses as `plan_outside_custody_root`. | `test_cap10_audit_installer_admits_the_plan_where_c1_prepare_publishes_it`, `test_cap10_one_plan_location_function`, `test_cap10_a_controls_root_never_moves_the_night_plan_off_the_custody_root` | PASS |
+| I3 no stub on the admission path | The adapter no longer patches `pilot.install`. The real `bytes_h_session.install` builds the argv, and the real installer parses it in-process, loaded from a copy of its module and templates in a directory with no `.git`. It runs plan parse, identity, schedule, battery custody record, plist render, night-record check and admission, which includes the publication check. Only host steps are replaced: the launchd transaction and launchctl lookup, the courier lookup and driver preflight (programs of a measurement checkout that the synthetic export does not hold), the battery probe, and the clock. Each git call is recorded. | `test_cap10_i3_fresh_attempt_end_to_end_through_the_real_installer` | PASS |
+| Frozen suite | Manifest digest, the nine frozen files, and all 94 decisions, with the real installer in every admitted case | `shasum -c SUITE.sha256`; `test_frozen_lite_decisions` | 94/94 |
+
+To expose the installer's host steps, `validate_install` was split into
+`check_identity`, `select_courier` and `driver_preflight`. Each is moved
+without change, and non-C1 plans keep the same checks in the same order.
+The adapter's night plan now carries the full HAZARD_PACK shape, which the
+real installer parses, and a minute-aligned `t0_epoch_s` of 1020. The
+installer files cannot go into the synthetic export: they are registered
+artifacts, and adding them would move the artifact-set digest that the
+frozen W1 desk pins.
+
+Three existing regressions assumed the old plan location and changed with
+it. `rendered_environment` and the gemini 6.1 case read the plan from
+`attempt.night`. In r15, the custody root already exists, because prepare
+publishes the plan there, so the linked-custody case moves that directory
+into the previous attempt and links to it. In r16, the custody-root case
+checks that prepare added only the attempt's own `night_plan.json` to the
+previous custody root it was given. Production prepare also writes there
+(its record and `operator-logs`). The build must still change nothing,
+and it refuses as before.
+
+Three more test files followed the change. The shared
+`fixture_c1_preflight` stands in for the git-authority preflight in the
+cadence witnesses, and it now returns the plan's `repo_head` as the
+context's commit. Two installer tests pin the shell usage line, which now
+lists `[--execution-commit OID]`.
+
+The refusal census lists two new INTERNAL `bytes_h_session` sites, for the
+producer's plan location and the non-C1 commit. The review-required path
+lists are untouched.
+
+Other readers already used the custody root's plan: the driver, the
+watchdog, `run_campaign` and the flag context. C1 now publishes there, so
+they agree with it without a change.
+
+Local checks, at most four processes:
+- the four CAP 10 regressions and the b5 writer case pass, and failed on
+  the spec commit;
+- all 50 `test_c1_closure` tests pass;
+- the frozen replay ran once (734 s) and matched all 94 decisions byte
+  for byte; `shasum -c SUITE.sha256` passes for all nine files, and they
+  are unchanged since `3ea3de760`;
+- `test_bytes_h_session` with `test_b5_plan` (66), `test_v4_series`
+  production path (all 11 windows), `test_v4_series_e2e` (11), and
+  `test_evidence_arm_sequence` with `b6/test_b6_plan_render` (6) pass;
+- the installer suites' usage, option, custody, head, courier and
+  preflight cases pass (20).
+
+The full installer suites passed 1100 s locally without finishing, so
+hosted CI runs them. The refusal census is clean.
