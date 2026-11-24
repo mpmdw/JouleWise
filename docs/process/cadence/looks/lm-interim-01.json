@@ -532,11 +532,11 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "939abe04e0ab409d391ffdf9457e18c65199f7b9ceb0721293ad64ac767ae1de"
+        "sha256": "206a51d99f280d2ead8569d872da17df38629903254c8b29ba695cc1a20ad172"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
-        "sha256": "f0a5c9a510a2e8e843f4277c94c4d235aabdaf1862b1d8f806c72ce809f5442f"
+        "sha256": "111efda69101cbecd941cd633af070a45d97dc884a016358fd947ba941e0b555"
       },
       {
         "path": "joulewise/cadence_looks/schema_check.py",
@@ -883,7 +883,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "a8107f26d60848a914189441ff87dc5d5ecae8ac0ad834c3b65b0018aca5c09a"
+        "sha256": "41b8aa0cc1662c21619b4a9c303b4581b431855f7b03a18b34bc7dbd56ab9873"
       },
       {
         "path": "joulewise/desk_compress.py",

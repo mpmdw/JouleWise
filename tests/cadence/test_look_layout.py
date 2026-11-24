@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 from joulewise.cadence_looks import custody_pins as P, interim_release as release, manifest as M
 from tests.cadence import custody_pin_fixture as PF
@@ -633,17 +634,15 @@ class CommandLine(unittest.TestCase):
         the reservation's names that differs from them only in case."""
         tmp = Path(os.path.realpath(tempfile.mkdtemp(prefix="look-names-")))
         self.addCleanup(shutil.rmtree, tmp, True)
-        root, public_rel = tmp / "root", str(tmp / "public")        # an absolute public root: nothing in the repo
+        root, repo = tmp / "root", tmp / "repo"
         (root / LOOK).mkdir(parents=True)
-        layout = M.LookLayout(REPO, doc_with_root(root))
-        public_dir = tmp / "public" / LOOK
+        public_dir = repo / M.LOOK_PUBLIC_ROOT / LOOK
         public_dir.mkdir(parents=True)
+        layout = M.LookLayout(repo, doc_with_root(root))
         row = {"look_id": LOOK, "execution_host": "hw1:" + "a" * 64, "custody_root": str(root),
-               "public_root": public_rel, "holds_cleared": {}}
+               "public_root": M.LOOK_PUBLIC_ROOT, "holds_cleared": {}}
         stage1 = {flag.split(".")[0]: {} for flag in M.STAGE2_HOLD_FLAGS["interim"]}
-        real_host = R.M.execution_host
-        R.M.execution_host = lambda: "hw1:" + "a" * 64
-        try:
+        with mock.patch.object(R, "ROOT", repo), mock.patch.object(R.M, "execution_host", return_value=row["execution_host"]):
             R.validate_execution_row(row, stage1, layout)                # nothing beside them: admitted
             for parent, name in ((public_dir, "public.json"), (root / LOOK, "restricted")):
                 try:
@@ -655,8 +654,12 @@ class CommandLine(unittest.TestCase):
                 (parent / name).unlink()
             with self.assertRaisesRegex(R.F.LookInputError, "not the root the manifest registers"):
                 R.validate_execution_row(dict(row, custody_root=str(tmp)), stage1, layout)
-        finally:
-            R.M.execution_host = real_host
+
+    def test_stage2_execution_preflight_refuses_an_unlisted_root_before_probes(self):
+        row = {"look_id": LOOK, "public_root": "docs/public"}
+        with mock.patch.object(R.M, "execution_host", side_effect=AssertionError("unexpected host probe")):
+            with self.assertRaisesRegex(R.F.LookInputError, "allowed public root.*docs/public"):
+                R.validate_execution_row(row, None, None)
 
 
 @unittest.skipIf(R is None, "numpy is not installed")

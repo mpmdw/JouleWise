@@ -996,10 +996,11 @@ class TwinThroughCLI(unittest.TestCase):
         private = private_root / LOOK / self.basename
         if private.exists():
             shutil.rmtree(private)
-        public_rel = f"generated-{fault}"
+        public_rel = M.LOOK_PUBLIC_ROOT
         public = self.mini / public_rel / LOOK / "PUBLIC.json"
+        public.unlink(missing_ok=True)
         private.parent.mkdir(parents=True, exist_ok=True)
-        public.parent.mkdir(parents=True)
+        public.parent.mkdir(parents=True, exist_ok=True)
         ledger = self.root / f"ledger-{fault}.json"
         row = dict(self.row, custody_root=str(private_root), public_root=public_rel)
         ledger.write_bytes(C.dump({"schema": M.LOOK_LEDGER_SCHEMA, "looks": [row]}))
@@ -1089,10 +1090,10 @@ class TwinThroughCLI(unittest.TestCase):
         self.assertEqual(record["result"]["bundle"], "runs/cadence-leg")
         out = self.root / "refused-stage1.json"
         ledger = self.root / "refusal-ledger.json"
-        row = dict(self.row, custody_root=str(self.source), public_root="generated-refusal")
+        row = dict(self.row, custody_root=str(self.source), public_root=M.LOOK_PUBLIC_ROOT)
         ledger.write_bytes(C.dump({"schema": M.LOOK_LEDGER_SCHEMA, "looks": [row]}))
         (self.source / LOOK).mkdir(exist_ok=True)
-        (self.mini / row["public_root"] / LOOK).mkdir(parents=True)
+        (self.mini / row["public_root"] / LOOK).mkdir(parents=True, exist_ok=True)
         private = self.source / LOOK / "RESTRICTED"
         stage2 = ["stage2", "--stage1", self.stage1, "--stage1-sha256", self.response_sha, "--manifest", self.manifest,
                   "--allow-draft", "--looks", ledger, "--custody", self.source]

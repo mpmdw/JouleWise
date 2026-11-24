@@ -223,7 +223,7 @@ def row(args):
             changes = {"status": "failed", "error_type": args.error_type}
         elif args.interrupted:
             public_root = r.get("public_root")
-            if not public_root or os.path.lexists(repo / public_root / r["look_id"] / "PUBLIC.json"):
+            if not public_root or os.path.lexists(repo / lm.public_report_path(r)):
                 problems.append("an interrupted look needs a registered public root with no completed report")
             else:
                 changes = {"status": "interrupted", "error_type": "none_recorded"}
@@ -271,8 +271,16 @@ def row(args):
 
 
 def public_row(repo, row):
-    """Read only the registered public report and verify its committed source bindings."""
-    public_path = repo / row["public_root"] / row["look_id"] / "PUBLIC.json"
+    """Authenticate the execution row on main before opening the admitted report."""
+    route = lm.public_report_path(row)
+    lm.fetch_public(repo)
+    _, main = lm.shared_ref(repo, "origin/main")
+    # The exact commit named by the report is checked below. First require the registered
+    # execution row to occur in the ledger history of the same fetched main commit.
+    if not any(lm.execution_row_at(repo, commit, row["look_id"]) == row
+               for commit in lm._ledger_history_commits(repo, main)):
+        raise ValueError(f"main's history does not authenticate the execution row for {route!r}")
+    public_path = repo / route
     if public_path.resolve() != public_path:
         raise ValueError("the registered public report must be a canonical path")
     raw = public_path.read_bytes()
@@ -282,12 +290,9 @@ def public_row(repo, row):
             row["look_id"], row["sha256"], row["stage1_sha256"]):
         raise ValueError("the public report names different commitments from the look ledger")
     commit = public["commit"]
-    lm.fetch_public(repo)                 # the shared ref is origin/main as fetched now; a failed fetch refuses
-    ref, _ = lm.shared_ref(repo, "origin/main")
-    if lm._git(repo, "merge-base", "--is-ancestor", commit, ref)[0]:
+    if lm._git(repo, "merge-base", "--is-ancestor", commit, main)[0]:
         raise ValueError("the public report's execution commit is not on the shared ref")
-    rc, ledger_raw, _ = lm._git(repo, "show", f"{commit}:{lm.LOOK_LEDGER_PATH}")
-    if rc or lm._look_row(json.loads(ledger_raw), row["look_id"]) != row:
+    if lm.execution_row_at(repo, commit, row["look_id"]) != row:
         raise ValueError("the execution commit does not authenticate this stage-1 ledger row")
     return {"status": "run", "output_sha256": hashlib.sha256(raw).hexdigest(),
             "coefficients_sha256": public["coefficients_sha256"]}
@@ -498,6 +503,9 @@ def _main(argv=None):
             p.error("--expected-coefficients-sha256 must be 64 lowercase hex digits")
         try:
             _, evidence = lm.freeze2_authority(args.repo, expected_coefficients_sha256=args.expected_coefficients_sha256)
+        except lm.ManifestError as error:
+            print(f"REFUSE freeze 2 public authority: {error}", file=sys.stderr)
+            return 1
         except (OSError, ValueError, TypeError, KeyError):
             print("REFUSE freeze 2 public authority", file=sys.stderr)
             return 1

@@ -1476,9 +1476,19 @@ def check_repo(doc, repo, kit_paths=(), *, final=None):
 
 # ---------------------------------------------------------------------------------------------- look ledger
 
-def _relative_directory(path):
-    return (isinstance(path, str) and bool(path) and not Path(path).is_absolute()
-            and all(piece not in ("", ".", "..") for piece in path.split("/")) and "\\" not in path)
+def public_report_path(row):
+    """Return a look's only admissible report route without accessing it."""
+    root, look_id = row.get("public_root"), row.get("look_id")
+    if root is None:
+        raise ManifestError([f"missing public root for the {look_id}/PUBLIC.json route"])
+    path = f"{root}/{look_id}/PUBLIC.json"
+    if isinstance(root, str) and any(part.casefold() in _RESERVED_NAMES for part in root.split("/")):
+        raise ManifestError([f"reserved component in report route {path!r}"])
+    if root != LOOK_PUBLIC_ROOT:
+        raise ManifestError([f"allowed public root is {LOOK_PUBLIC_ROOT!r}, report route is {path!r}"])
+    if not isinstance(look_id, str) or not LOOK_ID_RE.fullmatch(look_id):
+        raise ManifestError([f"invalid look id in report route {path!r}"])
+    return path
 
 
 def require_successor_ruling(doc, ledger):
@@ -1518,9 +1528,11 @@ def validate_look_ledger(doc, repo=None):
                       and row.keys() == {"look_id", "manifest_path", "sha256", "status"})
         if "execution_host" in row and not _text(row["execution_host"]):
             problems.append(f"{where}.execution_host: a host id")
-        if "public_root" in row and not _relative_directory(row["public_root"]):
-            problems.append(f"{where}.public_root: expected a canonical repository-relative directory, "
-                            f"got {row['public_root']!r}")
+        if "public_root" in row:
+            try:
+                public_report_path(row)
+            except ManifestError as error:
+                problems.append(f"{where}.public_root: {error}")
         if "custody_root" in row and not (
                 _text(row["custody_root"]) and Path(row["custody_root"]).is_absolute()):
             problems.append(f"{where}.custody_root: an absolute directory")
@@ -1768,17 +1780,27 @@ def _freeze2_naming(repo, row, raw):
     return common["ruling"]
 
 
-def _freeze2_execution_matches(repo, commit, row):
+_EXECUTION_FIELDS = ("public_root", "custody_root", "execution_host")
+
+
+def execution_row_at(repo, commit, look_id):
+    """Read a validated stage-2 execution row from the fixed ledger path, if present."""
     rc, raw, _ = _git(repo, "show", f"{commit}:{LOOK_LEDGER_PATH}")
     if rc:
-        return False
+        return None
     try:
-        executed = _look_row(validate_look_ledger(json.loads(raw)), row["look_id"])
+        row = _look_row(validate_look_ledger(json.loads(raw)), look_id)
     except (TypeError, ValueError):
-        return False
-    bindings = ("sha256", "stage1_sha256", "public_root", "custody_root", "execution_host")
-    return executed["status"] == "stage1_committed" and all(
-        key in executed and executed[key] == row.get(key) for key in bindings)
+        return None
+    if row["status"] == "stage1_committed" and all(key in row for key in _EXECUTION_FIELDS):
+        return row
+    return None
+
+
+def _freeze2_execution_matches(repo, commit, row):
+    executed = execution_row_at(repo, commit, row["look_id"])
+    bindings = ("sha256", "stage1_sha256", *_EXECUTION_FIELDS)
+    return executed is not None and all(executed[key] == row.get(key) for key in bindings)
 
 
 def freeze2_authority(repo, *, expected_coefficients_sha256=None):
@@ -1798,14 +1820,10 @@ def freeze2_authority(repo, *, expected_coefficients_sha256=None):
     row = _look_row(ledger, INTERIM_LOOK_ID)
     if row["status"] not in ("run", "frozen"):
         raise ManifestError(["freeze 2: the public report is not committed on origin/main"])
-    root = row.get("public_root")
-    if root is None:
-        raise ManifestError([f"freeze 2: missing public root for the {row['look_id']}/PUBLIC.json route"])
-    path = f"{root}/{row['look_id']}/PUBLIC.json"
-    if any(part.casefold() in _RESERVED_NAMES for part in root.split("/")):
-        raise ManifestError([f"freeze 2: reserved component in report route {path!r}"])
-    if root != LOOK_PUBLIC_ROOT:
-        raise ManifestError([f"freeze 2: allowed public root is {LOOK_PUBLIC_ROOT!r}, report route is {path!r}"])
+    path = public_report_path(row)
+    missing = [field for field in _EXECUTION_FIELDS if field not in row]
+    if missing:
+        raise ManifestError([f"freeze 2: execution row lacks {', '.join(missing)} for report route {path!r}"])
     directory = "docs/process/cadence/looks"
     if row["manifest_path"] != f"{directory}/{row['look_id']}.json":
         raise ManifestError(["freeze 2: unexpected public manifest path"])

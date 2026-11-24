@@ -1503,13 +1503,17 @@ def _stage2(a, stack, *, keep_redirected=False):
 
 
 def validate_execution_row(row, stage1, layout):
+    try:
+        public = ROOT / M.public_report_path(row)
+    except M.ManifestError as error:
+        raise F.LookInputError(f"stage 2: {error}") from None
     host = row.get("execution_host")
     if not host:
         raise F.LookInputError("stage 2: register the execution_host before reservation")
     if host != M.execution_host():
         raise F.LookInputError("stage 2: execution_host does not match this host")
-    if not row.get("custody_root") or not row.get("public_root"):
-        raise F.LookInputError("stage 2: register both look roots in the ledger")
+    if not row.get("custody_root"):
+        raise F.LookInputError("stage 2: register the custody_root in the ledger")
     try:                                # physical identity, never the spelling (audit 3, rule P1)
         same = os.path.samefile(row["custody_root"], layout.root)
     except (OSError, TypeError):
@@ -1518,7 +1522,7 @@ def validate_execution_row(row, stage1, layout):
         raise F.LookInputError("stage 2: the ledger's custody_root is not the root the manifest registers")
     # the reservation's two names, compared case-insensitively: a differently-cased file is the same file on a
     # case-insensitive volume, and may stand for it on any other (audit 2, lead ruling)
-    for parent, name in ((layout.look, "RESTRICTED"), (ROOT / row["public_root"] / row["look_id"], "PUBLIC.json")):
+    for parent, name in ((layout.look, "RESTRICTED"), (public.parent, public.name)):
         if M.name_collision(parent, name) is not None:
             raise F.LookInputError(f"stage 2: a file beside the registered {name} differs from it only in case")
     holds = M.STAGE2_HOLD_FLAGS["interim"]
