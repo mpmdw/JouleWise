@@ -21,8 +21,9 @@ from joulewise.schemas import BenchmarkConfig
 from . import controls_analysis as analysis
 from .qualification_manifest import _decode
 from .controls_time_fields import (
-    EMPTY_ARRAY, OPAQUE_FINITE_NUMBER, OPAQUE_NONBLANK_STRING, OPAQUE_NONNEGATIVE_NUMBER, OPAQUE_NUMBER,
-    OPAQUE_STRING, RAIL_COLUMNS, SKIP, Nullable, RecordFields, TimeFieldError, project_json, rail_rows, stream_fields,
+    BOOLEAN, EMPTY_ARRAY, INTEGER, OPAQUE_FINITE_NUMBER, OPAQUE_INTEGER, OPAQUE_NONBLANK_STRING,
+    OPAQUE_NONNEGATIVE_NUMBER, OPAQUE_STRING, OPAQUE_STRING_OR_INTEGER, RAIL_COLUMNS, SKIP, STRING,
+    Nullable, RecordFields, RequiredRecordFields, TaggedFields, TimeFieldError, project_json, rail_rows, stream_fields,
 )
 
 
@@ -32,28 +33,35 @@ FAILURES = ("boot_mismatch", "stream_unclosed", "anchor_unusable",
             "half_width_over_cap", "not_bracketed")
 ELIGIBLE = frozenset(("meter_absent", *FAILURES[1:]))
 RAILS = frozenset(("cpu_power", "gpu_power", "ane_power"))
-STAMP_FIELDS = dict.fromkeys(("epoch_ns", "monotonic_before_ns", "monotonic_after_ns",
-                              "wall_resolution_ns", "monotonic_resolution_ns"))
-TOOL_FIELDS = RecordFields(
-    **dict.fromkeys(("start_ns", "end_ns", "args_bytes", "result_bytes", "logged", "state_changed")),
-    name=SKIP, state_before_sha256=SKIP, state_after_sha256=SKIP,
+STAMP_FIELDS = RequiredRecordFields.fromkeys(("epoch_ns", "monotonic_before_ns", "monotonic_after_ns",
+                                             "wall_resolution_ns", "monotonic_resolution_ns"), INTEGER)
+TOOL_FIELDS = RequiredRecordFields(
+    **dict.fromkeys(("start_ns", "end_ns", "args_bytes", "result_bytes"), INTEGER),
+    logged=BOOLEAN, state_changed=Nullable(BOOLEAN), name=OPAQUE_STRING,
+    state_before_sha256=Nullable(OPAQUE_STRING), state_after_sha256=Nullable(OPAQUE_STRING),
 )
-TURN_FIELDS = RecordFields(
+TURN_FIELDS = RequiredRecordFields(
     **dict.fromkeys(("index", "start_ns", "end_ns", "context_tokens", "prefill_tokens",
-                     "decode_tokens", "hidden_tokens", "first_token_ns", "logged")),
-    tool_calls=[TOOL_FIELDS],
+                     "decode_tokens", "hidden_tokens"), INTEGER),
+    first_token_ns=Nullable(INTEGER), logged=BOOLEAN, tool_calls=[TOOL_FIELDS],
 )
-EPISODE_FIELDS = RecordFields(
-    **dict.fromkeys(("schema", "episode_id", "clock_domain", "start_ns", "end_ns", "condition")),
-    **dict.fromkeys(("task_pair", "agent_model", "endpoint", "seed"), SKIP),
-    hardware={"paired_clock_stamps_ns": [STAMP_FIELDS], "boot_id": None,
-              "thermal": {"intervals": [dict.fromkeys(("kind", "start_ns", "end_ns", "turn"))]}},
+INTERVAL_FIELDS = {"kind": STRING, "start_ns": INTEGER, "end_ns": INTEGER}
+GATE_FIELDS = {**INTERVAL_FIELDS, "turn": Nullable(OPAQUE_STRING_OR_INTEGER)}
+THERMAL_FIELDS = TaggedFields("kind", {"G0": GATE_FIELDS, "G1": GATE_FIELDS,
+                                      "H": {**INTERVAL_FIELDS, "turn": INTEGER}})
+EPISODE_FIELDS = RequiredRecordFields(
+    **dict.fromkeys(("schema", "episode_id", "clock_domain", "condition"), STRING),
+    **dict.fromkeys(("start_ns", "end_ns"), INTEGER),
+    **dict.fromkeys(("task_pair", "agent_model", "endpoint"), OPAQUE_STRING),
+    seed=OPAQUE_INTEGER,
+    hardware={"paired_clock_stamps_ns": [STAMP_FIELDS], "boot_id": Nullable(STRING),
+              "thermal": {"intervals": [THERMAL_FIELDS]}},
     turns=[TURN_FIELDS], flags=[OPAQUE_STRING], power_traces=EMPTY_ARRAY, clock_mappings=EMPTY_ARRAY,
-    main_task_score=SKIP, side_task_success=SKIP,
-    monitor_verdicts=[RecordFields(monitor_model=SKIP, visibility=None,
-                                   suspicion=OPAQUE_NUMBER, prompt_sha256=SKIP)],
-    router_log=RecordFields(model=SKIP, num_experts=None, top_k=None, layers=[SKIP],
-                            phase=[None], experts=[[[OPAQUE_NUMBER]]]),
+    main_task_score=Nullable(OPAQUE_FINITE_NUMBER), side_task_success=Nullable(BOOLEAN),
+    monitor_verdicts=[RequiredRecordFields(monitor_model=OPAQUE_STRING, visibility=STRING,
+                                           suspicion=OPAQUE_FINITE_NUMBER, prompt_sha256=OPAQUE_STRING)],
+    router_log=Nullable(RequiredRecordFields(model=OPAQUE_STRING, num_experts=INTEGER, top_k=INTEGER,
+                                             layers=[OPAQUE_INTEGER], phase=[STRING], experts=[[[OPAQUE_INTEGER]]])),
 )
 METADATA_FIELDS = {
     "run_id": None,
@@ -194,7 +202,7 @@ def _one_identity(values):
 
 
 def episode_timing(episode_raw, metadata):
-    view = project_json(episode_raw, EPISODE_FIELDS)
+    view = project_json(episode_raw, EPISODE_FIELDS, strict=True)
     try:
         # Use the installed record constructor on the blind envelope. Scores,
         # router observations and non-timing hardware values are skipped or masked.
@@ -205,7 +213,7 @@ def episode_timing(episode_raw, metadata):
     hardware = view["hardware"]
     episode_id = view["episode_id"]
     start, end = view["start_ns"], view["end_ns"]
-    stamp_rows = tuple(hardware["paired_clock_stamps_ns"])
+    stamp_rows = tuple(hardware.get("paired_clock_stamps_ns", ()))
     if (type(episode_id) is not str or not episode_id
             or view["clock_domain"] != f"joulewise.monotonic:{episode_id}"
             or type(start) is not int or type(end) is not int or start >= end

@@ -313,7 +313,7 @@ def run(operation, world, bench, fault):
         with (bench/"events.jsonl").open("ab") as stream:
             stream.write(manifest.canonical(value) + b"\n")
 
-    if fault == "marker_final_sync" or fault.startswith("typed_failure_"):
+    if fault in ("marker_final_sync", "synthetic_reservation") or fault.startswith("typed_failure_"):
         # Keep the production claim path usable on hosts that deny the
         # literal reservation name even in a synthetic temporary directory.
         layout.PRIVATE_NAME = "SYNTHETIC-RESERVATION"

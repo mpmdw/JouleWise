@@ -587,6 +587,11 @@ class LookPathFollowupTests(TestCase):
         with self.subTest(operation="preflight"):
             self.assertEqual(self.invoke(world, bench, "preflight", "guard_blind_values"), (0, b"", b""))
         self.assert_fresh(world, bench)
+        self.assertEqual(self.invoke(world, bench, "stage2", "synthetic_reservation"), (0, b"", b""))
+        report = self.private(bench) / "SYNTHETIC-RESERVATION" / "controls.json"
+        self.assertEqual(registrar.read(report)["aligned_power"]["qualified"], "yes")
+        public = bench / "public" / registrar.LOOK / layout.PUBLIC_NAME
+        self.assertNotIn(b"91827.375", public.read_bytes())
 
     def test_episode_record_fields_refuse_missing_type_and_numeric_faults(self):
         _, _, bundle = FROZEN["location"](self.pristine, "L002")

@@ -259,7 +259,8 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
              and result["kind"] == "cadence-leg" and result["leg_id"] == leg_id
              and result["g0_role"] == role and (synthetic or result["backend"] != "synthetic")
              and result["leg_status"] == selected["leg_status"]
-             and all(value == result[key] for key, value in record["result"].items() if key in result)
+             and all(value == result[key] for key, value in record["result"].items()
+                     if key in result and key != "script_complete")
              and all(key in record["result"] for key in ("leg_id", "leg_status", "bundle", "g0_released",
                                                         "g0_role", "script_record_sha256")))
     admitted = close_leg["summary"]["admitted"]
@@ -267,6 +268,11 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
     _require(close_leg["summary"]["leg_id"] == leg_id and type(admitted) is bool and type(dispatched) is bool
              and (not admitted or (dispatched and result["leg_status"] == "complete"
                                    and result["member_status"] == "succeeded" and not selected["contaminated"])))
+    script_complete = result.get("script_complete")
+    if (type(script_complete) is not bool or record["result"].get("script_complete") is not script_complete
+            or (script_complete and not dispatched)
+            or (not script_complete and (admitted or dispatched and result["leg_status"] == "complete"))):
+        raise TimeFieldError("inconsistent native admission or terminal completion")
     bundle = _path(result["bundle"])
     _require(bundle.startswith("runs/") and len(bundle.split("/")) == 2)
     member_files = {bundle + "/" + member: None for member in (*FILES.values(),
@@ -282,8 +288,9 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
         work = project_json(_read(root / script["path"], script), WORK_FIELDS, strict=True)
         _require(result["script_record_sha256"] == script["sha256"]
                  and work["schema"] == "joulewise.cadence_script_work.v1" and work["leg_id"] == leg_id
-                 and work["leg_spec_sha256"] == canonical_spec_sha and work["script"] == spec["script"]
-                 and type(work["complete"]) is bool and result["script_complete"] is work["complete"])
+                 and work["leg_spec_sha256"] == canonical_spec_sha and work["script"] == spec["script"])
+        if work.get("complete") is not script_complete:
+            raise TimeFieldError("native work completion disagrees with both result records")
         _check_script_requests(work, spec["script"])
         hidden = [step["actual_tokens"] for step in work["steps"] if step["kind"] == "hidden"]
         if len(hidden) == 1:

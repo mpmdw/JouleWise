@@ -29,16 +29,24 @@ MAX_DEPTH = 64
 NESTED = object()                    # a member whose value is an object or an array: never converted
 EMPTY_ARRAY = object()
 SKIP = object()
+BOOLEAN = object()
+STRING = object()
+INTEGER = object()
 NUMBER = object()
-OPAQUE_NUMBER = object()
+OPAQUE_INTEGER = object()
 OPAQUE_FINITE_NUMBER = object()
 OPAQUE_NONNEGATIVE_NUMBER = object()
 OPAQUE_STRING = object()
 OPAQUE_NONBLANK_STRING = object()
+OPAQUE_STRING_OR_INTEGER = object()
 
 
 class RecordFields(dict):
     """A typed record whose decoder rejects unknown fields."""
+
+
+class RequiredRecordFields(RecordFields):
+    """A record whose native serializer always emits every field."""
 
 
 class Nullable:
@@ -340,14 +348,25 @@ def _project(it, token, fields, depth, *, strict):
     if fields is SKIP:
         _skip_value(it, token, depth, strict=strict)
         return None
+    if fields is BOOLEAN:
+        if token not in (("lit", "false"), ("lit", "true")):
+            raise _Bad()
+        return token[1] == "true"
+    if fields is STRING:
+        if token[0] != "str":
+            raise _Bad()
+        return _convert(*token)
+    if fields is OPAQUE_STRING_OR_INTEGER and token[0] == "str":
+        return None
+    if fields in (INTEGER, OPAQUE_INTEGER, OPAQUE_STRING_OR_INTEGER):
+        if (token[0] != "num" or any(marker in token[1] for marker in ".eE")
+                or not _valid_opaque_number(token[1], nonnegative=False)):
+            raise _Bad()
+        return _convert(*token) if fields is INTEGER else 0
     if fields is NUMBER:
         if token[0] != "num":
             raise _Bad()
         return _convert(*token)
-    if fields is OPAQUE_NUMBER:
-        if token[0] != "num":
-            raise _Bad()
-        return 0
     if fields in (OPAQUE_FINITE_NUMBER, OPAQUE_NONNEGATIVE_NUMBER):
         if token[0] != "num" or not _valid_opaque_number(
             token[1], nonnegative=fields is OPAQUE_NONNEGATIVE_NUMBER,
@@ -370,7 +389,7 @@ def _project(it, token, fields, depth, *, strict):
                 captured.append(row_token)
                 yield row_token
 
-        tag = _project(capture_row(), token, {fields.tag: None}, depth, strict=strict).get(fields.tag)
+        tag = _project(capture_row(), token, {fields.tag: STRING}, depth, strict=strict).get(fields.tag)
         projection = fields.fields.get(tag)
         if projection is None:
             raise _Bad()
@@ -386,7 +405,8 @@ def _project(it, token, fields, depth, *, strict):
         digest.update(token[1].encode("utf-8"))
         view = _project(capture_tokens(), token, dict(fields), depth, strict=strict)
         return view, digest.hexdigest()
-    if token == ("lit", "null") and isinstance(fields, RecordFields):
+    if (token == ("lit", "null") and isinstance(fields, RecordFields)
+            and not isinstance(fields, RequiredRecordFields)):
         return None
     if fields is None:
         kind, value = token
@@ -415,6 +435,8 @@ def _project(it, token, fields, depth, *, strict):
     result, seen = {}, set()
     item = next(it)
     if item == ("punct", "}"):
+        if isinstance(fields, RequiredRecordFields) and fields:
+            raise _Bad()
         return result
     while True:
         if item[0] != "str" or next(it) != ("punct", ":"):
@@ -432,6 +454,8 @@ def _project(it, token, fields, depth, *, strict):
             _skip_value(it, value, depth + 1, strict=strict)
         separator = next(it)
         if separator == ("punct", "}"):
+            if isinstance(fields, RequiredRecordFields) and seen != fields.keys():
+                raise _Bad()
             return result
         if separator != ("punct", ","):
             raise _Bad()
