@@ -20,6 +20,7 @@ import unittest
 from unittest.mock import patch
 
 from tests.align.c1_closure_lite import adapter
+from tests.git_fixture import init_git_fixture
 from joulewise.align.apple import v4_registration as closure
 from scripts import align_v4_session as session, run_campaign
 
@@ -1390,20 +1391,26 @@ class C1ClosureTests(unittest.TestCase):
             attempt = self.attempt(make_attempt=Tagged, edit_source=tag_all(holder))
             closure.campaign_marker_refusal(attempt.view, staged(attempt))
 
-    def test_audit8_high_permitted_directory_link_in_the_pack_admits(self):
-        """Audit 8 HIGH: a pack directory linked inside the verified roots hashes through the verified walk."""
+    @staticmethod
+    def committed_d134_digest(pack, work):
+        """D-134's committed digest (arm_readiness) of a git-committed copy of the pack's bytes."""
         from joulewise.arm_readiness import committed_pack_tree_sha256
 
+        reference = Path(work) / 'committed'
+        shutil.copytree(pack, reference / 'pack', symlinks=False)
+        init_git_fixture(reference, '-q')
+        for argv in (['add', '-f', 'pack'], ['-c', 'user.name=invented', '-c', 'user.email=invented@invalid',
+                                             'commit', '-qm', 'invented pack']):
+            subprocess.run(['git', '-C', str(reference), *argv], check=True, capture_output=True)
+        return committed_pack_tree_sha256(reference / 'pack')
+
+    def test_audit8_high_permitted_directory_link_in_the_pack_admits(self):
+        """Audit 8 HIGH: a pack directory linked inside the verified roots hashes through the verified walk."""
         copied = self.attempt()
         linked = self.attempt(make_attempt=LinkedDirectoryAttempt)
         self.assertTrue((linked.stage / closure.PACK / LinkedDirectoryAttempt.subdirectory).is_symlink())
         digests = [closure.decode(a.night.read_bytes())['hazard_window']['pack']['pack_sha256'] for a in (copied, linked)]
-        reference = linked.work / 'committed'
-        shutil.copytree(linked.stage / closure.PACK, reference / 'pack', symlinks=False)
-        for argv in (['init', '-q'], ['add', '-f', 'pack'], ['-c', 'user.name=invented', '-c',
-                     'user.email=invented@invalid', 'commit', '-qm', 'invented pack']):
-            subprocess.run(['git', '-C', str(reference), *argv], check=True, capture_output=True)
-        self.assertEqual(digests, [committed_pack_tree_sha256(reference / 'pack')] * 2)
+        self.assertEqual(digests, [self.committed_d134_digest(linked.stage / closure.PACK, linked.work)] * 2)
         self.assert_admitted_on_both_routes(linked)
         with self.subTest(case='a directory link leaving the verified roots still refuses'):
             # Prepare's own output declaration walks the fence, so it refuses first.
@@ -1412,8 +1419,6 @@ class C1ClosureTests(unittest.TestCase):
 
     def test_r16_staged_pack_digest_is_the_committed_d134_digest(self):
         """The recomputed pack digest is D-134's committed digest of the same bytes, in both forms."""
-        from joulewise.arm_readiness import committed_pack_tree_sha256
-
         for form in ('copy', 'link'):
             with self.subTest(form=form):
                 work = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
@@ -1421,12 +1426,7 @@ class C1ClosureTests(unittest.TestCase):
                                check=True)
                 attempt = adapter.Attempt(work, 'valid_24_closure', form, None)
                 staged = attempt.view / closure.PACK
-                reference = work / 'committed'
-                shutil.copytree(staged, reference / 'pack', symlinks=False)
-                for argv in (['init', '-q'], ['add', '-f', 'pack'], ['-c', 'user.name=invented', '-c',
-                             'user.email=invented@invalid', 'commit', '-qm', 'invented pack']):
-                    subprocess.run(['git', '-C', str(reference), *argv], check=True, capture_output=True)
-                committed = committed_pack_tree_sha256(reference / 'pack')
+                committed = self.committed_d134_digest(staged, work)
                 self.assertEqual(closure.staged_pack_sha256(closure.Roots(attempt.repo, attempt.stage)), committed)
                 self.assertEqual(adapter.staged_pack_digest(staged), committed)
                 night = closure.decode(attempt.night.read_bytes())
