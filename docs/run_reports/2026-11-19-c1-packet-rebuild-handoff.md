@@ -1467,3 +1467,83 @@ Open, all LOW:
   forms are exercised.
 - The writer's window assertion needs a plan that declares `window_id`.
   The C1 kit plan declares `C1`.
+
+## Round 14 · audit 5, every stage write bound to this attempt
+
+Audit 5 checked head `3ea3de760` and verified one HIGH and one MED, both
+admitted before host entry:
+- **HIGH.** Adding `--log <previous-attempt>/campaign_log.jsonl` to the first
+  collection stage let build, install and arm admit. The campaign then
+  appended two provenance attestations to the previous attempt's log and
+  never created the current one.
+- **MED.** A stage whose other configs carry `launch_lineage_required`, with
+  one config left without it, let both routes admit. The campaign then
+  exited 2 with `launch_binding_mismatch` before measurement.
+
+The cases were committed first, as spec
+`7c70833b767ec5912745846a262805e2290369e3`. The unchanged preflight
+admitted both stale-log spellings, with one host checkpoint per route,
+and all six class cases. The control built.
+
+| Finding | Commit | Named regression | Result |
+| --- | --- | --- | --- |
+| HIGH: a previous attempt's `--log`, given as an absolute path (the audit's reproduction) and relative to the launch view. Both routes refuse, the previous log is unchanged and no current log is created. | `766fadf2c` | `test_audit5_high_stale_campaign_log_refuses_before_host` | PASS |
+| Class: the log in the other runs root, under another name, or a previous attempt's on the second stage; the bound written into a previous attempt or the claim runs root; a capture output root below `instrument_validation` with an agreeing reservation. Controls: an explicit current log, and the bound name pinned to the harvest's. | `766fadf2c` | `test_r14_every_stage_writes_only_where_this_attempt_is_read` | PASS |
+
+- **Root cause.** Preflight bound each stage's inputs, its runs root and
+  the ledger, but no other write location. The class is every path a C1
+  stage writes. I listed these from the three consumers:
+  - **Reservation.** The ledger (already canonical) and the runs root,
+    which is also its flag root.
+  - **Capture.** The ledger (already canonical) and the output root. The
+    output root holds the custody directory, and its parent is the flag
+    root. `--output` already refuses.
+  - **Campaign.** The runs directory, which also holds its lock, its
+    provenance and its flag root; the log, with its torn-tail sidecar
+    beside it; and the derivation's bound output. `--backup`,
+    `--whole-window-verdict-output` and `--quarantine-path` need modes that
+    C1 refuses.
+- **Fix.** One helper, `this_attempt`, now requires each write location to
+  be the current attempt's location that the harvest reads. The harvest
+  reads `<runs>/campaign_log.jsonl` and
+  `<bound_runs_root>/neg8-drift-bound.json`. Each path is compared as
+  spelled from the launch view. The round-13 runs-root check and the
+  campaign runs-dir check moved into the helper. With the output root
+  fixed, the round-12 slot agreement then puts each capture's custody
+  directory at its `<slot>_calibration_dir`.
+- **Fixture.** The invented adapter wrote the derivation bound to a literal
+  `work/derived.json`. It now writes `<bound_runs_root>/neg8-drift-bound.json`,
+  where the harvest reads it. The nine frozen files are unchanged. A frozen
+  decision records only outcomes, and every clean build passes the new
+  checks.
+- **Tests updated.** Round 12's slot-binding subcase for
+  `--output-root other_validation` still refuses on both routes, but now at
+  the earlier write-location check, so it expects that message. The
+  round-13 runs-root sweep case expects the shared message.
+
+**MED, not fixed (NEEDS_SPEC).** Outside `--dry-run`, the runner always
+refuses a selection that mixes marker-bearing and legacy configs
+(`authenticate_campaign_writer_preflight`). Preflight could call the
+runner's own `_config_requires_launch_lineage` on each dispatched config.
+The frozen suite's invented history, however, mixes them in its first
+collection stage: 7 of 11 configs carry the tag, and the second stage
+13 of 13. That check would therefore turn the 94 frozen decisions' clean
+admits into refusals. The lead has two options:
+- add the tag to the four legacy configs in the invented history, which
+  changes a frozen file;
+- accept the changed decisions.
+
+Local checks, within the lead's test budget:
+- 24 focused tests pass on the final code. They cover the two round-14
+  tests, every round-13, round-12 and earlier named regression, the
+  closed-environment class and the 137-case duplicate-option sweep.
+- `tests.align.test_v4_next_arm_packet` (69) and `tests.align.test_v4_series_e2e` (11),
+  the C1 packet modules most exposed to the new checks, pass.
+- The census scan is clean.
+- The nine frozen files match `SUITE.sha256`.
+
+I started the 94-case frozen replay locally by mistake, alongside the
+spec run, and stopped it before it finished. Hosted CI runs it.
+
+Open, LOW: the derivation route reads no `--log`, so preflight does not
+bind one on that stage.

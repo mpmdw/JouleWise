@@ -219,6 +219,15 @@ state at `--series-commit`, with:
   the window's claim runs root. The reservation writer itself refuses a
   `--window-id` that differs from the window its frozen plan declares
   (`calibration_reservation_input_invalid`, `plan_window_mismatch`).
+  Each stage writes only this attempt's locations, each where the harvest
+  reads it. The reservation's runs root is the claim runs root. Each
+  capture's output root is `<claim runs root>/instrument_validation`, so
+  its flag root is the claim runs root. Each campaign stage's runs
+  directory is its dispatch runs root. A collection stage's `--log`, if
+  given, is `<runs directory>/campaign_log.jsonl`. The bound derivation
+  writes `<bound runs root>/neg8-drift-bound.json`. Each path is compared
+  as spelled from the launch view, so another root, a previous attempt or
+  a parent step refuses.
   Consumers must agree: each capture's `--power-policy`
   equals the policy the reservation records (desk epoch, then desk T1, then
   `POWER_POLICY`). Its `--sampler-binary` selects the reservation's sampler,
