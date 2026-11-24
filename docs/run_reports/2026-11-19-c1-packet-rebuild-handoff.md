@@ -1786,3 +1786,12 @@ Local checks, within the lead's test budget:
   Its prefix and uniqueness properties were checked directly, and CI
   shard 12 runs it.
 - The nine frozen files are unchanged. Hosted CI runs the 94-case replay.
+
+The first CI run after the push (`45385694543`, on `1585f6d8e`) failed
+shard 4 in `test_git_fixture_maintenance`. That test requires every test
+module to run `git init` through `tests.git_fixture.init_git_fixture`,
+but the two D-134 oracle tests called it directly. `039da3520` routes
+both through one `committed_d134_digest` helper that uses
+`init_git_fixture`. The maintenance module and both oracle tests pass
+locally. The run's other shards had passed or were still running when the
+push cancelled it.
