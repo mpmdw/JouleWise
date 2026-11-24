@@ -443,3 +443,28 @@ synthetic fixtures. The narrow closing check covers the following changes.
 The valid interrupted tail, frozen bytes and exact byte-pass receipt remain
 covered. The existing LOW orphan-marker race remains open for the lead.
 Final-head CI is linked from [draft PR #957](https://github.com/mpmdw/JouleWise/pull/957).
+
+## Revision 12 blind construction and dry run
+
+Revision 12 froze at `6d508c6d0f839d3cc3e3e7b1581af2ec598d7277`.
+Both narrow-check reproductions failed on `e1c654a14` using the supplied
+synthetic fixtures.
+
+- The closed `BlindProjection` is built from verified kit and timing
+  fields. Transport locators and byte lengths stay in the source bindings
+  used to authenticate the original files. Renaming the stream and auxiliary
+  file, changing the latter's length and changing undeclared content in the
+  receipt and bundle records leave both blind projections byte-identical.
+- The native per-leg estimator runs at both blind gates with fixed positive
+  samples. The guard rejects source reads and value decoding in the dry run
+  and witnesses the pinned phase table. The certificate binds the
+  disposition, estimate availability and fit channels. Release compares
+  the real estimates to that structure and carries the ruled reasons forward.
+- Zero prefill is ruled `phase_denominator` while fresh. The real report
+  carries the same disposition. The audit 7 and audit 8 cases and the A3
+  differential matrix retain their fresh refusals and matched outcomes.
+
+The frozen trees match PR #951 byte for byte. The exact cumulative receipt
+and v3.1 remain in scope. The existing LOW orphan-marker race remains open.
+Final-head workflow results are linked from
+[draft PR #957](https://github.com/mpmdw/JouleWise/pull/957).

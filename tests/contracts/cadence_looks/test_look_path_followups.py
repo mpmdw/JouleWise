@@ -3,7 +3,7 @@
 import ast
 from collections import Counter
 from copy import deepcopy
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import inspect
 import json
 import os
@@ -1446,6 +1446,7 @@ class LookPathFollowupTests(TestCase):
     def test_round8_blind_and_measured_admission_agree_for_structural_mutations(self):
         disposition = dict(admitted=True, g0_released=True, script_complete=True)
         kernel = SimpleNamespace(phases=SimpleNamespace(qualify_ctl01=lambda _: {}, TIMING_EDGE_J=1.0))
+        frozen_kernel = analysis.PhaseKernel.frozen()
         roster = {"extra-turn": "L001", "hidden": "L002", "cpu": "L003", "split": "L006", "plain": "L007"}
         for kind, leg in roster.items():
             _, runtime, bundle = FROZEN["location"](self.pristine, leg)
@@ -1456,14 +1457,18 @@ class LookPathFollowupTests(TestCase):
 
             def verdict(episode, work):
                 timing = reader.episode_timing(registrar.manifest.canonical(episode), {})
-                trace = analysis.TraceTiming(tuple(range(timing.start_ns, timing.end_ns + analysis.NS, analysis.NS)),
-                                             analysis.NS)
-                plan = SimpleNamespace(episode=timing, trace_timing=lambda: dict.fromkeys(
-                    analysis.CHANNELS, (trace, None)))
-                return inputs.admit_leg(disposition, work, issued, plan)
+                starts = tuple(range(timing.start_ns, timing.end_ns, analysis.NS))
+                times = tuple(start + analysis.NS for start in starts)
+                plan = SimpleNamespace(
+                    episode=timing, dc=SimpleNamespace(selected=None),
+                    rail=SimpleNamespace(times=times, starts=starts, period_ns=analysis.NS,
+                                         mapping=SimpleNamespace(offset_ns=0, uncertainty_ns=0)),
+                )
+                bound = inputs._blind_leg(FROZEN["IDS"].index(leg), disposition, work, issued, plan)
+                return bound, analysis.dry_run_leg(bound, frozen_kernel)
 
             def rejected(episode, work, reason):
-                decision = verdict(episode, work)
+                _, decision = verdict(episode, work)
                 self.assertEqual((decision.disposition, decision.reason), ("not_evaluable", reason))
                 # A row that was ruled ineligible has no scientific episode
                 # to inspect. The measured entry point only prints its verdict.
@@ -1474,7 +1479,14 @@ class LookPathFollowupTests(TestCase):
                                                       disposition=decision.disposition, reason=decision.reason)])
                 self.assertTrue(all(not result["legs"] for result in report["dose_response"].values()))
 
-            self.assertTrue(verdict(source_episode, source_work).admitted, kind)
+            bound, expected = verdict(source_episode, source_work)
+            self.assertTrue(expected.admitted, kind)
+            episode = bound.episode.materialize(leg)
+            traces, mapping = bound.rails.placeholder(episode, "powermetrics", ("cpu_power", "gpu_power", "ane_power"))
+            measured = tuple(replace(trace, values=(2.0,) * len(trace.t_ns)) for trace in traces)
+            measured_episode = replace(episode, power_traces=measured, clock_mappings=(mapping,))
+            _, channels = analysis._native_estimates(frozen_kernel, expected, measured_episode)
+            self.assertEqual(analysis._estimate_shape(channels), expected.estimate_shape)
             for index, step in enumerate(steps):
                 with self.subTest(kind=kind, step=index):
                     if step["kind"] in ("hidden", "turn"):
@@ -1535,7 +1547,7 @@ class LookPathFollowupTests(TestCase):
 
     def test_round8_post_marker_refusal_and_drop_reason_inventory(self):
         roots = (reader.first_read, reader._attach_dc, reader._join_native_rails, analysis.print_admitted_controls,
-                 analysis._measured_fit_point)
+                 analysis._native_estimates, analysis._channel_values, analysis._energy, analysis._measured_fit_point)
         observed = set()
         for function in roots:
             syntax = ast.parse(textwrap.dedent(inspect.getsource(function)))
@@ -1545,12 +1557,16 @@ class LookPathFollowupTests(TestCase):
                     target = ast.unparse(node.exc.func).split(".")[-1]
                     if target == "ReaderBindingError":
                         self.assertIn(function, (reader._attach_dc, reader._join_native_rails))
+                    elif target == "EstimateStructureError":
+                        self.assertIs(function, analysis.print_admitted_controls)
                     else:
                         self.assertEqual(target, "ValueReadError")
                         observed.add(ast.literal_eval(node.exc.args[0]))
                 if isinstance(node, ast.ExceptHandler):
-                    self.assertEqual(ast.unparse(node.type), "ValueReadError")
-                    self.assertEqual([type(statement) for statement in node.body], [ast.Continue])
+                    exception, action = (("ArithmeticError", ast.Raise) if function is analysis._native_estimates
+                                         else ("ValueReadError", ast.Continue))
+                    self.assertEqual(ast.unparse(node.type), exception)
+                    self.assertEqual([type(statement) for statement in node.body], [action])
                 if isinstance(node, ast.Call):
                     invoked = ast.unparse(node.func).split(".")[-1]
                     self.assertNotIn(invoked, {"physical_call_view", "prepare_admission", "admit_leg", "script_steps",
@@ -1598,7 +1614,8 @@ class LookPathFollowupTests(TestCase):
 
         world, bench = self.prepare("v12-zero-prefill", configure=no_prefill)
         for operation in ("stage1", "commit-stage1", "preflight"):
-            self.assertEqual(self.invoke(world, bench, operation), (0, b"", b""))
+            fault = "none" if operation == "commit-stage1" else "capture_blind_projection"
+            self.assertEqual(self.invoke(world, bench, operation, fault), (0, b"", b""))
         self.assert_fresh(world, bench)
         certificate = registrar.read(self.private(bench) / "certificates/L002.json")
         self.assertEqual((certificate["admission"], certificate["admission_reason"]),
@@ -1606,6 +1623,54 @@ class LookPathFollowupTests(TestCase):
         report = self.round8_release(world, bench)
         row = next(row for row in report["legs"] if row["leg_id"] == "L002")
         self.assertEqual((row["disposition"], row["reason"]), ("not_evaluable", "phase_denominator"))
+
+    def test_revision12_blind_projection_excludes_transport_and_unknown_members(self):
+        compared = []
+        transport = []
+        for label in ("original", "renamed"):
+            def modify(world):
+                span, runtime, bundle = FROZEN["location"](world, "L002")
+                path = FROZEN["meter"](span)
+                receipt_path = span / "runner_receipt.json"
+                receipt = registrar.read(receipt_path)
+                auxiliary = span / f"calibration-note-{label}.txt"
+                auxiliary.write_bytes(b"synthetic" if label == "original" else b"synthetic note of another size")
+                meter = receipt["feeds"]["meter"]["files"]
+                if label == "renamed":
+                    new_path = path.with_name("stream-037.jsonl")
+                    path.rename(new_path)
+                    old_name = path.relative_to(span).as_posix()
+                    new_name = new_path.relative_to(span).as_posix()
+                    member = next(row for row in meter if row["path"] == old_name)
+                    member["path"] = new_name
+                    check_path = world / "authority/check.json"
+                    checks = registrar.read(check_path)
+                    if old_name in checks[span.name]:
+                        checks[span.name][new_name] = checks[span.name].pop(old_name)
+                        registrar.put(check_path, checks)
+                meter.append({"path": auxiliary.name, "sha256": registrar.digest(auxiliary.read_bytes())})
+                receipt[f"unknown_close_{label}"] = {"auxiliary_path": str(auxiliary)}
+                registrar.put(receipt_path, receipt)
+                mutate(world, "episode", lambda ep: ep["hardware"]["task_diagnostics"]["evaluation_outputs"].update(
+                    {f"unknown_episode_{label}": {"auxiliary_path": str(auxiliary)}}))
+                mutate(world, "metadata", lambda meta: meta.update(extra={f"unknown_metadata_{label}": str(bundle)}))
+                mutate(world, "config", lambda cfg: cfg["run_metadata"].update(project=f"synthetic-{label}"))
+                FROZEN["reanchor"](world, span)
+
+            world, bench = self.prepare(f"v12-projection-{label}", configure=modify)
+            for operation in ("stage1", "commit-stage1", "preflight"):
+                fault = "none" if operation == "commit-stage1" else "capture_blind_projection"
+                result = self.invoke(world, bench, operation, fault)
+                self.assertEqual(result, (0, b"", b""), result[2].decode("utf-8"))
+            self.assert_fresh(world, bench)
+            stage1, preflight = ((bench / f"blind-{gate}.json").read_bytes() for gate in ("stage1", "preflight"))
+            self.assertEqual(stage1, preflight)
+            compared.append(stage1)
+            transport.append(registrar.read(self.private(bench) / "inputs.v1.json"))
+        self.assertEqual(*compared)
+        self.assertNotEqual(*transport)
+        left, right = (item["positions"]["L002"]["files"]["episode"]["size"] for item in transport)
+        self.assertNotEqual(left, right)
 
     def test_closing_blind_model_projections_are_invariant_to_file_rename(self):
         model = self.base / "closing-model"
@@ -1645,205 +1710,6 @@ class LookPathFollowupTests(TestCase):
             projections.append(phases[0])
         self.assertEqual(*identities)
         self.assertEqual(*projections)
-
-    def test_closing_post_marker_fields_are_covered_by_blind_admission(self):
-        from joulewise.align import attribution, records
-        from joulewise.align.apple import episode_bundle, rl176_phases as phases, sampler
-
-        # Seed the record receivers in the native read and pinned calculation
-        # calls. Include the nested records whose keys the kernel dereferences.
-        episode = {"episode": "episode"}
-        turns = {**episode, "turn": "turn", "t": "turn", "call": "tool", "c": "tool"}
-        surfaces = {
-            reader.first_read: {"leg": "bound", "leg.binding": "binding", "position": "position",
-                                "pin": "file map", "pin['script']": "file", "entry": "file"},
-            inputs.Inputs.read_entry: {"entry": "file"},
-            inputs._read: {"entry": "file"},
-            inputs.Inputs.certificate: {"pin": "file", "self.positions[leg]": "position"},
-            reader._join_native_rails: episode,
-            reader._attach_dc: episode,
-            analysis.print_admitted_controls: {**episode, "leg": "leg", "view": "view"},
-            analysis._format_leg: {"step": "step", "view": "view"},
-            analysis._project_steps: {"step": "step"},
-            analysis.PhysicalView.cpu_dose.fget: {"step": "step"},
-            analysis._baseline: {"recovery": "step"},
-            analysis._channel_values: {**episode, "hidden": "step", "step": "step", "view": "view"},
-            phases.qualify_ctl01: {"leg": "control", "leg.episode": "episode"},
-            phases.selected_trace: episode,
-            phases.with_package: episode,
-            phases.phase_table: turns,
-            phases._event_times: turns,
-            phases.event_profiles: episode,
-            episode_bundle.join_episode_trace: {**episode, "episode.hardware": "hardware"},
-            sampler._restore_stamp: {"record": "stamp"},
-            attribution.attribute_episode: episode,
-            attribution._segments: {**turns, "episode.hardware": "hardware",
-                                    "thermal": "thermal", "interval": "interval"},
-            records.Episode.__post_init__: {**turns, "self": "episode"},
-            records.Episode.logged_turns: {**turns, "self": "episode"},
-            records.Episode.totals: {**turns, "self": "episode"},
-            records.Turn.__post_init__: {"self": "turn"},
-        }
-        access = {}
-        children = {
-            ("leg", "episode"): "episode", ("control", "episode"): "episode",
-            ("view", "episode"): "episode", ("view", "steps"): "step[]",
-            ("episode", "turns"): "turn[]", ("episode", "hardware"): "hardware",
-            ("turn", "tool_calls"): "tool[]", ("hardware", "thermal"): "thermal",
-            ("thermal", "intervals"): "interval[]", ("position", "files"): "file map",
-        }
-        for function, roots in surfaces.items():
-            nodes = list(ast.walk(ast.parse(textwrap.dedent(inspect.getsource(function)))))
-            roots = roots.copy()
-
-            def source(node):
-                known = roots.get(ast.unparse(node))
-                if known is not None:
-                    return known
-                if isinstance(node, ast.Attribute):
-                    return children.get((source(node.value), node.attr))
-                if isinstance(node, ast.Subscript):
-                    owner = source(node.value)
-                    if owner and owner.endswith("[]"):
-                        return owner[:-2]
-                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-                    if node.func.id in ("list", "sorted", "tuple", "replace") and node.args:
-                        return source(node.args[0])
-                return None
-
-            for _ in range(len(nodes)):
-                aliases = {}
-                for node in nodes:
-                    if isinstance(node, ast.Assign) and (role := source(node.value)):
-                        aliases.update((target.id, role) for target in node.targets if isinstance(target, ast.Name))
-                    if isinstance(node, (ast.For, ast.comprehension)) and isinstance(node.target, ast.Name):
-                        role = source(node.iter)
-                        if role and role.endswith("[]"):
-                            aliases[node.target.id] = role[:-2]
-                if aliases.items() <= roots.items():
-                    break
-                roots.update(aliases)
-            for node in nodes:
-                key = None
-                if isinstance(node, ast.Attribute) and (role := source(node.value)):
-                    key = node.attr
-                    if key == "get":
-                        continue
-                elif isinstance(node, ast.Subscript) and (role := source(node.value)) and not role.endswith("[]"):
-                    if role == "file map" and isinstance(node.slice, ast.Name):
-                        comp, = (item for item in nodes if isinstance(item, ast.comprehension)
-                                 and ast.unparse(item.target) == node.slice.id)
-                        access.setdefault(role, set()).update(ast.literal_eval(comp.iter))
-                        continue
-                    key = ast.literal_eval(node.slice)
-                elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "get":
-                    if role := source(node.func.value):
-                        key = ast.literal_eval(node.args[0])
-                elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "getattr":
-                    if role := source(node.args[0]):
-                        key = ast.literal_eval(node.args[1])
-                if key is not None:
-                    access.setdefault(role, set()).add(key)
-
-        # Registered position and file members are validated by the stage-1
-        # schemas and the authenticated terminal map. The printed records
-        # below are constructed from those bindings and the blind verdict.
-        schema_dir = Path(release.__file__).parents[2] / "docs/process/cadence/looks"
-        stage_leg = registrar.read(schema_dir / "lm-ctl-01.stage1.schema.json")["$defs"]["leg"]
-        self.assertLessEqual({"identity", "kind", "g0_released"}, set(stage_leg["required"]))
-        self.assertEqual(stage_leg["properties"]["identity"]["prefixItems"][4]["type"], "string")
-        self.assertEqual(stage_leg["properties"]["kind"]["type"], "string")
-        self.assertEqual(stage_leg["properties"]["g0_released"]["type"], "boolean")
-        inventory = registrar.read(schema_dir / "lm-ctl-01.inputs.schema.json")["$defs"]
-        position = inventory["position"]
-        self.assertEqual(access.pop("position"), {"files", "span_id", "certificate"})
-        self.assertLessEqual({"files", "span_id", "certificate"}, set(position["required"]))
-        self.assertEqual(position["properties"]["span_id"]["type"], "string")
-        self.assertEqual(set(position["properties"]["files"]["properties"]) - {
-            "leg_record", "leg_spec", "terminal_map", "result", "reference",
-        }, access.pop("file map"))
-        self.assertEqual(access.pop("file"), {"path", "size", "sha256"})
-        self.assertLessEqual({"path", "size", "sha256"}, set(inventory["file"]["required"]))
-        self.assertEqual({name: inventory["file"]["properties"][name]["type"]
-                          for name in ("path", "sha256", "size")},
-                         {"path": "string", "sha256": "string", "size": "integer"})
-        for role, fields in {
-            "bound": {"binding", "kind", "g0_released"},
-            "binding": {"leg_id"},
-            "leg": {"admission", "leg_id", "kind", "episode", "g0_released"},
-            "control": {"episode", "cpu_burn_s"},
-            "view": {"episode", "steps", "cpu_dose"},
-        }.items():
-            self.assertEqual(access.pop(role), fields)
-
-        # Direct or conditional wire reads must keep their declared selector.
-        # Phase calls only receive admitted turns, which have no tool calls.
-        episode_keys = access.pop("episode") - {"totals", "logged_turns"}
-        turn_keys = access.pop("turn")
-        self.assertLessEqual(episode_keys, reader.EPISODE_FIELDS.keys())
-        self.assertLessEqual(turn_keys, reader.TURN_FIELDS.keys())
-        self.assertLessEqual(access.pop("tool"), reader.TOOL_FIELDS.keys())
-        self.assertEqual(access.pop("hardware"), {"thermal", "paired_clock_stamps_ns"})
-        self.assertEqual(access.pop("thermal"), {"intervals"})
-        for tag, schema in reader.THERMAL_FIELDS.fields.items():
-            read = access["interval"] - ({"turn"} if tag != "H" else set())
-            self.assertLessEqual(read, schema.required)
-        access.pop("interval")
-        for field in access.pop("stamp"):
-            self.assertIs(reader.STAMP_FIELDS[field], blind.INT64)
-
-        # The projected Step has role-specific names and nullable wire fields
-        # for interrupted work. Exercise each field the consumer actually
-        # reads through the shared admission predicate on completed work.
-        work_fields = {
-            "kind": "kind", "complete": "complete", "start_ns": "started_ns", "end_ns": "ended_ns",
-            "requested_tokens": "requested_tokens", "delivered_tokens": "actual_tokens",
-            "context_tokens": "context_tokens", "first_ns": "first_token_ns", "requested_s": "requested_s",
-        }
-        observed = {work_fields[field] for field in access.pop("step")}
-        self.assertEqual(access, {})
-        position = dict(admitted=True, g0_released=True, script_complete=True)
-        _, runtime, bundle = FROZEN["location"](self.pristine, "L002")
-        original_episode = registrar.read(bundle / "outputs/align_episode.json")
-        original_work = registrar.read(runtime / "script-work.json")
-        for keys, selector in ((episode_keys, lambda ep: ep), (turn_keys, lambda ep: ep["turns"][0])):
-            for field in sorted(keys):
-                for mutation in ("missing", "wrong type", "null"):
-                    candidate = deepcopy(original_episode)
-                    row = selector(candidate)
-                    if mutation == "missing":
-                        del row[field]
-                    else:
-                        row[field] = [] if isinstance(row[field], bool) else False
-                        if mutation == "null":
-                            row[field] = None
-                    raw = registrar.manifest.canonical(candidate)
-                    with self.subTest(episode_field=field, mutation=mutation):
-                        if field == "first_token_ns" and mutation == "null":
-                            timing = reader.episode_timing(raw, {})
-                            plan = SimpleNamespace(episode=timing, trace_timing=lambda: None)
-                            admission = inputs.admit_leg(position, original_work, original_work["script"], plan)
-                            self.assertEqual(admission.reason, "envelope_stamps")
-                        else:
-                            with self.assertRaises(blind.TimeFieldError):
-                                reader.episode_timing(raw, {})
-        for leg in ("L002", "L003", "L006"):
-            _, runtime, _ = FROZEN["location"](self.pristine, leg)
-            work = registrar.read(runtime / "script-work.json")
-            for index, step in enumerate(work["steps"]):
-                for field in sorted(observed & inputs.STEP_VARIANTS[step["kind"]].keys()):
-                    for mutation in ("missing", "wrong type", "null"):
-                        candidate = deepcopy(work)
-                        row = candidate["steps"][index]
-                        if mutation == "missing":
-                            del row[field]
-                        else:
-                            row[field] = [] if mutation == "wrong type" else None
-                        with self.subTest(kind=step["kind"], field=field, mutation=mutation):
-                            with self.assertRaises(blind.TimeFieldError):
-                                projected = blind.project_json(registrar.manifest.canonical(candidate),
-                                                               inputs.WORK_FIELDS, strict=True)
-                                inputs.admit_leg(position, projected, work["script"], None)
 
     def test_incomplete_script_allows_a_native_interrupted_tail(self):
         work = {"steps": [{"kind": "turn", "complete": False, "actual_tokens": None,

@@ -768,7 +768,8 @@
                 "runner_unadmitted",
                 "token_delivery",
                 "gap_incomplete",
-                "recovery_incomplete"
+                "recovery_incomplete",
+                "phase_denominator"
               ]
             }
           }

@@ -4,6 +4,8 @@ from bisect import bisect_left, bisect_right
 from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
+from enum import StrEnum
+import json
 from math import ceil, fsum, isfinite, sqrt
 from statistics import median
 from sys import float_info
@@ -32,6 +34,10 @@ class ViewError(ValueError):
 
 class LegRecordError(Exception):
     """A frozen numerical operation refused an authenticated leg record."""
+
+
+class EstimateStructureError(RuntimeError):
+    """The value reader disagrees with the committed structural calculation."""
 
 
 VALUE_DEPENDENT_REASONS = frozenset({"nonfinite_sample", "nonfinite_estimate"})
@@ -69,6 +75,140 @@ class Step:
     requested_s: float | None = None
 
 
+class ScriptKind(StrEnum):
+    EXTRA_TURN = "extra-turn"
+    HIDDEN = "hidden"
+    CPU = "cpu"
+    SPLIT = "split"
+    PLAIN = "plain"
+
+
+class StepKind(StrEnum):
+    TURN = "turn"
+    HIDDEN = "hidden"
+    CPU = "cpu"
+    GAP = "gap"
+    RECOVERY = "recovery"
+
+
+class IntervalKind(StrEnum):
+    G0 = "G0"
+    G1 = "G1"
+    HOLD = "H"
+
+
+@dataclass(frozen=True)
+class BlindStep:
+    kind: StepKind
+    start_ns: int
+    end_ns: int
+    complete: bool
+    requested: int
+    first_ns: int | None
+    delivered_tokens: int | None
+    context_tokens: int | None
+
+    def materialize(self):
+        if self.kind in (StepKind.TURN, StepKind.HIDDEN):
+            return Step(self.kind.value, self.start_ns, self.end_ns, self.complete, self.first_ns,
+                        self.requested, self.delivered_tokens, self.context_tokens)
+        return Step(self.kind.value, self.start_ns, self.end_ns, self.complete, requested_s=self.requested)
+
+
+@dataclass(frozen=True)
+class BlindTurn:
+    start_ns: int
+    end_ns: int
+    first_ns: int | None
+    context_tokens: int
+    prefill_tokens: int
+    decode_tokens: int
+    hidden_tokens: int
+    logged: bool
+    has_tools: bool
+
+
+@dataclass(frozen=True)
+class BlindInterval:
+    kind: IntervalKind
+    start_ns: int
+    end_ns: int
+    turn: int | None
+
+
+@dataclass(frozen=True)
+class BlindEpisode:
+    start_ns: int
+    end_ns: int
+    turns: tuple[BlindTurn, ...]
+    intervals: tuple[BlindInterval, ...]
+
+    def materialize(self, leg_id):
+        from joulewise.align.records import Episode, Turn
+
+        turns = tuple(Turn(index, turn.start_ns, turn.end_ns, turn.context_tokens, turn.prefill_tokens,
+                           turn.decode_tokens, turn.hidden_tokens, turn.first_ns, logged=turn.logged)
+                      for index, turn in enumerate(self.turns))
+        intervals = [
+            dict(kind=row.kind.value, start_ns=row.start_ns, end_ns=row.end_ns,
+                 **({"turn": row.turn} if row.kind is IntervalKind.HOLD else {}))
+            for row in self.intervals
+        ]
+        return Episode(leg_id, "ctl01", "benign", "ctl01", "ctl01", 0, "ctl01.monotonic",
+                       self.start_ns, self.end_ns, turns, hardware={"thermal": {"intervals": intervals}})
+
+
+@dataclass(frozen=True)
+class BlindSupport:
+    times_ns: tuple[int, ...]
+    period_ns: int
+    half_width_ns: int
+    offset_ns: int
+    starts_ns: tuple[int, ...] = ()
+
+    def placeholder(self, episode, source, channels):
+        from joulewise.align.records import ClockMapping, PowerTrace
+
+        times = tuple(stamp - self.offset_ns for stamp in self.times_ns)
+        notes, width = "", None
+        if self.starts_ns:
+            starts = tuple(stamp - self.offset_ns for stamp in self.starts_ns)
+            notes = json.dumps({"sample_support_ns": list(zip(starts, times, strict=True))})
+            widths = {end - start for start, end in zip(starts, times, strict=True)}
+            if len(widths) == 1:
+                width, = widths
+        mapping = ClockMapping(source, episode.clock_domain, self.offset_ns, self.half_width_ns, "bound")
+        values = (1.0,) * len(times)
+        traces = tuple(PowerTrace(source, channel, source, times, values, "W", self.period_ns,
+                                  averaging_window_ns=width,
+                                  duty_fraction=1.0 if self.starts_ns else None, notes=notes)
+                       for channel in channels)
+        return traces, mapping
+
+
+@dataclass(frozen=True)
+class BlindLeg:
+    index: int
+    kind: ScriptKind
+    dispatched: bool
+    runner_admitted: bool
+    script_complete: bool
+    visible_doses: tuple[int, ...]
+    hidden_dose: int
+    gap_s: int
+    recovery_s: int
+    steps: tuple[BlindStep, ...] = ()
+    episode: BlindEpisode | None = None
+    rails: BlindSupport | None = None
+    dc: BlindSupport | None = None
+
+
+@dataclass(frozen=True)
+class BlindProjection:
+    kit_sha256: str
+    legs: tuple[BlindLeg, ...]
+
+
 @dataclass(frozen=True)
 class PhysicalView:
     episode: object
@@ -96,12 +236,6 @@ class LegInput:
 
 
 @dataclass(frozen=True)
-class TraceTiming:
-    t_ns: tuple[int, ...]
-    nominal_interval_ns: int
-
-
-@dataclass(frozen=True)
 class ChannelTiming:
     reason: str | None
     baseline_reason: str | None
@@ -120,6 +254,8 @@ class LegAdmission:
     parts: Mapping | None = None
     channels: Mapping | None = None
     rail_gaps: tuple[tuple[str, str], ...] = ()
+    fit_channels: tuple[str, ...] = ()
+    estimate_shape: tuple = ()
 
     @property
     def admitted(self):
@@ -239,14 +375,15 @@ def thermal_intervals(hardware):
     return intervals
 
 
-def physical_call_view(leg: LegInput, *, projected_work=None):
+def physical_call_view(leg: LegInput, *, projected_work=None, steps=None):
     """Replace just the logged turn. Keep the original episode and trace bounds."""
     episode = leg.episode
     if (episode is None or len(episode.turns) != 1 or episode.turns[0].logged is not True
             or episode.turns[0].tool_calls):
         raise ViewError("logged_envelope")
-    steps = (_read_steps(leg.work_bytes, leg.work_sha256, leg.leg_id, leg.kind) if projected_work is None
-             else script_steps(projected_work, leg.kind))
+    if steps is None:
+        steps = (_read_steps(leg.work_bytes, leg.work_sha256, leg.leg_id, leg.kind) if projected_work is None
+                 else script_steps(projected_work, leg.kind))
     gates = (interval["end_ns"] for interval in thermal_intervals(episode.hardware)
              if interval["kind"] == "G0")
     previous = max(episode.start_ns, max(gates, default=episode.start_ns))
@@ -323,19 +460,19 @@ def _other_parts(view, segments):
     return parts
 
 
-def _physical_partition(episode, work, kind):
+def _physical_partition(episode, work, kind, *, steps=None):
     from joulewise.align.attribution import _segments
 
     if any(interval["kind"] == "G0" and interval["end_ns"] > episode.start_ns
            for interval in thermal_intervals(episode.hardware)):
         raise LegRecordError()
-    leg = LegInput(work["leg_id"], kind, False, True, episode)
-    view = physical_call_view(leg, projected_work=work)
+    leg = LegInput(episode.episode_id if steps is not None else work["leg_id"], kind, False, True, episode)
+    view = physical_call_view(leg, projected_work=work, steps=steps)
     segments = _record_call(_segments, view.episode, [])
     return view, _other_parts(view, segments), segments
 
 
-def prepare_admission(position, episode, work, issued, traces):
+def prepare_admission(position, episode, work, issued, traces, *, steps=None):
     """Determine native participation using the bound kit and blind records."""
     if not position["g0_released"]:
         return LegAdmission("not_dispatched")
@@ -344,7 +481,7 @@ def prepare_admission(position, episode, work, issued, traces):
     if not position["admitted"]:
         return LegAdmission("not_evaluable", "runner_unadmitted")
     try:
-        view, parts, segments = _physical_partition(episode, work, issued["kind"])
+        view, parts, segments = _physical_partition(episode, work, issued["kind"], steps=steps)
     except ViewError as error:
         return LegAdmission("not_evaluable", str(error))
     except LegRecordError:
@@ -452,25 +589,27 @@ def _channel_timing(view, name, trace, mapping, gap_limit=None):
     return ChannelTiming(reason, None, drift_reason)
 
 
-def _energy(kernel, trace, mapping, start, end):
+def _energy(kernel, trace, mapping, start, end, *, require_finite=False):
     estimate = kernel.trace_energy(trace, start, end, mapping=mapping)
+    if require_finite and not _finite(estimate.joules):
+        raise ValueReadError("nonfinite_estimate")
     if "trace.partial_coverage" in estimate.flags or not _finite(estimate.joules):
         return None
     return estimate.joules
 
 
-def _baseline(kernel, trace, mapping, recovery, coverage):
+def _baseline(kernel, trace, mapping, recovery, coverage, *, require_finite=False):
     end = recovery.end_ns
     start = end - 40 * NS
     if coverage.baseline_reason is not None:
         return None, coverage.baseline_reason, None, coverage.drift_reason
-    energy = _energy(kernel, trace, mapping, start, end)
+    energy = _energy(kernel, trace, mapping, start, end, require_finite=require_finite)
     if energy is None:
         return None, "trace_or_clock_unavailable", None, "trace_or_clock_unavailable"
     previous = start - 40 * NS
     if coverage.drift_reason is not None:
         return energy / 40, None, None, coverage.drift_reason
-    prior = _energy(kernel, trace, mapping, previous, start)
+    prior = _energy(kernel, trace, mapping, previous, start, require_finite=require_finite)
     if prior is None:
         return energy / 40, None, None, "trace_or_clock_unavailable"
     return energy / 40, None, prior - energy, None
@@ -480,22 +619,26 @@ def _above(joules, seconds, baseline):
     return None if joules is None or baseline is None else joules - seconds * baseline
 
 
-def _channel_values(kernel, view, episode, name, attrs, parts, coverage):
+def _channel_values(kernel, view, episode, name, attrs, parts, coverage, *, require_finite=False):
     channel = TRACE_CHANNELS[name]
     trace, mapping = kernel.phases.selected_trace(episode, channel)
     if coverage.reason == "trace_or_clock_unavailable":
         return {"reason": coverage.reason, "baseline_w": None, "baseline_reason": coverage.baseline_reason}
     if coverage.reason is not None:
-        baseline, reason, _, _ = _baseline(kernel, trace, mapping, view.steps[-1], coverage)
+        baseline, reason, _, _ = _baseline(kernel, trace, mapping, view.steps[-1], coverage,
+                                           require_finite=require_finite)
         return {"reason": coverage.reason, "baseline_w": baseline, "baseline_reason": reason}
     table = _record_call(kernel.phases.phase_table, episode, channel, attrs)
-    baseline, reason, drift, drift_reason = _baseline(kernel, trace, mapping, view.steps[-1], coverage)
+    if require_finite and any(not _finite(phase["joules"]) for phase in table["phases"].values()):
+        raise ValueReadError("nonfinite_estimate")
+    baseline, reason, drift, drift_reason = _baseline(kernel, trace, mapping, view.steps[-1], coverage,
+                                                      require_finite=require_finite)
     above = {key: _above(phase["joules"], phase["seconds"], baseline)
              for key, phase in table["phases"].items()}
     detailed = {}
     for key, ranges in parts.items():
         seconds = sum(end - start for start, end in ranges) / NS
-        values = [_energy(kernel, trace, mapping, start, end) for start, end in ranges]
+        values = [_energy(kernel, trace, mapping, start, end, require_finite=require_finite) for start, end in ranges]
         absolute = fsum(values) if all(value is not None for value in values) else None
         detailed[key] = {"seconds": seconds, "joules": absolute,
                          "above_baseline_j": _above(absolute, seconds, baseline)}
@@ -505,7 +648,7 @@ def _channel_values(kernel, view, episode, name, attrs, parts, coverage):
               "above_baseline_j": above, "other": detailed}
     hidden = next((step for step in view.steps if step.kind == "hidden"), None)
     if hidden is not None:
-        whole = _energy(kernel, trace, mapping, hidden.start_ns, hidden.end_ns)
+        whole = _energy(kernel, trace, mapping, hidden.start_ns, hidden.end_ns, require_finite=require_finite)
         decode = detailed.get("hidden_decode", {}).get("above_baseline_j")
         divisor = hidden.delivered_tokens
         divisor_reason = None
@@ -761,6 +904,77 @@ def _measured_fit_point(hidden):
     return hidden["delivered_tokens"], hidden["call_j"]
 
 
+def _native_estimates(kernel, admission, episode):
+    """Run the shared native calculation through each channel estimate."""
+    view = admission.view
+    try:
+        episode = kernel.phases.with_package(replace(episode, turns=view.episode.turns))
+        estimates = {name: _channel_values(kernel, view, episode, name, None, admission.parts,
+                                          admission.channels[name], require_finite=True) for name in CHANNELS}
+    except ArithmeticError as error:
+        raise ValueReadError("nonfinite_estimate") from error
+    return episode, estimates
+
+
+def _estimate_shape(estimates):
+    shape = []
+    for channel in CHANNELS:
+        row = estimates[channel]
+        phases = row.get("absolute", {}).get("phases", {})
+        hidden = row.get("hidden", {})
+        shape.append((
+            row.get("reason"), row["baseline_reason"], row.get("baseline_drift_reason"),
+            tuple((kind, value["joules"] is not None, value.get("joules_per_token") is not None)
+                  for kind, value in phases.items()),
+            hidden.get("call_j") is not None, hidden.get("j_per_token_reason"),
+        ))
+    return tuple(shape)
+
+
+def dry_run_leg(leg, kernel):
+    """Commit the eligibility discovered by the native kernel on fixed samples."""
+    position = dict(g0_released=leg.dispatched, admitted=leg.runner_admitted,
+                    script_complete=leg.script_complete)
+    issued = dict(kind=leg.kind.value, turn_tokens=leg.visible_doses, hidden_tokens=leg.hidden_dose,
+                  gap_s=leg.gap_s, recovery_s=leg.recovery_s)
+    if not (leg.dispatched and leg.runner_admitted and leg.script_complete):
+        return prepare_admission(position, None, None, issued, None)
+    if len(leg.episode.turns) != 1 or leg.episode.turns[0].has_tools:
+        return LegAdmission("not_evaluable", "logged_envelope")
+    episode = leg.episode.materialize((PILOT + REMAINDER)[leg.index])
+    rails, rail_mapping = leg.rails.placeholder(episode, "powermetrics", ("cpu_power", "gpu_power", "ane_power"))
+    trace_timing = dict.fromkeys(("cpu_rail", "gpu_rail", "rail_sum"), (rails[0], rail_mapping))
+    traces, mappings = rails, (rail_mapping,)
+    trace_timing["dc_in"] = (None, None)
+    if leg.dc is not None:
+        dc, mapping = leg.dc.placeholder(episode, "wall_meter", ("dc_in",))
+        trace_timing["dc_in"] = (dc[0], mapping)
+        traces, mappings = (*traces, *dc), (*mappings, mapping)
+    steps = tuple(row.materialize() for row in leg.steps)
+    candidate = prepare_admission(position, episode, None, issued, trace_timing, steps=steps)
+    if not candidate.admitted:
+        return candidate
+
+    try:
+        _, estimates = _native_estimates(kernel, candidate, replace(episode, power_traces=traces,
+                                                                    clock_mappings=mappings))
+    except LegRecordError:
+        return LegAdmission("not_evaluable", "leg_record_invalid")
+    for row in estimates.values():
+        if "absolute" in row:
+            phases = row["absolute"]["phases"]
+            if any(phases[phase]["joules_per_token"] is None for phase in ("prefill", "decode")):
+                return LegAdmission("not_evaluable", "phase_denominator")
+    fit_channels = tuple(name for name in CHANNELS if leg.kind is ScriptKind.HIDDEN
+                         and estimates[name].get("hidden", {}).get("call_j") is not None)
+    return replace(candidate, fit_channels=fit_channels, estimate_shape=_estimate_shape(estimates))
+
+
+def dry_run(projection: BlindProjection):
+    kernel = PhaseKernel.frozen()
+    return tuple(dry_run_leg(leg, kernel) for leg in projection.legs)
+
+
 def print_admitted_controls(positions, *, kernel, pooled, instrument_manifest_sha256):
     """Calculate native results with the scientific participation set already fixed."""
     rows, controls, marks = [], [], []
@@ -773,21 +987,19 @@ def print_admitted_controls(positions, *, kernel, pooled, instrument_manifest_sh
             row["reason"] = admission.reason
         if admission.admitted:
             view = admission.view
-            episode = kernel.phases.with_package(replace(leg.episode, turns=view.episode.turns))
-            parts = admission.parts
-            channels = {name: _channel_values(kernel, view, episode, name, None, parts,
-                                              admission.channels[name]) for name in CHANNELS}
+            episode, channels = _native_estimates(kernel, admission, leg.episode)
+            if _estimate_shape(channels) != admission.estimate_shape:
+                raise EstimateStructureError("committed estimate shape")
             marks.extend({"leg_id": leg.leg_id, "channel": name, "part": part}
                          for name, part in admission.rail_gaps)
             controls.append(kernel.phases.ControlLeg(episode, view.cpu_dose))
             _format_leg(row, view, channels, pooled, instrument_manifest_sha256)
             if leg.kind == "hidden":
-                for name, coverage in admission.channels.items():
-                    if coverage.fit_supported:
-                        try:
-                            fit_points[name][leg.leg_id] = _measured_fit_point(channels[name]["hidden"])
-                        except ValueReadError:
-                            continue
+                for name in admission.fit_channels:
+                    try:
+                        fit_points[name][leg.leg_id] = _measured_fit_point(channels[name]["hidden"])
+                    except ValueReadError:
+                        continue
     return _print_result(kernel, rows, controls, marks, fit_points, any(leg.g0_released for leg in positions))
 
 

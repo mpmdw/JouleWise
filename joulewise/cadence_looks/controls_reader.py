@@ -14,7 +14,9 @@ from joulewise.align.apple.sampler import (
     NS_PER_SECOND as NS, _restore_stamp, seconds_ns, stamp_mapping,
 )
 from joulewise.align.power.windows import _support_edge_quantum_ns
-from joulewise.align.records import ClockMapping, Episode, PowerTrace, _build, _check_interval
+from joulewise.align.records import (
+    SCHEMA, ClockMapping, Episode, MonitorVerdict, PowerTrace, RouterLog, Turn, _build, _check_interval,
+)
 from joulewise.external import km003c_parse as meter
 from joulewise.schemas import BenchmarkConfig
 
@@ -391,6 +393,7 @@ class RailTiming:
     mapping: ClockMapping
     count: int
     times: tuple[int, ...]
+    starts: tuple[int, ...]
 
     def evidence(self):
         return {
@@ -454,18 +457,6 @@ class LegTiming:
     rail_evidence: dict | None
     dc: DCSelection
 
-    def trace_timing(self):
-        rail = (analysis.TraceTiming(self.rail.times, self.rail.period_ns), self.rail.mapping)
-        traces = dict.fromkeys(("cpu_rail", "gpu_rail", "rail_sum"), rail)
-        dc = self.dc.selected
-        if dc is None:
-            traces["dc_in"] = (None, None)
-        else:
-            traces["dc_in"] = (analysis.TraceTiming(dc.times, dc.period_ns),
-                               dc_mapping(self.episode.clock_domain, dc))
-        return traces
-
-
 def _one_identity(values):
     recorded = {value for value in values if value is not None}
     if len(recorded) > 1 or any(type(value) is not str or not value for value in recorded):
@@ -475,20 +466,32 @@ def _one_identity(values):
 
 def episode_timing(episode_raw, metadata):
     view = project_json(episode_raw, EPISODE_FIELDS, strict=True)
+    hardware = view["hardware"]
+    thermal = hardware.get("thermal", {})
+    stamp_rows = tuple(hardware["paired_clock_stamps_ns"])
     try:
-        # Use the installed record constructor on the blind envelope. Scores,
-        # router observations and non-timing hardware values are skipped or masked.
-        tools = tuple(tuple(ToolCallTiming(call["start_ns"], call["end_ns"]) for call in turn["tool_calls"])
-                      for turn in view["turns"])
-        turns = [dict(turn, tool_calls=[]) for turn in view["turns"]]
-        episode = _build(Episode, dict(view, turns=turns))
-        episode = replace(episode, turns=tuple(replace(turn, tool_calls=calls)
-                                               for turn, calls in zip(episode.turns, tools, strict=True)))
+        if view["schema"] != SCHEMA or view["condition"] not in ("benign", "sabotage"):
+            raise ValueError("native episode schema or condition")
+        # Keep the producer's domain checks at the source boundary.
+        _build(RouterLog, view["router_log"])
+        for verdict in view["monitor_verdicts"]:
+            _build(MonitorVerdict, verdict)
+        turns = tuple(Turn(
+            row["index"], row["start_ns"], row["end_ns"], row["context_tokens"], row["prefill_tokens"],
+            row["decode_tokens"], row["hidden_tokens"], row["first_token_ns"],
+            tuple(ToolCallTiming(call["start_ns"], call["end_ns"]) for call in row["tool_calls"]), row["logged"],
+        ) for row in view["turns"])
+        intervals = tuple(
+            dict(kind=row["kind"], start_ns=row["start_ns"], end_ns=row["end_ns"],
+                 **({"turn": row["turn"]} if row["kind"] == "H" else {}))
+            for row in thermal.get("intervals", ())
+        )
+        episode = Episode(view["episode_id"], "ctl01", "benign", "ctl01", "ctl01", 0, view["clock_domain"],
+                          view["start_ns"], view["end_ns"], turns,
+                          hardware={"paired_clock_stamps_ns": stamp_rows, "thermal": {"intervals": intervals}})
         analysis.thermal_intervals(episode.hardware)
     except (AttributeError, KeyError, TypeError, ValueError, OverflowError) as error:
         raise TimeFieldError("invalid native episode envelope") from error
-    hardware = view["hardware"]
-    thermal = hardware.get("thermal", {})
     policy = thermal.get("policy")
     sensors = policy["sensors"] if policy else None
     names = ({sensors["s_fast"], sensors["s_slow"], *sensors["fan_keys"], *sensors.get("record_keys", ())}
@@ -497,7 +500,6 @@ def episode_timing(episode_raw, metadata):
         raise TimeFieldError("native thermal sensor key is absent from its policy")
     episode_id = view["episode_id"]
     start, end = view["start_ns"], view["end_ns"]
-    stamp_rows = tuple(hardware.get("paired_clock_stamps_ns", ()))
     if (type(episode_id) is not str or not episode_id
             or view["clock_domain"] != f"joulewise.monotonic:{episode_id}"
             or type(start) is not int or type(end) is not int or start >= end
@@ -597,7 +599,8 @@ def rail_timing(payload, timing, period_ns, evidence):
     mapping, _ = _rail_mapping(timing, evidence)
     if grid[0][1] + mapping.offset_ns > timing.start_ns or grid[-1][2] + mapping.offset_ns < timing.end_ns:
         raise TimeFieldError("native rail trace does not cover episode extent")
-    return RailTiming(period_ns, _support_digest(grid), mapping, len(grid), tuple(row[0] for row in grid))
+    return RailTiming(period_ns, _support_digest(grid), mapping, len(grid), tuple(row[0] for row in grid),
+                      tuple(row[1] for row in grid))
 
 
 def _join_native_rails(episode, payload, rail, evidence):
@@ -779,12 +782,13 @@ def _attach_dc(episode, selected, source):
 
 def first_read(inputs, stage1):
     """Authenticate source bytes and attach values to the committed blind plans."""
-    inputs.verify_stage1(stage1)
+    sources = inputs.sources
+    sources.verify_stage1(stage1)
     cache = {}
     positions = []
     for leg in stage1.legs:
         leg_id = leg.binding.leg_id
-        position = inputs.positions[leg_id]
+        position = sources.positions[leg_id]
         admission = inputs.admissions[leg_id]
         if not leg.g0_released:
             positions.append(analysis.NativeLegInput(leg_id, leg.kind, admission.admitted, False, admission=admission))
@@ -792,13 +796,13 @@ def first_read(inputs, stage1):
 
         pin = position["files"]
         span_id = position["span_id"]
-        files = {role: inputs.read_entry(span_id, pin[role])
+        files = {role: sources.read_entry(span_id, pin[role])
                  for role in ("episode", "config", "metadata", "rails", "script")}
-        plan = inputs.timing[leg_id]
-        inputs.certificate(leg_id)
+        plan = sources.timing[leg_id]
+        sources.certificate(leg_id)
         if span_id not in cache:
-            cache[span_id] = {entry["path"]: decoded_stream(entry["path"], inputs.read_entry(span_id, entry))[1]
-                              for entry in inputs.spans[span_id]["streams"]}
+            cache[span_id] = {entry["path"]: decoded_stream(entry["path"], sources.read_entry(span_id, entry))[1]
+                              for entry in sources.spans[span_id]["streams"]}
         episode = _join_native_rails(plan.episode.projected_episode, files["rails"], plan.rail, plan.rail_evidence)
         if plan.dc.selected is not None:
             episode = _attach_dc(episode, plan.dc.selected, cache[span_id][plan.dc.selected.path])

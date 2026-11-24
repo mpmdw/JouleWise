@@ -7,7 +7,8 @@ import os
 from pathlib import Path
 import re
 
-from .controls_analysis import NS, ViewError, has_dose_quorum, prepare_admission, script_steps
+from . import controls_analysis as analysis
+from .controls_analysis import NS, ViewError, has_dose_quorum, script_steps
 from .controls_layout import GateRefusal, open_file, require_private, write_exclusive
 from .controls_manifest import ISSUED_SETTINGS, STAGE1_SCHEMA, canonical
 from .controls_print import CHANNELS, KIT_ID, MASTER_SEED, PILOT, REMAINDER, _hex_pin
@@ -198,7 +199,7 @@ def _entry_from_check(check, role, path, expected_sha256=None, *, parent=None):
     return _pin(role, path, entry, parent or check["offload_manifest_sha256"])
 
 
-def _close(kit_sha, runner_commit, check, root, ids, *, synthetic):
+def _bind_span(kit_sha, runner_commit, check, root, ids, *, synthetic):
     entry = _entry_from_check(check, "close_receipt", "runner_receipt.json")
     document = project_json(_read(root / entry["path"], entry), CLOSE_FIELDS, strict=True)
     _require(document["span_id"] == check["span_id"], "INPUT_CHANNELS")
@@ -228,7 +229,7 @@ def _close(kit_sha, runner_commit, check, root, ids, *, synthetic):
         _require(name.casefold() not in names and _hex_pin(row["sha256"], 64))
         names.add(name.casefold())
         streams.append(_entry_from_check(check, "stream", name, row["sha256"], parent=entry["sha256"]))
-    return entry, document, streams
+    return entry, document["legs"], streams
 
 
 def _kit_inputs(raw, runner_commit, *, synthetic):
@@ -411,24 +412,54 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
     return position, work
 
 
-def admit_leg(position, work, issued, plan):
-    """Apply the single scientific admission predicate to a bound leg."""
+def _blind_leg(index, position, work, issued, plan):
+    """Construct the science input from verified fields with fixed roles."""
+    episode = rails = dc = None
+    steps = ()
     if work is not None:
         _check_script_requests(work, issued)
-    episode = plan.episode.projected_episode if plan is not None else None
-    traces = plan.trace_timing() if plan is not None else None
-    return prepare_admission(position, episode, work, issued, traces)
+    if position["g0_released"]:
+        source = plan.episode.projected_episode
+        episode = analysis.BlindEpisode(
+            source.start_ns, source.end_ns,
+            tuple(analysis.BlindTurn(turn.start_ns, turn.end_ns, turn.first_token_ns, turn.context_tokens,
+                                     turn.prefill_tokens, turn.decode_tokens, turn.hidden_tokens,
+                                     turn.logged, bool(turn.tool_calls)) for turn in source.turns),
+            tuple(analysis.BlindInterval(analysis.IntervalKind(row["kind"]), row["start_ns"], row["end_ns"],
+                                         row["turn"] if row["kind"] == "H" else None)
+                  for row in analysis.thermal_intervals(source.hardware)),
+        )
+        rail = plan.rail
+        offset = rail.mapping.offset_ns
+        rails = analysis.BlindSupport(
+            tuple(stamp + offset for stamp in rail.times), rail.period_ns, rail.mapping.uncertainty_ns, offset,
+            tuple(start + offset for start in rail.starts),
+        )
+        selected = plan.dc.selected
+        if selected is not None:
+            dc = analysis.BlindSupport(tuple(stamp - selected.offset_ns for stamp in selected.times),
+                                       selected.period_ns, selected.width_ns, -selected.offset_ns)
+        if position["script_complete"]:
+            steps = tuple(analysis.BlindStep(
+                analysis.StepKind(row.kind), row.start_ns, row.end_ns, row.complete,
+                row.requested_tokens if row.requested_tokens is not None else int(row.requested_s),
+                row.first_ns, row.delivered_tokens, row.context_tokens,
+            ) for row in script_steps(work, issued["kind"]))
+    return analysis.BlindLeg(index, analysis.ScriptKind(issued["kind"]), position["g0_released"],
+                             position["admitted"], position["script_complete"], tuple(map(int, issued["turn_tokens"])),
+                             int(issued["hidden_tokens"]), int(issued["gap_s"]), int(issued["recovery_s"]),
+                             steps, episode, rails, dc)
 
 
 @dataclass
-class Inputs:
+class SourceBindings:
+    """Authenticated locators and registered file commitments."""
+
     source: Path
     private: Path
     inventory: dict
-    issued: dict
     legs: dict = field(default_factory=dict)
     certificates: dict = field(default_factory=dict)
-    admissions: dict = field(default_factory=dict)
     timing: dict = field(default_factory=dict)
 
     @property
@@ -461,12 +492,20 @@ class Inputs:
             raise ReaderBindingError("stage-1 inventory")
 
 
+@dataclass(frozen=True)
+class Inputs:
+    projection: analysis.BlindProjection
+    admissions: dict
+    sources: SourceBindings
+
+
 def _make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic):
     kit_sha = digest(kit_raw)
     kit = _kit_inputs(kit_raw, runner_commit, synthetic=synthetic)
     inventory = dict(schema=INVENTORY_SCHEMA, kit_sha256=kit_sha, runner_commit=runner_commit,
                      spans={}, positions={})
-    result = Inputs(source, private, inventory, kit)
+    sources = SourceBindings(source, private, inventory)
+    legs, certificate_entries = [], {}
     episode_ids = set()
     _require(len(checks) == 2 and len({row["span_id"].casefold() for row in checks}) == 2
              and len({row["check_item"] for row in checks}) == len({row["close_item"] for row in checks}) == 2)
@@ -474,16 +513,16 @@ def _make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic):
         span_id = check["span_id"]
         root = source / span_id
         _require(check["runner_commit"] == runner_commit)
-        close_entry, close, streams = _close(kit_sha, runner_commit, check, root, ids, synthetic=synthetic)
+        close_entry, close_legs, streams = _bind_span(kit_sha, runner_commit, check, root, ids, synthetic=synthetic)
         stream_views = tuple(blind_stream(entry["path"], _read(root / entry["path"], entry)) for entry in streams)
         span = dict(layout_index=number, close_item=check["close_item"], check_item=check["check_item"],
                     offload_manifest_sha256=check["offload_manifest_sha256"], close_receipt=close_entry,
                     streams=streams, capture_leg=ids[0])
-        result.spans[span_id] = span
-        for ordinal, (leg_id, close_leg) in enumerate(zip(ids, close["legs"], strict=True)):
+        sources.spans[span_id] = span
+        for ordinal, (leg_id, close_leg) in enumerate(zip(ids, close_legs, strict=True)):
             position, work = _terminal(root, check, close_leg, kit[leg_id], ordinal, synthetic=synthetic)
             position.update(span_index=number, disposition_sha256=None, certificate=None)
-            result.positions[leg_id] = position
+            sources.positions[leg_id] = position
             if ordinal == 0:
                 span.update(capture_attempt=position["attempt"], reference_sha256=position["reference_sha256"],
                             capture_run_id=position["run_id"], capture_config_sha256=position["files"]["config"]["sha256"],
@@ -497,6 +536,7 @@ def _make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic):
             files = position["files"]
             episode_id = episode_sha = script_sha = None
             issued = kit[leg_id]["script"]
+            plan = None
             if position["g0_released"]:
                 payloads = {name: _read(root / files[name]["path"], files[name]) for name in FILES}
                 timing, period, evidence = binding_projection(
@@ -509,33 +549,34 @@ def _make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic):
                 rail = rail_timing(payloads["rails"], timing, period, evidence)
                 dc = select_dc(timing, stream_views)
                 plan = LegTiming(timing, rail, evidence, dc)
-                result.timing[leg_id] = plan
-                admission = admit_leg(position, work, issued, plan)
+                sources.timing[leg_id] = plan
                 episode_id, episode_sha, script_sha = timing.episode_id, files["episode"]["sha256"], files["script"]["sha256"]
-                certificate = canonical({
+                certificate_entries[leg_id] = (close_entry["sha256"], {
                     "schema": CERTIFICATE_SCHEMA, "leg_id": leg_id, "span_id": span_id,
                     "episode_sha256": episode_sha, "rails": rail.evidence(),
-                    "admission": admission.disposition, "admission_reason": admission.reason,
-                    "fit_channels": [name for name in CHANNELS if admission.admitted
-                                     and position["kind"] == "hidden" and admission.channels[name].fit_supported],
                     "input_sha256": {name: pin["sha256"] for name, pin in files.items()},
                     "stream_sha256": {entry["path"]: entry["sha256"] for entry in streams},
                     **dc.evidence(),
                 })
-                result.certificates[leg_id] = certificate
-                position["certificate"] = _pin("certificate", f"certificates/{leg_id}.json",
-                                               {"size": len(certificate), "sha256": digest(certificate)},
-                                               close_entry["sha256"])
-            else:
-                admission = admit_leg(position, None, issued, None)
-            result.admissions[leg_id] = admission
-            result.legs[leg_id] = {
+            legs.append(_blind_leg(len(legs), position, work, issued, plan))
+            sources.legs[leg_id] = {
                 "identity": [KIT_ID, kit_sha, runner_commit, number, leg_id, position["attempt"]],
                 "role": position["role"], "reference": position["reference_sha256"],
                 "script_sha": script_sha, "kind": position["kind"], "admitted": position["admitted"],
                 "g0_released": position["g0_released"], "episode_id": episode_id, "episode_sha256": episode_sha,
             }
-    return result
+    projection = analysis.BlindProjection(kit_sha, tuple(legs))
+    admissions = dict(zip(IDS, analysis.dry_run(projection), strict=True))
+    for leg_id, (parent, fields) in certificate_entries.items():
+        admission = admissions[leg_id]
+        certificate = canonical(dict(fields, admission=admission.disposition, admission_reason=admission.reason,
+                                     fit_channels=admission.fit_channels, estimate_shape=admission.estimate_shape))
+        sources.certificates[leg_id] = certificate
+        sources.positions[leg_id]["certificate"] = _pin(
+            "certificate", f"certificates/{leg_id}.json",
+            {"size": len(certificate), "sha256": digest(certificate)}, parent,
+        )
+    return Inputs(projection, admissions, sources)
 
 
 def make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic=False):
@@ -560,7 +601,7 @@ def apply_disposition(inputs, disposition_raw):
         _require(dispositions and len(dispositions) == len(document["legs"]), "INPUT_CHANNELS")
         disposition_sha = digest(disposition_raw)
     disposed_legs = frozenset(dispositions)
-    for leg, raw in inputs.certificates.items():
+    for leg, raw in inputs.sources.certificates.items():
         certificate = load_canonical(raw)
         code = certificate["dc_code"]
         row = dispositions.pop(leg, None)
@@ -573,15 +614,14 @@ def apply_disposition(inputs, disposition_raw):
     if disposition_sha is not None:
         # Authorize the requested DC exclusions against the issued roster.
         # The actual fit quorum below also accounts for the blind verdicts.
-        authorized_doses = (row["script"]["hidden_tokens"] for leg, row in inputs.issued.items()
-                            if row["script"]["kind"] == "hidden" and leg not in disposed_legs)
+        authorized_doses = (leg.hidden_dose for leg in inputs.projection.legs
+                            if leg.kind is analysis.ScriptKind.HIDDEN and IDS[leg.index] not in disposed_legs)
         _require(has_dose_quorum(authorized_doses), "INPUT_CHANNELS")
-        for position in inputs.positions.values():
+        for position in inputs.sources.positions.values():
             position["disposition_sha256"] = disposition_sha
     for name in CHANNELS:
-        doses = (inputs.positions[leg]["hidden_delivered"] for leg, admission in inputs.admissions.items()
-                 if admission.admitted and inputs.positions[leg]["kind"] == "hidden"
-                 and admission.channels[name].fit_supported)
+        doses = (leg.hidden_dose for leg in inputs.projection.legs
+                 if name in inputs.admissions[IDS[leg.index]].fit_channels)
         _require(has_dose_quorum(doses), "insufficient_legs")
 
 

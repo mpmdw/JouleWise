@@ -74,7 +74,7 @@ def _check_inputs(authorization, binding, private, source):
         _require(close is not None and check is not None and span["span_id"] in close and span["span_id"] in check)
     kit_raw = _private(private / "issued-kit.json", binding["kit_sha256"])
     inputs = make_inputs(source, private, kit_raw, pins["spans"], binding["runner_commit"])
-    authorization.verify_authorized_prerequisites(binding, inputs)
+    authorization.verify_authorized_prerequisites(binding, inputs.sources)
     return inputs
 
 
@@ -243,20 +243,21 @@ def _run_fresh(operation, authority, binding, private, source, instrument, direc
     if stage_snapshot is not None:
         stage_raw, stage, inputs_raw = _stage_files(private, freeze, freeze_inputs, source)
     inputs = _check_inputs(authority, binding, private, source)
+    sources = inputs.sources
     if operation == "stage1":
-        _certificates(private_fd, inputs, create=True)
+        _certificates(private_fd, sources, create=True)
     # An eligible exception is represented only by an independently committed
     # disposition tied to the exact bytes of the freshly derived certificate.
     apply_disposition(inputs, _disposition(authority, private))
     if stage_snapshot is not None:
-        _certificates(private_fd, inputs)
-        _require(inputs.stage1_bytes() == (stage_raw, inputs_raw), "INPUT_BINDING")
-        inputs.verify_stage1(stage)
+        _certificates(private_fd, sources)
+        _require(sources.stage1_bytes() == (stage_raw, inputs_raw), "INPUT_BINDING")
+        sources.verify_stage1(stage)
     probe_link(private_fd, public_fd)
     authority.book.recheck()
     require_fresh(*directories, authority.history)
     if operation == "stage1":
-        _build_stage(private_fd, inputs, freeze_inputs)
+        _build_stage(private_fd, sources, freeze_inputs)
     elif operation == "stage2":
         run_controls_worker(freeze_inputs=freeze_inputs, stage1_bytes=stage_raw, blind=stage.public,
                             execution_host=execution["host"], local_host=socket.gethostname(),

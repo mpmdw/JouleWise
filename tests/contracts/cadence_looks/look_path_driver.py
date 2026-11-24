@@ -1,7 +1,7 @@
 #!/usr/bin/env python3.13
 """Synthetic-only registrar and observer for the frozen ctl bundle driver."""
 
-from dataclasses import asdict, replace
+from dataclasses import asdict, fields as dataclass_fields, is_dataclass, replace
 from contextlib import contextmanager
 from hashlib import sha256
 from importlib import import_module, util
@@ -327,6 +327,47 @@ def run(operation, world, bench, fault):
 
         reader.episode_timing = observe_tool_timing
 
+    if fault == "capture_blind_projection":
+        from enum import Enum
+        from unittest.mock import patch
+        from joulewise.cadence_looks import controls_analysis as analysis
+
+        run_dry = analysis.dry_run
+        phases = analysis.PhaseKernel.frozen().phases
+        phase_table = phases.phase_table
+
+        def closed(value):
+            if is_dataclass(value):
+                for field in dataclass_fields(value):
+                    closed(getattr(value, field.name))
+            elif isinstance(value, tuple):
+                for item in value:
+                    closed(item)
+            else:
+                assert value is None or type(value) in (int, bool) or isinstance(value, Enum), type(value)
+
+        def capture(projection):
+            assert isinstance(projection, analysis.BlindProjection)
+            assert len(projection.kit_sha256) == 64
+            closed(projection.legs)
+            put(bench / f"blind-{operation}.json", manifest.canonical(asdict(projection)))
+
+            def check_samples(episode, *args, **kwargs):
+                assert all(sample == 1.0 for trace in episode.power_traces
+                           if trace.channel != "package" for sample in trace.values)
+                return phase_table(episode, *args, **kwargs)
+
+            with (
+                patch.object(inputs, "_read", side_effect=AssertionError("dry run read a source")),
+                patch.object(reader.meter, "parse_bytes", side_effect=AssertionError("dry run decoded values")),
+                patch.object(phases, "phase_table", side_effect=check_samples) as same_phase_table,
+            ):
+                result = run_dry(projection)
+                assert same_phase_table.called
+                return result
+
+        analysis.dry_run = capture
+
     if fault == "guard_battery_observations":
         original_project = reader.project_json
 
@@ -353,7 +394,7 @@ def run(operation, world, bench, fault):
         projection = worker._check_inputs(authority, binding, private, source)
         fd, _ = layout.open_directory(private)
         try:
-            worker._certificates(fd, projection, create=True)
+            worker._certificates(fd, projection.sources, create=True)
         finally:
             os.close(fd)
         return 0
