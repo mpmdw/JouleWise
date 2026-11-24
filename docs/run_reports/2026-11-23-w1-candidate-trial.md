@@ -10,11 +10,53 @@ promotes one reviewed candidate. [RUN_STATE 462](https://github.com/mpmdw/JouleW
 |---|---|
 | Draft PR | PR #958, `ops/2026-11-23-w1-candidate-trial` → `ops/2026-11-11-w1-presign` (do not merge) |
 | Base | `b2e01464d6d4fbf2901ff4d4154df9455104a12a` (the head of PR #734) |
-| Final source head (CI target) | `e2baa3003536f8cfdd8a472494b19e4656d290b0` (tree `4455d777a`); this report is committed on top as docs only |
-| Seat | `opus-w1-trial-assembly-1123` (Claude Opus 5.5), Mon 23 Nov 19:20–20:57 PST |
+| Final source head (CI target) | Session 1: `e2baa3003536f8cfdd8a472494b19e4656d290b0` (tree `4455d777a`). Session 2: see §0 |
+| Seat | Session 1: `opus-w1-trial-assembly-1123` (Claude Opus 5.5), Mon 23 Nov 19:20–20:57 PST. Session 2: `opus-w1-integration-owner-1123` (§0) |
 | Blind status | Blind. Only rulings, code, public pins and synthetic witnesses were used. `r1_slots.json`, `inputs.json` values and the planning release were handled **by hash only**. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened. |
 
-**Not done.** Nothing was merged, and nothing was pushed to a component branch or to the W1 ref. `RUN_STATE.md` and `TASK_QUEUE.md` were not edited. No SSH was used, and no chain step 1–6 or WP19 ran on real data. No receipt was signed.
+**Not done.** Nothing was merged. In session 1 nothing was pushed to a component branch or to the W1 ref. Session 2 pushed by the lead's L1, L2 and L4 to PR #944, the new PR #959 and PR #886, normally, with no rebase and no force; the W1 ref is untouched. `RUN_STATE.md` and `TASK_QUEUE.md` were not edited. No SSH was used, and no chain step 1–6 or WP19 ran on real data. No receipt was signed.
+
+## 0. Session 2: the lead's decisions applied (integration owner)
+
+Seat `opus-w1-integration-owner-1123` (Claude Opus 5.5), Mon 23 Nov 21:46 PST onward. It applies lead decisions L1, L2, L4, L6 and L8 and findings F-6, F-7, F-8 and F-13 (2026-11-23 21:45). It also integrates two items from other lanes. The first is #839's fix. The second is the research lead's rulings RL-203 to RL-213 (Fable seat `fable-w1-rulings-1123`, 21:55), which answer L3, L5, L7, L9 and Q1–Q6. The blind status is unchanged. `inputs.json` values, `r1_slots.json` and the planning release were not opened. The L4 builder was given the same rule.
+
+| Item | Status | Where, and the evidence | Remaining, and who |
+|---|---|---|---|
+| L1 / F-1: protocol text | **DONE** | PR #944 merged PR #813's branch: `bef3ea87c`, a normal merge with no rebase. `pilot_protocol_v4.md` is `df775656f`, and the line check is on record in the commit. RL-206 accepts the text unreworded. [CI 45336367460](https://github.com/mpmdw/JouleWise/actions/runs/45336367460) green: 21 of 21 jobs at `bef3ea87c`. | none |
+| L2: the port as its own PR | **DONE (draft)** | PR #959, `align/2026-11-23-w1-part-c-port` → `ops/2026-11-11-w1-presign`. It starts at D's `7944b5025`. `4633839a4` takes #809's ten Part C paths from `532654cf0`. Its tree equals the trial's 16 port paths byte for byte. [CI 45340247448](https://github.com/mpmdw/JouleWise/actions/runs/45340247448) at `df018026d` was running at commit time. The test modules this PR touches pass locally on its head: `test_refusal_allowlist`, `test_host_command_sites`, `test_v4_executed_closure`, `test_v4_registration`, `test_v4_dynamic_closure` and `test_v4_kit` (116 OK). F-2's legacy `test_rl145_part_c` failures are expected here (#809 lane). | Re-refresh if #809 moves: its r3 confirmation audit is still running (#809 lane) |
+| L4 / F-3: #886's "R1 pending" tests | **DONE on #886** (CI pending) | #886 `1dbcb4dd5` regenerates the template (F-5; blob `6bfc797bc`, the same bytes as the trial's). `8fc76a0b9` rewrites the tests to assert the filled state: R1 no longer pending, and the committed `--check` stopping first at the R0 binding. It was pushed normally by this seat's L4 builder. On the trial head `348bc1603`, `test_v4_kit`, `test_v4_w1_plan`, `test_w1_kit_r10`, `test_w1_rl122_kit` and `test_v4_prequal` all pass locally. #886's [CI 45340766338](https://github.com/mpmdw/JouleWise/actions/runs/45340766338) was queued | #886's CI result |
+| L6 / F-7: 24 stale command sites | **DONE** | PR #959 `ca41d5477`. The decision is LEAD-PENDING:328 (2026-11-22 02:49): "the 24 stale historical command-site declarations move to a separate historical inventory file; the active signing inventory equals the exact scan." The active inventory has 338 rows and equals the scan. `tests/host_command_sites_historical.json` holds the 24, and one new test keeps them out of the scan. 3 tests OK | none |
+| F-6 and L5: hazard census | **DONE** | PR #959 `b13d6f14b`: 5 sites, 2 guards and 2 scope gaps listed. `fbe696ca1` then applies RL-208 with RL-93's unapplied recategorisation. All 26 smoke-launcher rows are now INTERNAL with RL-93's sentence, and so are RL-93's two `launch` rows. The two Part C modules are `not_scanned` with RL-208's reason. The census is clean, and `test_refusal_allowlist` gives 24 OK | RL-93 C09 has two parts that are not in this change. One is the "R1 rehearsal driver, kit and runtime" reason. The other is the check of `v4_registration.py` (`alignment_workload` or `v4_desk`). Both are the lead's |
+| F-8 and RL-211: receipt file list | **DONE** | PR #959 `83786c965` adds `scripts/align_r1_part_c_evidence.py` to `EXECUTED_CLOSURE` and the receipt template. `df018026d` adds `r1_planning_release.json` to `_NAMED_ARTIFACTS` and the template (RL-211). `test_v4_executed_closure` 6 OK | The lead fills both rows at the STRICT signature |
+| F-13 and L9: raw frozen suite in ordinary shards | **DONE** (the engineering half) | PR #959 `2b7620b9a` declares the module in `scripts/test_timings.json` `exclusive_modules`, with `runs_in` set to the 16-shard workflow. The ordinary shards and the quick tier skip it, as on main. RL-209 calls this "engineering" | RL-209: the signing result must be v3.2, run directly, not through the shim. Waiting on Astra's v3.2 issue and #809 adopting it |
+| L7: `rank_deficient_design` | **DONE in trial** | RL-212 confirms the lead's preference. Trial `e2cf3ca00` is its own commit after #813 and #944. It places RLD:23212's sentence verbatim in P4's S-score bullet, in AMENDMENT-R1-DRAFT and in E2's fixture block. `test_rl182_registration` and `test_protocol_v4_doc` give 12 OK. P4 is now `687badfd8` | Repeat this one commit on the real integration branch |
+| L8 / F-9: final-step order | **DONE** | §9 below. RL-210 confirms it | none |
+| L3 / F-4b: thermal-policy shape | **RULED** (RL-207) | Complete the policy in `inputs.json` with four keys: `heavy: true`, `per_turn: true`, `sensors.fan_keys` (equal to `r1_runtime.json`'s list) and `sensors.r0_sha256` (equal to `R0.record_sha256`). No code change | The lead, at §9 step 1. The authorized R0 digest is a missing fact (RL-207) |
+| F-11 / L10: #839's zsh `PATH` | **DONE** (#839 lane) | #839 `a37a3462b` (Sol seat `sol-839-fix-1123`), [CI 45335845504](https://github.com/mpmdw/JouleWise/actions/runs/45335845504) green. It returns 0, 1 and 2 under zsh, bash and sh. Merged into the trial at `a2ae37e3c` | The lead confirms the fix (RL-205) |
+| F-12: #826's TERM test | RULED (RL-204) | It does not hold the fold | The lead records one line on the cause before signing |
+| RL-209: frozen shard 2 lost | **Investigated, not closed** | On the trial tree, shard 2 was lost twice: run 45320845394 attempt 1 (03:50–04:39Z, 49 min) and run 45329958383 (05:04–05:52Z, 48 min). Neither left a step conclusion or a log blob (`BlobNotFound`). On #809's own tree, shard 2 passed in 17 min (run 45320110153), and every other trial shard takes 8–15 min. Attempt 2 of 45320845394 was cancelled by the concurrency group when `e08638fa6` was pushed. It was not lost. In session 2, shard 2 passed in 10 min on the trial at `10e809c1f` (run 45338335655). On PR #959 at `2b7620b9a` (run 45338251730), the same shard was still running past 18 min after its other 15 shards had finished. That run was then cancelled at 20 min by the next push, so the comparison there is inconclusive. So the hang is intermittent and not tied to the trial's extra bytes. It is a slow or hanging case in shard 2's partition, which the #809 lane has to find. | #809 lane and the lead: RL-209 holds item 2 until this is explained |
+
+**Trial assembly, continued** (merges only, no rebase; ten blobs 10/10 after every step):
+
+| # | Step | Trial commit | Ten R1 blobs |
+|---:|---|---|---|
+| 12 | PR #839 at `a37a3462b` (F-11 fix) | `a2ae37e3c` | 10/10 |
+| 13 | PR #944 at `bef3ea87c` (carries #813; L1). It changes no file | `83e330e26` | 10/10 |
+| 14 | PR #959 at `2b7620b9a` (L2; F-6, L6, F-8, F-13) | `10e809c1f` | 10/10 |
+| 15 | RL-212 `rank_deficient_design` clause (L7) | `e2cf3ca00` | 10/10 |
+| 16 | PR #959 at `df018026d` (RL-208 and RL-93 categories; RL-211) | `a59ef2de4` | 10/10 |
+| 17 | PR #886 at `8fc76a0b9` (L4; F-3 and F-5 now on PR #886). The template is unchanged: both sides have blob `6bfc797bc` | `348bc1603` | 10/10 |
+
+**First complete frozen matrix on the trial** (`partc-frozen-differential` run [45338335655](https://github.com/mpmdw/JouleWise/actions/runs/45338335655) at `10e809c1f`):
+- All 16 of 16 shards reported. There were **25,300 cases: 1,079 AGREES_PASS, 4,673 OTHER_REFUSAL and 19,548 REFUSED, with 0 FALSE_PASS, 0 WRONG_VERDICT and 0 HARNESS_ERROR.** The suite was v3.1, sha256 `12ca35d3…1588`, with 144 census stand-in points added. I summed the 16 shard logs myself because the run's `totals` job was still queued for a runner.
+- This ran through the shim, so under RL-209 it is honest interim evidence and **not signing evidence**. Signing needs v3.2 run directly.
+- The evaluator, the evidence module, the suite and the workflow are byte-identical at every later trial head.
+- I cancelled PR #959's duplicate frozen run (45340247578), which tests the same Part C bytes, to free hosted runners for the trial's `ci`. It can be re-run.
+
+**Trial CI.**
+- At `10e809c1f` (steps 12–14, before #886's fix), `ci` run [45338335723](https://github.com/mpmdw/JouleWise/actions/runs/45338335723) had, at 23:04, `quick` and `test (3.13, 2)` red, 9 jobs green and 10 shards still running. Every red was F-3: `test_v4_kit` (7) and `test_r1_rehearsal` (3 failures, 2 errors). #886's `8fc76a0b9` cures these, and they pass locally at `348bc1603`. That run was superseded by the push of the session-2 head.
+- Session-2 head (source `348bc1603`; this report is committed on top as docs only): `ci` and `partc-frozen-differential` were running when this was committed. The result is in the PR #958 checks and the seat's final message.
+- Note for the lead (L4): six S6 failures came from `r1_runtime.registered_s6()` (one of the ten frozen sources) reading `r1_slots.json` as the S6 registration. After #886's fill, that file is the R1 hardware record, and its `s6_tuning` has no `from_c`/`to_c`. The tests now pin a synthetic S6 registration. No W1 path calls it, but the lead may want one line on record.
 
 ## 1. Composition and order
 
@@ -66,18 +108,18 @@ moved twice in two days.
 
 | ID | Status | Finding | Minimal resolution taken in the trial | Owner |
 |---|---|---|---|---|
-| F-1 | **NEEDS_LEAD** | **Registration-text conflict in `docs/align/pilot_protocol_v4.md`** between #813 and #944. In hunk 1, #813 adds RL-149's descriptive item 9 just above B8, and #944 replaces B8. In hunk 2, the RL-18 interpretation line takes #813's S clause ("on the decoded part of each reference-state row, in gated episodes") and #944's K clause ("a physical positive control is registered (B10)…"). | The union: item 9, then #944's B8 verbatim, then one combined interpretation line. The blob is `df775656f`, byte-identical to rehearsal D's. Line check: every line either PR adds is present except that one combined line, and every line either PR removes is absent. | Lead confirms the text, or #944 is rebased on #813 to carry it. Fable sees it in the cold pass (Q1). |
-| F-2 | **blocked-by-PR-#809** | #809 is not accepted. r3 `532654cf0` landed at 19:31 during this trial, after r2-astra-confirm returned BLOCK with 5 HIGH. RL-193 item 2 needs an accepted head with zero false passes on v3 and the six-column supplement. The supplement case is present at r3. Rehearsal D also flagged two owed items: legacy W1 launcher fixtures (234 failures plus 4 errors in D) and the two protected stored replays (RL-183 §1.3). | Ported r3 byte-equal so that CI tests the newest bytes. | #809 builder, independent executing auditor, lead |
-| F-3 | **blocked-by-PR-#886** | **#886's own CI is red: 8 jobs, about 30 tests.** The tests assert the pre-fill "R1 pending" state, for example `test_v4_kit` `test_placeholders_fail_check…`, `test_sizing_is_only_a_provisional_preview…` and `test_d_has_required_base_controls_and_explicit_pending_slots`; `test_v4_w1_plan` (7); `test_v4_prequal` (4); `test_r1_rehearsal` (5); `test_w1_rl122_kit.test_record_file_is_read_canonically`; `test_r1_turn_counts_export`; `test_w1_prequal` chain; `test_r1_followup`; `test_w1_kit_r10.test_template_has_no_receipt_slot`. The trial CI reproduces the same set, except that F-5 cures 6 of the `test_v4_w1_plan` failures (§5). | None. These are test-expectation or fill-shape decisions for #886's owner. | #886 owner, lead |
-| F-4 | **NEEDS_LEAD, plus Q2 to Fable** | **`align_v4_kit.py --check` has at least three successive stops on the final tree.** (a) `R0.record_sha256 must bind thermal_policy.sensors.r0_sha256`: R0 is unbound (#824 lane, RL-193 item 6). (b) With a **synthetic** digest in a throwaway export, the next stop is `thermal policy has missing or unknown fields`. #886's `inputs.R1.thermal_policy` (DEC2's values) has no `heavy` or `per_turn` keys and no `sensors.r0_sha256` or `sensors.fan_keys`. The frozen `thermal_gates.validate_gate_policy` requires `heavy` and `per_turn` (`thermal_gates.py:101-106`), and the kit requires both to be true for D (`align_v4_kit.py:1131-1137`). The kit's own fully supplied fixture carries all four (`tests/align/test_v4_kit.py:440-446`). (c) With those four added **synthetically**, the next stop is `sizing_b5.json is not derivable yet`: the lead commits `w1_plan.json` (a filled `night_plan.template.json`), then regenerates. Later stops are unknown. | None. The probes ran only in `/Volumes/JW-EXT/scratch/opus-w1-trial-assembly-1123/probe-r0`; the trial's `inputs.json` is unchanged. | R0 owner and lead for (a). Lead and Fable for (b): RL-189 §2.5 item 2 says `inputs.json` holds DEC2's five `set_inputs` values **unchanged**. Lead for (c). |
-| F-5 | DONE in trial; re-sign later | **`night_plan.template.json` member bindings were stale.** #886 regenerated the 16 stage files (chain step 7) but not the template, so 14 member `config_sha256` values were stale. `--regenerate-template` on the final tree fixed them: blob `e478d2427`→`6bfc797bc`, sha256 `b1906f37…`→`ff0c4d41…`. | Committed in the trial (`67f74cbbd`). These bindings move again when R0 is bound. | Lead, at final regeneration |
-| F-6 | **NEEDS_LEAD, plus Q3 to Fable** | **The refusal census fails on the trial tree.** There are 5 unlisted refusal sites and 2 changed guards in `scripts/run_align_r1_smoke.py`: `EvidenceFailure` `verdict_binding`, `evidence_unverifiable` and `source_integrity`; `main` return code 2 (×3); a `soak_child` re-raise; and the guard text of the two `idle soak` ValueErrors. There are also 2 scope gaps: `align_r1_part_c.py` and `align_r1_part_c_evidence.py` are neither scanned nor listed as `not_scanned`. Every one of them comes from the Part C port scaffold. | None. `configs/gates/hazard_refusals.json` needs a reviewed disposition (Ed's rule: physics refuses, everything else is a flag). | #809 port owner, lead |
-| F-7 | **NEEDS_LEAD** | **Host-command inventory.** The lead decided on 2026-11-22 at 02:49 that the 24 stale historical declarations move to a separate historical inventory, so that the active signing inventory equals the exact scan. No branch implements this yet. `tests.test_host_command_sites` fails on the trial with exactly 24 stale rows and 0 missing, the same as rehearsal D. | None | #809 port owner, lead |
-| F-8 | **NEEDS_LEAD** | **Executed and dynamic closure.** `test_v4_executed_closure.test_every_executed_module_and_script_is_in_the_receipt_artifact_set` fails: `scripts/align_r1_part_c_evidence.py` is executed but is not in the receipt artifact set (`v4_registration.py` closure). The regenerated dynamic trace (§3) adds that path plus #813's two and #831's `s_rows.py`. | None. The closure inventory is reviewed code, and the trace is regenerated after F-3/F-4. | Lead |
-| F-9 | **MBP-step ordering** | **Step 4 must follow the final kit regeneration.** The RL-184 §4 three-blob comparison includes `collection_plan.json`. #886 already changed it (`d2219230f`→`fbd357c45`), and binding R0 changes it again: the probe regenerated it together with `inputs.json`, `identity_pins.json`, `plan_tree.json` and 16 stage files. Any step-4 export run before the R0 binding therefore has to be rerun. #839 proved the checker only in an invented repository; no real `STEP4_CHECKOUT` is recorded. | None | Lead and magistrate |
-| F-11 | **blocked-by-PR-839** | **#839 is FIX-FIRST** (Fable seat `fable-w1-813-826-1123`, 19:32). In the W1-BLOCKERS step-4 checker, `for path in` (WB:136) overwrites zsh's `PATH`, so the block exits 2 in zsh in every case. It fails closed, but it never gives a usable comparison. The trial carries #839 at `70b795954` unfixed. | None | #839 owner: rename `path` at WB:136, 141, 142 and 146; rebase onto `1fc28324d`; add one sentence about the report's `3dfeadc0c` pin |
-| F-12 | **NEEDS_LEAD** | **#826's intermittent TERM test.** `test_r1_runtime_e2e.test_term_reaches_the_runtime_which_closes_its_custody_before_exit` (`'reading' != 'session_end'`) failed at `3dfeadc0c` and passed at `1fc28324d` with the test and the ten sources unchanged. Fable ruled it does not hold the fold. | None | Lead records one line on the cause before the signing commit, and records any red on the candidate head with its re-run (Fable seat ruling) |
-| F-13 | **NEEDS_LEAD, plus Q4 to Fable** | **The raw frozen suite fails in the W1 line's ordinary CI shards.** On main, ordinary discovery never collects `tests/align`, so #809 runs `test_partc_frozen_differential.py` only through its `partc_suite_census.py` shim (16-shard workflow). The W1 line's shard runner **does** collect it, and in the trial's `test (3.13, 10)` the v3.1 clean control fails against the r3 evaluator: `Disagreement: clean control: other_failure`. Through the shim, the same file gives 23,712 cases on 15 shards with **0 FALSE_PASS, 0 WRONG_VERDICT and 0 HARNESS_ERROR**, plus 135 census stand-in points added. | None | Lead: adopt v3.2 (a fixture that carries the census points), or exclude the raw file from W1-line ordinary shards in favour of the workflow. Fable: Q4 |
+| F-1 | **DONE (§0, L1; RL-206)** | **Registration-text conflict in `docs/align/pilot_protocol_v4.md`** between #813 and #944. In hunk 1, #813 adds RL-149's descriptive item 9 just above B8, and #944 replaces B8. In hunk 2, the RL-18 interpretation line takes #813's S clause ("on the decoded part of each reference-state row, in gated episodes") and #944's K clause ("a physical positive control is registered (B10)…"). | The union: item 9, then #944's B8 verbatim, then one combined interpretation line. The blob is `df775656f`, byte-identical to rehearsal D's. Line check: every line either PR adds is present except that one combined line, and every line either PR removes is absent. | Lead confirms the text, or #944 is rebased on #813 to carry it. Fable sees it in the cold pass (Q1). |
+| F-2 | **blocked-by-PR-#809** (cause pointer in §0) | #809 is not accepted. r3 `532654cf0` landed at 19:31 during this trial, after r2-astra-confirm returned BLOCK with 5 HIGH. RL-193 item 2 needs an accepted head with zero false passes on v3 and the six-column supplement. The supplement case is present at r3. Rehearsal D also flagged two owed items: legacy W1 launcher fixtures (234 failures plus 4 errors in D) and the two protected stored replays (RL-183 §1.3). | Ported r3 byte-equal so that CI tests the newest bytes. | #809 builder, independent executing auditor, lead |
+| F-3 | **DONE on PR #886** (`8fc76a0b9`; L4), CI pending | **#886's own CI is red: 8 jobs, about 30 tests.** The tests assert the pre-fill "R1 pending" state, for example `test_v4_kit` `test_placeholders_fail_check…`, `test_sizing_is_only_a_provisional_preview…` and `test_d_has_required_base_controls_and_explicit_pending_slots`; `test_v4_w1_plan` (7); `test_v4_prequal` (4); `test_r1_rehearsal` (5); `test_w1_rl122_kit.test_record_file_is_read_canonically`; `test_r1_turn_counts_export`; `test_w1_prequal` chain; `test_r1_followup`; `test_w1_kit_r10.test_template_has_no_receipt_slot`. The trial CI reproduces the same set, except that F-5 cures 6 of the `test_v4_w1_plan` failures (§5). | None. These are test-expectation or fill-shape decisions for #886's owner. | #886 owner, lead |
+| F-4 | **(a) blocked-by-PR-#824; (b) RULED RL-207, lead fills; (c) NEEDS_LEAD** | **`align_v4_kit.py --check` has at least three successive stops on the final tree.** (a) `R0.record_sha256 must bind thermal_policy.sensors.r0_sha256`: R0 is unbound (#824 lane, RL-193 item 6). (b) With a **synthetic** digest in a throwaway export, the next stop is `thermal policy has missing or unknown fields`. #886's `inputs.R1.thermal_policy` (DEC2's values) has no `heavy` or `per_turn` keys and no `sensors.r0_sha256` or `sensors.fan_keys`. The frozen `thermal_gates.validate_gate_policy` requires `heavy` and `per_turn` (`thermal_gates.py:101-106`), and the kit requires both to be true for D (`align_v4_kit.py:1131-1137`). The kit's own fully supplied fixture carries all four (`tests/align/test_v4_kit.py:440-446`). (c) With those four added **synthetically**, the next stop is `sizing_b5.json is not derivable yet`: the lead commits `w1_plan.json` (a filled `night_plan.template.json`), then regenerates. Later stops are unknown. | None. The probes ran only in `/Volumes/JW-EXT/scratch/opus-w1-trial-assembly-1123/probe-r0`; the trial's `inputs.json` is unchanged. | R0 owner and lead for (a). Lead and Fable for (b): RL-189 §2.5 item 2 says `inputs.json` holds DEC2's five `set_inputs` values **unchanged**. Lead for (c). |
+| F-5 | **DONE on PR #886** (`1dbcb4dd5`, blob `6bfc797bc` = the trial's `67f74cbbd`); moves again at the R0 binding | **`night_plan.template.json` member bindings were stale.** #886 regenerated the 16 stage files (chain step 7) but not the template, so 14 member `config_sha256` values were stale. `--regenerate-template` on the final tree fixed them: blob `e478d2427`→`6bfc797bc`, sha256 `b1906f37…`→`ff0c4d41…`. | Committed in the trial (`67f74cbbd`). These bindings move again when R0 is bound. | Lead, at final regeneration |
+| F-6 | **DONE (PR #959; RL-208)** | **The refusal census fails on the trial tree.** There are 5 unlisted refusal sites and 2 changed guards in `scripts/run_align_r1_smoke.py`: `EvidenceFailure` `verdict_binding`, `evidence_unverifiable` and `source_integrity`; `main` return code 2 (×3); a `soak_child` re-raise; and the guard text of the two `idle soak` ValueErrors. There are also 2 scope gaps: `align_r1_part_c.py` and `align_r1_part_c_evidence.py` are neither scanned nor listed as `not_scanned`. Every one of them comes from the Part C port scaffold. | None. `configs/gates/hazard_refusals.json` needs a reviewed disposition (Ed's rule: physics refuses, everything else is a flag). | #809 port owner, lead |
+| F-7 | **DONE (PR #959, L6)** | **Host-command inventory.** The lead decided on 2026-11-22 at 02:49 that the 24 stale historical declarations move to a separate historical inventory, so that the active signing inventory equals the exact scan. No branch implements this yet. `tests.test_host_command_sites` fails on the trial with exactly 24 stale rows and 0 missing, the same as rehearsal D. | None | #809 port owner, lead |
+| F-8 | **DONE (PR #959; plus RL-211)** | **Executed and dynamic closure.** `test_v4_executed_closure.test_every_executed_module_and_script_is_in_the_receipt_artifact_set` fails: `scripts/align_r1_part_c_evidence.py` is executed but is not in the receipt artifact set (`v4_registration.py` closure). The regenerated dynamic trace (§3) adds that path plus #813's two and #831's `s_rows.py`. | None. The closure inventory is reviewed code, and the trace is regenerated after F-3/F-4. | Lead |
+| F-9 | **DONE as runbook (§9, L8; RL-210)**; MBP-step | **Step 4 must follow the final kit regeneration.** The RL-184 §4 three-blob comparison includes `collection_plan.json`. #886 already changed it (`d2219230f`→`fbd357c45`), and binding R0 changes it again: the probe regenerated it together with `inputs.json`, `identity_pins.json`, `plan_tree.json` and 16 stage files. Any step-4 export run before the R0 binding therefore has to be rerun. #839 proved the checker only in an invented repository; no real `STEP4_CHECKOUT` is recorded. | None | Lead and magistrate |
+| F-11 | **DONE (#839 `a37a3462b`)** | **#839 is FIX-FIRST** (Fable seat `fable-w1-813-826-1123`, 19:32). In the W1-BLOCKERS step-4 checker, `for path in` (WB:136) overwrites zsh's `PATH`, so the block exits 2 in zsh in every case. It fails closed, but it never gives a usable comparison. The trial carries #839 at `70b795954` unfixed. | None | #839 owner: rename `path` at WB:136, 141, 142 and 146; rebase onto `1fc28324d`; add one sentence about the report's `3dfeadc0c` pin |
+| F-12 | **RULED RL-204; NEEDS_LEAD line** | **#826's intermittent TERM test.** `test_r1_runtime_e2e.test_term_reaches_the_runtime_which_closes_its_custody_before_exit` (`'reading' != 'session_end'`) failed at `3dfeadc0c` and passed at `1fc28324d` with the test and the ten sources unchanged. Fable ruled it does not hold the fold. | None | Lead records one line on the cause before the signing commit, and records any red on the candidate head with its re-run (Fable seat ruling) |
+| F-13 | **DONE engineering (PR #959); v3.2 waiting (RL-209)** | **The raw frozen suite fails in the W1 line's ordinary CI shards.** On main, ordinary discovery never collects `tests/align`, so #809 runs `test_partc_frozen_differential.py` only through its `partc_suite_census.py` shim (16-shard workflow). The W1 line's shard runner **does** collect it, and in the trial's `test (3.13, 10)` the v3.1 clean control fails against the r3 evaluator: `Disagreement: clean control: other_failure`. Through the shim, the same file gives 23,712 cases on 15 shards with **0 FALSE_PASS, 0 WRONG_VERDICT and 0 HARNESS_ERROR**, plus 135 census stand-in points added. | None | Lead: adopt v3.2 (a fixture that carries the census points), or exclude the raw file from W1-line ordinary shards in favour of the workflow. Fable: Q4 |
 | F-10 | Process note | **Tooling hazard, fixed and isolated.** This seat could not read the shared gitdir under `air-home`, so the trial used a scratch blobless clone. With `GIT_DIR`/`GIT_WORK_TREE` exported, `align_v4_dynamic_trace.py`'s fixture child committed into that clone (`6f539e610 "fixture"`). It swept up the template change. The commit was local only and was soft-reset and recommitted before any push; nothing reached origin. **For promotion: never run the trace, kit or tests with `GIT_DIR` or `GIT_WORK_TREE` exported.** Separately, one stopped trace run kept running in the background. From 19:37 to 19:59, two trace processes ran beside 3 test workers. That is 5 processes against the 4-worker budget; I name the overrun. | The worktree `.git` was pointed at the scratch clone for the rest of the run. The original `gitdir:` line was restored at the end. | Integration owner |
 
 ## 3. Invariants on the final tree
@@ -265,7 +307,7 @@ Status words: DONE · blocked-by-PR-N · NEEDS_FABLE · NEEDS_LEAD · MBP-step.
 |---|---|---|---|---|
 | 1 | #734 is in PIN's history | **DONE** | PIN `b2e01464d` **is** PR #734's head (`gh pr view 734`: head `ops/2026-11-11-w1-presign@b2e01464d`) | Lead records that #734 is the base itself, which answers RL-193's "add it to the list" |
 | 2 | #809 accepted head: zero false passes on v3 plus the six-column supplement, and the two open findings closed | **blocked-by-PR-809** | F-2. r3 `532654cf0`: hosted frozen suite gave 0 false passes on 15 of 16 shards (shard 2 runner lost; re-run pending) in PR #958. Supplement case present (`test_partc_frozen_differential.py:1592`, `test_part_c_evidence_ledger.py:2292`) | Independent executing re-audit of r3 (or later), then lead acceptance and the v3.2 disposition |
-| 3 | #813: E1–E17, CI green, the lead's diff against that list, Astra's audit closed | **NEEDS_LEAD** (record only) | Fable seat `fable-w1-813-826-1123` (19:32): **FOLD-INTO-W1** at `82542232d`. E1–E17 found once each (`tests/align/test_rl182_registration.py:20-88`). Astra's BLOCK rows are correctly superseded by RL-182b. CI 21 green. Ruling: "condition 1 is met at `82542232d` … No round 8" | Lead commits that ruling as an RL-182b addendum and attaches the E1–E17 diff list to the packet |
+| 3 | #813: E1–E17, CI green, the lead's diff against that list, Astra's audit closed | **RULED RL-203; NEEDS_LEAD** (record only) | Fable seat `fable-w1-813-826-1123` (19:32): **FOLD-INTO-W1** at `82542232d`. E1–E17 found once each (`tests/align/test_rl182_registration.py:20-88`). Astra's BLOCK rows are correctly superseded by RL-182b. CI 21 green. Ruling: "condition 1 is met at `82542232d` … No round 8" | Lead commits that ruling as an RL-182b addendum and attaches the E1–E17 diff list to the packet |
 | 4 | RL-189 §2.5's four items | **Partial: 1 DONE, 2 blocked-by-PR-886, 3–4 NEEDS_LEAD** | §3 above | Lead writes the anti-hindsight list with the 488 s cap line and the two-session line |
 | 5 | Final receipt binds the reader-census module and its evidence | **NEEDS_LEAD** | Census PASS on the trial head (§3) | Commit the census test into the tree or bind it by hash, and rerun it at the signing head |
 | 6 | R0 binding and U3, WP19, receipt and gate steps pass `--check` at the final head | **blocked-by-PR-824 + NEEDS_LEAD + MBP-step** | F-4 (three stops), F-9, WP19 not runnable here | Admit #824, bind the R0 record, resolve F-4b, commit `w1_plan.json`, then regenerate, run step 4, run WP19, and run `--check` |
@@ -277,17 +319,17 @@ Status words: DONE · blocked-by-PR-N · NEEDS_FABLE · NEEDS_LEAD · MBP-step.
 
 | Source | Item | Status | Evidence / next action |
 |---|---|---|---|
-| RL-184 §4 line 1 | Step-4 check compares three blobs | **blocked-by-PR-839** (F-11) | The text is in `W1-BLOCKERS-merged.md:136-139`, but the block exits 2 under zsh. Fix: rename `path` |
+| RL-184 §4 line 1 | Step-4 check compares three blobs | **Checker DONE** (#839 `a37a3462b`); the run itself is §9 step 2 | The text is in `W1-BLOCKERS-merged.md:136-139`, but the block exits 2 under zsh. Fix: rename `path` |
 | RL-184 §4 line 2 | One synthetic run of the MBP-only path before W1 arms | **DONE** | Fable seat ruling (19:32): "'MBP-only' names the same-root path, not the host, so the Air run counts" (#839 report:80-90) |
 | RL-184 #826 pass | #826's verdict carries to `1fc28324d` | **DONE** | Fable seat: the delta is three test files; RL-184's twelve-green-shards condition is first met at `1fc28324d` |
 | Fable seat ruling | One line on the cause of the intermittent TERM test before the signing commit | **NEEDS_LEAD** (F-12) | `joulewise/align/apple/r1_runtime.py:1236`, `thermal.py:193` |
 | RL-183 §1.3 | Two protected stored replays (counted Part C, RUN_STATE 328; F0 run 11, item 426): verdict word and failing check names | **MBP-step** | Magistrate or an authorized seat, after #809 is accepted |
 | RL-193 §1 | Six-column zero-row supplement green at #809's accepted head | **blocked-by-PR-809** | Case present. Green only once #809 is accepted |
-| RL-193 §7 | `rank_deficient_design` registration clause: E18 on #813 if the candidate is not yet cut, otherwise in C1's receipt | **NEEDS_LEAD** (L7) | Not in the trial tree |
-| RL-198a / item 533 | Option C text on the W1 line before signing | **DONE in trial** (via #944; F-1 confirm) | `pilot_protocol_v4.md` B8, B9, B10 |
-| D 11-22 decision | 24 stale host-command rows go to a historical inventory | **NEEDS_LEAD** (F-7) | Not implemented on any branch |
+| RL-193 §7 | `rank_deficient_design` registration clause (RL-212: E2 as amended, on the candidate now) | **DONE in trial** (`e2cf3ca00`) | Repeat the commit on the integration branch |
+| RL-198a / item 533 | Option C text on the W1 line before signing | **DONE** (#944 `bef3ea87c` carries #813; RL-206) | `pilot_protocol_v4.md` B8, B9, B10 |
+| D 11-22 decision | 24 stale host-command rows go to a historical inventory | **DONE** (PR #959 `ca41d5477`) | none |
 | RL-183 §2.7 | Anti-hindsight list to Fable | **NEEDS_LEAD** | Not written |
-| Exact-tree CI | All suites green on the promoted head | **FAIL** (F-2, F-3, F-4, F-6, F-7, F-8, F-13) | PR #958 |
+| Exact-tree CI | All suites green on the promoted head | **Pending** on the session-2 head (§0). Remaining expected reds: F-2 (#809 lane) and F-4a (R0, #824) | PR #958, §0 |
 
 ### 6.3 RL-193 §2: the install-only rehearsal (gates the smoke through PREQUAL, not the signature)
 
@@ -333,18 +375,86 @@ Context for the seat: the trial tree is PR #958 at `e2baa3003536f8cfdd8a472494b1
 
 ## 8. NEEDS_LEAD decisions
 
-- **L1 (F-1).** Accept the protocol union, or have #944 rebase on #813.
-- **L2 (§3).** Give the #809 W1 port a PR of its own (scaffold `09b1ddbd5`, the host-command union and the W1-only fixture, plus the Part C paths at the accepted head). Without one, "each PR's accepted diff" has nothing to compare against for those paths.
-- **L3 (F-4b).** Choose how `heavy`, `per_turn`, `sensors.r0_sha256` and `fan_keys` enter: an `inputs.json` completion or a code change. Q2 goes to Fable first.
-- **L4 (F-3).** Have #886's owner retire or rewrite the "R1 pending" test expectations.
-- **L5 (F-6).** Dispose the 5 refusal sites, 2 guards and 2 scope gaps in `hazard_refusals.json`.
-- **L6 (F-7).** Implement the 11-22 historical-inventory decision.
-- **L7 (RL-193 §7).** Choose E18 on #813 now, or C1's receipt.
-- **L8 (F-9).** Schedule step 4 after the R0 binding and the final regeneration.
-- **L9 (F-13).** Choose how the frozen suite runs on the W1 line: the v3.2 fixture, or the raw file excluded from ordinary shards with the 16-shard workflow as the gate.
-- **L10 (F-11, F-12).** Get #839's zsh `path` fix and rebase. Record the cause of #826's TERM test.
+- **L1 (F-1).** DONE: #944 merged #813 (`bef3ea87c`); RL-206 accepts the text.
+- **L2 (§3).** DONE: PR #959. Originally: give the #809 W1 port a PR of its own (scaffold `09b1ddbd5`, the host-command union and the W1-only fixture, plus the Part C paths at the accepted head). Without one, "each PR's accepted diff" has nothing to compare against for those paths.
+- **L3 (F-4b).** RULED RL-207 (complete the policy; the lead fills it at §9 step 1). Originally: choose how `heavy`, `per_turn`, `sensors.r0_sha256` and `fan_keys` enter: an `inputs.json` completion or a code change. Q2 goes to Fable first.
+- **L4 (F-3).** DONE on PR #886 (`1dbcb4dd5`, `8fc76a0b9`); its CI was pending at commit time.
+- **L5 (F-6).** DONE per RL-208 (PR #959 `fbe696ca1`). Originally: dispose the 5 refusal sites, 2 guards and 2 scope gaps in `hazard_refusals.json`.
+- **L6 (F-7).** DONE: PR #959 `ca41d5477`.
+- **L7 (RL-193 §7).** DONE in trial per RL-212 (`e2cf3ca00`).
+- **L8 (F-9).** DONE: §9 (RL-210 confirms).
+- **L9 (F-13).** RULED RL-209 (v3.2, run direct); the ordinary-shard half is DONE in PR #959 `2b7620b9a`. Originally: choose how the frozen suite runs on the W1 line: the v3.2 fixture, or the raw file excluded from ordinary shards with the 16-shard workflow as the gate.
+- **L10 (F-11, F-12).** #839's fix DONE (`a37a3462b`). Record the cause of #826's TERM test.
 
-## 9. Reproduce
+## 9. Promotion runbook: the final steps, in order (lead L8)
+
+Lead decision L8 (2026-11-23 21:45) fixes the order of the last four steps:
+**final regeneration (including the R0 binding) → step 4 (three-blob check) →
+receipt → signing.** The reason is F-9. Every kit regeneration rewrites
+`collection_plan.json`, one of the three step-4 blobs, and binding R0
+regenerates the kit (with a synthetic digest, the probe rewrote 20 kit files).
+So step 4 can only be valid after the last regeneration. A step-4 export made
+earlier is never reused. RL-210 confirms this. Step 4 runs after the last regeneration that can move
+`collection_plan.json`: after the R0 binding, after RL-207's completion and after the committed `w1_plan.json`. Step 5 uses
+the same exporter and follows the same rule. `selection.json` stays the blob committed before any energy was
+read.
+
+**Before step 1.** Every component is accepted at a named head:
+- #826, #839 (`a37a3462b`) and #831;
+- #944, which now carries #813 (`bef3ea87c`, L1);
+- #886 (L4), #904, and the port PR #959 (L2, PR #809's accepted head).
+
+Assemble on the PIN by merges in RL-193 §3 order, the port last, exactly as
+this trial does. After every merge, the ten-blob check must give 10/10
+(`tools/ten.sh`). RL-207 to RL-212 have ruled L3, L5, L7 and L9. Still open before step 1:
+- #809's accepted head, with the port refreshed to it;
+- v3.2 issued and adopted, with zero FALSE_PASS, WRONG_VERDICT and HARNESS_ERROR on v3.2 run directly, every shard reporting (RL-209);
+- #824 admitted and the authorized R0 digest named (RL-207's missing fact);
+- RL-212's clause commit repeated after #813 and #944.
+
+1. **Final regeneration, including the R0 binding (lead).** On the assembled
+   tree, run every step below in one go and commit the result as the
+   candidate head. Run nothing with `GIT_DIR` or `GIT_WORK_TREE` exported
+   (F-10).
+   1. Bind `R0.record_sha256` to the authorized R0 record's digest, equal to
+      `thermal_policy.sensors.r0_sha256` (RL-193 item 6).
+   2. Complete `thermal_policy` per RL-207: `heavy: true`, `per_turn: true`,
+      `sensors.fan_keys` equal to `r1_runtime.json`'s list, and
+      `sensors.r0_sha256` equal to `R0.record_sha256`. DEC2's five leaves stay
+      unchanged.
+   3. Commit `w1_plan.json`, the filled `night_plan.template.json`.
+   4. Regenerate:
+      - the kit: `python3.13 -B scripts/align_v4_kit.py` writes `inputs.json`'s derived files, `identity_pins.json`, `plan_tree.json`, `collection_plan.json`, the 16 stage files with their 2 order manifests, and `sizing_b5.json`;
+      - the template bindings: `python3.13 -B scripts/validate_align_v4_w1_plan.py --regenerate-template`;
+      - the dynamic closure trace: `python3.13 -B scripts/align_v4_dynamic_trace.py`, committed only if every scenario is `ok: true`.
+   5. Run the refusal census and the reader census. Both must pass at this
+      head.
+   6. `python3.13 -B scripts/align_v4_kit.py --check` must exit 0.
+   7. Exact-tree CI on this head, all suites, including the 16-shard
+      `partc-frozen-differential` workflow.
+2. **Step 4: the RL-184 §4 three-blob check (lead and magistrate).** Run it
+   once, at the candidate head or at a commit blob-equal to it on the three
+   blobs: the exporter, the selection and `collection_plan.json`. Use #839's
+   fixed W1-BLOCKERS block (`a37a3462b`). If any blob differs from the
+   signing commit, go back to step 1. The MBP steps that need the final kit
+   run on this same head: U3, WP19 and the two protected Part C replays
+   (§6.2).
+3. **Receipt (lead).** On the candidate head, fill
+   `registration_receipt.json`'s STRICT artifact digests. These include the
+   rows added since the pin: `rl176.py` and `rl176_phases.py` (#813), and
+   `scripts/align_r1_part_c_evidence.py` (F-8, PR #959). Bind the
+   reader-census module and its evidence (RL-193 item 5). Attach the ten-blob
+   and accepted-diff proof (item 7) and the published file list (item 8).
+   The file list follows RL-211: the trial's files plus its five groups, one
+   row per file with key names only. `r1_planning_release.json` is now in
+   `ARTIFACTS` (PR #959 `df018026d`).
+   The receipt is the only file that changes after step 1. Any other change
+   sends the run back to step 1.
+4. **Signing.** The lead signs the receipt STRICT at the final pin. Then
+   comes Fable's W1 cold pass on the promoted candidate (RL-193 item 9).
+   E3's install-only rehearsal follows promotion (§6.3).
+
+## 10. Reproduce
 
 The seat directory is `/Volumes/JW-EXT/scratch/opus-w1-trial-assembly-1123/`:
 - `merge-log.tsv`: each step's commit, tree and ten-blob result.
