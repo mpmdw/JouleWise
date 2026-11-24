@@ -25462,3 +25462,111 @@ The script does not parse the receipt for proof. Step 3 is the proof.
 **Blind status.** Blind. Read: RL-201a (format), RL-197b whole; the lane's run report from the admission draft to the end; the "Item 541 answers" bullet of RUN_STATE on `origin/main` as the worktree holds it; `scripts/launch_cadence_span.py` at `f45e22e4e` (ledger, `verify_shutdown`, `proven_close`, `append_attempt`, lock, `close-proof`), `fence_lock` in `scripts/launch_align_r0.py`, the stop and restore record shapes in `scripts/cadence_legs_runner.py` and `scripts/run_align_r1_smoke.py` at `6e9d42f1d` and `f45e22e4e`, `restore_automatic` in `joulewise/align/apple/powermode.py`, and the file list of the diff between the two pins. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened, and no real receipt or ledger. No commit, push, comment, run, SSH or fetch. The only file written is this one.
 
 **For Ed, plainly.** The positive control needs a "last run" record that does not exist yet. We create it once, with a tiny reviewed script, right after one ordinary stability leg; the control's code and kit do not change, and the pilot can follow that leg directly.
+
+---
+
+Research lead (Fable 5.2), Mon Nov 23 21:55 PST 2026 (from `date`). RL-203 to RL-213 answer the lead's batched W1 call. `RLD:n` is this file at `1850d6930`. `T` is the trial tree `e2baa3003` (PR #958) and `PIN` is `b2e01464d`. `P4` is `docs/align/pilot_protocol_v4.md`, `KIT` is `scripts/align_v4_kit.py`, `VR` is `joulewise/align/apple/v4_registration.py`, `WB` is `docs/align/v4/W1-BLOCKERS-merged.md`. Blind: rulings, code, docs and synthetic fixtures only. `inputs.json`, `r1_slots.json` and the planning release were not opened.
+
+# RL-203. Addendum to RL-182b: condition 1 is met at #813 `82542232d`; no round 8
+**Question.** RL-182b's first condition allows a change from `2fe705e73` to the two test files and a run report; the head adds four more files. Is it met?
+- **Met.** The condition protects the files rounds 2 to 7 passed on. The four added files are review records no round judged: two rows in `executing_reviews.json`, the citation paper, and Astra's round 5 and 6 reports. The diff from `2fe705e73` is those seven files and nothing under `joulewise/` or `scripts/`.
+- The rows exist because CI at `cd4d78684` was red on the append-only review-row test, so conditions 1 and 3 could not both hold without them.
+- The adapter is still `578455fa…9336`, the block test carries `85ffe1a3…45c5` and reads bytes from disk, and CI is 21 green. #813 folds into W1 at this head. Condition 4 is met on the final tree.
+- **Cites.** RLD:21489-21494, 23142; `configs/b6/executing_reviews.json:1405-1432@82542232d`; `tests/b6/test_audit_record_fixes.py:81,133@82542232d`; `tests/align/test_measurement_core_boundary.py:67-78@82542232d`.
+
+# RL-204. #826's intermittent TERM test does not hold the fold
+**Question.** `test_term_reaches_the_runtime_which_closes_its_custody_before_exit` failed at `3dfeadc0c` and passed at `1fc28324d` with nothing it runs changed. Does it hold #826?
+- **No.** It is the base's test on the base's sources: the delta is three test files and the ten R1 sources equal PIN's. RL-184's pass carries to `1fc28324d`, where its twelve-green-shards condition is first met. No edit to the ten sources.
+- Before the signing commit the lead records one line on the cause: the test's wait, or the runtime's bounded close.
+- A red on the candidate head is recorded with its re-run, never silently re-rolled. It returns to me only if the cause is in the ten and W1's abort path shares it.
+- **Cites.** `tests/align/test_r1_runtime_e2e.py:128@1fc28324d`; RLD:21154, 20090; `joulewise/align/apple/r1_runtime.py:1236@b2e01464d`; `joulewise/align/apple/thermal.py:193@b2e01464d`.
+
+# RL-205. #839: "MBP-only" names the same-root path, so the Air restore run counts
+**Question.** RL-184 §4 line 2 asks for one synthetic run of the MBP-only path before W1 arms. #839's run was on the Air. Does it count?
+- **Yes.** The words name the path, not the host: move the originals aside, unpack the window's own pack at the source root, then desk. The run did that, with three refusal controls. Line 2 is met.
+- The desk ending with its gate false on invented inputs shows that a restored window can be desked, which is what the line asked.
+- #839 stays FIX-FIRST for line 1: `for path in` overwrites zsh's `PATH`, so the three-blob check exits 2 in zsh every time. Rename the variable at WB:136, 141, 142 and 146, rebase onto `1fc28324d`, and add one sentence that the report's pin differs from the head by tests only. The lead confirms the fix.
+- **Cites.** RLD:20523, 21172-21173; `docs/run_reports/2026-11-18-w1-step4-restore-proof.md:80-90@70b795954`; WB:136-146@70b795954.
+
+# RL-206. The #813/#944 union of the protocol is accepted as registration text (F-1, Q1, L1)
+**Question.** Is the trial's union of `pilot_protocol_v4.md`, blob `df775656f`, acceptable, or does a clause need rewording?
+- **Accepted, no rewording.** The combined RL-18 line is two rulings on separate clauses of one sentence: the K clause is RL-198's replacement and the S clause is RL-182 E11, each verbatim.
+- I checked that T's text is #813's with #944's patch applied: the two patches' changed lines are identical except that one line. No "no physical positive control", `positive_control_not_run` or "stands unmet" remains. Item 9 ends B7 and B8 follows it, which is where both belong.
+- Either route serves: #944 rebased on #813, or the integration commit with the lead's line check on record. The candidate's blob is `df775656f` plus RL-212's clause; any other difference returns to me.
+- **Cites.** P4:1463, 1478-1481@e2baa3003; P4:1487-1490@82542232d; P4:1425-1428@16f10ade2; RLD:19729, 24303, 24313.
+
+# RL-207. `heavy`, `per_turn`, `fan_keys` and the R0 digest enter `inputs.json` by completing the policy; no code change (F-4b, Q2, L3)
+**Question.** Under RL-189 §2.5 item 2, may the lead add these keys to `inputs.R1.thermal_policy`, or must code supply them?
+- **Complete the policy.** Item 2 binds DEC2's five `set_inputs` leaves, not the object: `R1.B_D`, `R1.T_dead`, and `g0_cap_s`, `contrast_g0_cap_s` and `contrast_fit` under `R1.thermal_policy`. Sibling keys leave the five unchanged, and that is the test.
+- **`heavy: true` and `per_turn: true` carry no choice.** The frozen validator requires both keys, and KIT admits only true/true for D and overwrites both per member. KIT's own supplied fixture carries all four keys. KIT is byte-equal to PIN's, so a code change would spend its carried verdict to avoid typing two constants.
+- **`sensors.fan_keys`** equals the frozen runtime config's list (`r1_runtime.json`, blob `bf8479b26`). Fan keys are recorded and enter no gate. Another list returns to me.
+- **`sensors.r0_sha256`** equals `R0.record_sha256`, the authorized R0 record's digest. **Missing fact:** whether that digest is the one in the same frozen config, `e6231a8f…`. If not, the lead records in one line which record each names and why, in the cold-pass packet.
+- The completed object is Stage B bytes. The cross-family recomputation checks the five leaves against DEC2 and that the only other change from #886's object is these four keys. No anti-hindsight line is owed.
+- **Cites.** RLD:22189, 20269-20270, 23153; `scripts/align_w1_budget_procedure.py:165-169@e2baa3003`; `joulewise/align/apple/thermal_gates.py:101-106@e2baa3003`; KIT:1113-1116, 1131-1140, 1484-1496, 1553-1560@e2baa3003; `tests/align/test_v4_kit.py:440-446@e2baa3003`; `joulewise/align/apple/thermal.py:22-50@b2e01464d`.
+
+# RL-208. Part C's refusals stay refusals and are listed INTERNAL; the two Part C files are `not_scanned` for W1's signing (F-6, Q3, L5)
+**Question.** Are the ported launcher's `EvidenceFailure` refusals listed in `hazard_refusals.json` or turned into flags, and are `align_r1_part_c*.py` scanned?
+- **They stay refusals in code.** A flag would let Part C pass on evidence it could not verify, which is the fault RL-183 repaired.
+- **In the allowlist they are INTERNAL:** the five new sites and the two re-guarded idle-soak sites. RL-93 already ruled that a site is categorised by what it can stop and that a smoke is not a collection. Ed's doctrine governs paths that stop collection or remove data from a claim; these stop a smoke. Each `protects` says what the site checks, then RL-93's sentence, citing RL-93 and RL-208.
+- **RL-93's own recategorisation is unapplied.** At T the allowlist is byte-identical to PIN's: its 21 smoke-launcher rows are PHYSICS 15 and NUMBER_INTEGRITY 6, and none cites RL-93. RL-93 placed it before signing. It lands in the same commit, with every smoke-launcher row INTERNAL.
+- **The two files are `not_scanned`,** with the reason "Part C evaluator and evidence module: judge an engineering smoke's records; stop the smoke only; produce no member; not censused, RL-93 C09, RL-208". Scanning them opens the align closure, which is RL-86's deferred census and does not gate signing. If a module on a W1 night's executed path imports either file, it joins that census instead.
+- **Cites.** RLD:20112, 5512-5521, 5525-5533, 4958-4965; `configs/gates/hazard_refusals.json:12-15@e2baa3003`; `scripts/run_align_r1_smoke.py:356-363, 540-558, 638-645@e2baa3003`; `tests/hazards/test_refusal_allowlist.py:203-207, 217-218@e2baa3003`.
+
+# RL-209. The W1 line's frozen Part C suite is v3.2, run direct; the shim's result is not signing evidence (F-13, Q4, L9)
+**Question.** Does RL-193 item 2's "zero false passes on v3" admit the shim's result, or must v3.2 be frozen and used?
+- **v3.2, direct.** Item 2 now reads: zero FALSE_PASS, WRONG_VERDICT and HARNESS_ERROR on v3.2 with no runtime rewrite of its fixtures, every shard reporting, at #809's accepted head on the candidate tree, with the six-column case green.
+- **Why not the shim.** It rewrites the clean control at run time, so every case mutates a base that is in no manifest (25,300 cases against v3.1's 25,083). It touches neither the oracle nor the verdict logic, so its zero is honest interim evidence for #809's fix rounds, not the signature's.
+- **Why the fixture changes and the evaluator's rule stays.** The frozen `Segment` always writes `start` and `end` and excludes its own PID. v3.1's clean control has an empty census and no excluded root, a shape no frozen run writes.
+- **Review v3.2 needs, after which it does not return to me:**
+  1. The lead's diff from v3.1 is confined to the clean-control builder.
+  2. Every v3.1 case id is present with its expectation unchanged, the oracle's code is byte-unchanged, and the new cases are counted.
+  3. The added values are shown against the frozen writer's lines, not against the evaluator's rule.
+  4. One executing cold check, by a seat of another family than the issuer's, reruns item 2 and the direct run.
+  5. **Missing fact:** the lead records v3.2's final digest and the sixteen pinned shard counts in this file.
+- **v3.1** (`12ca35d3…1588`) is accepted as the intermediate issue on its zero changed expectations. RL-193 §1's "stands byte for byte" now means every v3 case keeps its v3 expectation.
+- **A missing shard is not a zero.** The trial tree has no complete matrix in three attempts; the lead finds why shard 2 is lost before item 2 is claimed. Whether the raw file also runs in ordinary shards is engineering.
+- If a stored replay of RL-183 §1.3 fails on the census check, it comes to me with the check name.
+- **Cites.** RLD:23115-23116, 23149, 20144; `tests/align/partc_suite_census.py:34-40@e2baa3003`; `tests/align/partc_audit_probe.py:185-218@e2baa3003`; `scripts/align_r1_part_c.py:1444, 3563-3576@e2baa3003`; `joulewise/align/apple/r1_runtime.py:1576, 1599, 1608, 1611@b2e01464d`; `tests/align/test_partc_frozen_differential.py:752-767, 900@e2baa3003`.
+
+# RL-210. Step 4 runs after the final kit regeneration, and no earlier export is reused (F-9, Q5, L8)
+**Question.** Every regeneration rewrites `collection_plan.json`, one of step 4's three blobs. When does step 4 run?
+- **After the last regeneration that can move that file:** after the R0 binding, RL-207's completion and the committed `w1_plan.json`. Step 5 uses the same exporter and follows the same rule.
+- The test is RL-184 §4 line 1, unchanged: the three blobs at step 4's checkout equal the signing commit's. Equal blobs suffice; the commits need not be the same. A later regeneration that moves one reruns step 4.
+- No export exists yet, so step 4 runs once. `selection.json` stays the blob committed before any energy was read; a selection changed after an export returns to me.
+- The comparator is #839's block, so its zsh fix lands first (RL-205).
+- **Cites.** RLD:21172, 23142; `scripts/align_v4_u3_export.py:96-97, 106, 111@1fc28324d`; WB:99-101@e2baa3003; WB:136-146@70b795954.
+
+# RL-211. The published list is the trial's files plus five groups, and the planning release joins the receipt's artifact set (Q6)
+**Question.** Is anything owed on RL-193 item 8's list beyond the trial's files and the existing registration set?
+- **Yes, five groups:**
+  1. `u3_bar.json`, `wp19_receipt.json` and `r1_soak_reference.json`, the remaining receipt-bound inputs of RL-183 §2.10.
+  2. The U3 sources step 12 names: `u3_sources/policy.json`, `selection.json`, `pilot.json`, `r1.json` and `pairs.json`, with `docs/align/v4/U3-transfer.md` and `U3-gate.json`.
+  3. `battery_window_policy.json`, once registered.
+  4. `w1_plan.json` and `sizing_b5.json`.
+  5. The reader-census module and its evidence.
+- **`r1_planning_release.json` is read by the kit and not bound by the receipt.** KIT reads it and it changes the kit's word from `R1-RERUN` to `TYPICAL-CASE`, yet it is absent from `ARTIFACTS` (I evaluated the tuple at T: 335 paths). It joins `_NAMED_ARTIFACTS` in the same change F-8 makes to that file. A file that decides the kit's word is bound by the receipt, not only by a digest quoted in a ruling.
+- **Shape.** One row per file: path, blob at the signing head, sha256, class (signed input, generated by the kit, or receipt), and, for a file not in `ARTIFACTS`, the bound parent that carries its digest. Each data-bearing file also gets its key list, names only. I confirm from that in the cold pass.
+- **Cites.** RLD:20297-20305, 22182, 22188, 23155; VR:17-75@e2baa3003; KIT:193-211, 1365@e2baa3003; WB:97-108@e2baa3003.
+
+# RL-212. The `rank_deficient_design` clause goes on the candidate now, as an amendment to E2 (L7)
+**Question.** Does RL-193 §7's fourth cause land on the candidate now or in C1's receipt?
+- **On the candidate, now; the lead's preference is confirmed.** P4's blob is moving anyway (RL-206), and a registration signed with three causes after a ruling named four would be knowingly stale.
+- It is its own commit on the integration branch after #813 and #944, not a new commit on #813. #813's verdict stays at `82542232d` (RL-203).
+- **Three places change in that commit, each to RLD:23212's sentence verbatim:** P4's S-score bullet, the same bullet in the amendment draft, and the fixture's E2 block. The test checks E2's block in both documents, so they move together or CI is red. The count of seventeen edits is unchanged.
+- **Label corrected.** RL-193 §7 called it "E18", but E18 and E19 are RL-185's. It is "E2 as amended by RL-193 §7".
+- No code changes on the W1 line: the scorer there already gives no score and `s_score_undefined`. The cause word is the release script's and lands with C1's receipt. RL-193 §7's design check is still owed before C1 arms.
+- **Cites.** RLD:23212-23213, 19681, 20803, 20837; P4:1188@e2baa3003; `docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/r1-ready-1116/AMENDMENT-R1-DRAFT.md:153@e2baa3003`; `tests/align/fixtures/rl182/edits.md:11@e2baa3003`; `tests/align/test_rl182_registration.py:24, 52, 71@e2baa3003`; `joulewise/align/apple/rl176.py:393-394@e2baa3003`.
+
+# RL-213. PR #795: the six `finish_reason` cases are admitted; ratified, with the ground corrected (D)
+**Question.** Does the lead's re-expectation of six frozen REFUSE cases as ADMIT at `c3a0dd9f8` stand?
+- **Ratified.** At admission the field is text or null, which is the pinned writer's range for it: any string the runtime's last response carried, with an empty one stored as null. `mlx-lm>=0.31.3` with no lock gives no closed set. The frozen REFUSE came from the generic type-mutation generator meeting a null base value, not from a rule.
+- **The ground is incomplete.** The six mutated records are not writer-producible as whole records: the pinned writer sets `stop_condition` from `finish_reason`, and the mutation leaves `"stream_exhausted"` beside `"2"`. The validator checks that pair only in its error branch. So these are not signal-130's kind. They are admitted because the validator makes no rule for the pair, which RL-194 §2 already classed as a low finding that blocks nothing.
+- **No coupling check is added.** No stage or twin reads the field, and the look's real inputs are eleven spans pinned by hash. A refusal written after collection could only refuse a real pinned file.
+- **Owed at the corrections file's next edit, not before merge:** its `reason` gains the sentence above, and its `authority` gets the true time (it says 19:35 PST; the commit is 19:23:52) and this ruling's id.
+- **Returns to me:** a real pinned file refused at stage 1 (RL-194 condition 6).
+- **Cites.** `tests/cadence/interim_admission_corrections.json:8-9, 14-19@c3a0dd9f8`; `joulewise/cadence_looks/admission_journals.py:465-476@c3a0dd9f8`; `joulewise/align/apple/endpoint.py:275-276, 301-302, 770-779@2d347f721` (blob `e66b2f66b` at all three pins); `pyproject.toml:17@c3a0dd9f8`; `tests/cadence/test_interim_admission_closure.py:233-236, 303-326@c3a0dd9f8`; RLD:21125, 23313.
+
+**Not checked (RL-203 to RL-213).**
+- I ran no suite, kit, census or replay. Nothing was committed, pushed or merged.
+- These rest on two fact-finding forks' reads, not mine: the shim and v3.1/v3.2 counts and digests, the three hosted attempts, the launcher site lines, the generator lines in #795's suite, and #795's CI (54 pass, 32 of 32 admission shards).
+- I did not check v3.2's draft, the cause of the lost shard, what strings upstream mlx-lm emits, or whether any real span carries a non-null `finish_reason`.
