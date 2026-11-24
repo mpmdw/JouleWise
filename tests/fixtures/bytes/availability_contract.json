@@ -446,16 +446,16 @@
   {
     "id": "export_sidecar",
     "path": "<session>.session.json",
-    "phase": "analysis",
-    "primary": "joulewise/bytes_analysis.py:759\u2013785,1108\u20131111",
+    "phase": "both",
+    "primary": "joulewise/b6/export_runs.py:589\u2013593; joulewise/bytes_analysis.py:759\u2013785,1108\u20131111",
     "scope": "campaign",
     "faults": {
-      "absent": "Uses the visible CSV only as a legacy export.",
-      "zero": "Post-commit malformed JSON refuses; the pre-commit path skips the sidecar for row admission.",
+      "absent": "An initial export may create the sidecar. Sealed consumers require it. Below the seal the legacy reader uses the visible CSV only.",
+      "zero": "Pre-existing sidecar without a binding refuses export. Sealed consumers refuse changed bytes. Below the seal a post-commit malformed sidecar refuses; the blinded reader skips it for row admission.",
       "half": "Same as zero.",
       "garbage": "Same as zero."
     },
-    "flags": "No synthesized bytes.withheld_missing without a valid locator/count record.",
+    "flags": "A missing expected binding or changed sealed sidecar refuses before analysis. Below the seal there is no synthesized bytes.withheld_missing without a valid locator/count record.",
     "read_paths": [
       "export/*/*.session.json"
     ]
@@ -515,7 +515,7 @@
     "id": "export_key_binding",
     "path": "blinding-sessions/<session>.json",
     "phase": "both",
-    "primary": "joulewise/b6/export_runs.py:589\u2013593; joulewise/b6/bytes_integrity.py:192\u2013221,269\u2013333,336\u2013350",
+    "primary": "joulewise/b6/export_runs.py:589\u2013593; joulewise/b6/bytes_integrity.py:247\u2013274,351\u2013434,437\u2013455",
     "scope": "conditional_campaign",
     "faults": {
       "absent": "Re-export refuses a missing binding when the session's publication lock or sidecar exists. Campaign capture and verification require each expected session's binding.",
@@ -532,7 +532,7 @@
     "id": "export_integrity_manifest",
     "path": "private bytes-export-integrity.json and its authorized input set",
     "phase": "both",
-    "primary": "joulewise/b6/bytes_integrity.py:192\u2013221,269\u2013350,367\u2013389",
+    "primary": "joulewise/b6/bytes_integrity.py:119\u2013183,247\u2013274,325\u2013455,468\u2013493",
     "scope": "integrity",
     "faults": {
       "absent": "A keyed fit, commitment check or admission requires a finalized manifest and all of its committed entries.",
@@ -540,7 +540,7 @@
       "half": "Truncation changes length or digest and refuses before analysis or journal append.",
       "garbage": "Working manifest bytes must equal the designated Git blob. Any entry mutation, extra, duplicate or escaped path refuses."
     },
-    "flags": "The captured commit authorizes the blinded and empty-key probes. Finalization verifies it, then adds only fit and reference release entries. The live journal and post-fit receipts use their separate Git checks."
+    "flags": "Capture binds authorized fit and reference archive reads, including both bundle locations, optional reductions and meter inputs. The captured commit authorizes the blinded and empty-key probes. Finalization verifies it, then adds only fit and reference release entries. The live journal and post-fit receipts use their separate Git checks."
   },
   {
     "id": "prediction",

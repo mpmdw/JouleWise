@@ -1,7 +1,9 @@
 """Synthetic regressions for the shared two-phase BYTES export seal."""
 from contextlib import redirect_stderr, redirect_stdout
+import hashlib
 import io
 from pathlib import Path
+import shutil
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -150,24 +152,21 @@ class ExportIntegrityTests(unittest.TestCase):
             refuses(seal, guard)
         finally:
             extra.unlink()
-        checked = 0
-        for entry in document["files"]:
-            path = Path(document["roots"][entry["root"]]["path"]) / entry["path"]
-            with self.subTest(root=entry["root"], path=entry["path"]):
-                data = path.read_bytes()
-                with file_fault(path, "absent"):
-                    refuses(seal, guard)
-                    checked += 1
-                if data:
-                    with file_fault(path, "zero"):
-                        refuses(seal, guard)
-                        checked += 1
-                try:
-                    path.write_bytes(bytes([data[0] ^ 1]) + data[1:] if data else b"\0")
-                    refuses(seal, guard)
-                    checked += 1
-                finally:
-                    path.write_bytes(data)
+
+        # Round 10 reproduction. The added whitespace leaves valid JSON
+        # and the same parsed config, but changes one authenticated input.
+        archive_inputs = {row["path"] for row in document["files"]
+                          if row["root"] == f"fit_archive:{SESSION}"}
+        self.assertIn((fixture.bundle / "config.json").relative_to(fixture.archive).as_posix(),
+                      archive_inputs)
+        self.assertIn(fixture.stream.relative_to(fixture.archive).as_posix(), archive_inputs)
+        for path in (fixture.bundle / "config.json", fixture.targets(fixture.export)["reduction"], fixture.stream):
+            original_input = path.read_bytes()
+            try:
+                path.write_bytes(original_input + b" ")
+                refuses(seal, guard)
+            finally:
+                path.write_bytes(original_input)
 
         # Exercise malformed committed manifests, as well as local substitution
         # against a pinned commit. Neither case opens the declared escaped path.
@@ -185,4 +184,140 @@ class ExportIntegrityTests(unittest.TestCase):
             bytes_commitment.verify_commitment(commit, predictions, repo=repo, **guard)
             bytes_commitment.admit(args, "heldout_rows")
         self.assertNotEqual(journal.read_bytes(), before)
-        print(f"\nBYTES {timing} seal: {checked} per-file mutations refused by four consumers", flush=True)
+
+    def test_every_finalized_input_is_protected_for_all_four_consumers(self):
+        with tempfile.TemporaryDirectory(prefix="bytes-input-faults-") as directory:
+            self.check_input_faults(Path(directory))
+
+    def check_input_faults(self, root):
+        # Build a compact fixture for the exhaustive matrix. The native and
+        # mock campaign tests above also run clean fits using the larger trees.
+        app = root / "fixture-checkout"
+        checker = app / "joulewise/b6/bytes_integrity.py"
+        checker.parent.mkdir(parents=True)
+        shutil.copyfile(integrity.__file__, checker)
+        export = root / "export"
+        archive = root / "archive"
+        campaign = root / "manifest.json"
+        private = root / "private"
+        keys = root / "fit-keys"
+        models = [{"role": "fit", "config_key": "synthetic-fit", "cell_ids": ["fit-cell"]},
+                  {"role": "heldout", "config_key": "synthetic-held", "cell_ids": ["held-cell"]}]
+
+        def put(path, data):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+
+        agreement._write(campaign, {"sessions": [{"session_id": "sim", "archive": str(archive)}],
+                                    "models": models, "synthetic": True})
+        roster = archive / "derived/roster.json"
+        roster.parent.mkdir(parents=True)
+        agreement._write(roster, {"members": [
+            {"run_id": "fit", "role": "science", "units": [{"cell_id": "fit-cell"}]},
+            {"run_id": "ref", "role": "corpus"},
+            {"run_id": "held", "role": "science", "units": [{"cell_id": "held-cell"}]}]})
+        agreement._write(archive / "harvest.json", {
+            "outputs": {"derived/roster.json": hashlib.sha256(roster.read_bytes()).hexdigest()}})
+        put(archive / "derived/empty", b"")
+        put(export / "sim.runs.csv", b"run_id,role,cell_ids\nfit,science,fit-cell\nref,corpus,\n")
+        digests = {}
+        for name in ("pack.json", integrity._key_name("neg8_reference"), integrity._key_name("synthetic-fit")):
+            put(keys / name, b"{}\n")
+            digests[name] = hashlib.sha256(b"{}\n").hexdigest()
+        agreement._write(export / "sim.session.json", {"blinding": {"key_sha256": digests}})
+        (private / "bytes/blinding-sessions").mkdir(parents=True)
+        agreement._write(private / "bytes/blinding-sessions/sim.json", {
+            "session_id": "sim", "key_sha256": digests})
+
+        bundle = archive / "sources/claim-runs/fit"
+        fit_paths = (bundle / "config.json", bundle / "raw/powermetrics.plist",
+                     bundle / "calibration/member.json", bundle / "outputs/request_tokens.jsonl",
+                     archive / "sources/bound-runs/ref/metadata.json.zst",
+                     archive / integrity.REDUCTIONS / "fit.summary_metrics.rereduced.json",
+                     archive / integrity.REDUCTIONS / "fit.summary_metrics.rereduced.json.zst",
+                     archive / integrity.METER_DIR / "stream-001.jsonl")
+        for path in (*fit_paths, Path(str(archive) + ".desk") / "compression.jsonl",
+                     app / "configs/campaign_policies/synthetic.json"):
+            put(path, b"synthetic input\n")
+        outside = (archive / "sources/claim-runs/held/config.json",
+                   archive / integrity.REDUCTIONS / "held.summary_metrics.rereduced.json")
+        for path in outside:
+            put(path, b"synthetic outside the fit census\n")
+
+        with patch.object(integrity, "ROOT", app), patch.object(bytes_twin, "__file__", app / "scripts/bytes_twin.py"):
+            table = export / "sim.runs.csv"
+            visible = table.read_bytes()
+            try:
+                table.write_bytes(visible + b"held,science,fit-cell\n")
+                with self.assertRaisesRegex(ValueError, "unauthorized or duplicate fit table row"):
+                    integrity.capture(export, campaign, [export], private)
+            finally:
+                table.write_bytes(visible)
+            captured = integrity.capture(export, campaign, [export], private)
+            finalized = integrity.finalize(export, captured, keys)
+            document = integrity.verify(export, finalized)
+            self.check_sealed_file_faults(root, export, campaign, archive, keys, finalized, document, fit_paths, outside)
+
+    def check_sealed_file_faults(self, root, export, campaign, archive, keys, finalized, document, fit_paths, outside):
+        repo, predictions, receipt, commit = commitment_fixture(root)
+        before = (repo / bytes_commitment.JOURNAL).read_bytes()
+        guard = {"export_seal_repo": export, "export_seal_commit": finalized}
+        auth = SimpleNamespace(stage1_commit=commit, commitment_repo=repo, predictions=predictions,
+                               stage1_receipt=receipt, **guard)
+        seal = integrity.options(export, finalized)
+        common = ["--manifest", str(campaign), "--key-dir", str(keys), "--out", str(root / "refused"), *seal]
+        primary = ["--export", str(export), "--stage", "fit", *common]
+        twin = ["--export-dir", str(export), "--archive", str(archive), "--stage", "1", *common]
+        paths = [Path(document["roots"][row["root"]]["path"]) / row["path"] for row in document["files"]]
+        self.assertLessEqual(set(fit_paths), set(paths))
+        self.assertTrue(set(outside).isdisjoint(paths))
+
+        def refuses():
+            with patch.object(bytes_analyze.ba, "read_json", side_effect=AssertionError("read after seal refusal")), \
+                    patch.object(bytes_twin, "read_manifest", side_effect=AssertionError("read after seal refusal")), \
+                    patch.object(bytes_commitment, "ROOT", repo):
+                messages = io.StringIO()
+                with redirect_stdout(messages), redirect_stderr(messages):
+                    self.assertEqual(bytes_analyze.main(primary), 1)
+                    self.assertEqual(bytes_twin.main(twin), 1)
+                self.assertEqual(messages.getvalue().count("BYTES export manifest:"), 2)
+                with self.assertRaisesRegex((OSError, ValueError), "export manifest"):
+                    bytes_commitment.verify_commitment(commit, predictions, repo=repo, **guard)
+                with self.assertRaisesRegex((OSError, ValueError), "export manifest"):
+                    bytes_commitment.admit(auth, "heldout_rows")
+            self.assertEqual((repo / bytes_commitment.JOURNAL).read_bytes(), before)
+            self.assertFalse((root / "refused").exists())
+
+        for path in outside:
+            with file_fault(path, "garbage"):
+                self.assertEqual(integrity.verify(export, finalized), document)
+        shadow = archive / "sources/claim-runs/ref"
+        shadow.mkdir()
+        try:
+            refuses()
+        finally:
+            shadow.rmdir()
+        for path in (archive / "sources/claim-runs/fit/extra",
+                     archive / "sources/bound-runs/fit/config.json",
+                     archive / integrity.METER_DIR / "stream-002.jsonl"):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch()
+            try:
+                refuses()
+            finally:
+                path.unlink()
+        count = 0
+        for path in paths:
+            with self.subTest(path=path.relative_to(root)):
+                data = path.read_bytes()
+                for fault in ("absent", "zero") if data else ("absent",):
+                    with file_fault(path, fault):
+                        refuses()
+                    count += 1
+                try:
+                    path.write_bytes(bytes([data[0] ^ 1]) + data[1:] if data else b"\0")
+                    refuses()
+                    count += 1
+                finally:
+                    path.write_bytes(data)
+        print(f"\nBYTES seal: {len(paths)} entries, {count} per-file mutations refused by four consumers", flush=True)

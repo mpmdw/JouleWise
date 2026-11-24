@@ -1544,36 +1544,44 @@ def run_both(root, manifest, *, verify_fit_rerun=False):
     for session in manifest["sessions"]:
         twin += ["--archive", session["archive"]]
 
-    def run(tag, command):
+    def run(tag, command, *, expected=0, artifact=None):
         result = subprocess.run(ample_space_command(command), cwd=ROOT, capture_output=True, text=True, check=False)
         (o / (tag + ".exit")).write_text(str(result.returncode) + "\n")
         (o / (tag + ".stdout")).write_text(result.stdout)
         (o / (tag + ".stderr")).write_text(result.stderr)
-        return result.returncode
+        if result.returncode != expected:
+            raise AssertionError(f"{tag} exited {result.returncode}, expected {expected}\n"
+                                 + result.stdout + result.stderr)
+        if artifact is not None and load(o / artifact) is None:
+            raise AssertionError(f"{tag} did not produce {artifact}")
 
-    run("a-blinded", analysis + capture_options + ["--stage", "blinded", "--out", str(o / "a-blinded")])
-    run("t-blinded", twin + capture_options + ["--stage", "blinded", "--out", str(o / "t-blinded.json")])
+    run("a-blinded", analysis + capture_options + ["--stage", "blinded", "--out", str(o / "a-blinded")],
+        artifact="a-blinded/blinded_pass_estimates.json")
+    run("t-blinded", twin + capture_options + ["--stage", "blinded", "--out", str(o / "t-blinded.json")],
+        artifact="t-blinded.json")
     # Stage 1 before any release must refuse on both sides.
-    run("a-fit-nokeys", analysis + capture_options + probe + ["--stage", "fit", "--key-dir", str(released), "--out", str(o / "a-fit-nokeys")])
-    run("t-1-nokeys", twin + capture_options + probe + ["--stage", "1", "--key-dir", str(released), "--out", str(o / "t-1-nokeys.json")])
+    run("a-fit-nokeys", analysis + capture_options + probe + ["--stage", "fit", "--key-dir", str(released), "--out", str(o / "a-fit-nokeys")], expected=1)
+    run("t-1-nokeys", twin + capture_options + probe + ["--stage", "1", "--key-dir", str(released), "--out", str(o / "t-1-nokeys.json")], expected=1)
     # Stage-1 release: the fit set's keys and the NEG-8 reference key (Addendum 3 item 1).
-    fit_keys = {"neg8_reference", *(m["model"] + "|bytes-synthetic|512" for m in manifest["models"] if m["role"] == "fit")}
-    for name in sorted({"pack.json", *(blinding._config_filename(k) for k in fit_keys)}):
+    fit_keys = {"pack.json", blinding._config_filename("neg8_reference"),
+                *(blinding._config_filename(m["config_key"]) for m in manifest["models"] if m["role"] == "fit")}
+    for name in sorted(fit_keys):
         shutil.copyfile(private / name, released / name)
     if capture_options:
         fit_options = bytes_integrity.options(export, bytes_integrity.finalize(export, captured, released))
     analysis += fit_options
     twin += fit_options
-    run("a-fit", analysis + ["--stage", "fit", "--key-dir", str(released), "--out", str(o / "a-fit")])
-    run("t-1", twin + ["--stage", "1", "--key-dir", str(released), "--out", str(o / "t-1.json")])
+    run("a-fit", analysis + ["--stage", "fit", "--key-dir", str(released), "--out", str(o / "a-fit")],
+        artifact="a-fit/predictions.json")
+    run("t-1", twin + ["--stage", "1", "--key-dir", str(released), "--out", str(o / "t-1.json")],
+        artifact="t-1.json")
     predictions = o / "a-fit/predictions.json"
     from tests.bytes_commitment_support import fixture_options
     options = fixture_options(root, predictions)
     if verify_fit_rerun:
         rerun = o / "a-fit-rerun"
         fit = analysis + ["--stage", "fit", "--key-dir", str(released), "--out", str(rerun)]
-        if run("a-fit-rerun", fit) != 0:
-            raise AssertionError("synthetic fit rerun refused")
+        run("a-fit-rerun", fit, artifact="a-fit-rerun/predictions.json")
         fixture_prediction = Path(options[options.index("--predictions") + 1])
         if (rerun / "predictions.json").read_bytes() != fixture_prediction.read_bytes():
             raise AssertionError("synthetic fit rerun changed committed bytes")
@@ -1587,18 +1595,26 @@ def run_both(root, manifest, *, verify_fit_rerun=False):
         # released, both implementations run on the blinded held-out rows (rails only).  The commit
         # is the desk's git commit of the stage-1 output; its hash admits the withheld store.
         (o / "stage1-commit").write_text(commit + "\n")
-        run("a-blinded-post", analysis + ["--stage", "blinded", "--stage1-commit", commit, "--out", str(o / "a-blinded-post")])
-        run("t-blinded-post", twin + ["--stage", "blinded", "--stage1-commit", commit, "--out", str(o / "t-blinded-post.json")])
+        run("a-blinded-post", analysis + ["--stage", "blinded", "--stage1-commit", commit, "--out", str(o / "a-blinded-post")],
+            artifact="a-blinded-post/blinded_pass_estimates.json")
+        run("t-blinded-post", twin + ["--stage", "blinded", "--stage1-commit", commit, "--out", str(o / "t-blinded-post.json")],
+            artifact="t-blinded-post.json")
     # Stage 2 with only the fit keys released must refuse on both sides (Addendum 3 item 4, D7).
     run("a-held-fitkeys", analysis + ["--stage", "heldout", "--key-dir", str(released), "--predictions", str(predictions),
-                                      "--out", str(o / "a-held-fitkeys")])
-    run("t-2-fitkeys", twin + ["--stage", "2", "--key-dir", str(released), "--out", str(o / "t-2-fitkeys.json")])
-    # Stage-2 release: every key.
-    for path in sorted(private.glob("*.json")):
-        shutil.copyfile(path, released / path.name)
-    run("a-held", analysis + ["--stage", "heldout", "--key-dir", str(released), "--predictions", str(predictions),
-                              "--out", str(o / "a-held")])
-    run("t-2", twin + ["--stage", "2", "--key-dir", str(released), "--out", str(o / "t-2.json")])
+                                      "--out", str(o / "a-held-fitkeys")], expected=1)
+    run("t-2-fitkeys", twin + ["--stage", "2", "--key-dir", str(released), "--out", str(o / "t-2-fitkeys.json")], expected=1)
+    # Model the separate stage-2 release without modifying the sealed fit directory.
+    heldout = root / "heldout-keys/bytes/blinding"
+    heldout.mkdir(parents=True)
+    names = fit_keys | {blinding._config_filename(m["config_key"]) for m in manifest["models"]}
+    for name in sorted(names):
+        source = private / name
+        if source.is_file():
+            shutil.copyfile(source, heldout / name)
+    run("a-held", analysis + ["--stage", "heldout", "--key-dir", str(heldout), "--predictions", str(predictions),
+                              "--out", str(o / "a-held")], artifact="a-held/heldout_pass_estimates.json")
+    run("t-2", twin + ["--stage", "2", "--key-dir", str(heldout), "--out", str(o / "t-2.json")],
+        artifact="t-2.json")
 
 
 def setUpModule():
@@ -1636,7 +1652,7 @@ def whole_sample_flips(name):
     the twin's own meter reader and export reader after every key is released."""
     root = WORK["root"] / name
     manifest = load(root / "manifest.json")
-    released = root / "released-keys/bytes/blinding"
+    released = root / "heldout-keys/bytes/blinding"
     flips = runs = 0
     largest = 0.0
     sample_intervals = set()
@@ -1963,7 +1979,7 @@ class AgreementTests(unittest.TestCase):
         from tests.bytes_commitment_support import fixture_options
         command = [sys.executable, str(mutant), "--export-dir", str(root / "export"),
                    "--manifest", str(root / "manifest.json"), "--stage", "2",
-                   "--key-dir", str(root / "released-keys/bytes/blinding"), "--out", str(output)]
+                   "--key-dir", str(root / "heldout-keys/bytes/blinding"), "--out", str(output)]
         for session in manifest["sessions"]:
             command += ["--archive", session["archive"]]
         command += fixture_options(root, root / "out/a-fit/predictions.json")
@@ -1985,7 +2001,7 @@ class AgreementTests(unittest.TestCase):
               f"diagnostics {counts['diagnostic_compared']}, different {counts['diagnostic_different']}")
         root = WORK["root"] / "marker_incomplete"
         manifest = load(root / "manifest.json")
-        records = ba.load_records(root / "export", manifest, stage="all", key_dir=root / "released-keys/bytes/blinding")
+        records = ba.load_records(root / "export", manifest, stage="all", key_dir=root / "heldout-keys/bytes/blinding")
         self.assertTrue(any(r.get("meter") and not r["meter"]["battery_end_window_complete"] for r in records))
         twin = load(root / "out/t-2.json")
         reasons = [str(est.get("without_assisted", {}).get("reason", ""))
@@ -2010,7 +2026,7 @@ class AgreementTests(unittest.TestCase):
               f"diagnostics {counts['diagnostic_compared']}, different {counts['diagnostic_different']}")
         root = WORK["root"] / "late_start"
         manifest = load(root / "manifest.json")
-        records = ba.load_records(root / "export", manifest, stage="all", key_dir=root / "released-keys/bytes/blinding")
+        records = ba.load_records(root / "export", manifest, stage="all", key_dir=root / "heldout-keys/bytes/blinding")
         partial = [r for r in records if r.get("meter") is None and r.get("decode_assist_evaluated")]
         self.assertTrue(partial, "late-start stream must miss decode coverage but reach the marker window")
         self.assertTrue(any("bytes.decode_battery_assist" in r["flags"] for r in partial))
@@ -2037,7 +2053,7 @@ class AgreementTests(unittest.TestCase):
               f"diagnostics {counts['diagnostic_compared']}, different {counts['diagnostic_different']}")
                 root = WORK["root"] / name
                 records = ba.load_records(root / "export", load(root / "manifest.json"), stage="all",
-                                          key_dir=root / "released-keys/bytes/blinding")
+                                          key_dir=root / "heldout-keys/bytes/blinding")
                 self.assertEqual(len(records), 1000)
                 self.assertTrue(all(r["meter"] is None and r.get("decode_assist_evaluated") for r in records))
                 self.assertTrue(any("bytes.decode_battery_assist" in r["flags"] for r in records))
@@ -2051,7 +2067,7 @@ class AgreementTests(unittest.TestCase):
         # This generator reuses run IDs across passes; session + run is the identity.
         unusable = {(s["session_id"], d["run_id"]) for d in planted for s in manifest["sessions"]
                     if s["pass_id"] == d["pass"]}
-        primary = ba.load_records(root / "export", manifest, stage="all", key_dir=root / "released-keys/bytes/blinding")
+        primary = ba.load_records(root / "export", manifest, stage="all", key_dir=root / "heldout-keys/bytes/blinding")
         bad = [r for r in primary if (r["session_id"], r["run_id"]) in unusable]
         self.assertEqual(len(bad), len(unusable))
         self.assertTrue(all(r["status"] == "unusable" and r["invalid_energy_record"] for r in bad))
@@ -2254,6 +2270,18 @@ class AgreementTests(unittest.TestCase):
               f"under the bar {counts['under_bar']}, above the bar {counts['above_bar']}")
         exits = {r["key"]: (r["a"], r["t"]) for r in recorder.rows if r["group"] == "exit"}
         self.assertEqual(exits["heldout/stage2"], (0, 0))
+        root = WORK["root"] / name
+        manifest = load(root / "manifest.json")
+        fit_keys = {"pack.json", blinding._config_filename("neg8_reference")}
+        fit_keys.update(blinding._config_filename(model["config_key"])
+                        for model in manifest["models"] if model["role"] == "fit")
+        heldout_keys = {blinding._config_filename(model["config_key"])
+                        for model in manifest["models"] if model["role"] == "heldout"}
+        private_keys = {p.name for p in (root / "private-keys/bytes/blinding").glob("*.json")}
+        self.assertTrue(private_keys - fit_keys - heldout_keys, "the lost member must mint an unregistered key")
+        self.assertEqual({p.name for p in (root / "released-keys/bytes/blinding").iterdir()}, fit_keys)
+        self.assertEqual({p.name for p in (root / "heldout-keys/bytes/blinding").iterdir()},
+                         private_keys & (fit_keys | heldout_keys))
         rows = {(r["group"], r["key"]): (r["a"], r["t"]) for r in recorder.rows if r["stage"] == "heldout"}
         model = "qwen3-next-80b-a3b-instruct-4bit"
         for boundary in ("rails", "dc_input", "rest"):

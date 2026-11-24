@@ -630,11 +630,16 @@ class BytesAvailabilityTests(unittest.TestCase):
                                 shutil.copytree(fixture.root / "private-keys", private)
                                 target = private / "bytes/blinding" / target.name
                             with file_fault(target, fault):
+                                if row_id == "export_sidecar" and fault != "absent":
+                                    with self.assertRaisesRegex(ValueError, "BYTES export manifest: missing session binding"):
+                                        fixture.export_again(out, private)
+                                    export_stops += 1
+                                    continue
                                 try:
                                     export, keys = fixture.export_again(out, private)
                                 except (StorageStop, OSError, ValueError, KeyError, TypeError) as exc:
                                     self.assertIn(row_id, {"events", "roster", "acceptance", "flags", "harvest_receipt",
-                                                              "source_inventory", "pack_key", "config_key"}, type(exc).__name__)
+                                                          "source_inventory", "pack_key", "config_key"}, type(exc).__name__)
                                     export_stops += 1
                                     continue
                                 compared += fixture.compare(self, export, keys, scratch, stage=stage, expect_kept=expect_kept)

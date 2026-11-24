@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
+import csv
 import fcntl
 import hashlib
 import json
@@ -15,8 +16,13 @@ import sys
 import tempfile
 
 NAME = "bytes-export-integrity.json"
-SCHEMA = "joulewise.bytes_export_integrity.v1"
+# v1 did not inventory the archive inputs opened during fit.
+SCHEMA = "joulewise.bytes_export_integrity.v2"
 ROOT = Path(__file__).resolve().parents[2]
+REFERENCE_ROLES = frozenset({"corpus", "start", "midpoint", "end"})
+BUNDLE_DIRS = ("sources/claim-runs", "sources/bound-runs")
+REDUCTIONS = "withheld/reductions"
+METER_DIR = "sources/night-custody/hazards/meter"
 
 
 def _git(repo, *args):
@@ -99,6 +105,49 @@ def _root(path, kind, *, names=(), ignore=()):
     return {"path": str(Path(path).resolve()), "kind": kind, "names": sorted(names), "ignore": sorted(ignore)}
 
 
+def _run_component(value):
+    value = _relative(value)
+    if "/" in value or value == "withheld":
+        raise ValueError("BYTES export manifest: invalid run identity")
+    return value
+
+
+def _present(root, relative):
+    path = root / relative
+    if path.resolve() != path or path.is_symlink():
+        raise ValueError("BYTES export manifest: symlink in authorized input set")
+    return path.exists()
+
+
+def _fit_bundles(root, runs):
+    candidates = (f"{base}/{run}" for run in map(_run_component, runs) for base in BUNDLE_DIRS)
+    return sorted(bundle for bundle in candidates if _present(root, bundle))
+
+
+def _fit_archive_paths(root, scope):
+    runs = scope["names"]
+    bundles = _fit_bundles(root, runs)
+    if bundles != scope["bundles"]:
+        raise ValueError("BYTES export manifest: missing or extra fit bundle directory")
+    # Restore can read the whole bundle, including metadata-selected files.
+    # Walk only named fit bundles. Reductions share a directory with held-out
+    # runs, so probe exact names there.
+    for bundle in bundles:
+        for relative in _scan(root / bundle, reject_withheld=True):
+            yield f"{bundle}/{relative}"
+    for run in runs:
+        reduction = f"{REDUCTIONS}/{run}.summary_metrics.rereduced.json"
+        for relative in (reduction, reduction + ".zst"):
+            if _present(root, relative):
+                yield relative
+    if _present(root, METER_DIR):
+        meter = root / METER_DIR
+        if not meter.is_dir():
+            raise ValueError("BYTES export manifest: expected a meter directory")
+        for path in meter.glob("stream-*.jsonl"):
+            yield path.relative_to(root).as_posix()
+
+
 def _membership(roots):
     members = {}
     for name, scope in sorted(roots.items()):
@@ -111,6 +160,12 @@ def _membership(roots):
         elif kind == "compression":
             journal = root / "compression.jsonl"
             filenames = [journal.name] if journal.exists() or journal.is_symlink() else []
+        elif kind == "fit_archive":
+            filenames = _fit_archive_paths(root, scope)
+        elif kind == "policies":
+            if root != ROOT / "configs/campaign_policies":
+                raise ValueError("BYTES export manifest: environment policy root differs")
+            filenames = sorted(path.name for path in root.glob("*.json"))
         elif kind in {"tables", "derived", "bindings", "release"}:
             filenames = _scan(root, ignore=scope["ignore"], recursive=kind in {"tables", "derived"},
                               reject_withheld=kind in {"tables", "derived"})
@@ -212,8 +267,9 @@ def verify(repo, commit, *, phase="finalized"):
     members = _membership(document["roots"])
     if set(members) != set(identities):
         raise ValueError("BYTES export manifest: missing or extra file")
-    if _entries(members) != entries:
-        raise ValueError("BYTES export manifest: changed input length or digest")
+    for (root_id, relative), row in zip(identities, entries):
+        if _fingerprint(members[(root_id, relative)]) != (row["length"], row["sha256"]):
+            raise ValueError("BYTES export manifest: changed input length or digest")
     return document
 
 
@@ -266,6 +322,32 @@ def _table_paths(roots, sessions):
     return found
 
 
+def _fit_run_ids(roster, table, cell_roles):
+    """Select from the counting roster and the fit-visible table only."""
+    authorized = {}
+    seen = set()
+    for member in roster["members"]:
+        run = _run_component(member["run_id"])
+        if run in seen:
+            raise ValueError("BYTES export manifest: duplicate run in roster")
+        seen.add(run)
+        role = member["role"]
+        units = {unit["cell_id"] for unit in member.get("units", ())}
+        fit_units = all(cell_roles.get(cell) == "fit" for cell in units)
+        if fit_units and (role in REFERENCE_ROLES or units):
+            authorized[run] = (role, units)
+
+    runs = set()
+    with table.open(newline="", encoding="utf-8") as stream:
+        for row in csv.DictReader(stream):
+            run = _run_component(row["run_id"])
+            identity = (row["role"], set(filter(None, row["cell_ids"].split(";"))))
+            if run in runs or authorized.get(run) != identity:
+                raise ValueError("BYTES export manifest: unauthorized or duplicate fit table row")
+            runs.add(run)
+    return runs
+
+
 def capture(repo, campaign_path, export_dirs, pack_records_root):
     """Publish the export-time inventory for the campaign's counting sessions."""
     repo = _repo(repo, create=True)
@@ -290,11 +372,22 @@ def capture(repo, campaign_path, export_dirs, pack_records_root):
     bindings = Path(pack_records_root) / "bytes/blinding-sessions"
     names = [sid + ".json" for sid in sessions]
     scopes = {**tables, "campaign": _root(campaign_path.parent, "named", names=[campaign_path.name]),
+              "environment_policies": _root(ROOT / "configs/campaign_policies", "policies"),
               "bindings": _root(bindings, "bindings", names=names, ignore=[sid + ".lock" for sid in sessions])}
     keys = {"pack.json", _key_name("neg8_reference")}
     heldout = set()
+    cell_roles = {}
     for model in campaign["models"]:
-        (keys if model["role"] == "fit" else heldout).add(_key_name(model["config_key"]))
+        role = model["role"]
+        if role not in {"fit", "heldout"}:
+            raise ValueError("BYTES export manifest: invalid model role")
+        (keys if role == "fit" else heldout).add(_key_name(model["config_key"]))
+        for cell in model["cell_ids"]:
+            if cell in cell_roles:
+                raise ValueError("BYTES export manifest: duplicate campaign cell")
+            cell_roles[cell] = role
+    if keys & heldout:
+        raise ValueError("BYTES export manifest: fit and held-out keys overlap")
     for sid, archive in sessions.items():
         derived = Path(archive) / "derived"
         scopes[f"derived:{sid}"] = _root(derived, "derived")
@@ -323,12 +416,20 @@ def capture(repo, campaign_path, export_dirs, pack_records_root):
         config_names.update(bindings_by_session[sid])
     if keys != config_names:
         raise ValueError("BYTES export manifest: an expected fit key has no session binding")
+    archive_scopes = {}
+    for sid, archive in sessions.items():
+        roster = json.loads(members[(f"derived:{sid}", "roster.json")].read_bytes())
+        runs = _fit_run_ids(roster, members[exports[(sid, ".runs.csv")]], cell_roles)
+        archive_scopes[f"fit_archive:{sid}"] = {
+            **_root(archive, "fit_archive", names=runs), "bundles": _fit_bundles(Path(archive), runs)}
+    entries += _entries(_membership(archive_scopes))
     table_files = [str(members[exports[(sid, ".runs.csv")]]) for sid in sorted(sessions)]
     with _publication(repo):
         if (repo / NAME).exists():
             raise ValueError("BYTES export manifest: export inventory already exists")
-        return _publish(repo, {"schema": SCHEMA, "phase": "captured", "files": entries,
-                               "roots": scopes, "archive_roots": sessions, "table_files": table_files,
+        return _publish(repo, {"schema": SCHEMA, "phase": "captured",
+                               "files": sorted(entries, key=lambda row: (row["root"], row["path"])),
+                               "roots": {**scopes, **archive_scopes}, "archive_roots": sessions, "table_files": table_files,
                                "bindings": bindings_by_session, "fit_keys": sorted(keys),
                                "heldout_names": sorted(heldout)})
 
