@@ -19,12 +19,13 @@ from joulewise.external import km003c_parse as meter
 from joulewise.schemas import BenchmarkConfig
 
 from . import controls_analysis as analysis
+from . import controls_metadata as metadata_wire
 from .qualification_manifest import _decode
 from .controls_time_fields import (
     BOOLEAN, EMPTY_ARRAY, INT64, INTEGER, NUMBER, OPAQUE_FINITE_NUMBER, OPAQUE_INTEGER, OPAQUE_NONBLANK_STRING,
     OPAQUE_NONNEGATIVE_NUMBER, OPAQUE_OBJECT, OPAQUE_PERCENT, OPAQUE_STRING, OPAQUE_STRING_OR_INTEGER,
-    RAIL_COLUMNS, SKIP, STRING,
-    KeyedFields, Nullable, RequiredRecordFields, TaggedFields, TimeFieldError, TokenForms, WireRecord,
+    RAIL_COLUMNS, STRING,
+    ExtensionRecord, KeyedFields, Nullable, RequiredRecordFields, TaggedFields, TimeFieldError, TokenForms, WireRecord,
     project_json, rail_rows, stream_fields,
 )
 
@@ -213,12 +214,62 @@ CLOCK_INFO_FIELDS = TaggedFields("kind", {
         "wall_minus_monotonic_start_s", "wall_minus_monotonic_end_s",
     ), OPAQUE_FINITE_NUMBER)),
 })
-PRODUCER_PAYLOAD = TokenForms({"{": SKIP})
+ADAPTER_FIELDS = WireRecord({}, {
+    "runtime": ExtensionRecord(
+        {"name": OPAQUE_STRING, "prepare_metadata": OPAQUE_OBJECT},
+        {"cleanup_metadata": OPAQUE_OBJECT, "clock_alignments": [OPAQUE_OBJECT]},
+    ),
+    "telemetry": ExtensionRecord(
+        {"name": OPAQUE_STRING}, {"clock_alignments": [OPAQUE_OBJECT]},
+    ),
+})
+EXTRA_FIELDS = ExtensionRecord({}, {
+    "node_cleanup": [OPAQUE_OBJECT], "cooldown_cap_hit": BOOLEAN,
+    "environment_admission_failed": BOOLEAN, "clock_step_suspect": BOOLEAN,
+    "preceding_member_end_s": Nullable(OPAQUE_FINITE_NUMBER),
+    "preceding_gap_s": Nullable(OPAQUE_FINITE_NUMBER), "idle_start_s": OPAQUE_FINITE_NUMBER,
+})
+TRACE_WINDOW_MARGINS = RequiredRecordFields.fromkeys((
+    "requested_post_window_dwell_s", "achieved_pre_window_margin_s", "achieved_post_window_margin_s",
+), OPAQUE_FINITE_NUMBER)
+SAMPLER_NUMBERS = dict.fromkeys(("temperature", "top_p", "min_p"), OPAQUE_FINITE_NUMBER)
+SAMPLER_POLICY = RequiredRecordFields(**SAMPLER_NUMBERS, top_k=OPAQUE_INTEGER)
+EXECUTION_POLICY = WireRecord({}, {
+    **dict.fromkeys(("prompt_cache", "fallback", "accounting_version", "repetition", "assistant_history",
+                     "warmup_condition", "seed_law", "turn_seed_law", "seed_model_id", "seed_thinking"), OPAQUE_STRING),
+    **dict.fromkeys(("seed_bits", "seed_index", "max_episode_decode_tokens", "hybrid_checkpoint_limit"), OPAQUE_INTEGER),
+    **dict.fromkeys(("deadman_s", "max_episode_seconds"), OPAQUE_FINITE_NUMBER),
+    "effective_context_cap": Nullable(OPAQUE_INTEGER),
+    "seed_task_pair": Nullable(OPAQUE_STRING), "sampler": SAMPLER_POLICY, "thermal": THERMAL_POLICY,
+    "chat_template_kwargs": WireRecord({}, {"enable_thinking": BOOLEAN}),
+    "checkpoint": RequiredRecordFields(policy=OPAQUE_STRING, limit=OPAQUE_INTEGER, boundary=OPAQUE_STRING,
+                                       prefill_step_size=OPAQUE_INTEGER),
+})
 WORKLOAD_PROVENANCE_FIELDS = WireRecord(
     {**dict.fromkeys(("kind", "episode_spec_sha256", "transcript_sha256", "endpoint_identity", "cache_policy"),
                      OPAQUE_STRING),
-     **dict.fromkeys(("prompt", "tokenizer", "model", "sampler", "output_policy",
-                      "episode_outcome"), PRODUCER_PAYLOAD),
+     "prompt": RequiredRecordFields(realized_token_count=Nullable(OPAQUE_INTEGER), token_hash_domain=OPAQUE_STRING,
+                                    token_ids_sha256=OPAQUE_STRING, text_sha256=Nullable(OPAQUE_STRING)),
+     "tokenizer": RequiredRecordFields(backend=OPAQUE_STRING, identifier=Nullable(OPAQUE_STRING),
+                                        revision=Nullable(OPAQUE_STRING), **{"class": Nullable(OPAQUE_STRING)},
+                                        vocab_size=Nullable(OPAQUE_INTEGER)),
+     "model": RequiredRecordFields(name=OPAQUE_STRING, source=Nullable(OPAQUE_STRING),
+                                    revision=Nullable(OPAQUE_STRING), artifact_identity=Nullable(ARTIFACT_IDENTITY)),
+     "sampler": WireRecord(
+         {"kind": OPAQUE_STRING, "temperature": OPAQUE_FINITE_NUMBER, "pinned": BOOLEAN,
+          "requested_temperature": OPAQUE_FINITE_NUMBER, "max_tokens": OPAQUE_INTEGER},
+         {"api": OPAQUE_STRING, "parameter": OPAQUE_STRING, "enable_thinking": BOOLEAN,
+          "top_p": OPAQUE_FINITE_NUMBER, "min_p": OPAQUE_FINITE_NUMBER, "top_k": OPAQUE_INTEGER,
+          "constructor_kwargs": RequiredRecordFields(temp=OPAQUE_FINITE_NUMBER, top_p=OPAQUE_FINITE_NUMBER,
+                                                     min_p=OPAQUE_FINITE_NUMBER, top_k=OPAQUE_INTEGER),
+          "execution_policy": EXECUTION_POLICY}),
+     "output_policy": WireRecord(
+         {"name": OPAQUE_STRING, "stop_condition": OPAQUE_STRING,
+          **dict.fromkeys(("requested_tokens", "max_turns", "max_tokens_per_turn", "emitted_tokens"), OPAQUE_INTEGER)},
+         {"max_context_tokens": OPAQUE_INTEGER, "max_episode_decode_tokens": OPAQUE_INTEGER,
+          "deadman_s": OPAQUE_FINITE_NUMBER}),
+     "episode_outcome": WireRecord({"stop_condition": OPAQUE_STRING, "emitted_tokens": OPAQUE_INTEGER},
+                                   {"token_budget": TOKEN_BUDGET}),
      "generator": RequiredRecordFields(name=OPAQUE_STRING, version=OPAQUE_STRING),
      "flags": [OPAQUE_STRING]},
 )
@@ -228,7 +279,7 @@ METADATA_REQUIRED = {
         {"clock_anchor": IDENTITY_CLOCK_FIELDS},
         {"telemetry_backend": OPAQUE_STRING, "schema_version": OPAQUE_STRING, "sample_phase": SAMPLE_PHASE_FIELDS,
          "idle_drift": IDLE_DRIFT_FIELDS, "idle_drift_guard": IDLE_GUARD_FIELDS,
-         "process_group_teardown": PRODUCER_PAYLOAD}),
+         "process_group_teardown": metadata_wire.PROCESS_GROUP_TEARDOWN}),
 }
 OPTIONAL_CONFIG_TEXT = Nullable(OPAQUE_NONBLANK_STRING)
 CONFIG_FIELDS = RequiredRecordFields(
@@ -270,12 +321,15 @@ METADATA_FIELDS = WireRecord(
          {"token_count_source": OPAQUE_STRING}),
      "serialization_quarantine": [WireRecord(
          {"path": OPAQUE_STRING, "reason": OPAQUE_STRING}, {"key_type": OPAQUE_STRING, "value_type": OPAQUE_STRING})],
-     "adapters": WireRecord({}, dict.fromkeys(("runtime", "telemetry"), PRODUCER_PAYLOAD)),
+     "adapters": ADAPTER_FIELDS, "extra": EXTRA_FIELDS, "trace_window_margins": TRACE_WINDOW_MARGINS,
      "workload_provenance": WORKLOAD_PROVENANCE_FIELDS,
-     **dict.fromkeys(("battery_float", "connection", "environment", "campaign_policy",
-                      "campaign_environment_preflight", "environment_admission", "instrument_calibration",
-                      "trace_window_margins", "idle_baseline", "thermal_pre", "thermal_post",
-                      "suite", "extra"), PRODUCER_PAYLOAD),
+     "battery_float": metadata_wire.BATTERY_FLOAT, "connection": metadata_wire.CONNECTION,
+     "environment": metadata_wire.ENVIRONMENT, "idle_baseline": metadata_wire.IDLE_BASELINE,
+     "thermal_pre": metadata_wire.THERMAL_STATE, "thermal_post": metadata_wire.THERMAL_STATE,
+     "suite": metadata_wire.SUITE,
+     "campaign_policy": metadata_wire.CAMPAIGN_POLICY, "campaign_environment_preflight": metadata_wire.CAMPAIGN_PREFLIGHT,
+     "environment_admission": metadata_wire.ENVIRONMENT_ADMISSION,
+     "instrument_calibration": metadata_wire.INSTRUMENT_CALIBRATION,
      **dict.fromkeys(("clock_anchor_bound_s", "marker_to_first_sample_phase_bound_s",
                       "marker_to_last_sample_phase_bound_s", "idle_drift_bound_w"), Nullable(OPAQUE_FINITE_NUMBER))},
 )

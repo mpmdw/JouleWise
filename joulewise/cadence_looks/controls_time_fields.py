@@ -63,6 +63,10 @@ class WireRecord(RecordFields):
         self.required = frozenset(required)
 
 
+class ExtensionRecord(WireRecord):
+    """A typed opaque record that permits producer-defined members."""
+
+
 class KeyedFields:
     """A vocabulary-constrained map whose entries share one value schema."""
 
@@ -509,6 +513,7 @@ def _project(it, token, fields, depth, *, strict):
     if token != ("punct", "{"):
         raise _Bad()
     result, seen = {}, set()
+    extension = isinstance(fields, ExtensionRecord)
     required = fields.keys() if isinstance(fields, RequiredRecordFields) else getattr(fields, "required", ())
     item = next(it)
     if item == ("punct", "}"):
@@ -528,7 +533,11 @@ def _project(it, token, fields, depth, *, strict):
                 raise _Bad()
             result[name] = _project(it, value, fields.values, depth + 1, strict=strict)
         elif name in fields:
-            result[name] = _project(it, value, fields[name], depth + 1, strict=strict)
+            projected = _project(it, value, fields[name], depth + 1, strict=strict)
+            if not extension:
+                result[name] = projected
+        elif extension:
+            _skip_value(it, value, depth + 1, strict=True, finite=True)
         elif isinstance(fields, RecordFields):
             raise _Bad()
         else:

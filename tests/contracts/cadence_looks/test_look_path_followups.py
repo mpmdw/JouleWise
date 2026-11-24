@@ -1,5 +1,6 @@
 """Synthetic regressions for the pre-reservation audit findings."""
 
+from collections import Counter
 import json
 import os
 from pathlib import Path
@@ -21,6 +22,7 @@ from joulewise.cadence_looks import controls_reader as reader
 from joulewise.cadence_looks import controls_release as release
 from joulewise.cadence_looks import controls_time_fields as blind
 from tests.contracts.cadence_looks import look_path_driver as registrar
+from tests.contracts.cadence_looks import look_path_wire_matrix as wire_matrix
 
 
 FROZEN = runpy.run_path(str(Path(__file__).with_name("look_path") / "suite/run_suite.py"))
@@ -695,6 +697,10 @@ class LookPathFollowupTests(TestCase):
         for path in outputs:
             for sentinel in (EXTENSION_KEY, str(EXTENSION_VALUE)):
                 self.assertNotIn(sentinel.encode(), path.read_bytes())
+        for name, data in extension_metadata().items():
+            view = blind.project_json(registrar.manifest.canonical(data), reader.METADATA_FIELDS[name], strict=True)
+            expected = {"runtime": {}, "telemetry": {}} if name == "adapters" else {}
+            self.assertEqual(view, expected)
 
     def test_v10_adapter_declared_inventory_has_typed_members(self):
         schema = reader.METADATA_FIELDS["adapters"]
@@ -755,6 +761,148 @@ class LookPathFollowupTests(TestCase):
                 world, bench = self.prepare("v10-" + name, configure=lambda world: raw_metadata_extension(world, raw))
                 self.assert_refuses_at_blind_gates(world, bench, scaffold)
 
+    def test_v10_rebound_metadata_field_matrix(self):
+        scaffold = self.stage_scaffold("v10-rebound-matrix")
+        bench = scaffold.parents[1]
+        world = bench.parent / "source"
+        span, runtime, bundle = FROZEN["location"](world, "L001")
+        path = bundle / "metadata.json"
+        fixture = registrar.read(path)
+        matrix = wire_matrix.NativeGateMatrix(world, bench)
+        for synthetic, schema in ((True, reader.METADATA_FIELDS), (False, reader.PRODUCER_METADATA_FIELDS)):
+            baseline = {**wire_matrix.sample(schema), **fixture}
+            role = "synthetic metadata" if synthetic else "native metadata"
+            with matrix.member(span, path, "metadata", runtime):
+                self.assert_wire_matrix(matrix, role, schema, baseline, synthetic=synthetic)
+
+    def test_v10_rebound_native_role_field_matrix(self):
+        scaffold = self.stage_scaffold("v10-native-matrix")
+        bench = scaffold.parents[1]
+        world = bench.parent / "source"
+        span, runtime, bundle = FROZEN["location"](world, "L002")
+        matrix = wire_matrix.NativeGateMatrix(world, bench)
+        for role, path, schema in (
+            ("episode", bundle / "outputs/align_episode.json", reader.EPISODE_FIELDS),
+            ("config", bundle / "config.json", reader.CONFIG_FIELDS),
+            ("script", runtime / "script-work.json", inputs.WORK_FIELDS),
+            ("result", runtime / "runtime_result.json", inputs.RUNTIME_RESULT_FIELDS),
+            ("result-copy", runtime.parent / "leg_record.json", inputs.LEG_RECORD_FIELDS),
+        ):
+            with matrix.member(span, path, role, runtime):
+                self.assert_wire_matrix(matrix, role, schema, registrar.read(path))
+
+        runtime_path = runtime / "runtime_result.json"
+        copy_path = runtime.parent / "leg_record.json"
+        result, copy = map(registrar.read, (runtime_path, copy_path))
+        native_members = inputs.NATIVE_RESULT_COPY | inputs.RUNTIME_ONLY.keys() | {"episode_flags"}
+        for key in native_members:
+            result.setdefault(key, wire_matrix.sample(inputs.RUNTIME_RESULT_FIELDS[key]))
+        result["backend"] = "production"
+        copy["result"].update({key: result[key] for key in inputs.NATIVE_RESULT_COPY})
+        if "backend" in copy["result"]:
+            copy["result"]["backend"] = result["backend"]
+        for role, path, baseline, companion_path, companion, schema in (
+            ("native result", runtime_path, result, copy_path, copy, inputs.RUNTIME_RESULT_FIELDS),
+            ("native result copy", copy_path, copy, runtime_path, result, inputs.LEG_RECORD_FIELDS),
+        ):
+            linked = {companion_path: registrar.manifest.canonical(companion)}
+            with matrix.member(span, path, role, runtime, linked=linked):
+                self.assert_wire_matrix(matrix, role, schema, baseline)
+
+        path = FROZEN["meter"](span)
+        header, *polls, trailer = path.read_bytes().splitlines()
+        poll = next(raw for raw in polls if json.loads(raw).get("n"))
+        lines = [header, poll, b'{"k":"e","rx":0}', trailer]
+        for kind, schema in blind.METER_FIELDS.fields.items():
+            row = next(raw for raw in lines if json.loads(raw)["k"] == kind)
+
+            def replace_line(raw, row=row):
+                return b"\n".join(raw.rstrip() if entry == row else entry for entry in lines) + b"\n"
+
+            with matrix.member(span, path, "stream"):
+                self.assert_wire_matrix(matrix, f"stream {kind}", schema, json.loads(row), pack=replace_line)
+
+        for kind, leg in (("turn", "L002"), ("hidden", "L002"), ("recovery", "L002"),
+                          ("cpu", "L003"), ("gap", "L006")):
+            work_span, work_runtime, _ = FROZEN["location"](world, leg)
+            path = work_runtime / "script-work.json"
+            baseline = registrar.read(path)
+            index, row = next((index, row) for index, row in enumerate(baseline["steps"]) if row["kind"] == kind)
+            conditional = inputs.STEP_VARIANTS[kind].keys() - inputs.STEP_VARIANTS[kind].required
+            self.assertLessEqual(conditional, row.keys())
+            with matrix.member(work_span, path, "script", work_runtime), matrix.entrypoints(synthetic=True):
+                for key in sorted(conditional):
+                    dropped = {name: value for name, value in row.items() if name != key}
+                    steps = [*baseline["steps"][:index], dropped, *baseline["steps"][index + 1:]]
+                    matrix.bind(registrar.manifest.canonical({**baseline, "steps": steps}))
+                    with self.subTest(role="script", field=key, variant=kind, mutation="finished-step-missing"):
+                        self.assert_matrix_refusal(matrix)
+                matrix.claim.assert_not_called()
+
+    def assert_wire_matrix(self, matrix, role, schema, baseline, *, synthetic=True, pack=lambda raw: raw):
+        encode = registrar.manifest.canonical
+        counts = Counter()
+        with matrix.entrypoints(synthetic=synthetic):
+            for (path, variant), fields, row, replace in wire_matrix.records(schema, baseline):
+                required = fields if isinstance(fields, blind.RequiredRecordFields) else fields.required
+                if row.get("prefill_tokens") is not None and any(
+                    fields is result for result in (inputs.RUNTIME_RESULT_FIELDS, inputs.RESULT_FIELDS)
+                ):
+                    required = required | {"turn_start_ns", "turn_end_ns", "first_token_ns"}
+                if role == "native result" and fields is inputs.RUNTIME_RESULT_FIELDS:
+                    required = required | inputs.NATIVE_RESULT_COPY | inputs.RUNTIME_ONLY.keys() | {"episode_flags"}
+                if role == "native result copy" and fields is inputs.RESULT_FIELDS:
+                    required = required | inputs.NATIVE_RESULT_COPY
+                if role == "stream b" and not path and row["n"]:
+                    required = required | {"tx"}
+                finished_step = (role == "script" and row.get("complete") is True and any(
+                    fields is step for step in inputs.STEP_VARIANTS.values()))
+                for key, member in fields.items():
+                    present = {**row, key: row[key] if key in row else wire_matrix.sample(member)}
+                    absent = {name: value for name, value in row.items() if name != key}
+                    wrong = wire_matrix.wrong_type(member)
+                    cases = [("type", {**present, key: wrong})]
+                    blind.project_json(encode(replace(present)), schema, strict=True)
+                    boundary = wire_matrix.numeric_boundary(member)
+                    if boundary is not None:
+                        inside, outside = boundary
+                        with self.subTest(role=role, field=(*path, key), variant=variant, mutation="numeric-inside"):
+                            self.assert_matrix_shape(matrix, encode(replace({**row, key: inside})), pack)
+                            counts["numeric-inside"] += 1
+                        cases.append(("numeric-boundary", {**present, key: outside}))
+                    if key in required:
+                        cases.append(("missing", absent))
+                    elif not finished_step:
+                        with self.subTest(role=role, field=(*path, key), variant=variant, mutation="optional-absent"):
+                            self.assert_matrix_shape(matrix, encode(replace(absent)), pack)
+                            counts["optional-absent"] += 1
+                    for mutation, malformed in cases:
+                        matrix.bind(pack(encode(replace(malformed))))
+                        with self.subTest(role=role, field=(*path, key), variant=variant, mutation=mutation):
+                            self.assert_matrix_refusal(matrix)
+                            counts[mutation] += 1
+            matrix.claim.assert_not_called()
+        print(f"Rebound {role} field coverage at {wire_matrix.OPERATIONS} {dict(counts)}", flush=True)
+
+    def assert_matrix_shape(self, matrix, payload, pack):
+        matrix.bind(pack(payload))
+        for operation in wire_matrix.OPERATIONS:
+            with self.subTest(operation=operation), self.assertRaises(wire_matrix.ShapeAccepted):
+                matrix.probe_accepted_shape(operation, payload)
+
+    def assert_matrix_refusal(self, matrix):
+        for operation in wire_matrix.OPERATIONS:
+            with self.subTest(operation=operation):
+                self.assertEqual(matrix.run(operation), (2, b"", CHANNELS))
+                self.assertTrue(matrix.reached)
+                self.assertIsInstance(matrix.cause, blind.TimeFieldError)
+        with self.subTest(operation="status"):
+            self.assertEqual(matrix.run("status"), (0, b"", b""))
+            self.assertFalse(os.path.lexists(matrix.private / layout.PRIVATE_NAME))
+            self.assertFalse(os.path.lexists(matrix.private / layout.MARKER_NAME))
+            self.assertEqual(list(matrix.public.iterdir()), [])
+            self.assertFalse((matrix.repo.parent / "events.jsonl").exists())
+
     def test_v9_role_schema_member_matrix(self):
         def sample(schema):
             if isinstance(schema, blind.Nullable):
@@ -799,8 +947,12 @@ class LookPathFollowupTests(TestCase):
                 project(data, schema)
                 required = (schema.keys() if isinstance(schema, blind.RequiredRecordFields)
                             else getattr(schema, "required", ()))
-                with self.subTest(path=path, mutation="unknown"), self.assertRaises(blind.TimeFieldError):
-                    project(dict(data, undeclared=True), schema)
+                with self.subTest(path=path, mutation="unknown"):
+                    if isinstance(schema, blind.ExtensionRecord):
+                        self.assertEqual(project(dict(data, undeclared=True), schema), project(data, schema))
+                    else:
+                        with self.assertRaises(blind.TimeFieldError):
+                            project(dict(data, undeclared=True), schema)
                 for field, field_schema in schema.items():
                     with self.subTest(path=path, field=field, mutation="missing"):
                         without = {key: value for key, value in data.items() if key != field}
@@ -810,7 +962,7 @@ class LookPathFollowupTests(TestCase):
                         else:
                             project(without, schema)
                     if field_schema is not blind.SKIP:
-                        wrong = {} if type(data[field]) is bool else False
+                        wrong = wire_matrix.wrong_type(field_schema)
                         with self.subTest(path=path, field=field, mutation="type"), self.assertRaises(blind.TimeFieldError):
                             project(dict(data, **{field: wrong}), schema)
                     inspect(field_schema, (*path, field))

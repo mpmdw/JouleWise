@@ -292,3 +292,71 @@ manifests verify and local v3.1 passed 846/846. The dated handoff and
 the final-head verification are linked from [draft PR #957](https://github.com/mpmdw/JouleWise/pull/957).
 Independent Tier 2 executing review, the installed byte pass and
 bound-host blind preflight remain lead gates before reservation.
+
+## 2026-11-24 revision 10 metadata boundaries
+
+Freeze `547cada3f768a4aa3303680febf3915aa6f2e4c2` committed the
+revision and failing synthetic cases before production edits. Execution
+against the frozen production code produced 16 failed assertions. Six
+were direct adapter field checks. Ten were rebound adapter or ancillary
+mutations that the old stage 1 accepted.
+[Revision 10](../process/cadence/looks/lm-ctl-01.print-spec.v10.md)
+
+The metadata envelope closes over the pinned members. The three extension
+records are typed opaque objects. Both adapter names and runtime prepare
+metadata are required, and their declared optional members retain their
+types. Extension keys and values disappear from the projection. The exact
+metadata bytes remain bound by the file digest. Fixed ancillary records
+use typed projections, including clock and workload provenance, battery
+and thermal records, the environment and admission records, calibration,
+suite, margin and sampler teardown metadata.
+
+The full registration regression installs and binds 19 malformed
+synthetic cases. Every case returned exit 2, empty stdout and
+`REFUSE PREFLIGHT INPUT_CHANNELS` at stage 1, standalone preflight and
+direct stage 2. Status stayed fresh, with no reservation, marker,
+publication, claim or value-read event. The valid sentinel in each
+extension record passed both guarded blind operations and was absent
+from the private and public outputs.
+
+The field matrix reuses the verified synthetic freeze and locked layout
+across mutations. It independently rebinds changed source bytes and their
+terminal and Check digests, then calls the native operation for each
+entry point. Negative probes require the exact refusal and a structural
+cause after the verified subject read. Positive probes stop at the
+successful wire projection, with the individual field, variant and
+entry point identified by the test. Separate full launcher cases verify
+the accepted extension payloads and existing ruled outcomes.
+[Rebound fixture and entry-point harness](../../tests/contracts/cadence_looks/look_path_wire_matrix.py)
+
+### Field and entry-point coverage
+
+Each row runs at stage 1, standalone preflight and direct stage 2.
+The counts are per entry point. The numeric column counts one boundary
+on each side for each numeric field. The suite includes the real
+conditional removal for each returned or finished step kind.
+
+| Role or variant | Wrong type | Required removal | Optional absence | Numeric pairs |
+| --- | ---: | ---: | ---: | ---: |
+| Metadata with frozen allowances | 1082 | 752 | 330 | 346 |
+| Native metadata | 1082 | 765 | 317 | 346 |
+| Episode, including G0, G1 and H | 274 | 182 | 92 | 128 |
+| Config | 54 | 47 | 7 | 13 |
+| Work and all five step kinds | 63 | 62 | 1 | 42 |
+| Frozen result and result copy | 148 | 99 | 49 | 56 |
+| Native result and result copy | 148 | 135 | 13 | 56 |
+| Stream header, trailer, poll and error | 74 | 21 | 53 | 31 |
+| Total | 2925 | 2063 | 862 | 1018 |
+
+The table records 6,006 negative and 1,880 positive shape probes per
+entry point. The detailed field and variant coordinates are the nested
+subtest labels in the two matrix regressions.
+[Acceptance tests](../../tests/contracts/cadence_looks/test_look_path_followups.py)
+
+The frozen trees match PR #951 byte for byte and all four checksum
+manifests verify. Final-head CI and the frozen cumulative receipt are
+linked from [draft PR #957](https://github.com/mpmdw/JouleWise/pull/957).
+
+The orphan-marker race remains an open LOW follow-up. Independent
+Tier 2 executing review, the installed byte pass and bound-host blind
+preflight remain lead gates before reservation.
