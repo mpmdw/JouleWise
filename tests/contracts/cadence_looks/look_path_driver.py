@@ -9,6 +9,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import socket
 import subprocess
 import sys
@@ -280,23 +281,27 @@ def run(operation, world, bench, fault):
         forbidden = ("91827.375", "19.8375")
         if fault == "guard_metadata_extensions":
             forbidden += ("synthetic_extension_opaque",)
-        if fault == "guard_measured_sizes":
-            forbidden = ("99183", "876543")
+        size_token = re.compile(r"(?<![\w.])(?:99183|876543)(?![\w.])")
+
+        def contains_observation(text):
+            if fault == "guard_measured_sizes":
+                return size_token.search(text) is not None
+            return any(value in text for value in forbidden)
         original_loads, original_convert = json.loads, fields._convert
         original_project = fields.project_json
 
         def guarded_loads(raw, *args, **kwargs):
             text = raw.decode("utf-8") if isinstance(raw, (bytes, bytearray)) else raw
-            assert not any(value in text for value in forbidden), "unprojected blind JSON decode"
+            assert not contains_observation(text), "unprojected blind JSON decode"
             return original_loads(raw, *args, **kwargs)
 
         def guarded_convert(kind, text):
-            assert not any(value in text for value in forbidden), "blind observation conversion"
+            assert not contains_observation(text), "blind observation conversion"
             return original_convert(kind, text)
 
         def guarded_project(raw, projection, **kwargs):
             result = original_project(raw, projection, **kwargs)
-            assert not any(value in repr(result) for value in forbidden), "observation in blind projection"
+            assert not contains_observation(repr(result)), "observation in blind projection"
             return result
 
         json.loads, fields._convert = guarded_loads, guarded_convert

@@ -784,7 +784,7 @@ def first_read(inputs, stage1):
         position = inputs.positions[leg_id]
         admission = inputs.admissions[leg_id]
         if not leg.g0_released:
-            positions.append(analysis.LegInput(leg_id, leg.kind, admission.admitted, False, admission=admission))
+            positions.append(analysis.NativeLegInput(leg_id, leg.kind, admission.admitted, False, admission=admission))
             continue
 
         pin = position["files"]
@@ -799,6 +799,6 @@ def first_read(inputs, stage1):
         episode = _join_native_rails(plan.episode.projected_episode, files["rails"], plan.rail, plan.rail_evidence)
         if plan.dc.selected is not None:
             episode = _attach_dc(episode, plan.dc.selected, cache[span_id][plan.dc.selected.path])
-        positions.append(analysis.LegInput(leg_id, leg.kind, admission.admitted, True, episode, files["script"],
-                                           pin["script"]["sha256"], admission))
+        positions.append(analysis.NativeLegInput(leg_id, leg.kind, admission.admitted, True, episode, files["script"],
+                                                 pin["script"]["sha256"], admission))
     return tuple(positions)

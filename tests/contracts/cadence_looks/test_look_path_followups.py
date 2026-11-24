@@ -1409,7 +1409,8 @@ class LookPathFollowupTests(TestCase):
             world, bench = self.prepare(f"round8-tools-{label}", role="episode", fault=change)
             for operation in ("stage1", "commit-stage1", "preflight"):
                 guard_fault = "guard_measured_sizes" if operation != "commit-stage1" else "none"
-                self.assertEqual(self.invoke(world, bench, operation, guard_fault), (0, b"", b""))
+                result = self.invoke(world, bench, operation, guard_fault)
+                self.assertEqual(result, (0, b"", b""), result[2].decode("utf-8"))
                 if operation != "commit-stage1":
                     observed = bench / f"projection-{operation}.json"
                     self.assertEqual(observed.read_bytes(), first)
@@ -1465,7 +1466,7 @@ class LookPathFollowupTests(TestCase):
                 self.assertEqual((decision.disposition, decision.reason), ("not_evaluable", reason))
                 # A row that was ruled ineligible has no scientific episode
                 # to inspect. The measured entry point only prints its verdict.
-                read = analysis.LegInput(leg, kind, False, True, admission=decision)
+                read = analysis.NativeLegInput(leg, kind, False, True, admission=decision)
                 report = analysis.print_admitted_controls((read,), kernel=kernel, pooled=None,
                                                           instrument_manifest_sha256="a" * 64)
                 self.assertEqual(report["legs"], [dict(leg_id=leg, kind=kind,

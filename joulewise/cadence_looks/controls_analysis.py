@@ -93,7 +93,6 @@ class LegInput:
     episode: object | None = None
     work_bytes: bytes | None = None
     work_sha256: str | None = None
-    admission: "LegAdmission | None" = None
 
 
 @dataclass(frozen=True)
@@ -125,6 +124,11 @@ class LegAdmission:
     @property
     def admitted(self):
         return self.disposition == "admitted"
+
+
+@dataclass(frozen=True)
+class NativeLegInput(LegInput):
+    admission: LegAdmission | None = None
 
 
 def _finite(value):
