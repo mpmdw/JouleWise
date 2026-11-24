@@ -1198,6 +1198,47 @@ class C1ClosureTests(unittest.TestCase):
                 Path(attempt.bindings[name]).mkdir()
             self.assert_admitted_on_both_routes(attempt)
 
+    def test_r15_custody_and_operator_logs_hold_no_links(self):
+        """Round 15 class: the launch's own record roots cannot redirect a write through a link."""
+        def previous(attempt):
+            directory = attempt.work / 'previous-attempt' / 'night'
+            directory.mkdir(parents=True, exist_ok=True)
+            return directory
+
+        def custody(attempt):
+            return attempt.work / 'attempt-custody'
+
+        def linked_night(attempt):
+            custody(attempt).mkdir()
+            (custody(attempt) / 'night').symlink_to(previous(attempt), target_is_directory=True)
+
+        def linked_custody(attempt):
+            custody(attempt).symlink_to(previous(attempt).parent, target_is_directory=True)
+
+        def linked_operator_log(attempt):
+            logs = Path(attempt.bindings['operator_log_root'])
+            logs.mkdir()
+            (logs / 'align-v4-c1-episodes-a.log').symlink_to(previous(attempt) / 'old.log')
+
+        cases = (
+            ('custody night directory links to a previous attempt', linked_night, 'custody_root holds a link'),
+            ('custody root is a link', linked_custody, 'custody_root is a link'),
+            ('operator log links to a previous attempt', linked_operator_log, 'operator_log_root holds a link'),
+        )
+        for name, place, detail in cases:
+            with self.subTest(case=name):
+                attempt = self.attempt()
+                place(attempt)
+                code, _ = attempt.build()
+                self.assertEqual(code, 2, attempt.build_error)
+                self.assertIn(detail, attempt.build_error)
+        with self.subTest(control='custody holding ordinary records'):
+            attempt = self.attempt()
+            (custody(attempt) / 'operator-logs').mkdir(parents=True)
+            adapter.put(custody(attempt), 'install-record.json', {'invented': True})
+            code, _ = attempt.build()
+            self.assertEqual(code, 0, attempt.build_error)
+
     def test_r13_arguments_a_consumer_rejects_or_that_disagree_with_the_plan(self):
         """Round 13 sweep: each such rendered argument refuses at the shared preflight (builder exit 2)."""
         def stage(kind, slot=None):
