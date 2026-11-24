@@ -8,8 +8,53 @@ from pathlib import Path
 from unittest.mock import patch
 from joulewise import bytes_analysis as ba
 from joulewise.external import km003c_parse as kp
+from tests.fixtures.bytes import harvest_roster
 
 FIXTURES = Path(__file__).resolve().parent
+
+
+def plan_role(member):
+    """The plan role of a harvest-shaped member of this campaign, as the export table names it.
+
+    The roster has no role. This campaign plans science on the ``decode`` stage
+    and each reference on ``<role>_reference``, as the real plan names its
+    reference inputs (``joulewise/b6/acceptance.py`` ``_stage_roles``)."""
+    if member["units"]:
+        return "science"
+    stage = member["stage_id"]
+    if not stage.endswith("_reference"):
+        raise ValueError(f"no planned reference role for stage {stage!r}")
+    return stage.removesuffix("_reference")
+
+
+# The registered plan's input id for each reference role (joulewise/b6/acceptance.py _stage_roles).
+REFERENCE_INPUTS = {"corpus": "neg8_bound", "start": "start_reference", "midpoint": "midpoint_reference",
+                    "end": "end_reference"}
+
+
+def plan_tree(members):
+    """The plan walk for a harvest-shaped roster, in the registered tree's shape.
+
+    Science rows, one external-input manifest per reference stage, and the stage
+    graph that binds each manifest to its stage, in first-appearance order. The
+    exporter takes every role from this walk, as it does on a real archive; the
+    fixture hands it over as the plan's ``plan_tree``."""
+    science, stages = [], {}
+    for member in members:
+        role = plan_role(member)
+        if role == "science":
+            science.append({"run_id": member["run_id"], "stage_id": member["stage_id"]})
+        stages.setdefault(member["stage_id"], (role, []))[1].append({"run_id": member["run_id"]})
+    manifests, graph = [], []
+    for stage_id, (role, rows) in stages.items():
+        path = f"members/{stage_id}/order_manifest.json"
+        graph.append({"stage_id": stage_id, "kind": "campaign_collection", "expected_count": len(rows),
+                      "input": {"path": path}})
+        if role != "science":
+            manifests.append({"external_input_id": REFERENCE_INPUTS[role], "manifest": {"path": path},
+                              "members": rows})
+    return {"science": science, "external_inputs": {"manifests": manifests}, "stage_graph": graph}
+
 
 def meter_ticks(start, end):
     """100 ms campaign coordinates, sampled every 20 ms."""
@@ -280,8 +325,8 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                     _write_json(bundle / "metadata.json", metadata)
                 unit = {"cell_id": model["cell_ids"][0], "stratum": "repeat" if ordinal < 10 else "quad",
                         "unit_id": str(ordinal if ordinal < 10 else (ordinal - 10) // 4)}
-                roster.append({"run_id": run_id, "stage_id": ref["role"] + "_reference" if ref else "decode",
-                               "role": ref["role"] if ref else "science", "units": [] if ref else [unit]})
+                roster.append(harvest_roster.member(run_id, ref["role"] + "_reference" if ref else "decode",
+                                                    [] if ref else [unit]))
                 evidence_members.append(SimpleNamespace(run_id=run_id, stage_id=ref["role"] + "_reference" if ref else "decode",
                                                        role=ref["role"] if ref else "science",
                                                        status="succeeded", config_key=model["model"]))
@@ -344,7 +389,7 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
         stream.parent.mkdir(parents=True)
         trailer = {"k": "t", "end_raw_ns": tick * 100_000_000, "end_mono_ns": tick * 100_000_000}
         stream.write_text("".join(json.dumps(item) + "\n" for item in (header, *batches, trailer)))
-        _write_json(archive / "derived/roster.json", {"pack_id": pack_id, "attempt": 1, "members": roster})
+        harvest_roster.write(archive / "derived/roster.json", pack_id, roster)
         harvest_assist = [{"code": "battery.assist", "effect": "DISCLOSE", "scope": {"run_id": e["run_id"]}}
                          for e in battery_episodes if e.get("current_ma", design["battery_assist"]["current_ma"]) < 0]
         # §6 / RL-82: session codes have no run attached. Keep a shared code
@@ -360,7 +405,8 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
         (archive / "derived/flags.jsonl").write_text("".join(json.dumps(f) + "\n" for f in harvest_assist + session_flags))
         evidence = SimpleNamespace(stages=[SimpleNamespace(members=evidence_members)], runtime={}, session_id=session_id)
         _seal_archive_inputs(archive)
-        export_runs.export(archive, {}, root / "registration", root / "private-keys", root / "export", non_claim=non_claim,
+        export_runs.export(archive, {"plan_tree": plan_tree(roster)}, root / "registration", root / "private-keys",
+                           root / "export", non_claim=non_claim,
                            evidence=evidence, acceptance_record=acceptance,
                            # Export stops on an unresolved registration (#416 F-S9); an
                            # ungrouped synthetic pack names itself explicitly.
@@ -384,8 +430,7 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
     if late_start_stream:
         session = manifest["sessions"][0]
         archive = Path(session["archive"])
-        first = next(m for m in ba.read_json(archive / "derived/roster.json")["members"]
-                     if m["role"] == "science")
+        first = next(m for m in ba.read_json(archive / "derived/roster.json")["members"] if m["units"])
         bundle = archive / "sources/claim-runs" / first["run_id"]
         events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
         start, end = ba._event_span(events, "decode", ba.read_json(bundle / "metadata.json"))
@@ -406,8 +451,7 @@ def archive_campaign(root, *, world="bytes", seed=1100, non_claim=True, release=
                 polls[0]["n"] += 1
             elif marker_stream_mode in ("replayed_batch", "replayed_tail"):
                 archive = Path(session["archive"])
-                first = next(m for m in ba.read_json(archive / "derived/roster.json")["members"]
-                             if m["role"] == "science")
+                first = next(m for m in ba.read_json(archive / "derived/roster.json")["members"] if m["units"])
                 bundle = archive / "sources/claim-runs" / first["run_id"]
                 events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
                 start, end = ba._event_span(events, "decode", ba.read_json(bundle / "metadata.json"))

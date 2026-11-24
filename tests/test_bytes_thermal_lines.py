@@ -260,12 +260,8 @@ class BoundAnalysisReplayTests(unittest.TestCase):
             add_campaign_pass_identity(manifest)
             for session in manifest['sessions']:
                 source = Path(session['archive'])
-                roster_path = source / 'derived/roster.json'
-                roster = json.loads(roster_path.read_bytes())
-                science = [m for m in roster['members'] if m['role'] == 'science']
-                for m in roster['members']:
-                    m['kind'] = 'science' if m['role'] == 'science' else 'external_input'
-                roster_path.write_text(json.dumps(roster))
+                roster = json.loads((source / 'derived/roster.json').read_bytes())
+                science = [m for m in roster['members'] if m['kind'] == 'science']
                 model = manifest['models'][0]
                 target = next(m for m in science if m['units'][0]['cell_id'] in model['cell_ids'] and m['units'][0]['stratum'] == 'quad')
                 run = target['run_id']
@@ -749,11 +745,8 @@ class ReviewerGroupedAnalysisTests(unittest.TestCase):
                 side = json.loads((export / (sid + ".session.json")).read_text())["blinding"]["withheld"]
                 store = (export / side["path"]).resolve()
                 roster_path = source / "derived/roster.json"
-                roster = json.loads(roster_path.read_bytes())
-                for m in roster["members"]:  # real harvest rosters carry kind; this fixture carries role
-                    m["kind"] = "science" if m["role"] == "science" else "external_input"
-                roster_path.write_text(json.dumps(roster))
-                science = [m for m in roster["members"] if m["role"] == "science"]
+                roster = json.loads(roster_path.read_bytes())   # the harvest's shape: kind, no role
+                science = [m for m in roster["members"] if m["kind"] == "science"]
                 # choose the target: a heldout-config member when one exists (s5, s2), else fit
                 heldout = [m for m in science if models[next(x["model"] for x in manifest["models"]
                            if m["units"][0]["cell_id"] in x["cell_ids"])]["role"] == "heldout"

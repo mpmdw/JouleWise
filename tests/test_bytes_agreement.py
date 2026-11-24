@@ -1484,14 +1484,14 @@ def build(root, name, *, missing_inputs=()):
             roster = load(archive / "derived/roster.json")["members"]
             ends = []
             for member in roster:
-                if member["role"] == "science":
+                if member["units"]:
                     bundle = archive / "sources/claim-runs" / member["run_id"]
                     events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
                     ends.append(ba._event_span(events, "decode", load(bundle / "metadata.json"))[1])
             # Pass 1 ends inside the delayed end window, after science decode.
             # Pass 2 ends before the last decode's delayed marker window starts,
             # leaving no marker polls and making not_evaluated non-vacuous.
-            last_member = next(member for member in reversed(roster) if member["role"] == "science")
+            last_member = next(member for member in reversed(roster) if member["units"])
             bundle = archive / "sources/claim-runs" / last_member["run_id"]
             events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
             last_start = ba._event_span(events, "decode", load(bundle / "metadata.json"))[0]

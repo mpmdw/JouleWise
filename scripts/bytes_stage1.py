@@ -315,7 +315,10 @@ def run_stage1(manifest_path, export_dirs, pack_records_root, out_root, *, pytho
     if census_sessions is not None and sorted(s["session_id"] for s in manifest["sessions"]) != sorted(census_sessions):
         raise Stage1Error("manifest sessions differ from the census sessions")
     heads = _git_state()
-    seal_repo = Path(export_seal_repo or export_dirs[0]).resolve()
+    if export_seal_repo is None:
+        raise Stage1Error("name --export-seal-repo: a private Git directory outside every export directory")
+    # capture refuses a seal repository inside any export directory (cold review of #949, MED 1).
+    seal_repo = Path(export_seal_repo).resolve()
     captured = bytes_integrity.capture(seal_repo, manifest_path, export_dirs, pack_records_root)
     o = out_root / "out"
     o.mkdir(parents=True)
@@ -424,7 +427,8 @@ def main(argv=None):
     r.add_argument("--manifest", required=True, type=Path)
     r.add_argument("--export", nargs="+", required=True, type=Path)
     r.add_argument("--pack-records-root", required=True, type=Path)
-    r.add_argument("--export-seal-repo", type=Path, help="private export Git root (default: first export directory)")
+    r.add_argument("--export-seal-repo", type=Path, required=True,
+                   help="private export Git root outside every export directory (created when absent)")
     r.add_argument("--out", required=True, type=Path)
     args = parser.parse_args(argv)
     try:

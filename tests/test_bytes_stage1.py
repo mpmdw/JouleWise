@@ -182,7 +182,8 @@ class WithheldLayoutTests(unittest.TestCase):
                 for command in ('census', 'run'):
                     args = [command, '--export', str(export), '--out', str(root / 'out')]
                     if command == 'run':
-                        args += ['--manifest', 'NEVER_OPEN', '--pack-records-root', 'NEVER_OPEN']
+                        args += ['--manifest', 'NEVER_OPEN', '--pack-records-root', 'NEVER_OPEN',
+                                 '--export-seal-repo', str(root / 'seal')]
                     with mock.patch.object(Path, 'open', side_effect=AssertionError('file opened')) as opened, \
                             mock.patch.object(s1.subprocess, 'run') as child, \
                             contextlib.redirect_stderr(io.StringIO()) as err:
@@ -247,7 +248,12 @@ class CommandLineTests(unittest.TestCase):
 
 class RunTests(unittest.TestCase):
     def test_pre_commit_sequence_writes_agreeing_predictions(self):
+        # Cold review of #949: the campaign's rosters have the harvest's shape (no role),
+        # and the driver still seals the export and ends READY_TO_COMMIT.
         root = WORK["root"]
+        for session in WORK["manifest"]["sessions"]:
+            members = json.loads((Path(session["archive"]) / "derived/roster.json").read_bytes())["members"]
+            self.assertEqual({key for member in members for key in member}, {"run_id", "stage_id", "kind", "units"})
         out = Path(WORK["dir"].name) / "stage1-run"
         code, summary = s1.run_stage1(root / "manifest.json", [root / "export"], root / "private-keys", out,
                                       release_fn=fit_release(root), wrap=ample_space_command,
@@ -271,6 +277,29 @@ class RunTests(unittest.TestCase):
         self.assertFalse(any((out / "out").glob("a-held*")))
         self.assertFalse(any((out / "out").glob("t-2*")))
         self.assertTrue(json.loads((out / "stage1-summary.json").read_text())["verdict"] == "READY_TO_COMMIT")
+        self.assertEqual(summary["export_seal_repo"], str(out.with_suffix(".seal").resolve()))
+        self.assertTrue(summary["export_capture_commit"] and summary["export_seal_commit"])
+        self.assertFalse((root / "export/.git").exists())
+
+    def test_seal_repository_is_required_and_outside_every_export_directory(self):
+        # Cold review of #949, MED 1: no default to the export directory, and capture refuses one inside it.
+        root = WORK["root"]
+        export = root / "export"
+        before = sorted(path.relative_to(export) for path in export.rglob("*"))
+        with self.assertRaisesRegex(s1.Stage1Error, "--export-seal-repo"):
+            s1.run_stage1(root / "manifest.json", [export], root / "private-keys", Path(WORK["dir"].name) / "no-seal",
+                          check_registered_models=False)
+        for name, repo in (("seal-is-export", export), ("seal-in-export", export / "seal")):
+            with self.subTest(name), self.assertRaisesRegex(ValueError, "outside every export directory"):
+                s1.run_stage1(root / "manifest.json", [export], root / "private-keys", Path(WORK["dir"].name) / name,
+                              check_registered_models=False, export_seal_repo=repo)
+            self.assertFalse((Path(WORK["dir"].name) / name).exists())
+        self.assertEqual(sorted(path.relative_to(export) for path in export.rglob("*")), before)
+        with contextlib.redirect_stderr(io.StringIO()) as error, self.assertRaises(SystemExit) as stop:
+            s1.main(["run", "--manifest", str(root / "manifest.json"), "--export", str(export),
+                     "--pack-records-root", str(root / "private-keys"), "--out", str(Path(WORK["dir"].name) / "cli")])
+        self.assertEqual(stop.exception.code, 2)
+        self.assertIn("--export-seal-repo", error.getvalue())
 
     def test_refuses_existing_output_and_unregistered_estimator(self):
         root = WORK["root"]
@@ -301,7 +330,8 @@ class RunTests(unittest.TestCase):
         out = Path(WORK["dir"].name) / "run-withheld-out"
         with mock.patch.object(s1, "run_stage1", fake_run), contextlib.redirect_stdout(io.StringIO()):
             rc = s1.main(["run", "--manifest", "m.json", "--export", str(export),
-                          "--pack-records-root", "x", "--out", str(out)])
+                          "--pack-records-root", "x", "--export-seal-repo", str(out.with_suffix(".seal")),
+                          "--out", str(out)])
         self.assertEqual(rc, 0)
         self.assertTrue(any("bytes.withheld_missing" in w for w in seen["census_warnings"]), seen)
 
@@ -416,7 +446,8 @@ class ReleaseGateTests(unittest.TestCase):
                 mock.patch.object(s1.bytes_integrity, "finalize", return_value="synthetic-final"), \
                 mock.patch.object(s1, "_git_state", return_value=("synthetic", False)), \
                 mock.patch("tests.test_bytes_agreement.compare_campaign", side_effect=compare_campaign if actual_comparer else comparer):
-            result = s1.run_stage1(path, [root / "export"], root, root / "run", release_fn=release)
+            result = s1.run_stage1(path, [root / "export"], root, root / "run", release_fn=release,
+                                   export_seal_repo=root / "seal")
         return result, released
 
     def test_no_key_faults_stop_before_release(self):

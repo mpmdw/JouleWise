@@ -18,6 +18,7 @@ from unittest.mock import patch
 
 from scripts import bytes_twin as bt
 from tests.bytes_commitment_support import synthetic_checkout
+from tests.fixtures.bytes import harvest_roster
 
 ROOT = Path(__file__).resolve().parents[1]
 _synth_spec = importlib.util.spec_from_file_location("twin_synth", ROOT / "tests/fixtures/bytes/twin_synth.py")
@@ -133,11 +134,13 @@ class ScienceMeterEligibilityTests(unittest.TestCase):
         } for index, code in enumerate(codes[i % len(codes)] for i in range(50))]
         absent = rows.pop()
         run_id = absent["run_id"]
+        # The planned member as the harvest writes it: units and no role (cold review of #949).
+        planned = harvest_roster.document("s1", [harvest_roster.member(run_id, "decode", [{
+            "cell_id": absent["cell_ids"], "stratum": absent["strata"], "unit_id": absent["unit_ids"]}])])["members"]
+        self.assertNotIn("role", planned[0])
         archive = {
             "session_id": "s1", "session_flags": ["audit.session"],
-            "planned_members": [{"run_id": run_id, "role": "science", "units": [{
-                "cell_id": absent["cell_ids"], "stratum": absent["strata"], "unit_id": absent["unit_ids"],
-            }]}],
+            "planned_members": planned,
             "run_codes": {**{row["run_id"]: {"battery.assist", row["exclusion_codes"]} - {""} for row in rows},
                           run_id: {"member.bytes_missing"}},
             "exclusions": {**{row["run_id"]: {row["exclusion_codes"]} for row in rows if row["excluded"]},
@@ -161,6 +164,24 @@ class ScienceMeterEligibilityTests(unittest.TestCase):
                 self.assertEqual(set(quantity["flags"]), {"audit.session", "battery.assist", *bt.VALIDITY_CODES})
                 self.assertTrue(any(row["run_id"] == run_id and row["codes"] == "member.bytes_missing"
                                     for row in cell["removed_members"]))
+
+    def test_absent_planned_runs_follow_harvest_units_not_roles(self):
+        # Cold review of #949: the harvest's roster names no role, so a role test keeps no lost run.
+        unit = {"cell_id": "qwen3-4b-4bit-decode", "stratum": "repeat", "unit_id": "0"}
+        planned = harvest_roster.document("s1", [
+            harvest_roster.member("lost", "decode", [unit]),
+            harvest_roster.member("exported", "decode", [{**unit, "unit_id": "1"}]),
+            harvest_roster.member("reference", "start_reference")])["members"]
+        self.assertEqual({key for member in planned for key in member}, {"run_id", "stage_id", "kind", "units"})
+        archive = {"planned_members": planned, "exclusions": {"lost": {"member.bytes_missing"}},
+                   "run_codes": {"lost": {"member.bytes_missing"}}}
+        rows = list(bt.absent_science_rows({"s1": [{"run_id": "exported"}, {"run_id": "reference"}]},
+                                           {"s1": archive}))
+        self.assertEqual([(row["run_id"], row["role"], row["cell_ids"], row["strata"], row["unit_ids"],
+                           row["exclusion_codes"]) for row in rows],
+                         [("lost", "science", "qwen3-4b-4bit-decode", "repeat", "0", "member.bytes_missing")])
+        unexported = list(bt.absent_science_rows({"s1": []}, {"s1": archive}))
+        self.assertEqual([row["run_id"] for row in unexported], ["lost", "exported"])
 
     def test_partial_floor_plan_refuses_before_estimation(self):
         rows = [{"flag_codes": "battery.assist"}] * 49
@@ -227,9 +248,9 @@ class MissingWithheldFlagTests(unittest.TestCase):
         """A harvest archive whose roster plans two runs of the missing model and one of another."""
         (root / "derived").mkdir()
         cell, other = "cell-" + self.MODEL, "cell-qwen3-14b-4bit"
-        (root / "derived/roster.json").write_text(json.dumps({"members": [
-            {"run_id": "r1", "units": [{"cell_id": cell}]}, {"run_id": "r2", "units": [{"cell_id": cell}]},
-            {"run_id": "r3", "units": [{"cell_id": other}]}]}))
+        harvest_roster.write(root / "derived/roster.json", "s1", [
+            harvest_roster.member(run, "decode", [{"cell_id": unit_cell, "stratum": "repeat", "unit_id": run}])
+            for run, unit_cell in (("r1", cell), ("r2", cell), ("r3", other))])
         (root / "derived/flags.jsonl").write_text("".join(json.dumps(row) + "\n" for row in [
             {"code": "audit.early", "scope": {}},
             {"code": "battery.assist", "scope": {"run_id": "r1"}},
@@ -947,7 +968,7 @@ class MeterTests(QuantityTestCase):
         archive_root = next(iter(sorted((WORLD["one"] / "archives").iterdir())))
         archive = bt.load_archive(archive_root)
         roster = json.loads((archive_root / "derived/roster.json").read_text())
-        run_id = next(m["run_id"] for m in roster["members"] if m["role"] == "science")
+        run_id = next(m["run_id"] for m in roster["members"] if m["units"])
         joined = bt.dc_join(archive, run_id)
         self.assertEqual(joined["status"], "ok")
         summary = json.loads((archive_root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json")).read_text())
@@ -973,7 +994,7 @@ class MeterTests(QuantityTestCase):
         archive_root = next(iter(sorted((WORLD["one"] / "archives").iterdir())))
         archive = bt.load_archive(archive_root)
         roster = json.loads((archive_root / "derived/roster.json").read_text())
-        run_id = next(m["run_id"] for m in roster["members"] if m["role"] == "science")
+        run_id = next(m["run_id"] for m in roster["members"] if m["units"])
         joined = bt.dc_join(archive, run_id)
         terms = joined["edge_terms"]
         self.assertQuantityEqual(joined["edge_bound_j"], (terms["P_start_w"] + terms["P_end_w"]) * (terms["r_max_s"] + terms["dt_meter_s"]))

@@ -52,6 +52,15 @@ def _repo(path, *, create=False):
     return path
 
 
+def _outside_exports(repo, export_dirs):
+    """Keep the seal repository, its Git directory and its manifest out of every
+    export directory. Both fit CLIs walk export directories recursively, so an
+    unsealed table could otherwise sit where they read (cold review of #949, MED 1)."""
+    repo = Path(repo).resolve()
+    if any(repo.is_relative_to(Path(directory).resolve()) for directory in export_dirs):
+        raise ValueError("BYTES export manifest: the seal repository must be outside every export directory")
+
+
 def _relative(value):
     if not isinstance(value, str) or not value or value == ".":
         raise ValueError("BYTES export manifest: invalid relative path")
@@ -257,6 +266,7 @@ def verify(repo, commit, *, phase="finalized"):
     document = _document(current)
     if document["schema"] != SCHEMA or document["phase"] != phase:
         raise ValueError(f"BYTES export manifest: a {phase} manifest is required")
+    _outside_exports(repo, [scope["path"] for scope in document["roots"].values() if scope["kind"] == "tables"])
     entries = document["files"]
     for row in entries:
         if (set(row) != {"root", "path", "length", "sha256"} or type(row["length"]) is not int
@@ -326,26 +336,29 @@ def _table_paths(roots, sessions):
 
 
 def _fit_run_ids(roster, table, cell_roles):
-    """Select from the counting roster and the fit-visible table only."""
-    authorized = {}
-    seen = set()
+    """Select from the counting roster and the fit-visible table only.
+
+    The harvested roster names each run's units and no role
+    (joulewise/b5/harvest.py, l4_exclusion_inputs). The role is the table's.
+    A row is authorized when its run is a roster member, its cells are that
+    member's units, every cell is a fit cell, and a row without cells is a
+    reference.
+    """
+    units = {}
     for member in roster["members"]:
         run = _run_component(member["run_id"])
-        if run in seen:
+        if run in units:
             raise ValueError("BYTES export manifest: duplicate run in roster")
-        seen.add(run)
-        role = member["role"]
-        units = {unit["cell_id"] for unit in member.get("units", ())}
-        fit_units = all(cell_roles.get(cell) == "fit" for cell in units)
-        if fit_units and (role in REFERENCE_ROLES or units):
-            authorized[run] = (role, units)
+        units[run] = {unit["cell_id"] for unit in member.get("units", ())}
 
     runs = set()
     with table.open(newline="", encoding="utf-8") as stream:
         for row in csv.DictReader(stream):
             run = _run_component(row["run_id"])
-            identity = (row["role"], set(filter(None, row["cell_ids"].split(";"))))
-            if run in runs or authorized.get(run) != identity:
+            cells = set(filter(None, row["cell_ids"].split(";")))
+            if (run in runs or units.get(run) != cells
+                    or any(cell_roles.get(cell) != "fit" for cell in cells)
+                    or not (cells or row["role"] in REFERENCE_ROLES)):
                 raise ValueError("BYTES export manifest: unauthorized or duplicate fit table row")
             runs.add(run)
     return runs
@@ -353,6 +366,7 @@ def _fit_run_ids(roster, table, cell_roles):
 
 def capture(repo, campaign_path, export_dirs, pack_records_root):
     """Publish the export-time inventory for the campaign's counting sessions."""
+    _outside_exports(repo, export_dirs)
     repo = _repo(repo, create=True)
     campaign_path = Path(campaign_path).resolve(strict=True)
     campaign = json.loads(campaign_path.read_bytes())
@@ -367,7 +381,7 @@ def capture(repo, campaign_path, export_dirs, pack_records_root):
         sessions[sid] = str(archive)
     tables = {}
     for index, path in enumerate(sorted({Path(path).resolve() for path in export_dirs})):
-        ignore = [".git", NAME] if path == repo else []
+        ignore = []
         if campaign_path.is_relative_to(path):
             ignore.append(campaign_path.relative_to(path).as_posix())
         tables[f"tables:{index}"] = _root(path, "tables", ignore=ignore)
@@ -461,7 +475,8 @@ def finalize(repo, capture_commit, key_dir):
 
 
 def add_arguments(parser):
-    parser.add_argument("--export-seal-repo", type=Path, help="private BYTES export Git root")
+    parser.add_argument("--export-seal-repo", type=Path,
+                        help="private BYTES export Git root, outside every export directory")
     parser.add_argument("--export-seal-commit", help="full commit object id for the BYTES export manifest")
 
 
@@ -484,6 +499,16 @@ def check_inputs(repo, commit, *, stage, campaign, export_dirs=(), tables=(), ar
         raise ValueError("BYTES export manifest: table roots differ")
     if tables and (len(tables) != len(document["table_files"]) or
                    {str(Path(path).resolve()) for path in tables} != set(document["table_files"])):
+        raise ValueError("BYTES export manifest: table paths differ")
+    # Both fit CLIs find tables by walking these directories, including any
+    # path the census ignores. Refuse a table the seal did not name.
+    found = set()
+    for directory in export_dirs:
+        directory = Path(directory).resolve()
+        found.update(str(path) for path in directory.rglob("*.runs.csv"))
+        found.update(str(path.with_name(path.name.removesuffix(".session.json") + ".runs.csv"))
+                     for path in directory.rglob("*.session.json"))
+    if export_dirs and found != set(document["table_files"]):
         raise ValueError("BYTES export manifest: table paths differ")
     if archives is not None and stage != "blinded":
         expected = sorted(document["archive_roots"].values())
