@@ -25570,3 +25570,41 @@ Research lead (Fable 5.2), Mon Nov 23 21:55 PST 2026 (from `date`). RL-203 to RL
 - I ran no suite, kit, census or replay. Nothing was committed, pushed or merged.
 - These rest on two fact-finding forks' reads, not mine: the shim and v3.1/v3.2 counts and digests, the three hosted attempts, the launcher site lines, the generator lines in #795's suite, and #795's CI (54 pass, 32 of 32 admission shards).
 - I did not check v3.2's draft, the cause of the lost shard, what strings upstream mlx-lm emits, or whether any real span carries a non-null `finish_reason`.
+
+---
+
+# RL-214. View 3 of the pilot hand-read does not require the episode to start before G0 ends: the frozen record puts G0 at or before the episode's start, and the brief's inequality was the reverse. The three HOLD rows of `cq-ctl-01-s01-a1` meet RL-187 3.1 as written. A pre-episode G0 subtracts nothing from the whole and is neither a hold nor a look-time question. Span 2 may launch at 02:35 Tue 24 Nov once view 3 is re-signed under the wording below
+
+**Sources read: stamps, counts, docs and code only.** RLD at `1850d6930` (local and remote head agree; it ends at RL-202a and RL-197c, and no RL-203 exists there or in RUN_STATE on main `4e5db3983`). The signed HOLD (sha256 `9ed261dc…af37`), its brief, and `HANDREAD-PLAN.md` item 3. `attribution.py` (AT) and `rl176_phases.py` (PH) at `82542232d`, byte-identical at `c9faeaf45` and main (blobs `610a5b00b`, `5b395798c`). `controls_analysis.py` (CA) at `08279e20e` and `c9faeaf45`. From projection `998a9d1f…1b5a`: episode start and end, thermal interval kinds and ends, step stamps. No energy, power, meter or transcript field was opened.
+
+## 1. View 3 (Q1): no
+
+**RL-187 3.1's sentence is about the steps, not about where G0 sits against the episode's start** (RLD:21702). View 3 is met when:
+
+> Every step is in its issued position; each step's start ≤ its end; each step's start ≥ the previous step's end; the first step's start ≥ `episode.start_ns` and ≥ G0's end; the last step's end ≤ `episode.end_ns`; and G0's end ≤ `episode.start_ns`. Equality is legal at every comparison (RL-197a A9, RLD:24037). Hidden and CPU steps are included.
+
+- **The brief's `episode.start_ns ≤ G0.end_ns` is not in my ruling and reverses the frozen record's rule.** The kernel refuses a G0 that ends after the episode's start (AT:633-636). RL-202 4.1 already makes "G0 ending 1 ns into the episode" `not_evaluable`/`leg_record_invalid` (RLD:25289). A leg that met the brief strictly is the leg the look refuses.
+- **The print's own check is the step part of the block.** Its lower bound is `max(episode.start_ns, G0 end)`, then order and the episode's end, reason `step_order_or_episode_bounds` (CA:123-129 at `08279e20e`; CA:138-144 at `c9faeaf45`).
+- **The block's last comparison is the frozen record rule, read by hand** so that a leg the look would refuse is caught before span 2 (RL-197 §3 item 8, RLD:23910). It adds nothing to the print.
+- **The fault** is a transcription in the preparation seat's brief. The reviewer applied the brief as issued and referred it, which was right.
+- **The pilot, by my own stamp read.** G0 ends 22,292,230 / 36,551,730 / 30,035,709 ns before the episode's start. The first step starts 29,532,374 / 32,056,478 / 29,427,854 ns after it. Steps are ordered, do not overlap and end inside the episode. All three legs meet view 3.
+
+## 2. The whole (Q2): nothing is subtracted for G0
+
+- **The whole** is the integral over [`start_ns`, `end_ns`] (AT:722) less the segments of kind gate and hold (PH:84-86, PH:110-112). Those segments come only from G1 and H intervals inside the episode (AT:637-656). G0 is checked and skipped (AT:633-636) and is never a segment.
+- **There is no intersection to take.** A pre-episode G0 is the only admissible G0 and contributes zero excluded joules. A G0 partly inside the episode is not clipped: the kernel raises and the leg is `leg_record_invalid` (RLD:25286).
+- **The print adds no gate arithmetic of its own.** At `08279e20e` it calls the kernel it is handed (CA:272, CA:491-492). At `c9faeaf45` the same calls are wrapped for RL-202 4.1 (CA:287, CA:534-535, CA:546-547).
+- **RL-187 3.1's "less its gate and hold segments" stands unamended** (RLD:21691). On L001 to L003 the only thermal interval is the G0, so the whole is the full episode integral. The 22 to 37 ms before the episode's start is outside it and is not read.
+- **This is not a reason for `not_evaluable`, not a span-2 hold and not a look-time question.** No code, suite, kit or pin changes.
+
+## 3. Span 2 (Q3): yes, on five conditions
+
+1. This ruling is committed to the audit branch first; the reviewer signs against its commit, not a message.
+2. The lead replaces item 3 of the brief with the quoted block of section 1, verbatim.
+3. The same reviewer seat, its session resumed, re-reads view 3 on L001 to L003 from the same projection and writes the integers for each comparison. My figures are not its evidence. If that session cannot be resumed, a fresh independent seat reads all twelve rows, F-3(c) and Q1 itself and inherits nothing.
+4. A new signed disposition supersedes the HOLD and cites it by sha256. The HOLD file is kept unedited. For the resumed seat, the nine PASS rows, F-3(c) and Q1 carry over by that citation, since no byte they read has changed. Then `pilot-pass.json` under the pinned launcher contract, unchanged.
+5. Any comparison that fails under this wording is a HOLD and returns to me. The seat ends before the pre-arm census.
+
+**The same reviewer is acceptable.** The change is to the rule, made by me, on evidence the reviewer had already recorded; its independence from the runner, the pilot and the desk is unchanged. No leg is rerun and no data changes. **Nothing else is owed before 02:35.** The section 1 block is the wording wherever view 3 is read by hand again.
+
+> **Lead (2026-11-23 22:05 PST):** the research lead wrote this as "RL-203" from ledger head `1850d6930`; RL-203..RL-213 (the W1 batch) were committed first at `a2cb8bcc8`, so it is recorded as **RL-214**, text otherwise verbatim from seat `fable-ctl01-g0-ruling-1123`.
