@@ -8,12 +8,14 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 PIN = '18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71'
 ORIGIN_REF = 'refs/remotes/origin/records/2026-11-bytes-stage1'
 REMOTE_REF = 'refs/heads/records/2026-11-bytes-stage1'
+_admission_fixtures = None
 
 
 def copy_cli_checkout(destination):
@@ -220,8 +222,18 @@ def commitment_args(repo, predictions, receipt, commit):
 
 def fixture_options(root, predictions=None):
     """Persist fixture evidence, then run the production verifier afresh on every use."""
+    global _admission_fixtures
+    root = Path(root).resolve()
+    admission_only = not (root / 'manifest.json').exists()
+    if admission_only:
+        # Reader fixtures can copy their entire input world. Keep the
+        # checkout and its absolute seal bindings outside that copied tree.
+        if _admission_fixtures is None:
+            _admission_fixtures = tempfile.TemporaryDirectory(prefix='bytes-admission-fixtures-')
+        world = hashlib.sha256(os.fsencode(root)).hexdigest()[:20]
+        root = Path(_admission_fixtures.name).resolve() / world
     raw = Path(predictions).read_bytes() if predictions is not None else b'synthetic-provenance'
-    directory = Path(root) / ('synthetic-commitment-' + hashlib.sha256(raw).hexdigest()[:16])
+    directory = root / ('synthetic-commitment-' + hashlib.sha256(raw).hexdigest()[:16])
     repo = directory / 'commitment-repo'
     if not repo.exists():
         directory.mkdir(parents=True)
@@ -231,9 +243,9 @@ def fixture_options(root, predictions=None):
         commit = json.loads(receipt.read_text())['stage1_commit']
         path = repo / 'docs/bytes/stage1/predictions.json'
     seal = []
-    if not (Path(root) / 'manifest.json').exists():
+    if admission_only:
         # Admission-only tests still verify an actual private export commit.
-        export = Path(root).resolve() / '.admission-export'
+        export = root / 'export-fixture'
         seal, _ = empty_synthetic_export(export).finalized(export / 'fit-keys')
     return [*seal, *commitment_args(repo, path, receipt, commit)]
 
