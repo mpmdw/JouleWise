@@ -20,7 +20,7 @@ if str(ROOT) not in sys.path:
 from scripts import align_v4_kit as w1
 from scripts.align_pilot_kit import raw_json, sha
 from joulewise.align.apple import v4_cadence as cadence
-from joulewise.align.apple.v4_registration import C1_DISPATCH, confined_reader
+from joulewise.align.apple.v4_registration import C1_DISPATCH, C1_WINDOW, confined_reader, window_identity
 from joulewise.align.apple.sampling import episode_seed, leading_seed, turn_seed
 from joulewise.b5 import chain, plan as launch_plan
 
@@ -51,7 +51,7 @@ def c1_kit_file(path):
 
 
 def c1_plan_projection(plan):
-    if plan.get('window_id') != 'C1' or not isinstance(plan.get('members'), list):
+    if plan.get('window_id') != C1_WINDOW or not isinstance(plan.get('members'), list):
         raise ValueError('materialized C1 collection plan missing')
     rows = []
     for position, member in enumerate(plan['members'], 1):
@@ -92,7 +92,7 @@ def _order_configs(order, directory, read):
 
 
 def c1_spare_path(stage_id, count):
-    return Path('configs/campaigns') / pack_id('C1') / C1_DISPATCH / stage_id / f'spares-{count}' / 'order_manifest.json'
+    return Path('configs/campaigns') / pack_id(C1_WINDOW) / C1_DISPATCH / stage_id / f'spares-{count}' / 'order_manifest.json'
 
 
 def c1_execution_identity(tree, plan, read, *, staged):
@@ -114,7 +114,7 @@ def c1_execution_identity(tree, plan, read, *, staged):
     if read_errors:
         raise read_errors[0]
     science_stages = {member['stage_id'] for member in plan['members']}
-    launch_pack = Path('configs/campaigns') / pack_id('C1')
+    launch_pack = Path('configs/campaigns') / pack_id(C1_WINDOW)
     orders, science_ids = [], []
     for dispatch in dispatches:
         stage = stages[dispatch.stage_id]
@@ -158,7 +158,7 @@ def c1_execution_identity(tree, plan, read, *, staged):
 
 def read_c1_kit(root, *, read=None, entries=None):
     """Hash the selected materialization, including the exact collection-plan bytes."""
-    relative = kit_path('C1')
+    relative = kit_path(C1_WINDOW)
     root = Path(root)
     directory = root / relative
     if entries is None:
@@ -468,6 +468,10 @@ def build_files(root, manifest, name, *, extra_sentinels=0):
     base = w1.build_files(root)
     original = json.loads(base[w1.KIT / 'collection_plan.json'])
     tree = _rewrite(json.loads(base[w1.KIT / 'plan_tree.json']), directory, pack)
+    # Lead J1 (PR #896): the reservation reserves the series window, not the
+    # pack. Its --window-id and --evidence-root-id point into this identity,
+    # and the collection plan declares the same window.
+    tree['window_identity'] = window_identity(name, pack)
     stages = [s for s in tree['stage_graph'] if '-episodes-' in s['stage_id']]
     files, members, orders = {}, [], [[], []]
     reference = None
@@ -539,7 +543,8 @@ def build_files(root, manifest, name, *, extra_sentinels=0):
         stage['launch']['commands'][0]['argv_template']['arguments'][0]['value'] = path.parent.as_posix()
     tree['science'] = [r for group in orders for r in group]
     tree['module_order'] = list(dict.fromkeys(r['module_id'] for r in tree['science']))
-    plan = dict(schema_version='joulewise.align_v4.series_window.v1', plan_id=pack, window_id=name,
+    plan = dict(schema_version='joulewise.align_v4.series_window.v1', plan_id=pack,
+                window_id=tree['window_identity']['window_id'],
                 series_manifest_sha256=sha(raw_json(manifest)), series_role=window['role'], non_claim=True,
                 members=members, midpoint_after_ordinal=11,
                 runtime_requirements=deepcopy(original['runtime_requirements']))

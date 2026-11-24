@@ -31,7 +31,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from joulewise import timing_receipts
+from joulewise.align.apple.v4_registration import C1_WINDOW  # one window identity (J1)
 from scripts import align_pilot_session as pilot, align_v4_kit as kit
+
+
+# The ALIGN v4 session-ID prefix; prepare mints IDs with bytes_h_session.session_id_at.
+SESSION_PREFIX = 'align-v4-'
 
 
 def series_ac_powermode(measurement_root, kit_path=kit.KIT):
@@ -65,7 +70,7 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
         if selected['id'] != 'W1':
             series.generate(measurement_root, window_id, check=True, extra_sentinels=extra_sentinels)
             kwargs.update(kit=series.kit_path(selected['id']), pack_id=series.pack_id(selected['id']))
-            if selected['id'] == 'C1':
+            if selected['id'] == C1_WINDOW:
                 kwargs.update(attempt_c1=True, c1_public_inputs=c1_public_inputs)
         series_state = dict(window_id=selected['id'], role=selected['role'], extra_sentinels=extra_sentinels,
             manifest_sha256=kit.sha((Path(measurement_root) / series.MANIFEST).read_bytes()),
@@ -75,7 +80,7 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
     kwargs.setdefault('ac_powermode', series_ac_powermode(measurement_root, kwargs.get('kit', kit.KIT)))
     kwargs.setdefault('kit', kit.KIT)
     kwargs.setdefault('pack_id', kit.PACK_ID)
-    kwargs.setdefault('session_prefix', 'align-v4-')
+    kwargs.setdefault('session_prefix', SESSION_PREFIX)
     try:
         state = pilot.prepare(measurement_root, session_root, **kwargs)
     except (pilot.h.PhysicalHazard, KeyError, OSError) as exc:
@@ -1240,7 +1245,7 @@ def _check_c1_packet_kit(view, read, packet, tree, night):
     def repo_read(path):
         return view.roots.regular(view.roots.repo / path).read_bytes()
 
-    kit_dir = view.roots.repo / series.kit_path('C1')
+    kit_dir = view.roots.repo / series.kit_path(C1_WINDOW)
     entries = [kit_dir / name for name, mode, _ in view.roots.walk(kit_dir) if mode != '040000']
     actual, plan = series.read_c1_kit(view.roots.repo, read=repo_read, entries=entries)
     if actual != packet.get('c1_kit'):
@@ -1251,7 +1256,7 @@ def _check_c1_packet_kit(view, read, packet, tree, night):
     if (tree['plan']['path'] != series.C1_PLAN
             or tree['plan']['actual_sha256'] != actual['plan_sha256']
             or hazard['pack']['plan_tree_sha256'] != _sha256(tree_raw)
-            or read(pack / series.C1_PLAN) != repo_read(series.kit_path('C1') / series.C1_PLAN)
+            or read(pack / series.C1_PLAN) != repo_read(series.kit_path(C1_WINDOW) / series.C1_PLAN)
             or [(row['run_id'], row['config_sha256']) for row in tree['science']] !=
                [(row['run_id'], row['config_sha256']) for row in plan['members']]):
         raise ValueError('staged launch plan differs from the materialized kit')
@@ -1272,7 +1277,7 @@ def c1_arm_preflight(handoff, *, now_epoch_s, measurement_root=None, plan=None, 
     try:
         if not isinstance(handoff, dict):
             handoff = c1_closure.decode(Path(handoff).read_bytes())
-        if handoff['window'] != 'C1':
+        if handoff['window'] != C1_WINDOW:
             raise ValueError('the handoff does not select C1')
         authority = Path(handoff['git'])
         # The one pinned commit (CAP 10 I1): the launch view is verified
@@ -1303,7 +1308,7 @@ def c1_arm_preflight(handoff, *, now_epoch_s, measurement_root=None, plan=None, 
         source_plan, kit_result = _check_c1_packet_kit(view, verified.stage_read, verified.packet, tree, night)
         if plan is not None and plan != source_plan:
             raise ValueError('selected collection plan differs from the materialized C1 plan')
-        series.bind_packet(view.roots.repo, 'C1', built, authenticated_by_rebuild=True)
+        series.bind_packet(view.roots.repo, C1_WINDOW, built, authenticated_by_rebuild=True)
         return {'authority': authority, 'state': state, 'night': night, 'plan': source_plan,
                 'view': view, 'packet': built, 'packet_sha256': verified.packet_sha256,
                 'current_digest': current, 'kit': kit_result, 'execution_commit': execution_commit}
@@ -1548,7 +1553,7 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     evidence_root = measurement_root
     now_s = (now or time.time)()
     c1_prepared = Path(measurement_root).parent / 'c1-prepared.json'
-    if (c1_handoff is not None or c1_kit_root is not None or plan.get('window_id') == 'C1'
+    if (c1_handoff is not None or c1_kit_root is not None or plan.get('window_id') == C1_WINDOW
             or c1_prepared.is_file()):
         try:
             if c1_handoff is None:
@@ -1886,7 +1891,7 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
             raise PacketKitMismatch('an explicit committed C1 handoff is required')
         state = pilot.h.read(session / 'session.json')
         measurement_root = state['measurement_root']
-        if (state.get('v4_series') or {}).get('window_id') == 'C1':
+        if (state.get('v4_series') or {}).get('window_id') == C1_WINDOW:
             raise PacketKitMismatch('an explicit committed C1 handoff is required')
         source_root = state['source_measurement_root'] if state.get('v4_series') else measurement_root
         kit.generate(source_root, check=True, source_root=source_root)
@@ -2082,11 +2087,11 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
     window_id = (state.get('v4_series') or {}).get('window_id', 'W1')
     binding_root = state.get('source_measurement_root') or measurement_root
     attestation_state = state
-    staged_c1 = window_id == 'C1' and Path(binding_root) != Path(measurement_root)
+    staged_c1 = window_id == C1_WINDOW and Path(binding_root) != Path(measurement_root)
     if staged_c1:
         _c1_external_controls(measurement_root, w1_disk_config,
                               weight_digests_attested, runtime_stack_attested)
-        attestation_state = {**state, 'registration_dir': Path(binding_root) / series.kit_path('C1') / 'registration'}
+        attestation_state = {**state, 'registration_dir': Path(binding_root) / series.kit_path(C1_WINDOW) / 'registration'}
 
     def read_control(path):
         _c1_external_controls(measurement_root, path)
@@ -2244,7 +2249,7 @@ def main(argv=None):
         return install(session_root, **kwargs)
 
     return pilot.main(argv, kit=kit.KIT, pack_id=kit.PACK_ID, desk_schema=kit.DESK_SCHEMA,
-                      session_prefix='align-v4-', prepare_fn=prepare, install_fn=install_cli,
+                      session_prefix=SESSION_PREFIX, prepare_fn=prepare, install_fn=install_cli,
                       desk_fn=desk, install_refusals=(PacketKitMismatch,),
                       prepare_options=(('--window-id', dict(help='frozen series window or D alias; requires series admission')),
                                        ('--extra-sentinels', dict(type=int, default=0, choices=(0, 2),

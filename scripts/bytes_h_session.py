@@ -134,7 +134,7 @@ def c1_measurement_view(source, session, *, kit, public_inputs=None):
         except FileNotFoundError:
             return None
 
-    files, _ = render_measurement_files(kit, 'align-v4-c1', source_file, optional_file,
+    files, _ = render_measurement_files(kit, c1_closure.PACK.name, source_file, optional_file,
                                        dispatch_dir=c1_closure.C1_DISPATCH)
     for name, mode, _ in roots.walk(repo / kit):
         path = Path(name)
@@ -171,7 +171,7 @@ def c1_measurement_view(source, session, *, kit, public_inputs=None):
     (stage / c1_closure.PACKET).parent.mkdir(exist_ok=True)
     runtime, git_link = source / '.venv', source / '.git'
     c1_closure.link_launch_view(roots, view, runtime=runtime, git_link=git_link)
-    handoff = {'window': 'C1', 'git': str(source), 'repo': str(repo), 'stage': str(stage),
+    handoff = {'window': c1_closure.C1_WINDOW, 'git': str(source), 'repo': str(repo), 'stage': str(stage),
                'view': str(view), 'execution_commit': execution, 'runtime': str(runtime), 'git_link': str(git_link),
                'cache_home': str(stage / 'cache')}
     runtime_inputs = c1_closure.execution_inputs(
@@ -425,6 +425,11 @@ def disk_snapshot(root, *, statvfs=os.statvfs, capacity=important_capacity):
             'flags': [] if important is not None else ['disk.purgeable_unreadable']}
 
 
+def session_id_at(clock, prefix):
+    """The session ID prepare mints at ``clock`` (UTC, microseconds) under ``prefix``."""
+    return prefix + dt.datetime.fromtimestamp(clock, dt.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+
+
 def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time,
             statvfs=os.statvfs, capacity=important_capacity, kit=KIT, pack_id=PACK_ID,
             session_prefix='bytes-h-', ac_powermode=None, attempt_c1=False,
@@ -442,7 +447,7 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
         raise ValueError('session root must be empty; preserve the existing session')
     session.mkdir(parents=True, exist_ok=True)
     clock = now()
-    session_id = session_prefix + dt.datetime.fromtimestamp(clock, dt.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+    session_id = session_id_at(clock, session_prefix)
     config = read(measurement / 'configs/b6/loop.json')
     lead = config.get('launch_lead_s', DEFAULT_LEAD_S)
     if not finite(lead) or lead < MIN_LEAD_S:
@@ -561,10 +566,11 @@ def install(session_root, *, run=subprocess.run, home=None, now=time.time, state
     (v4_registration.execution_commit). The installer checks the plan's
     heads against that commit, never against git (CAP 10 I1).
     """
+    from joulewise.align.apple import v4_registration as c1_closure
+
     session = Path(session_root).resolve()
     state = read(session / 'session.json') if state is None else state
-    if (state.get('v4_series') or {}).get('window_id') == 'C1':
-        from joulewise.align.apple import v4_registration as c1_closure
+    if (state.get('v4_series') or {}).get('window_id') == c1_closure.C1_WINDOW:
         execution_commit = c1_closure.execution_commit({'execution_commit': execution_commit})
     elif execution_commit is not None:
         raise ValueError('only a C1 attempt installs from a pinned execution commit')

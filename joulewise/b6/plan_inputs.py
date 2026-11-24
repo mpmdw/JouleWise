@@ -76,6 +76,12 @@ def capture_screen(registration_dir, pack_id=None):
     return result
 
 
+def window_identities(session_id, attempt=1):
+    """The plan, attempt, bracket session and calibration attempt IDs of a session's window plan."""
+    return {"plan_id": session_id, "attempt": attempt, "bracket_session_id": session_id + "-calibration",
+            "pre_attempt_id": session_id + "-cal-pre", "post_attempt_id": session_id + "-cal-post"}
+
+
 def build(measurement_root, registration_dir, pack_id, session_id, identities, *, custody_root,
           runs_parent, claim_backup, bound_backup, head=None, attempt=1, run=subprocess.run):
     measurement, reg = Path(measurement_root), Path(registration_dir)
@@ -102,13 +108,14 @@ def build(measurement_root, registration_dir, pack_id, session_id, identities, *
                 "source_pointer": f"/packs/{label}/{key}"}
 
     registration_raw = (measurement / REGISTRATION).read_bytes()
-    result = {"schema": "joulewise.b5_window_plan_inputs.v2", "plan_id": session_id, "attempt": attempt,
+    ids = window_identities(session_id, attempt)
+    result = {"schema": "joulewise.b5_window_plan_inputs.v2", "plan_id": ids["plan_id"], "attempt": ids["attempt"],
               "pack_root": str(measurement / "configs/campaigns" / pack_id),
               "measurement_root": str(measurement), "measurement_head": head, "repo_head": head,
               "custody_root": str(custody_root), "runs_parent": str(runs_parent),
               "claim_backup_destination": str(claim_backup), "bound_backup_destination": str(bound_backup),
-              "bracket_session_id": session_id + "-calibration", "pre_attempt_id": session_id + "-cal-pre",
-              "post_attempt_id": session_id + "-cal-post", "g10": False,
+              **{name: ids[name] for name in ("bracket_session_id", "pre_attempt_id", "post_attempt_id")},
+              "g10": False,
               "programmed_span_s": allowance("programmed_span_s"),
               "T_stream_max_s": allowance("T_stream_max_s"), "bytes_per_member": BYTES_PER_MEMBER,
               "capture_screen": capture_screen(reg, pack_id), "spare_retries": False,

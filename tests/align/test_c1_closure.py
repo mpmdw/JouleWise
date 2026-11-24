@@ -1009,7 +1009,11 @@ class C1ClosureTests(unittest.TestCase):
             def apply(tree):
                 row = next(row for row in tree['stage_graph'] if row['kind'] == 'bracket_reservation')
                 arguments = adapter.arguments(row)
-                reserved = arguments[arguments.index(adapter.literal('--evidence-root-id')) + 1]['value']
+                reserved = tree['window_identity']['evidence_root_id']
+                if root is not None:
+                    # The reservation's operands point into the identity (lead J2), so
+                    # a disagreeing evidence root needs the reservation to pass its own.
+                    arguments[arguments.index(adapter.literal('--evidence-root-id')) + 1] = adapter.literal(reserved)
                 tree['window_identity'] = {'window_id': window, 'evidence_root_id': root or reserved}
                 return {}
             return apply

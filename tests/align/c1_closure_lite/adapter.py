@@ -18,6 +18,9 @@ from tests.align.test_v4_cadence import write_battery_log
 from joulewise import night_gate
 from joulewise.align.apple import powermode, v4_registration as closure
 from joulewise.b5 import chain
+from joulewise.b6 import plan_inputs
+from joulewise.calibration_ledger import GENESIS_DIGEST
+from scripts import align_v4_kit as w1
 from scripts import align_v4_next_arm_packet as builder, align_v4_series as series
 from scripts import align_v4_session as session, bytes_h_session as staging
 from scripts import reserve_calibration_window_bracket as reservation
@@ -30,12 +33,20 @@ LEDGER = Path(closure.LEDGER)
 POLICY = Path('configs/campaign_policies/quiet_mac_p2_production.json')
 HEAD = Path('configs/calibration/calibration_ledger_head.json')
 DERIVATION = Path('configs/campaigns/fixture-derivation/settled_corpus.json')
-KIT = series.kit_path('C1')
+KIT = series.kit_path(closure.C1_WINDOW)
 SELECTED = {'ledger': LEDGER, 'head_pin': HEAD, 'policy': POLICY, 'derivation': DERIVATION}
 # The installer module and the launchd templates it reads (CAP 10 I3).
 INSTALLER_FILES = ('joulewise/night_agent_install.py', 'configs/launchd/com.joulewise.night.plist.template',
                    'configs/launchd/com.joulewise.night-probe.plist.template')
 SYSTEM_PATH = '/usr/bin:/bin:/usr/sbin:/sbin'
+# Lead J2 (PR #896): the reservation flags the adapter completes on the
+# invented template, in its order. Each operand is the committed W1
+# template's own, which the materializer copies: bindings for the attempt's
+# IDs and roots, and tree pointers for the window and plan identity.
+RESERVATION_FLAGS = ('--session-id', '--runs-root', '--identity-epoch-json', '--t1-bindings-json',
+                     '--pre-attempt-id', '--post-attempt-id', '--pre-custody-locator', '--post-custody-locator',
+                     '--window-id', '--plan-id', '--plan-sha256', '--evidence-root-id')
+CAPTURE_FLAGS = ('--session-id', '--attempt-id')
 
 
 def put(root, name, data):
@@ -43,6 +54,25 @@ def put(root, name, data):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data if isinstance(data, bytes) else series.raw_json(data))
     return path
+
+
+def w1_operands(kind, flags, slot=None):
+    """The committed W1 template's operands for ``flags`` in its ``kind`` stage (and ``slot``).
+
+    The materializer copies this template, so these are the operands a
+    materialized C1 kit carries.
+    """
+    tree = closure.decode((ROOT / w1.KIT / 'plan_tree.json').read_bytes())
+    for row in tree['stage_graph']:
+        args = arguments(row)
+        if row['kind'] == kind and (slot is None or args[args.index(literal('--slot')) + 1]['value'] == slot):
+            return {flag: args[args.index(literal(flag)) + 1] for flag in flags}
+    raise ValueError(f'the W1 template has no {kind} stage')
+
+
+def other_digest(value):
+    """A well-formed digest that differs from ``value``: for a fixture that must not match."""
+    return closure.digest(value.encode())
 
 
 def check_view(request):
@@ -117,9 +147,12 @@ class Attempt:
                          'claim_backup_destination', 'bound_backup_destination')}
         self.bindings.update(repo_root=str(self.view), ledger_path=str(self.view / LEDGER),
                              identity_epoch_json=str(self.stage / 'inputs/epoch.json'),
-                             t1_bindings_json=str(self.stage / 'inputs/t1.json'),
-                             bracket_session_id='fixture-session', pre_attempt_id='fixture-pre',
-                             post_attempt_id='fixture-post')
+                             t1_bindings_json=str(self.stage / 'inputs/t1.json'))
+        # Lead J2: the session, attempt and calibration IDs as prepare mints
+        # them, at this attempt's clock (never an invented literal).
+        self.ids = plan_inputs.window_identities(staging.session_id_at(self.now, session.SESSION_PREFIX))
+        self.bindings.update({name: self.ids[name] for name in
+                              ('bracket_session_id', 'pre_attempt_id', 'post_attempt_id')})
         # The reservation requires each custody locator under the claim runs
         # root; b5.plan derives them the same way.
         for slot in ('pre', 'post'):
@@ -135,7 +168,7 @@ class Attempt:
             # committed default so the invented attempt carries a valid policy.
             put(self.git_dir, POLICY, (ROOT / POLICY).read_bytes())
         if not payloads.get(str(HEAD)):
-            put(self.git_dir, HEAD, {'sequence': 0, 'head_digest': '0' * 64,
+            put(self.git_dir, HEAD, {'sequence': 0, 'head_digest': GENESIS_DIGEST,
                                    'ledger_schema': 'joulewise.calibration_observation_ledger.v1'})
         runbook = "\n".join([chain.RUNBOOK_SCREEN_START, 'PRE_CAL_FIDUCIAL_MAX_S=1.0',
                              chain.RUNBOOK_SCREEN_FUNCTION, '  value=$(printf 1.0)', '}', ''])
@@ -152,7 +185,7 @@ class Attempt:
         self.identities['series_commit'] = self.rev()
         closure.export_repo(self.git_dir, self.execution, self.repo)
         self.stage.mkdir()
-        self.handoff = {'window': 'C1', 'git': str(self.git_dir), 'repo': str(self.repo),
+        self.handoff = {'window': self.plan['window_id'], 'git': str(self.git_dir), 'repo': str(self.repo),
                         'stage': str(self.stage), 'view': str(self.view), 'execution_commit': self.execution}
         self.prepare()
         put(self.work, self.prepared_file.name, self.handoff)
@@ -199,33 +232,25 @@ class Attempt:
         """The session root install writes (the prepared session's session_root)."""
         return self.work / 'install'
 
-    def reserved_value(self, flag, default):
-        """The value the tree's reservation passes for ``flag``, as rendered."""
-        for stage in self.tree['stage_graph']:
-            if stage['kind'] == 'bracket_reservation':
-                args = arguments(stage)
-                if literal(flag) in args:
-                    item = args[args.index(literal(flag)) + 1]
-                    return self.bindings[item['value']] if item['kind'] == 'binding' else item['value']
-        return default
+    def reserved_value(self, flag):
+        """The value this attempt's reservation passes for ``flag``, as the chain binds it."""
+        stage = next(row for row in self.tree['stage_graph'] if row['kind'] == 'bracket_reservation')
+        args = arguments(stage)
+        return chain.bind_argument(args[args.index(literal(flag)) + 1], self.bindings, self.tree, self.view)
 
     def complete_arguments(self):
         for stage in self.source['stage_graph']:
             args = arguments(stage)
             if stage['kind'] == 'bracket_reservation':
                 self.reservation_stage = stage['stage_id']
-                for flag, value in (('--session-id', 'bracket_session_id'), ('--runs-root', 'claim_runs_root'),
-                                    ('--identity-epoch-json', 'identity_epoch_json'), ('--t1-bindings-json',
-                                     't1_bindings_json'), ('--pre-attempt-id', 'pre_attempt_id'),
-                                    ('--post-attempt-id', 'post_attempt_id'), ('--pre-custody-locator',
-                                     'pre_calibration_dir'), ('--post-custody-locator', 'post_calibration_dir')):
+                template = w1_operands('bracket_reservation', RESERVATION_FLAGS)
+                for flag in RESERVATION_FLAGS:
                     if literal(flag) not in args:
-                        option(args, flag, 'binding', value)
-                for flag, value in (('--window-id', 'C1'), ('--plan-id', self.source['plan']['plan_id']),
-                                    ('--plan-sha256', self.source['plan']['actual_sha256']),
-                                    ('--evidence-root-id', 'fixture-evidence')):
-                    if literal(flag) not in args:
-                        option(args, flag, 'literal', value)
+                        args.extend([literal(flag), deepcopy(template[flag])])
+                # The window identity those pointers read, as the materializer
+                # writes it: from the plan's declared window and the tree's plan.
+                self.source.setdefault('window_identity', closure.window_identity(
+                    self.plan['window_id'], self.source['plan']['plan_id']))
                 if literal('--execute') not in args:
                     # The committed reservation templates append the session.
                     args.append(literal('--execute'))
@@ -238,9 +263,9 @@ class Attempt:
                 if literal('--output-root') not in args:
                     args.extend([literal('--output-root'), {'kind': 'binding_path', 'value': 'claim_runs_root',
                                                             'relative': 'instrument_validation'}])
-                for flag, value in (('--session-id', 'bracket_session_id'), ('--attempt-id', f'{slot}_attempt_id')):
+                for flag, operand in w1_operands('calibration_capture', CAPTURE_FLAGS, slot).items():
                     if literal(flag) not in args:
-                        option(args, flag, 'binding', value)
+                        args.extend([literal(flag), deepcopy(operand)])
                 if literal('--power-policy') not in args:
                     option(args, '--power-policy', 'literal', 'ac_high_power')
             if stage['kind'] == 'bound_derivation':
@@ -333,7 +358,7 @@ class Attempt:
             return (self.repo / path).read_bytes()
 
         files, self.tree = staging.render_measurement_files(
-            KIT, series.pack_id('C1'), read, lambda path: read(path) if (self.repo / path).is_file() else None,
+            KIT, closure.PACK.name, read, lambda path: read(path) if (self.repo / path).is_file() else None,
             dispatch_dir=closure.C1_DISPATCH)
         for path in sorted((self.repo / KIT).rglob('*')):
             if path.is_file() and path.name != 'plan_tree.json':
@@ -417,7 +442,7 @@ class Attempt:
                            'chain_sha256_path': str(chain_path) + '.sha256', 'measurement_root': str(self.view),
                            'repo_head': self.execution, 'measurement_head': self.execution,
                            'custody_root': custody_root, 'hazard_window': {
-            'attempt': 1, 'bracket_session_id': self.bindings['bracket_session_id'],
+            'attempt': self.ids['attempt'], 'bracket_session_id': self.bindings['bracket_session_id'],
             'runs_roots': {'claim': self.bindings['claim_runs_root'], 'bound': self.bindings['bound_runs_root']},
             'bindings': self.bindings, 'T_stream_max_s': 10, 'settle_s': chain.SETTLE_S,
             'window_env': {'path': str(window_env), 'sha256': closure.digest(window_env_raw)},
@@ -425,8 +450,8 @@ class Attempt:
             'pack': {'pack_root': str(self.view / closure.PACK), 'plan_tree_sha256': tree_digest,
                      'pack_sha256': staged_pack_digest(self.stage / closure.PACK),
                      'pack_id': closure.PACK.name, 'pack_plan_id': plan_id,
-                     'window_id': self.reserved_value('--window-id', 'C1'),
-                     'evidence_root_id': self.reserved_value('--evidence-root-id', 'fixture-evidence')}}}
+                     'window_id': self.reserved_value('--window-id'),
+                     'evidence_root_id': self.reserved_value('--evidence-root-id')}}}
         self.complete_night(self.night_data)
         self.edit_night(self.night_data)
         # Published where the installer admits it, not staged (CAP 10 I2): the
@@ -435,8 +460,8 @@ class Attempt:
         late = {}
         self.state = {'session_root': str(self.install_root()), 'measurement_root': str(self.view), 'source_measurement_root': str(self.repo),
                       'plan_path': str(self.night), 'plan_sha256': closure.digest(series.raw_json(self.night_data)),
-                      'v4_series': {'window_id': 'W1' if self.fixture == 'session_downgrade' else 'C1'},
-                      'inputs': {'custody_root': custody_root, 'attempt': 1, 'plan_id': plan_id}}
+                      'v4_series': {'window_id': self.session_window()},
+                      'inputs': {'custody_root': custody_root, 'attempt': self.ids['attempt'], 'plan_id': plan_id}}
         late[Path('session.json')] = series.raw_json(self.state)
         write(late)
         files.update(late)
@@ -448,7 +473,17 @@ class Attempt:
             from scripts import run_campaign
             put(self.work, run_campaign.PROSPECTIVE_ANALYSIS_MANIFEST_V3_NAME,
                 {'stage_manifests': [{'manifest_path': f'S/{self.second_order()}'}],
-                 'metadata': {'path': '/DO-NOT-FOLLOW', 'sha256': '0' * 64}})
+                 'metadata': {'path': '/DO-NOT-FOLLOW', 'sha256': closure.digest(b'/DO-NOT-FOLLOW')}})
+
+    def session_window(self):
+        """The prepared session's series window: the plan's declared window.
+
+        The downgrade fixture names the window before it in the frozen series.
+        """
+        if self.fixture != 'session_downgrade':
+            return self.plan['window_id']
+        order = series.load(self.git_dir)['order']
+        return order[order.index(self.plan['window_id']) - 1]
 
     def second_order(self):
         stages = [row for row in self.tree['stage_graph'] if row['kind'] == 'campaign_collection']
@@ -483,12 +518,12 @@ class Attempt:
     def deliver(self, packet, variant='clean'):
         fixture = self.fixture
         if fixture == 'wrong_start_digest':
-            packet['c1_closure']['ledger']['sha256'] = '1' * 64
+            packet['c1_closure']['ledger']['sha256'] = other_digest(packet['c1_closure']['ledger']['sha256'])
         if fixture == 'pending_desk_forged_status_and_ready':
             packet['checks']['full_desk_gate']['status'] = 'pass'
             packet['packet_preflight']['ready'] = True
         if fixture == 'wrong_predecessor_hash':
-            packet['record_sha256'] = '2' * 64
+            packet['record_sha256'] = other_digest(packet['record_sha256'])
         if fixture == 'ledger' and variant == 'unbound':
             del packet['c1_closure']['stage_files'][str(LEDGER)]
         raw = series.raw_json(packet)
@@ -830,14 +865,19 @@ def observe_reservation(attempt, packet):
     t1 = {**dict.fromkeys(V2_BINDING_FIELDS, 'invented'), **epoch}
     path = attempt.view / LEDGER
     with ledger_environment(attempt, packet):
+        # Lead J2: the reservation's own values for this attempt, as the chain passes them.
+        session_id = attempt.reserved_value('--session-id')
         receipt = ledger.append_bracket_session_receipt(
-            path, session_id='fixture-session', window_id='C1', plan_id='fixture-plan',
-            plan_sha256='a' * 64, evidence_root_id='fixture-evidence', runs_root=attempt.work / 'runs-out',
+            path, session_id=session_id, window_id=attempt.reserved_value('--window-id'),
+            plan_id=attempt.reserved_value('--plan-id'), plan_sha256=attempt.reserved_value('--plan-sha256'),
+            evidence_root_id=attempt.reserved_value('--evidence-root-id'), runs_root=attempt.work / 'runs-out',
             head_pin_path=attempt.view / HEAD,
-            slots={name: {'attempt_id': f'fixture-{name}', 'identity_epoch': epoch, 't1_bindings': t1,
-                          'custody_locator': str(attempt.work / 'runs-out' / 'instrument_validation' / f'fixture-{name}')}
+            slots={name: {'attempt_id': attempt.reserved_value(f'--{name}-attempt-id'), 'identity_epoch': epoch,
+                          't1_bindings': t1, 'custody_locator': str(
+                              attempt.work / 'runs-out' / 'instrument_validation' /
+                              attempt.reserved_value(f'--{name}-attempt-id'))}
                    for name in ('pre', 'post')})
         snapshot = ledger.load_calibration_ledger_snapshot(
             path, attempt.view / HEAD, verify_custody=False, mode='read_replay')
     return (path.samefile(attempt.stage / LEDGER) and receipt['sequence'] == snapshot.head_sequence
-            and 'fixture-session' in snapshot.bracket_session_by_id)
+            and session_id in snapshot.bracket_session_by_id)

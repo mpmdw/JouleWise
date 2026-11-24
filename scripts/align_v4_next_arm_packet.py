@@ -480,7 +480,7 @@ def template():
             'quiet_requirements': {'cooldown_s': None, 'display_off_s': None, 'dwell_s': None,
                                    'max_age_s': None},
             'next_plan': dict(ref), 'last_passed_record': {'commit': 'REPLACE', **ref},
-            'lead_rulings': [{'ruling_id': 'REPLACE', 'after_window': 'C1',
+            'lead_rulings': [{'ruling_id': 'REPLACE', 'after_window': registration.C1_WINDOW,
                               'text': dict(ref), 'lead_signature': 'REPLACE'}],
             'pool_members': [], 'sentinel_ids': [], 'escalations': []},
         'packet': {'schema': cadence.TRIAGE_SCHEMA,
@@ -650,7 +650,7 @@ def frozen_sentinel_ids(manifest, plan, *, needs_supplemental):
 
 def committed_c1_kit(evidence, commit, manifest_sha256, projection):
     """Bind the materialization in the same commit as the ledger and its projection."""
-    directory = frozen_series.kit_path('C1').as_posix()
+    directory = frozen_series.kit_path(registration.C1_WINDOW).as_posix()
     entries = evidence.git('ls-tree', '-r', '-z', commit, '--', directory).split(b'\0')[:-1]
     if not entries:
         return None    # projection-only packets can still be evaluated off-host
@@ -933,7 +933,7 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
         plan = next_plan()
         expected = frozen_sentinel_ids(decode(manifest_raw), plan, needs_supplemental=needs_supplemental)
         require(series.get('sentinel_ids') == expected, 'ledger sentinel IDs disagree with the frozen next roster')
-        if plan['window'].split('#')[0] == 'C1':
+        if plan['window'].split('#')[0] == registration.C1_WINDOW:
             binding = committed_c1_kit(evidence, series_commit, digest(manifest_raw), plan['members'])
             if binding is not None:
                 packet['c1_kit'] = binding

@@ -1217,10 +1217,15 @@ EXECUTION_COMMIT = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 
 
 def c1_attempt_plan(plan):
-    """Whether ``plan`` is a C1 attempt's window plan, which runs from a repo export."""
+    """Whether ``plan`` is a C1 attempt's window plan, which runs from a repo export.
+
+    The night plan's pack carries the window its reservation reserves, the one
+    C1 window identity (v4_registration.C1_WINDOW; lead J1, PR #896).
+    """
+    from joulewise.align.apple.v4_registration import C1_WINDOW
     window = getattr(plan, "hazard_window", None)
     pack = window.get("pack") if hasattr(window, "get") else None
-    return hasattr(pack, "get") and pack.get("window_id") == "C1"
+    return hasattr(pack, "get") and pack.get("window_id") == C1_WINDOW
 
 
 def check_identity(plan, repo, execution_commit=None):

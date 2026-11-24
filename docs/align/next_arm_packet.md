@@ -219,6 +219,13 @@ state at `--series-commit`, with:
   the window's claim runs root. The reservation writer itself refuses a
   `--window-id` that differs from the window its frozen plan declares
   (`calibration_reservation_input_invalid`, `plan_window_mismatch`).
+  That ID has one source: `v4_registration.C1_WINDOW` and
+  `window_identity(window_id, pack_id)`. The materializer writes the
+  identity into the plan tree and the same window into the collection
+  plan. The reservation's `--window-id` and `--evidence-root-id` are tree
+  pointers into it, and the C1 preflight and the installer compare with
+  `C1_WINDOW`. A series window's reservation reserves its series ID, never
+  its pack ID (`align-v4-c1`).
   Each stage writes only this attempt's locations, each where the harvest
   reads it. The reservation's runs root is the claim runs root. Each
   capture's output root is `<claim runs root>/instrument_validation`, so

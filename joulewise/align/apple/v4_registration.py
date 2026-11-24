@@ -826,7 +826,24 @@ def declared_pins(repo, stage):
 
 LEDGER = 'runs/calibration_observation_ledger.jsonl'
 PACK = Path('configs/campaigns/align-v4-c1')
+# The C1 window's ID, from one source (lead J1, PR #896). A series window's
+# reservation reserves its series ID, never its pack ID.
 C1_WINDOW = 'C1'
+
+
+def window_identity(window_id, pack_id):
+    """The window identity that a series window's bracket reservation reserves.
+
+    This is the one source of the window ID (lead J1, PR #896):
+    - the materializer writes it as the plan tree's `window_identity` and as
+      the collection plan's `window_id`;
+    - the reservation's `--window-id` and `--evidence-root-id` are tree
+      pointers into it, so `verify_frozen_plan` compares the plan's window
+      with this same value;
+    - the C1 preflight (packet build, install and direct arm) and the
+      installer compare the C1 window with `C1_WINDOW`.
+    """
+    return {'window_id': window_id, 'evidence_root_id': 'evidence-' + pack_id}
 # Where the harvest reads a campaign stage's log (also the runner's default)
 # and the bound-derivation stage's bound, in this attempt's runs roots.
 CAMPAIGN_LOG = 'campaign_log.jsonl'
@@ -1003,7 +1020,7 @@ def export_repo(authority, commit, dest):
 
 def load_prepared(view, read):
     state = decode(read('session.json'))
-    if (state.get('v4_series') or {}).get('window_id') != 'C1':
+    if (state.get('v4_series') or {}).get('window_id') != C1_WINDOW:
         raise ValueError('the C1 handoff requires a C1 prepared session')
     if (Path(state['source_measurement_root']) != view.roots.repo
             or Path(state['measurement_root']) != view.root):

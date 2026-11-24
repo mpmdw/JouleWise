@@ -46,7 +46,7 @@ IDENTITY_LITERALS = {
         r"""repo_head|measurement_head)['"]?\s*[:=]\s*(?:['"]|[0-9])""", "'attempt': 1,"),
     'an identity flag paired with a literal value': (
         r"""['"]--(?:window-id|plan-id|plan-sha256|evidence-root-id|session-id|pre-attempt-id|"""
-        r"""post-attempt-id)['"]\s*,\s*['"]""", "(('--window-id', 'C1'),"),
+        r"""post-attempt-id)['"]\s*,\s*['"](?!-)""", "(('--window-id', 'C1'),"),
     'a hex object ID or digest': (r"""['"](?:[0-9a-f]{40}|[0-9a-f]{64})['"]""",
                                   "'" + '3' * 40 + "'"),
     'a repeated-character digest': (r"""['"][0-9a-fA-F]['"]\s*\*\s*(?:40|64)\b""", "plan_sha256='a' * 64,"),
