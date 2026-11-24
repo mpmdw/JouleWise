@@ -143,7 +143,9 @@ class CandidateReplayTests(unittest.TestCase):
 
 class DriverTests(unittest.TestCase):
     def run_world(self, root, world):
-        with patch.object(r1, "_now_local", lambda: NOON_SAFE), patch.object(r1, "_run", world):
+        # PR #886: the committed registration/r1_slots.json is the R1 record; pin the synthetic S6 registration.
+        with patch.object(r1, "_now_local", lambda: NOON_SAFE), patch.object(r1, "_run", world), \
+                rehearsal.synthetic_s6_registration():
             args = rehearsal.R1Tests.args(None, root, synthetic=True)
             self.assertEqual(r1.run(args), 0, json.loads((args.output / "r1_result.json").read_text()).get("error"))
         return json.loads(args.registration.read_text()), json.loads((args.output / "r1_result.json").read_text())

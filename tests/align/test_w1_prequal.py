@@ -560,7 +560,11 @@ class ReceiptTests(_Ctx):
 
 class ChainTests(_Ctx):
     def test_chain_runs_every_cli_step_on_a_lane_shaped_record(self):
-        row = self.probe('r1-w1-chain')
+        # PR #886: the committed registration/r1_slots.json is the R1 record, not the S6
+        # registration the synthetic rehearsal reads; pin the synthetic one for the chain.
+        from tests.align.test_r1_rehearsal import synthetic_s6_registration
+        with synthetic_s6_registration():
+            row = self.probe('r1-w1-chain')
         steps = {s['step']: s for s in row['evidence'].get('steps', [])}
         for name in ('export', 'backfill-x-g', 'backfill-turn-counts', 'derive-contrast', 'decide'):
             self.assertEqual(steps[name]['rc'], 0, (name, row['detail']))

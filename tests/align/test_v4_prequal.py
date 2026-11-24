@@ -142,13 +142,25 @@ class ConfigPinKitChecks(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             row = prequal.check_kit(ctx(tmp))
             self.assertEqual(row["status"], "pass", row["problems"])
-            # R0 passed and its rung is filled (RUN_STATE 218); R1 values stay pending until R1 closes.
+            # R0 passed and its rung is filled (RUN_STATE 218); PR #886 fills R1, so nothing is pending
+            # and readiness first stops at the R0 record binding (a separate owner), not at R1.
             self.assertNotIn("R0.reasoning_effort", row["pending_inputs"])
-            self.assertIn("R1.B_D", row["pending_inputs"])
+            self.assertEqual(row["pending_inputs"], [])
+            self.assertTrue(row["require_ready"].startswith(
+                "ValueError: R0.record_sha256 must bind thermal_policy.sensors.r0_sha256"))
             self.assertFalse([p for p in row["pending_inputs"] if p.startswith("WP11.")])
             self.assertEqual(row["d_identity_folded_sha256"],
                              "a8d1c5c963787dd9dc524912e05d409172124da773d196e8f5123820b4c36b30")
             self.assertEqual(prequal.check_kit(ctx(tmp, stage="w1"))["status"], "fail")
+        # A synthetic blanked R1 leaf is still reported pending.
+        from scripts import align_v4_kit as kit
+        inputs = kit.read_inputs(REPO)
+        inputs["R1"]["B_D"] = None
+        with tempfile.TemporaryDirectory() as tmp, patch.object(kit, "read_inputs", return_value=inputs), \
+                patch.object(kit, "build_files", return_value={}):
+            row = prequal.check_kit(ctx(tmp))
+        self.assertIn("R1.B_D", row["pending_inputs"])
+        self.assertIn("BLOCKED", row["require_ready"])
 
     def test_kit_check_fails_a_filled_wp11_that_does_not_bind_the_pins_at_any_stage(self):
         from scripts import align_v4_kit as kit
@@ -171,7 +183,8 @@ class ConfigPinKitChecks(unittest.TestCase):
 class W1PlanCheck(unittest.TestCase):
     """The R1 kit checks (validate_align_v4_w1_plan.py, L1, fit rule) in the prequal."""
 
-    def test_w1_plan_is_in_the_runner_and_r0_stage_passes_while_r1_is_pending(self):
+    def test_w1_plan_is_in_the_runner_and_r0_stage_passes_while_the_w1_plan_is_pending(self):
+        # PR #886 fills the R1 inputs; registration/w1_plan.json (the R1-filled template) is not committed yet.
         self.assertIn("w1-plan", dict(prequal.AIR_CHECKS))
         with tempfile.TemporaryDirectory() as tmp:
             row = prequal.check_w1_plan(ctx(tmp))

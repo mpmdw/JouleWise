@@ -236,10 +236,18 @@ class PlanningReleaseTests(unittest.TestCase):
         self.assertEqual(released['step'], procedure.decide(clean, 12)['step'])
 
     def test_record_file_is_read_canonically(self):
-        self.assertIsNone(kit.read_r1_planning_release(ROOT))  # none committed: no release is in force
+        # PR #886 commits the lead's RL-122 3(a) release: it reads canonically and is in force
+        # for the committed R1 record's INCONCLUSIVE planning segments.
+        committed = kit.read_r1_planning_release(ROOT)
+        self.assertIsInstance(committed, dict)
+        self.assertEqual(committed['schema'], kit.R1_PLANNING_RELEASE_SCHEMA)
+        released = kit.planning_released_segments(kit.read_r1_slots(ROOT), committed)
+        self.assertTrue(released)
+        self.assertLessEqual(released, set(kit.PLANNING_SEGMENTS))
         _, slots = planning_slots(['planning_turn_R_plus_0C'])
         record = release_for(slots, ['planning_turn_R_plus_0C'])
         with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(kit.read_r1_planning_release(tmp))  # none committed: no release is in force
             path = Path(tmp) / kit.R1_PLANNING_RELEASE
             path.parent.mkdir(parents=True)
             path.write_bytes(kit.raw_json(record))
