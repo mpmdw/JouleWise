@@ -2489,8 +2489,10 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
         """F2: a soak missing its last 600 s of readings; F3: a soak with 5 CPU samples; F5: a battery row or a
         whole battery journal outside the member. A battery row added in order, which no tick issued, is
         refused (RL-215 Q1)."""
+        # The v4 history runner judges soak-short-load through the v4 writer case cpu-min/I/short on both paths,
+        # and prints that case's grade.
         self.check_probe({"soak-tail-missing": "other_failure soak_readings",
-                          "soak-short-load": "other_failure soak_load",
+                          "soak-short-load": "REFUSED expected soak_load",
                           # RL-215 Q1: a third ordered row no tick issued is refused; a positive needs the ticks
                           # that issue it (PROBE:389-391).
                           "battery-row-ordered": "other_failure battery_evidence",
@@ -2543,7 +2545,9 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
         list of [pid, pid] or [] is refused; exactly one PID passes."""
         self.check_probe({"status-control": "pass -", "status-future": "other_failure reading_record",
                           "status-pm-future": "other_failure reading_record",
-                          "closing-battery-kept": "pass -", "closing-battery-dropped": "other_failure battery_evidence",
+                          "closing-battery-kept": "pass -",
+                          # Judged through the v4 writer case one-battery/P/r3-offline-missing-closing-sample.
+                          "closing-battery-dropped": "REFUSED expected battery_evidence",
                           "roots-single": "pass -", "roots-repeated": "other_failure quiet_load",
                           "roots-empty": "other_failure quiet_load"})
 
