@@ -237,7 +237,7 @@ class ExportIntegrityTests(unittest.TestCase):
                      archive / integrity.REDUCTIONS / "fit.summary_metrics.rereduced.json.zst",
                      archive / integrity.METER_DIR / "stream-001.jsonl")
         for path in (*fit_paths, Path(str(archive) + ".desk") / "compression.jsonl",
-                     app / "configs/campaign_policies/synthetic.json"):
+                     app / "configs/campaign_policies/synthetic.json", app / "configs/bytes/bytes_manifest.json"):
             put(path, b"synthetic input\n")
         outside = (archive / "sources/claim-runs/held/config.json",
                    archive / integrity.REDUCTIONS / "held.summary_metrics.rereduced.json")

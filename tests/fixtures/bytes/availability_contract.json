@@ -515,7 +515,7 @@
     "id": "export_key_binding",
     "path": "blinding-sessions/<session>.json",
     "phase": "both",
-    "primary": "joulewise/b6/export_runs.py:589\u2013593; joulewise/b6/bytes_integrity.py:247\u2013274,351\u2013434,437\u2013455",
+    "primary": "joulewise/b6/export_runs.py:589\u2013593; joulewise/b6/bytes_integrity.py:250\u2013277,354\u2013438,441\u2013459",
     "scope": "conditional_campaign",
     "faults": {
       "absent": "Re-export refuses a missing binding when the session's publication lock or sidecar exists. Campaign capture and verification require each expected session's binding.",
@@ -532,7 +532,7 @@
     "id": "export_integrity_manifest",
     "path": "private bytes-export-integrity.json and its authorized input set",
     "phase": "both",
-    "primary": "joulewise/b6/bytes_integrity.py:119\u2013183,247\u2013274,325\u2013455,468\u2013493",
+    "primary": "joulewise/b6/bytes_integrity.py:119\u2013186,250\u2013277,328\u2013459,472\u2013497",
     "scope": "integrity",
     "faults": {
       "absent": "A keyed fit, commitment check or admission requires a finalized manifest and all of its committed entries.",
@@ -540,7 +540,7 @@
       "half": "Truncation changes length or digest and refuses before analysis or journal append.",
       "garbage": "Working manifest bytes must equal the designated Git blob. Any entry mutation, extra, duplicate or escaped path refuses."
     },
-    "flags": "Capture binds authorized fit and reference archive reads, including both bundle locations, optional reductions and meter inputs. The captured commit authorizes the blinded and empty-key probes. Finalization verifies it, then adds only fit and reference release entries. The live journal and post-fit receipts use their separate Git checks."
+    "flags": "Capture binds fit and reference archive reads, the registered predictors and checkout environment policies. The captured commit authorizes the blinded and empty-key probes. Finalization verifies it, then adds only fit and reference release entries. The live journal and post-fit receipts use their separate Git checks."
   },
   {
     "id": "prediction",

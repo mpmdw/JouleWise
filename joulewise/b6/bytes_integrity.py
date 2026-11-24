@@ -157,6 +157,9 @@ def _membership(roots):
         kind = scope["kind"]
         if kind == "named":
             filenames = scope["names"]
+            if name == "registered_predictors" and (root != ROOT / "configs/bytes"
+                                                     or filenames != ["bytes_manifest.json"]):
+                raise ValueError("BYTES export manifest: registered predictor path differs")
         elif kind == "compression":
             journal = root / "compression.jsonl"
             filenames = [journal.name] if journal.exists() or journal.is_symlink() else []
@@ -372,6 +375,7 @@ def capture(repo, campaign_path, export_dirs, pack_records_root):
     bindings = Path(pack_records_root) / "bytes/blinding-sessions"
     names = [sid + ".json" for sid in sessions]
     scopes = {**tables, "campaign": _root(campaign_path.parent, "named", names=[campaign_path.name]),
+              "registered_predictors": _root(ROOT / "configs/bytes", "named", names=["bytes_manifest.json"]),
               "environment_policies": _root(ROOT / "configs/campaign_policies", "policies"),
               "bindings": _root(bindings, "bindings", names=names, ignore=[sid + ".lock" for sid in sessions])}
     keys = {"pack.json", _key_name("neg8_reference")}
