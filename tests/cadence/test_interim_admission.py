@@ -187,7 +187,8 @@ class FrozenCorpus(unittest.TestCase):
 
     def test_every_unmodified_production_is_admitted(self):
         admits = [case for case in self.cases if admitted_as_ruled(case)]
-        self.assertEqual({case.family for case in admits}, {"admit", "F1", "F2", "F3", "F5", "missing-key"})
+        self.assertEqual({case.family for case in admits},
+                         {"admit", "F1", "F2", "F3", "F5", "missing-key", "type-number-text", "type-unicode-digit"})
         for case in admits:
             with self.subTest(case.name):
                 self.assertIsNone(verdict(self.files(case)))
@@ -240,12 +241,13 @@ class FrozenCorpus(unittest.TestCase):
 
 @unittest.skipIf(T is None, "the frozen admission packet is absent")
 class SignalWithoutResult(unittest.TestCase):
-    """The three corrected cases (lead, PR #795 NEEDS_SPEC): an interrupted soak step that has an error and no result."""
+    """The three signal-130 corrections: an interrupted soak step that has an error and no result."""
 
     @classmethod
     def setUpClass(cls):
         cls.corpus = T.load_corpus()
-        cls.cases = {case.name: case for case in T.cases() if case.name in CORRECTED}
+        cls.cases = {case.name: case for case in T.cases()
+                     if case.branch == "interrupt-after-result" and case.name in CORRECTED}
 
     def mutated(self, pin, branch="interrupt-after-result", step="soak"):
         docs = T.document_set(pin, branch, self.corpus)
@@ -309,7 +311,7 @@ class SignalWithoutResult(unittest.TestCase):
 
 
 class Accounting(unittest.TestCase):
-    """The frozen packet's files and case list are the published ones, and the correction is the lead's three IDs."""
+    """The frozen packet's files, case list and ruled corrections match their recorded digests."""
 
     @unittest.skipIf(T is None, "the frozen admission packet is absent")
     def test_the_frozen_files_and_the_case_list_match_the_published_hashes(self):
