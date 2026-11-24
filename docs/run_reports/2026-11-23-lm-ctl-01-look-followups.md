@@ -396,3 +396,35 @@ Local v3.1 passed 846/846. Final-head CI is linked from
 
 Independent Tier 2 executing review, installed byte pass and the
 bound-host blind preflight remain lead gates before reservation.
+
+## 2026-11-24 round 8 admission and opacity
+
+Revision 11 froze in `04fd9916a8b138f0190b43dbc594bca62dd4885b` before
+the implementation changed. The three supplied audit scripts reproduced
+their findings on `fd781344a`. The three frozen acceptance tests also
+failed on that audited implementation. The matched scripts kept the DC
+quorum and recovery baseline with the original issued work.
+
+| Audit 7 finding | Implementation | Synthetic acceptance |
+| --- | --- | --- |
+| HIGH. A short visible dose supplied the apparent fourth DC leg | `7301d2032` binds the scientific admission and channel support in the private stage-1 certificate. Future calculation uses that verdict. | A rebound 1,023-of-1,024 visible call with the two authorized DC exclusions refuses `insufficient_legs` at stage 1, standalone preflight and direct stage 2. Fresh status, empty stdout and the absence of a reservation, marker, claim, value read and publication are asserted. The matched control fits the same four certified legs after release. |
+| HIGH. A complete flag concealed a short recovery | `7301d2032` checks each visible and hidden delivery and compares monotonic gap and recovery duration against the issued dose. The predicate also consumes the verified completed script, reference and selected attempt and applies the RL-214 stamp block. | The completed 39 s recovery against the 600 s issue is ruled `recovery_incomplete` before the marker. Preflight and the private print agree, and the fit excludes the leg. The differential matrix covers each visible and hidden call, short gaps and recoveries at 1 ns and 1 s, missing and reordered steps, and 1 ns stamp placement violations for all five issued script kinds. |
+| HIGH. Blind projections exposed measured argument and result sizes | `7301d2032` validates those fields lexically and omits them from the projected tool timings. It also discards measured artifact, runtime character-count and ancillary memory sizes. `80f03d720` preserves the frozen legacy print input shape and scopes the observation guard to whole tokens. | The audit's 99,183/876,543 and 3/7 pairs give byte-identical typed projections at both blind gates. The per-field checks cover every discarded size, and guards reject any attempt to convert or project the size sentinel. |
+| LOW. Orphan marker racing a denied mkdir | Existing follow-up. | Ordinary setup, collision, recovery and spend precedence retain their existing regressions. The orphan-marker race remains a lead decision. |
+
+The public runner census keeps its frozen format. Scientific participation
+is pinned through the private certificates and inventory. The native
+reader authenticates source bytes and attaches measured traces to the
+committed timing plan. The post-marker reason inventory checks the closed
+value-dependent reasons and separates digest and operational faults.
+The legacy v3.1 fixture adapter keeps its original input shape.
+
+The frozen trees match PR #951 byte for byte. Local v3.1 passed 846/846.
+The exact byte-pass receipt remains
+`75 raw + 4 superseded (RL-202a §2.4; lead record audit branch 1850d6930 SUPERSESSION-v2.md)`.
+The suite seat's freeze 3 and the lead record resolved the four
+supersessions. Hosted verification is tracked on
+[draft PR #957](https://github.com/mpmdw/JouleWise/pull/957).
+
+Tier 2 executing review of revision 11, the installed byte pass and the
+bound-host blind preflight remain lead gates before reservation.
