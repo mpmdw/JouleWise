@@ -10,14 +10,17 @@ name: partc-frozen-differential
 #     operands on the v4 control (suite-v4/legacy/normalized_v32.py), each as four sub-shards k = i + 16j of 64,
 #     whose union is shard i of 16, one per hosted vCPU;
 #   - the 78 named history cases (suite-v4/tests/align/partc_v4_history.py), one process.
-# One more job runs the writer clean proof (62, 62, 82, 62, 62 battery rows). RL-215 Q5: a must-refuse legacy ID
-# that either path admits is settled by the frozen oracle on the v4 bytes (tests/align/partc_legacy_settle.py, the
-# suite's own Probe.oracle), never by the evaluator: a mismatch is a false pass; none makes it "may pass (control
-# changed)", listed by ID and pinned here. The totals job is the gate. It pins every shard's counts: no FALSE_PASS,
-# WRONG_VERDICT, HARNESS_ERROR or OPERAND_ERROR beyond the settled IDs; the six mandatory legacy positives pass;
-# exactly the 40 operand-rulings.tsv IDs print INAPPLICABLE (RL-215 Q3); parity differences on legacy IDs are
-# printed and block nothing (Q5). A missing shard is not a zero. Each shard job records and uploads its runs and
-# exit statuses; the totals job judges them.
+# One more job runs the writer clean proof (62, 62, 82, 62, 62 battery rows). RL-215 Q5 as RL-216 R1 amends it: a
+# must-refuse legacy ID that either path admits is settled by the frozen oracle on the v4 bytes
+# (tests/align/partc_legacy_settle.py, the suite's own Probe.oracle), never by the evaluator. Two closed lists, by ID:
+# "may pass (control changed)" (the oracle admits) and "archive_unattested" (the four max_position_embeddings/shift
+# IDs, each only under R1's three conditions). Any other admitted must-refuse ID, or one of the four missing a
+# condition, fails the settle job. The totals job is the gate. It pins every shard's counts and RL-216's totals:
+# v4 390 AGREES_PASS and 1,082 REFUSED with no FALSE_PASS, WRONG_VERDICT or HARNESS_ERROR; history 78; legacy 982
+# AGREES_PASS, 24,255 REFUSED, 10 PARITY_DIFFERENCE (printed, blocking nothing) and 13 printed FALSE_PASS, all settled
+# by the two lists; the six mandatory legacy positives; exactly the 40 operand-rulings.tsv IDs INAPPLICABLE (RL-215
+# Q3); no OPERAND_ERROR. A missing shard is not a zero. Each shard job records and uploads its runs and exit
+# statuses; the totals job judges them.
 #
 # tests/align and tests/frozen have no __init__.py, so the ordinary CI shards' unittest discovery never collects
 # these runners. Lead test budget of 2026-11-22: the full frozen runs are hosted CI's, not the shared Air's. The
@@ -37,6 +40,26 @@ permissions:
 concurrency:
   group: partc-frozen-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  # RL-215 Q5, settled by the frozen oracle (runs 45402589689 and 45416296214): both paths admit and the oracle
+  # admits on the v4 bytes. "may pass (control changed)", by ID.
+  CONTROL_CHANGED: >-
+    ["capture-predecessor-30b/runtime_custody.json//every-shift",
+    "capture-predecessor-30b/runtime_custody.json/started_epoch_s/shift",
+    "d-bank-benign-s1/v3/branch/load_journal.json/census.0.processes.0.comm/set-synthetic-worker",
+    "d-bank-benign-s1/v3/branch/runtime_result.json/census.0.processes.0.comm/set-synthetic-worker",
+    "idle/v3/branch/load_journal.json/census.0.processes.0.comm/set-synthetic-worker",
+    "idle/v3/branch/runtime_result.json/census.0.processes.0.comm/set-synthetic-worker",
+    "idle/v3/branch/soak_row.json/result.census.0.processes.0.comm/set-synthetic-worker",
+    "x-g/v3/branch/load_journal.json/census.0.processes.0.comm/set-synthetic-worker",
+    "x-g/v3/branch/runtime_result.json/census.0.processes.0.comm/set-synthetic-worker"]
+  # RL-216 R1: the archive's ruled native_limit: unattested pass (RL-189 1.4), each under R1's three conditions.
+  JW_PARTC_ARCHIVE_UNATTESTED: >-
+    ["capture-predecessor-30b/runs/align-pilot-v3-episodes-a-e01/outputs/align_episode.json/hardware.context_limits.max_position_embeddings/shift",
+    "step-d/runs/align-v4-r1-step-d/outputs/align_episode.json/hardware.context_limits.max_position_embeddings/shift",
+    "d-bank-benign-s1/runs/align-v4-r1-d-bank-benign-s1/outputs/align_episode.json/hardware.context_limits.max_position_embeddings/shift",
+    "x-g/runs/align-v4-r1-x-g/outputs/align_episode.json/hardware.context_limits.max_position_embeddings/shift"]
 
 jobs:
   proof:
@@ -161,7 +184,9 @@ jobs:
       - name: The issued suite is byte-identical to SUITE-v4.sha256
         working-directory: tests/frozen/partc-v4
         run: sha256sum --check SUITE-v4.sha256
-      - name: Settle each admitted must-refuse legacy ID by the frozen oracle (RL-215 Q5)
+      - name: Settle each admitted must-refuse legacy ID by the frozen oracle (RL-215 Q5, RL-216 R1)
+        # The tool prints each ID's category with both paths, the archive's native_limit and the oracle's label,
+        # and exits 1 on any ID neither closed list settles.
         env:
           JW_PARTC_REPO: ${{ github.workspace }}
           PYTHONDONTWRITEBYTECODE: "1"
@@ -201,20 +226,11 @@ jobs:
           LEGACY_TOTAL: "25260"
           INAPPLICABLE_SHARDS: "5 2 2 2 1 1 3 4 2 2 2 3 2 4 1 4"
           INAPPLICABLE_TOTAL: "40"
+          # RL-216's pins after the fix pass, by outcome.
+          V4_OUTCOMES: '{"AGREES_PASS": 390, "REFUSED": 1082}'
+          LEGACY_OUTCOMES: '{"AGREES_PASS": 982, "REFUSED": 24255, "PARITY_DIFFERENCE": 10, "FALSE_PASS": 13}'
           PROOF_RESULT: ${{ needs.proof.result }}
           SETTLE_RESULT: ${{ needs.settle.result }}
-          # RL-215 Q5, settled by the frozen oracle at c496c55d4 (run 45402589689): both paths admit, the oracle
-          # admits on the v4 bytes. "may pass (control changed)", by ID.
-          CONTROL_CHANGED: >-
-            ["capture-predecessor-30b/runtime_custody.json//every-shift",
-            "capture-predecessor-30b/runtime_custody.json/started_epoch_s/shift",
-            "d-bank-benign-s1/v3/branch/load_journal.json/census.0.processes.0.comm/set-synthetic-worker",
-            "d-bank-benign-s1/v3/branch/runtime_result.json/census.0.processes.0.comm/set-synthetic-worker",
-            "idle/v3/branch/load_journal.json/census.0.processes.0.comm/set-synthetic-worker",
-            "idle/v3/branch/runtime_result.json/census.0.processes.0.comm/set-synthetic-worker",
-            "idle/v3/branch/soak_row.json/result.census.0.processes.0.comm/set-synthetic-worker",
-            "x-g/v3/branch/load_journal.json/census.0.processes.0.comm/set-synthetic-worker",
-            "x-g/v3/branch/runtime_result.json/census.0.processes.0.comm/set-synthetic-worker"]
         run: |
           python3 - <<'EOF'
           import ast, collections, json, os, pathlib, re, sys
@@ -231,15 +247,16 @@ jobs:
               "d018-interval-header-zero-rows"}
           totals = {"v4": collections.Counter(), "history": collections.Counter(), "legacy": collections.Counter()}
           problems, positives, inapplicable_ids, admitted = [], {}, set(), set()
+          logs = {}
           for index in range(16):
               log = pathlib.Path("shards") / f"partc-shard-{index}" / "shard.log"
               if not log.is_file():
                   problems.append(f"shard {index}: no log")
                   continue
-              text = log.read_text()
+              text = logs[index] = log.read_text()
               exits = dict(re.findall(r"(?m)^EXIT (\S+) (\d+)$", text))
               parts = ["v4-0", "v4-1", "v4-2", "v4-3", "history", "legacy-0", "legacy-1", "legacy-2", "legacy-3"]
-              # A legacy part exits 1 for any admitted must-refuse ID, settled or not; its outcomes are judged by ID
+              # A legacy part exits 1 for any printed FALSE_PASS, settled or not; its outcomes are judged by ID
               # below and its count is pinned, so a part that stopped early still fails.
               if sorted(exits) != sorted(parts) or any(exits[part] != "0" for part in parts[:5]):
                   problems.append(f"shard {index}: exits {exits}")
@@ -271,27 +288,35 @@ jobs:
                               if outcome == "FALSE_PASS" and expected == "must refuse")
           for name, counter in totals.items():
               print(name, sum(counter.values()), sorted(counter.items()))
+          for line in re.findall(r"(?m)^(?:FALSE_PASS|WRONG_VERDICT|HARNESS_ERROR) v4/.+$", "\n".join(logs.values())):
+              print(line)
+          for run, key in (("v4", "V4_OUTCOMES"), ("legacy", "LEGACY_OUTCOMES")):
+              if dict(totals[run]) != json.loads(os.environ[key]):
+                  problems.append(f"{run} outcomes {dict(totals[run])}, pinned {os.environ[key]}")
+          if any(totals["v4"][key] for key in ("FALSE_PASS", "WRONG_VERDICT", "HARNESS_ERROR")):
+              problems.append("v4: a FALSE_PASS, WRONG_VERDICT or HARNESS_ERROR")
+          if totals["legacy"]["OPERAND_ERROR"] or totals["legacy"]["WRONG_VERDICT"]:
+              problems.append("legacy: an OPERAND_ERROR or a refused positive")
+          # RL-215 Q5 with RL-216 R1: every printed FALSE_PASS is settled by one of the two closed lists, by ID.
           settle = pathlib.Path("shards") / "partc-settle" / "settle.log"
-          settled = dict(re.findall(r"(?m)^SETTLE (.+?) \| .* \| oracle (admits|refuses)$",
-                                    settle.read_text() if settle.is_file() else ""))
-          if os.environ["SETTLE_RESULT"] != "success" or set(settled) != admitted:
-              problems.append(f"settlement: {os.environ['SETTLE_RESULT']}, {len(settled)} of {len(admitted)} settled")
-          changed = sorted(name for name in admitted if settled.get(name) == "admits")
-          false_pass = sorted(admitted - set(changed))
-          print("may pass (control changed), settled by the frozen oracle (RL-215 Q5):", len(changed))
-          for name in changed:
-              print("  " + name)
-          if changed != sorted(json.loads(os.environ["CONTROL_CHANGED"])):
-              problems.append("the control-changed IDs differ from the pinned list")
-          totals["legacy"]["FALSE_PASS"] = len(false_pass)
-          for name in false_pass:
-              print("FALSE_PASS (the frozen oracle refuses):", name)
-          for name, counter in (("v4", totals["v4"]),):
-              for line in re.findall(r"(?m)^(?:FALSE_PASS|WRONG_VERDICT|HARNESS_ERROR) v4/.+$",
-                                     "\n".join(p.read_text() for p in pathlib.Path("shards").glob("partc-shard-*/shard.log"))):
-                  print(line)
-          bad = {f"{name} {key}": counter[key] for name, counter in totals.items()
-                 for key in ("FALSE_PASS", "WRONG_VERDICT", "HARNESS_ERROR", "OPERAND_ERROR") if counter[key]}
+          settled = collections.defaultdict(set)
+          for category, name, _record in re.findall(r"(?m)^SETTLE (\S+) (.+?) (\{.*\})$",
+                                                    settle.read_text() if settle.is_file() else ""):
+              settled[category].add(name)
+          seen = set().union(*settled.values()) if settled else set()
+          if os.environ["SETTLE_RESULT"] != "success" or seen != admitted:
+              problems.append(f"settlement: {os.environ['SETTLE_RESULT']}, {len(seen)} of {len(admitted)} settled")
+          for category, key in (("control_changed", "CONTROL_CHANGED"), ("archive_unattested", "JW_PARTC_ARCHIVE_UNATTESTED")):
+              print(f"{category} (settled, closed list):", len(settled[category]))
+              for name in sorted(settled[category]):
+                  print("  " + name)
+              if sorted(settled[category]) != sorted(json.loads(os.environ[key])):
+                  problems.append(f"the {category} IDs differ from the pinned list")
+          print("unsettled:", len(settled["false_pass"]))
+          for name in sorted(settled["false_pass"]):
+              print("FALSE_PASS (unsettled):", name)
+          if settled["false_pass"] or set(settled) - {"control_changed", "archive_unattested", "false_pass"}:
+              problems.append("unsettled admitted must-refuse IDs")
           if positives != dict.fromkeys(POSITIVES, "AGREES_PASS"):
               problems.append(f"mandatory legacy positives: {positives}")
           if len(inapplicable_ids) != 40:
@@ -300,7 +325,8 @@ jobs:
               problems.append("writer clean proof: " + os.environ["PROOF_RESULT"])
           print("parity differences on legacy IDs (printed, blocking nothing; RL-215 Q5):",
                 totals["legacy"]["PARITY_DIFFERENCE"])
-          if problems or bad:
-              print("::error::incomplete or failing frozen runs:", problems, bad)
+          if problems:
+              print("::error::incomplete or failing frozen runs:", problems)
               sys.exit(1)
+          print("all pins hold")
           EOF

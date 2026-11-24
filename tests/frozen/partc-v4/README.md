@@ -3,7 +3,9 @@
 `suite-v4/` is the issued Part C v4 suite, copied byte for byte from the issuing seat's
 `astra-partc-invariants-v4-1123/out/suite-v4` (the issuer's `__pycache__` left out). `SUITE-v4.sha256` is the
 issuer's digest list as the lead re-recorded it under RL-215 Q3 and Q5 (`legacy/normalized_v32.py` is
-`4824c536…f740`). Nothing under `suite-v4/` is edited here; check it before every run:
+`4824c536…f740`) and under RL-216 R2 (`tests/align/test_partc_writer_v4.py` is `59dd7128…cef7`: only
+`assess_launch_config` changed, to test the kit's refusal at its start). Nothing under `suite-v4/` is edited here;
+check it before every run:
 
 ```sh
 cd tests/frozen/partc-v4 && shasum -a 256 -c SUITE-v4.sha256
@@ -19,7 +21,9 @@ What it holds:
   retired `tests/align/partc_audit_probe.py`).
 - `legacy/normalized_v32.py`: the 25,300 inherited v3.2 operands applied to the v4 control. The 40 IDs in
   `legacy/operand-rulings.tsv` print `INAPPLICABLE` and are not counted (RL-215 Q3); parity differences print and
-  block nothing (Q5). `legacy/issued_v32.py` is the v3.2 module itself, byte-identical to
+  block nothing (Q5). An admitted `must refuse` ID prints FALSE_PASS and is settled by the frozen oracle
+  (`tests/align/partc_legacy_settle.py`; RL-215 Q5, RL-216 R1) into one of two closed lists, by ID.
+  `legacy/issued_v32.py` is the v3.2 module itself, byte-identical to
   `tests/align/test_partc_frozen_differential.py` (the committed baseline, no longer a gate: RL-215 Q1).
 
 Run from this directory with the candidate checkout and an object database holding both pinned commits

@@ -2358,12 +2358,26 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
     def test_outer_row_absent_in_an_archive_and_in_a_native_run(self):
         """RL-215 Q2, outer row absent. An archive without the soak row binds the soak to archived custody and
         passes, its members' terminal order still judged (an overlapping predecessor is refused); an archive that
-        holds the row passes as native does; one outer file without the other is unverifiable. A native run
-        whose row is missing at Part C is ``evidence_unverifiable`` (RLD:20771)."""
+        holds the row passes as native does. RL-216 R4 (a): one outer file without the other is unverifiable,
+        naming the absent file, in both directions. A native run whose row is missing at Part C is
+        ``evidence_unverifiable`` (RLD:20771)."""
         expected = {"archive-with-row": "pass -", "archive-without-row": "pass -",
                     "archive-without-row-overlapping-member": "other_failure member_order",
-                    "archive-row-without-reference": "other_failure evidence_unverifiable",
+                    "archive-row-without-reference": "other_failure evidence_unverifiable soak_reference.json",
+                    "archive-reference-without-row": "other_failure evidence_unverifiable soak_row.json",
                     "native-without-row": "other_failure evidence_unverifiable"}
+        proc, output, seen = self.run_rl215(*expected)
+        self.assertEqual(seen, expected, output[-3000:])
+        self.assertEqual(proc.returncode, 0, output[-3000:])
+
+    def test_an_archived_path_is_a_label_and_the_native_ledger_binds_it(self):
+        """RL-216 R3. The run root moved to another parent or under another root name, the original removed,
+        replays ``pass`` as ``archived_custody`` with no reason; both outer path strings rewritten alike replay
+        ``pass``. The same pair written before the soak ledger's row 2 is ``fresh_soak`` natively."""
+        expected = {"archive-moved-to-another-parent": "pass - archived_custody",
+                    "archive-moved-to-another-root-name": "pass - archived_custody",
+                    "archive-paths-rewritten-alike": "pass -",
+                    "native-paths-rewritten-before-ledger-row-2": "other_failure fresh_soak"}
         proc, output, seen = self.run_rl215(*expected)
         self.assertEqual(seen, expected, output[-3000:])
         self.assertEqual(proc.returncode, 0, output[-3000:])

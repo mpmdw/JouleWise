@@ -3505,9 +3505,9 @@ def binding_edit(case,root,receipt):
 
 
 def assess_launch_config(case):
-    # Exercise the real launcher with its synthetic transport. Record even a refused dispatch.
+    # RL-216 R2: the refusal stage is the kit's start. The soak is dispatched once and no member is.
     fx = new_fixture()
-    calls=[]
+    idle=[];members=[]
     try:
         source=fx.attempt.config
         copy=source.with_name("v4-synthetic-config-copy.json")
@@ -3515,14 +3515,26 @@ def assess_launch_config(case):
         try:
             fx.runtime=["synthetic-runtime", *(["--config="+str(copy)] if case.op=="equals" else
                                                ["--config",str(source),"--config",str(copy)])]
+            make_idle=fx.make_idle
             def observed_idle():
-                calls.append("idle")
+                idle.append("idle")
+                return make_idle()
+            def observed_member(kind,segment):
+                members.append(kind)
                 raise OSError("synthetic dispatch witness")
             with patch.object(fx,"make_idle",observed_idle):
-                rc=fx.run_launcher()
-            if calls: return "WRONG_VERDICT"  # Failure after the first dispatch is too late.
-            return "REFUSED" if rc!=0 and "issued_inputs" in (
-                fx.attempt.root/"runner_receipt.json").read_text() else "WRONG_VERDICT"
+                rc=fx.run_launcher(model_transport=observed_member)
+            if members or idle!=["idle"]: return "WRONG_VERDICT"  # A member dispatched on an unbound config is too late.
+            root,out=fx.attempt.root,fx.attempt.output
+            if not all(p.is_file() for p in (out/"smoke.json",out/"smoke_part_c.json",root/"part-c.stdout.log")):
+                return "WRONG_VERDICT"
+            record=read(out/"smoke.json");result=record["evaluation"];runner=read(root/"runner_receipt.json")
+            found={(f.get("reason"),f.get("field")) for f in map(json.loads,(
+                line for line in (root/"part-c.stdout.log").read_text().splitlines() if line.startswith("{")))}
+            refused=(rc==2 and runner["rc"]==2 and runner["parts"]=={"C":False} and record==read(out/"smoke_part_c.json")
+                     and result["verdict"]=="other_failure" and result["pass"] is False
+                     and case.expected in result["evidence_failures"] and (case.expected,"--config") in found)
+            return "REFUSED" if refused else "WRONG_VERDICT"
         finally: copy.unlink()
     finally: fx.doCleanups()
 

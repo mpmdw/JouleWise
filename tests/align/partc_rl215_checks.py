@@ -1,9 +1,15 @@
-"""RL-215's named Part C checks on the frozen v4 control: the outer soak row absent, and the marker test.
+"""RL-215's and RL-216's named Part C checks on the frozen v4 control: the outer soak files and the marker test.
 
-Q2, outer row absent. An archive with no soak ledger binds the soak to archived custody (RLD:20789, 20613): no row
-is invented and the three outer comparisons (EVIDENCE-INVARIANTS ``outer-open``, ``outer-close``, ``outer-next``)
-are not made, while the members' own terminal-order checks still apply. An archive that holds the row is compared
-as native. A native run without the row is ``evidence_unverifiable`` (RLD:20771).
+RL-215 Q2, outer row absent. An archive with no soak ledger binds the soak to archived custody (RLD:20789, 20613): no
+row is invented and the three outer comparisons (EVIDENCE-INVARIANTS ``outer-open``, ``outer-close``, ``outer-next``)
+are not made, while the members' own terminal-order checks still apply. An archive that holds the row is compared as
+native. A native run without the row is ``evidence_unverifiable`` (RLD:20771).
+
+RL-216 R4 (a): an archive with one outer file and not the other is ``evidence_unverifiable``, naming the absent file.
+RL-216 R3: in an archive a path is a label. A run root copied to another parent or under another root name, the
+original removed, replays ``pass`` as ``archived_custody`` with no reason, and so does an archive whose two path strings
+are rewritten alike. The same rewritten pair, written before the soak ledger's row 2, is ``fresh_soak`` natively: what
+RL-185 1.3 item 6 takes from the ledger (the row names row 1's segment) is native.
 
 Builder item 8, RL-183c test 3 (RLD:20654) extended to the new class rules: a marker planted in the values the
 battery count and callback order, the excluded PID in both census snapshots, the gated status wire, its clocks and
@@ -25,6 +31,7 @@ import tempfile
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 SUITE = Path(__file__).resolve().parents[2] / "tests/frozen/partc-v4/suite-v4/tests/align/test_partc_writer_v4.py"
 MARKER = 918273645672
@@ -32,8 +39,13 @@ EXPECTED = {
     "archive-with-row": "pass -",
     "archive-without-row": "pass -",
     "archive-without-row-overlapping-member": "other_failure member_order",
-    "archive-row-without-reference": "other_failure evidence_unverifiable",
+    "archive-row-without-reference": "other_failure evidence_unverifiable soak_reference.json",
+    "archive-reference-without-row": "other_failure evidence_unverifiable soak_row.json",
+    "archive-moved-to-another-parent": "pass - archived_custody",
+    "archive-moved-to-another-root-name": "pass - archived_custody",
+    "archive-paths-rewritten-alike": "pass -",
     "native-without-row": "other_failure evidence_unverifiable",
+    "native-paths-rewritten-before-ledger-row-2": "other_failure fresh_soak",
     "marker-class-rules": "no-value battery_evidence,load_evidence,reading_record,step_thermometry",
 }
 
@@ -150,11 +162,20 @@ def run(argv):
                     result = s.pc.replay_archived(copy / "part-c", config)
                     assert result["binding"] == "archived_custody", result
                     seen[name] = f"{result['verdict']} {','.join(result['evidence_failures']) or '-'}"
+                    if name in ("archive-row-without-reference", "archive-reference-without-row"):
+                        # The finding names the absent outer file (RL-216 R4 (a)).
+                        digest = s.evidence.digest(config.read_bytes())
+                        try:
+                            s.pc._ArchivedSoak(copy / "part-c", config, digest)
+                        except s.evidence.EvidenceFailure as error:
+                            seen[name] += f" {error.source}"
 
-                def without_row(copy, *, reference=False):
+                def without_row(copy):
                     (copy / "soak" / "soak_row.json").unlink()
-                    if not reference:
-                        (copy / "soak" / "soak_reference.json").unlink()
+                    (copy / "soak" / "soak_reference.json").unlink()
+
+                def row_only(copy):
+                    (copy / "soak" / "soak_reference.json").unlink()
 
                 def overlapping(copy):
                     without_row(copy)
@@ -164,12 +185,40 @@ def run(argv):
                     terminal["started_epoch_s"] = idle["ended_epoch_s"] - 1
                     s.write(member / s.rt.CUSTODY_NAME, terminal)
 
+                def reference_only(copy):
+                    (copy / "soak" / "soak_row.json").unlink()
+
+                elsewhere = "/synthetic-elsewhere/run/soak/idle_soak"
+
+                def rewrite_paths(directory):
+                    """Both outer path strings rewritten to one other absolute path, the files written as the
+                    launcher writes them (RL-216 R3)."""
+                    for name, key in (("soak_row.json", "output_dir"), ("soak_reference.json", "source_output")):
+                        document = s.read(directory / name)
+                        document[key] = elsewhere
+                        s.write(directory / name, document)
+
                 edits = {"archive-with-row": lambda copy: None, "archive-without-row": without_row,
                          "archive-without-row-overlapping-member": overlapping,
-                         "archive-row-without-reference": lambda copy: without_row(copy, reference=True)}
+                         "archive-row-without-reference": row_only,
+                         "archive-reference-without-row": reference_only,
+                         "archive-paths-rewritten-alike": lambda copy: rewrite_paths(copy / "soak")}
                 for name, edit in edits.items():
                     if name in wanted:
                         archive(name, edit)
+                # The run root moved, the original removed: no path in the archive names where it now lies.
+                for name, destination in (("archive-moved-to-another-parent", root / "another-parent" / native.name),
+                                          ("archive-moved-to-another-root-name", root / "moved" / "another-run-root")):
+                    if name in wanted:
+                        destination.parent.mkdir(parents=True)
+                        shutil.move(native, destination)
+                        try:
+                            assert not native.exists()
+                            result = s.pc.replay_archived(destination / "part-c", config)
+                            seen[name] = (f"{result['verdict']} {','.join(result['evidence_failures']) or '-'} "
+                                          f"{result['binding']}{' checks' if result['failing_checks'] else ''}")
+                        finally:
+                            shutil.move(destination, native)
                 if "native-without-row" in wanted:
                     # The launcher bound the row by digest in the soak ledger; it is gone at Part C.
                     (native / "soak" / "soak_row.json").unlink()
@@ -177,6 +226,22 @@ def run(argv):
                     evaluation = json.loads((native / "part-c" / "smoke.json").read_text())["evaluation"]
                     seen["native-without-row"] = (f"{evaluation['verdict']} "
                                                   f"{','.join(sorted(evaluation['evidence_failures'])) or '-'}")
+                    assert not accepted or evaluation["verdict"] == "pass"
+                if "native-paths-rewritten-before-ledger-row-2" in wanted:
+                    # The launcher writes the pair, then the soak ledger's row 2 binds it; here the pair is the
+                    # rewritten one, so the ledger binds a row that does not name row 1's segment.
+                    shutil.rmtree(native / "soak")
+                    finish = s.evidence.EvidenceLedger.finish_soak
+
+                    def finish_soak(ledger, outcome):
+                        rewrite_paths(ledger.root)
+                        return finish(ledger, outcome)
+
+                    with patch.object(s.evidence.EvidenceLedger, "finish_soak", finish_soak):
+                        accepted = probe.candidate(None)
+                    evaluation = json.loads((native / "part-c" / "smoke.json").read_text())["evaluation"]
+                    seen["native-paths-rewritten-before-ledger-row-2"] = (
+                        f"{evaluation['verdict']} {','.join(sorted(evaluation['evidence_failures'])) or '-'}")
                     assert not accepted or evaluation["verdict"] == "pass"
     failures = 0
     for name in wanted:
