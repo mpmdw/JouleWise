@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "f2stab07-be9d31fe/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~06:57 Tue after three quiet minutes; expected end ~09:01, worst case ~10:05, fence end ~10:29; read the true fence deadline and pid from run-out.txt; check the pid, not the deadline). This activation exits right after the launch. The next activation, after the fence pid is gone and runner_receipt.json exists, Checks attempt cq-f2-stab-07-l001-l002-l003-a1 at /Users/edr/campaign-out/f2-stab-07/cq-f2-stab-07-l001-l002-l003-a1 with f2stab07-check-template-be9d31fe/ (copy to f2stab07-check-NEWACT/, replace NEWACT; LEGS L001,L002,L003; kit sha fb22cadc...746d, campaign f2-stab-07, pin A 2d347f721; asserts batch_windows == ['02:00-02:35'] and roster prefix; L001 cold, L002-L003 warm); maps each leg's quiet span to wall time through the receipt's ended pair and counts maintenance lines inside it; copies at once with the template's offload-run.sh; then the ladder (items 422, 463, 464, 507, 536, 553): the 10:50:01-13:14:59 gap takes pin B kit 15's next unrun position (L011; L001-L010 spent) under its 1-leg queue; after the gap, pin-A rank 4 continues with kit 07 L004 onward (kits 06-13; kit 14 reserved for rank 1).",
+  "next_observable": "PR #957 merged, then the ctl-01 print freeze and look issue on main",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 571,
+      "owner": "lead",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 570,
@@ -243,13 +249,13 @@
       "status": "ISSUED"
     }
   ],
-  "owner": "magistrate",
+  "owner": "lead",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "570",
-  "source_item_heading_date": "2026-11-24",
+  "source_item": "571",
+  "source_item_heading_date": null,
   "wait": {
-    "deadline_epoch_s": 1795546200,
+    "deadline_epoch_s": 1795680000,
     "observable": "none",
-    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-07 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. A census or soak refusal on a measured contending process with a proven clean close is not a kit hold (items 505, 547): a leg with an attempt is spent, a leg with none stays unrun. A clean close with a leg not admitted (cpu_load, redo_quota 0) is recorded, not a stop and not a kit hold (items 467, 479, 520). If f2stab07-be9d31fe/run-out.txt has no LAUNCH_RC line (WAIT/STOP before launch, e.g. not quiet by 07:15), nothing launched: L001-L003 stay unrun and Tuesday's rank 1 is unserved; the next activation re-selects (kit 07 L001 cold first; 3/2/1 at the actual t0 with the fence ending before 10:50, item 464 gap) and issues a new typed item before launch."
+    "on_early_or_refused": "If a look prerequisite cannot close, the lead records the known limitation or refers it to the research lead; no look is issued without them."
   }
 }

@@ -1052,6 +1052,28 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+571. **Lead: ctl-01 span-2 first-split hand-read (L006) PASS; blind disclosure CTL01-RUN committed on the W1 line**
+
+```pointer
+owner: lead
+wait: none
+deadline: 2026-11-26T00:00:00-08:00
+on_early_or_refused: If a look prerequisite cannot close, the lead records the known limitation or refers it to the research lead; no look is issued without them.
+next_observable: PR #957 merged, then the ctl-01 print freeze and look issue on main
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795533594, "number": 571, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **First-split hand-read of `cq-ctl-01-s02-a1` L006 (RL-197 table row 8, RLD:21387): PASS, signed.** This holds no span.
+  - Reviewer: the independent GPT 6.2 Astra seat `ctl01-s02-l006-handread-1124` on the Air, fresh session. It did not build the runner, run the span or produce the desk.
+  - Input: a lead projection, made on the Air from the iCloud offload (outer hashes OK; 329/329 files equal to the MBP SHA256SUMS; receipt sha256 `9d072d77…ebad8` = item 570). Projector sha256 `964ae043…3fcc`, the pilot's. Archive sha256 `666e8a9efab4e115b70d2ce820ad54d0f91a6c1ee9af96490cf05d5d7c2b94aa`. No seat command touched the original tree.
+  - Views: (1) split turns 342 + 341 + 341 = 1,024 delivered; visible context 6,072 (the desk's 2,000 is the nominal prefill). (2) First visible stamps equal the logged turn to the ns. (3) RL-214 §1 block holds, with both gaps 60.010 s ≥ 60 s. (4) Recovery 600.003 s, ending inside the episode. Q1: L006 consumed L004 attempt 1, not excluded, not redone. F-3(c): agrees with the desk. L007 is adjacent (plain, same seed, next leg, +0.735 s).
+  - `SIGNED-DISPOSITION.md` sha256 `d9cacaf17228c302d7c02bfb16da127d5dd1c2523d6360c206b51b022cfb75bb`, with OPENED.txt, kept in the lead's private scratch.
+- **Blind disclosure amendment committed** (RL-190 §3.7, RL-198 Amends, RLD:21379): row `CTL01-RUN` in `docs/align/v4/DEVIATIONS.md` on the W1 line, PR #964, merge `86b6a7c0e`. It holds the research lead's sentence verbatim, beginning "The ctl-01 block was run." K's `k_positive_control_*` code is unchanged. No ctl energy, power, meter, transcript or look output was read.
+- **The ctl-01 look still waits** on the look-path follow-ups (PR #957, final round), the print freeze, and the `lm-inst-01` read (RL-197). No look is issued here.
+
 570. **Magistrate be9d31fe (headless, Opus 5.5), 2026-11-24 06:46- PST: item 568 CHECK ctl-01 span 2 cq-ctl-01-s02-a1 (L004-L012, RL-197c sequence 3): RECEIPT OK (9/9 legs, MEASURED_OK, L004 captured, L005-L012 consumed, L006 split with L007 adjacent, restored, feeds stopped), desk PASS, ledger seq 3 sha256 9ebb1f18...78ca, copied at once, 12/12 ctl-01 positions accounted; 568 and 569 CLOSED; Tuesday rank 1 f2-stab-07-l001-l002-l003 ISSUED on pin A (3: all start checks pass), launches as the last act**
 
 ```pointer
