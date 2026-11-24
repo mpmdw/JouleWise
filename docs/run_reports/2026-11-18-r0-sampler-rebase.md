@@ -501,3 +501,44 @@ Local checks used Python 3.13 under `taskpolicy -c utility`, `TZ=UTC` and synthe
 - `tests.align.test_r0_checks` and `tests.hazards.test_contention`: 86 tests passed with three live skips.
 
 Frozen v3 and the census fault matrix run in hosted CI. Frozen v3 is byte-identical at SHA-256 `afd360c29d390f7d39400e1363a25add5c13ace71bca55c80d11ec0ceb4e5009`. `RUN_STATE.md` and `TASK_QUEUE.md` retain their PR-base blobs.
+
+## 2026-11-24 proven-window check for PR #824 (lead P1–P3)
+
+The narrow check of `c0fc6fc75aafc308df6a09ddcabcad82de539ece` found a false publication on a stable clock. A resident worker used 3.07 CPU-s inside 55–85 s, and the daemon read it at 46, 62, 78 and 94 s as 0.00, 1.48, 1.59 and 3.07. No two reads within 30 s differed by 1.50, and every sliding window spanned 32 s at 0.0497 CPU-s/s, so both modes published. The replay reproduced on that head before this change, with instant reads and with 10 ms reads.
+
+**P1, `_proven_windows` in `joulewise/align/r0_host.py`.** Each series read now records every process's reading, in a per-identity history that keeps only the first and last reading of an unchanged run. At each closing read, R0 pairs every earlier point of the same process's life with the closing reading. A point is a reading, at its lower-bound counter, or the birth bound's earliest instant, at a zero counter.
+
+- **Span:** L runs from the start of the earlier point's read to the end of the closing read, the largest span the reads allow.
+- **Growth:** Δ is the closing counter less the earlier counter, less 0.01 CPU-s for Darwin's rounding.
+- **Test:** with k = ceil(L / 30 s), or k = 1 up to 30 s, contention is proven when Δ / k reaches 1.50 CPU-s.
+
+A proof withholds with the existing contention reason. The reason also prints the pair and the bound, for example: "3.06 CPU-s after rounding from 46.000 s to 94.010 s: at least 1.530 CPU-s in one of 2 windows of at most 30 s". The proof is recorded under `proven_windows`. The rule windows and the exact check stay as they are.
+
+**Tests.**
+
+- `test_r5_narrow_check_pigeonhole_window_withholds` ports the replay. The 3.07 CPU-s worker withholds in both modes, with instant or 10 ms reads, and the 1.49 CPU-s control publishes.
+- The independent sweep, `test_publication_matches_an_independent_workload_model`, now runs 6,720 CLI runs. Its expectation comes only from the true CPU curve and the reads the test schedules:
+  - A stall above 50 s withholds.
+  - A clock change above 1 ms withholds as `clock_unstable`.
+  - P1-provable contention withholds, as does the narrower exact rule with instant reads.
+  - Everything else publishes, unless one of the following allows withholding: true contention, within 0.01 CPU-s of 1.50 with timed reads, or the admitted R0-L3 rate rule.
+  - It adds a long-lived worker with three bursts ("split", 3.07 CPU-s within 21.5 s) and one with a 1.48 CPU-s burst every 30 s ("spread", never 1.50 in any 30 s).
+  - It also adds sparse 10 ms reads 16, 20, 35, 50 and 60 s apart. At 16 s the resident split worker is the narrow check's schedule.
+  - It also asserts that P1 never proves contention the curve does not contain.
+- The 300 s caller-gap test now also receives a correct P1 proof: 11.99 CPU-s from 120 s to 330 s, so at least 1.713 CPU-s in one of seven windows. It checks the rule flag beside that proof.
+
+With P1 disabled, the sweep fails exactly the 5 stable-clock runs of the narrow check's schedule, and the replay test fails all 4 split cases. Every 1.49 control still publishes, so P1 withholds none of them.
+
+**Reported, not changed: the admitted R0-L3 rate rule.** The "spread" worker never uses 1.50 CPU-s in any 30 s, yet R0 withholds it, before and after P1 alike. The R0-L3 rule (docs/align/r0/R0-L3-contention-rule.md) flags an average above 0.05 CPU-s/s over a sampled window of 30–50 s, or over a newcomer's lifetime within one:
+
+- the 40 s window holding two of the worker's bursts averages 0.074;
+- a newcomer's 15 s lifetime overlap averages 0.099.
+
+Frozen v3 requires every L3 flag to remain an R0 flag, so this rule stays. P2's condition "withheld implies true contention or a disclosed ambiguity" therefore holds only with this rule listed as a third disclosed reason. The sweep states the rule and computes an over-approximation of where it can fire from its own reads.
+
+Local checks used Python 3.13 under `taskpolicy -c utility`, `TZ=UTC` and synthetic inputs:
+
+- `tests.align.test_r0_host`: 157 tests passed with one native-capture skip. The census fault matrix test was skipped locally.
+- `tests.align.test_r0_checks` and `tests.hazards.test_contention`: 86 tests passed with three live skips.
+
+Frozen v3 and the census fault matrix run in hosted CI. Frozen v3 is byte-identical at SHA-256 `afd360c29d390f7d39400e1363a25add5c13ace71bca55c80d11ec0ceb4e5009`. `RUN_STATE.md` and `TASK_QUEUE.md` retain their PR-base blobs.

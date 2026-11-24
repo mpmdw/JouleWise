@@ -13,7 +13,12 @@ ending at the final read. At every sample it also runs the exact check: for
 each earlier sample at most INTERVAL_S before it, a contaminant whose
 counter grew by at least the limit times INTERVAL_S is flagged. Each sample
 is judged once, when it first ends a window, and a flag is never withdrawn,
-so adding samples cannot remove a flag. Admission windows reproduce the
+so adding samples cannot remove a flag. Each sample also gets the proven
+check (lead P1). Against each earlier point of the same process's life,
+whether a reading or its birth bound with a zero counter, it takes the
+growth less one centisecond over the largest span the reads allow. It splits
+that span into k windows of at most 30 s, and flags if growth / k reaches
+the limit times 30 s: one of those windows held at least that much. Admission windows reproduce the
 admitted L3 guard's flags; they can add a flag, never supply an opening to
 the verdict.
 
@@ -578,6 +583,11 @@ class QuietGuard:
         # lowest and highest wall - monotonic offset of every series read.
         self._series_args = None
         self._wall_offsets = None
+        # (pid, start) -> every series reading of it, oldest first, as
+        # (started ns, finished ns, midpoint ns, lower-bound cs, printed cs).
+        # Of a run of unchanged readings only the first and last are kept:
+        # no other can give a larger proven bound (lead P1).
+        self._readings = {}
         self._admission_snapshots = []
         self._admission_previous_over = {}
         self._process_observations = []
@@ -723,6 +733,15 @@ class QuietGuard:
             if self._wall_offsets is not None:
                 offsets += self._wall_offsets
             self._wall_offsets = (min(offsets), max(offsets))
+            for identity, row in rows.items():
+                entry = (snapshot.started.monotonic_ns, snapshot.finished.monotonic_ns, snapshot.midpoint_ns,
+                         round(row.get("peak_cpu_seconds", row["cumulative_cpu_seconds"]) * 100),
+                         round(row["cumulative_cpu_seconds"] * 100))
+                history = self._readings.setdefault(identity, [])
+                if len(history) >= 2 and history[-2][3:] == history[-1][3:] == entry[3:]:
+                    history[-1] = entry
+                else:
+                    history.append(entry)
             self._pending["wall_clock_backwards"] |= backwards
             self._snapshots.append(snapshot)
             if census_summary is not None:
@@ -971,7 +990,7 @@ class QuietGuard:
     def __exit__(self, exc_type, exc, traceback):
         self.close()
 
-    def _record_cpu_flags(self, receipt, details, busy, *, kind=None, proof_interval=None):
+    def _record_cpu_flags(self, receipt, details, busy, *, kind=None, proof_interval=None, note=None):
         if not busy:
             return
         interval = {key: details[key] for key in ("start_monotonic_s", "end_monotonic_s", "elapsed_s")}
@@ -983,7 +1002,7 @@ class QuietGuard:
                 fresh.append(row)
         if fresh:
             names = ", ".join(f"{row['pid']} {row['command']} {row['cpu_s_per_s']:.6g} CPU-s/s" for row in fresh)
-            flag = f"contaminating CPU contention: {names}"
+            flag = f"contaminating CPU contention: {names}" + (f" ({note})" if note else "")
             details["contention_flag"] = flag
             receipt.setdefault("contention_flag", flag)
             entry = {"monotonic_s": receipt.get("monotonic_s", interval["end_monotonic_s"]),
@@ -1092,6 +1111,60 @@ class QuietGuard:
             busy.extend(fresh)
         return busy
 
+    def _proven_windows(self, receipt, current, births, readings, flagged):
+        """Lead P1: contention any two points of one process's life prove.
+
+        A point is a series reading of the process (its lower-bound
+        counter) or its birth bound's earliest instant (counter 0). For an
+        earlier point a and the reading b at ``current``, the span L runs
+        from the start of a's read (or the bound) to the end of b's read,
+        the largest the reads allow. The growth is b's printed counter less
+        a's, less one centisecond for Darwin's rounding. Split [a, b] into
+        k = ceil(L / 30 s) windows (k = 1 up to 30 s): one holds at least
+        growth / k. Contention is proven if that reaches the limit times
+        30 s. Identities another check flagged at this read are skipped.
+        """
+        window_ns = prewindow.INTERVAL_S * 1_000_000_000
+        closing_ns = current.finished.monotonic_ns
+        busy = []
+        for identity, row in current.rows.items():
+            if not row["contaminant"] or identity in flagged:
+                continue
+            closing_cs = round(row["cumulative_cpu_seconds"] * 100)
+            points = [(started, midpoint, lower) for started, _, midpoint, lower, _ in readings.get(identity, ())
+                      if midpoint < current.midpoint_ns]
+            bound = births.get(identity)
+            if bound is not None:
+                points.append((bound.lifetime_floor_ns, bound.lifetime_floor_ns, 0))
+            best = None
+            for started_ns, midpoint_ns, lower_cs in points:
+                span_ns = closing_ns - started_ns
+                growth_cs = closing_cs - lower_cs - 1
+                if span_ns <= 0 or growth_cs <= 0:
+                    continue
+                windows = max(1, -(-span_ns // window_ns))
+                if (growth_cs * 1_000_000_000 * _CPU_LIMIT_DEN >= _CPU_LIMIT_NUM * window_ns * windows
+                        and (best is None or growth_cs * best[3] > best[2] * windows)):
+                    best = (started_ns, midpoint_ns, growth_cs, windows, span_ns)
+            if best is None:
+                continue
+            started_ns, midpoint_ns, growth_cs, windows, span_ns = best
+            evidence = {"pid": identity[0], "command": row["command"], "start": identity[1],
+                        "cpu_s_per_s": growth_cs / windows / 100 / prewindow.INTERVAL_S,
+                        "basis": "CPU between two points of one process's life, split into windows of at most 30 s"}
+            details = {"start_monotonic_s": midpoint_ns / 1e9, "end_monotonic_s": current.midpoint_ns / 1e9,
+                       "elapsed_s": (current.midpoint_ns - midpoint_ns) / 1e9, "span_s": span_ns / 1e9,
+                       "cpu_s": growth_cs / 100, "windows": windows, "bound_cpu_s": growth_cs / windows / 100,
+                       "busy": [evidence]}
+            receipt.setdefault("proven_windows", []).append(details)
+            note = (f"{growth_cs / 100:.2f} CPU-s after rounding from {started_ns / 1e9:.3f} s to "
+                    f"{closing_ns / 1e9:.3f} s: at least {growth_cs / windows / 100:.3f} CPU-s in one of "
+                    f"{windows} window{'s' if windows > 1 else ''} of at most {prewindow.INTERVAL_S:g} s")
+            self._record_cpu_flags(receipt, details, [evidence], kind="proven_30s", note=note)
+            flagged.add(identity)
+            busy.append(evidence)
+        return busy
+
     def _cpu_interval(self, receipt):
         # Admission's closing read can judge a second batch into its receipt.
         details = receipt.get("cpu_interval") or {"regressed_counters": [], "regressed_noncontaminant": []}
@@ -1102,6 +1175,7 @@ class QuietGuard:
             snapshots = list(self._snapshots)
             observations = list(self._process_observations)
             births = dict(self._birth_bounds)
+            readings = {identity: tuple(history) for identity, history in self._readings.items()}
             pending, self._pending = self._pending, self._empty_pending()
             background_failure = self._background_failure
         if pending["census"]:
@@ -1137,6 +1211,8 @@ class QuietGuard:
                 # The exact check at this sample, against every earlier sample
                 # at most INTERVAL_S before it and each newcomer's birth bound.
                 busy.extend(self._exact_windows(receipt, snapshots, births, end, dwell_ns, flagged))
+                # Lead P1, over each process's whole sampled life.
+                busy.extend(self._proven_windows(receipt, snapshots[end], births, readings, flagged))
                 if long_interval is not None:
                     receipt["long_interval"] = True
                     raise Refused(
