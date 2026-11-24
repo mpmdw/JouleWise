@@ -117,11 +117,14 @@ jobs:
             if JW_PARTC_SHARD="$3" python -IB "$2" > "$1.out" 2>&1; then rc=0; else rc=$?; fi
             echo "EXIT $1 $rc" >> "$1.out"
           }
-          for j in 0 1 2 3; do run "v4-$j" suite-v4/tests/align/test_partc_writer_v4.py "$((SHARD + 16 * j))/64" & done
-          wait
+          # Wait for these runs by PID: a bare wait would also wait for the memory logger, which never ends.
+          pids=()
+          for j in 0 1 2 3; do run "v4-$j" suite-v4/tests/align/test_partc_writer_v4.py "$((SHARD + 16 * j))/64" & pids+=($!); done
+          wait "${pids[@]}"
           run history suite-v4/tests/align/partc_v4_history.py "$SHARD/16"
-          for j in 0 1 2 3; do run "legacy-$j" suite-v4/legacy/normalized_v32.py "$((SHARD + 16 * j))/64" & done
-          wait
+          pids=()
+          for j in 0 1 2 3; do run "legacy-$j" suite-v4/legacy/normalized_v32.py "$((SHARD + 16 * j))/64" & pids+=($!); done
+          wait "${pids[@]}"
           for part in v4-0 v4-1 v4-2 v4-3 history legacy-0 legacy-1 legacy-2 legacy-3; do
             echo "=== $part" >> "$log"
             cat "$part.out" >> "$log"
@@ -132,7 +135,9 @@ jobs:
         if: always()
         with:
           name: partc-shard-${{ matrix.shard }}
-          path: shard.log
+          path: |
+            shard.log
+            tests/frozen/partc-v4/*.out
 
   totals:
     needs: [proof, shard]
