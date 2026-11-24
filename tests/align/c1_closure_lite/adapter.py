@@ -357,17 +357,30 @@ class Attempt:
         files[chain_path.relative_to(self.stage)] = chain_raw
         files[Path(str(chain_path.relative_to(self.stage)) + '.sha256')] = chain.sidecar_bytes(chain_raw, chain_path.name)
 
+        exported = self.repo / KIT / series.C1_PLAN
+        staged = self.stage / closure.PACK / series.C1_PLAN
+
         def write(entries):
             for name, raw in entries.items():
-                if self.form == 'link' and name == closure.PACK / series.C1_PLAN:
+                if self.form == 'pack-link' and name == closure.PACK / series.C1_PLAN:
+                    # Negative fixture: a link inside the pack, refused at the first stage (lead L1).
                     path = self.stage / name
                     path.parent.mkdir(parents=True, exist_ok=True)
-                    path.symlink_to(self.repo / KIT / series.C1_PLAN)
+                    path.symlink_to(exported)
                 else:
                     put(self.stage, name, raw)
 
         # Stage the pack before the plan, so its digest is of the staged bytes.
         write(files)
+        if self.form == 'link':
+            # The frozen in-view link to the genuine kit (lead ruling): the pack
+            # keeps a regular file with the committed bytes and mode, and the
+            # exported R/KIT path, which preflight reads, links to it.
+            if staged.read_bytes() != exported.read_bytes():
+                raise AssertionError('staged plan differs from the exported kit plan')
+            staged.chmod(exported.stat().st_mode & 0o777)
+            exported.unlink()
+            exported.symlink_to(staged)
         custody_root = str(self.custody_path())
         # The launch identity and locations b5.plan writes from the same inputs.
         self.night_data = {'plan_id': plan_id, 't0_epoch_s': 1000, 'chain_path': str(chain_path),
