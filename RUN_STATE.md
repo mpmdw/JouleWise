@@ -6,12 +6,6 @@ read to get back here. Session records live in `docs/run_reports/` and
 policy lives in `docs/decision_log.md`. Do not create a dated restart doc;
 update this file instead.
 
-**Current pointer: read the top numbered item first.** That is the
-highest-numbered item; from item 168 on, items run newest first and start
-right after item 167 below. [`CANONICAL.md`](CANONICAL.md) is the tool map:
-the one current tool or document per job. [`docs/ARCHIVE.md`](docs/ARCHIVE.md)
-says how to get back files removed from `main` in the 2026-11-06 prune.
-
 **2026-11-24 qualification freeze-2 bind [AGENT].** PR #835 binds the
 reviewed #795 verifier at `6f81504db0c50ced6ef488d13afab0bf2662ec5b`.
 Both public decision paths passed in the synthetic Start and Run replay.
@@ -19,6 +13,12 @@ The provider's reserved-report route is an open blinding blocker. The
 lead owns disposition and the one Astra replay. Qualification remains
 HOLD_FOR_FIT_FREEZE. The Nov 25–27 renewal was reproduced in scratch
 for lead selection. [Bind report](docs/run_reports/2026-11-24-pr835-freeze2-bind.md)
+
+**Current pointer: read the top numbered item first.** That is the
+highest-numbered item; from item 168 on, items run newest first and start
+right after item 167 below. [`CANONICAL.md`](CANONICAL.md) is the tool map:
+the one current tool or document per job. [`docs/ARCHIVE.md`](docs/ARCHIVE.md)
+says how to get back files removed from `main` in the 2026-11-06 prune.
 
 **2026-11-18 qualification draft handoff [AGENT].** Six unissued items
 for Nov 20–22 and two qualification-pin stability fillers bind the PR #812
