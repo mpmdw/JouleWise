@@ -11,7 +11,7 @@ from unittest.mock import patch
 from joulewise.b6 import blinding
 from scripts import b6_release_subset
 from tests.b6.support import write_json
-from tests.bytes_commitment_support import synthetic_checkout
+from tests.bytes_commitment_support import fixture_options, synthetic_checkout
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -39,9 +39,12 @@ class ReleaseSubsetTests(unittest.TestCase):
                 "--stage", stage, "--out", str(self.root / out), "--keys", *keys]
         if commit:
             args += ["--stage1-commit", commit]
-            if commit != "not-a-hash":
-                from tests.bytes_commitment_support import fixture_options
-                args += fixture_options(self.root)
+        if stage == "heldout":
+            options = fixture_options(self.root)
+            if commit and commit != "not-a-hash":
+                args += options
+            else:
+                args += options[:options.index("--commitment-repo")]
         stdout, stderr = io.StringIO(), io.StringIO()
         with synthetic_checkout(args), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             code = b6_release_subset.main(args)
@@ -86,7 +89,6 @@ class ReleaseSubsetTests(unittest.TestCase):
 
     def test_stage2_releases_only_explicit_keys_after_verified_commit_without_drawing(self):
         key = blinding.configuration_key(self.configs[-1])
-        from tests.bytes_commitment_support import fixture_options
         options = fixture_options(self.root)
         commit = options[-1]
         code, _, error = self.release([key], "heldout", commit=commit)

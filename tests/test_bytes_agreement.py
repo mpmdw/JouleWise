@@ -107,6 +107,23 @@ EDGE_LOCKED_KNOBS = {"sample_phase_ms": 19, "edge_phase": False, "min_receive_la
 # collected (R6's optional pass).
 WITHHELD_KNOBS = {"subpack_sessions": True, "uncollected_sessions": ("bytes-s4-p2",)}
 MISSING_STORES = ("bytes-s2-p2", "bytes-s6-p1", "bytes-s6-p2")
+
+
+def label_defects(repeats):
+    # RL-92 §§3–4: two refused models (one MoE) and one dense model with a
+    # missing store and a refusal. Six invalid repeats leave four in either selection.
+    return [
+        (pass_id, model, ordinal, "strict_validation")
+        for model, pass_ids in (("Qwen3-32B-4bit", (1, 2)), ("Qwen3-Next-80B-A3B-Instruct-4bit", (1, 2)),
+                                ("Llama-3.3-70B-Instruct-4bit", (2,)))
+        for pass_id in pass_ids for ordinal in repeats
+    ]
+
+
+LABEL_KNOBS = {**NR1_KNOBS, "subpack_sessions": True, "battery_assist": True}
+MISSING_BUNDLE_CASE = (1, "Qwen3-Next-80B-A3B-Instruct-4bit", 20, "bundle_after_export")
+MISSING_INPUT_MODES = ("bundle_before_export", "bundle_after_export", "meter_missing",
+                       "bundle_and_meter_missing", "lost_member")
 # name: (world, seed, planted defects, generator knobs, withheld stores removed after export).
 CAMPAIGNS = {
     "bytes": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True, "battery_publication": "delayed", "battery_reference_assist": True}, ()),
@@ -116,6 +133,16 @@ CAMPAIGNS = {
     "minimum": ("bytes", 1100, DEFECTS_MINIMUM, NR1_KNOBS, ()),
     "edge_locked": ("resident", 3100, [], EDGE_LOCKED_KNOBS, ()),
     "withheld": ("bytes", 1100, [], {**NR1_KNOBS, **WITHHELD_KNOBS}, MISSING_STORES),
+    "no_point_labels": ("bytes", 1100, label_defects(range(4, 10)), LABEL_KNOBS, ("bytes-s5-p1",)),
+    # Audit round 1: the same refusals, with the assisted repeats among the invalid records.
+    "no_point_labels_invalid_assist": ("bytes", 1100, label_defects(range(6)), LABEL_KNOBS, ("bytes-s5-p1",)),
+    "no_point_labels_survivor": ("bytes", 1100, label_defects(range(4, 10)) + [
+        (1, "Qwen3-14B-4bit", i, "member.target_phase_precheck_failed") for i in range(6)
+    ], LABEL_KNOBS, ("bytes-s5-p1",)),
+    "no_point_labels_lost_member": ("bytes", 1100, label_defects(range(4, 10)) + [
+        (1, "Qwen3-Next-80B-A3B-Instruct-4bit", 20, "lost_member")
+    ], LABEL_KNOBS, ("bytes-s5-p1",)),
+    "no_point_labels_missing_bundle": ("bytes", 1100, label_defects(range(4, 10)), LABEL_KNOBS, ("bytes-s5-p1",)),
     "invalid_anchor": ("bytes", 1100, ANCHOR_DEFECTS, NR1_KNOBS, ()),
     "marker_incomplete": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
                            "truncate_marker_window": True}, ()),
@@ -441,12 +468,8 @@ def compare_census(R, stage, rows, t, *, point=False, table=None):
                         if model in bt.FIT_SET:
                             continue
                         quantity = cells.get(pk, {}).get("boundaries", {}).get(boundary, {}).get("quantities", {}).get("gross", {})
-                        if block.get("status") == "refused_fit_set_incomplete":
-                            present = pk == "passes_mean" and quantity.get("status") != "ok"
-                        else:
-                            member = models.get(model)
-                            present = member is not None and (pk == "passes_mean" or
-                                ("refused" not in member and member.get("status") != "missing"))
+                        member = models.get(model)
+                        present = member is not None and (pk == "passes_mean" or quantity.get("status") == "ok")
                         if present:
                             expected.append((model, boundary, "mean" if pk == "passes_mean" else pk[4:]))
             elif "passes_mean" in passes:
@@ -568,7 +591,7 @@ def reference_reason_code(reason):
     """Compare registered words; the bound analysis retains meter diagnostic prose.
 
     Only meter-unavailable diagnostics lack a printed code: clock/mapping,
-    span coverage, absent samples/battery readings, and absent meter requests.
+    span coverage, and absent samples or battery readings.
     Their registered disclosure is bytes.meter_decode_unavailable, except a
     dropped device sample, whose disclosure is bytes.meter_gap. Do not fold
     status/exclusion words or unknown text into a generic unavailable value.
@@ -576,7 +599,7 @@ def reference_reason_code(reason):
     if reason == "dropped device sample in meter span":
         return "bytes.meter_gap"
     if reason in ("meter does not cover decode and own idle spans", "meter span has no samples",
-                  "battery reading missing", "meter request unavailable",
+                  "battery reading missing",
                   "meter clock fit or raw/monotonic mapping unavailable") or (
             isinstance(reason, str) and reason.startswith(
                 "meter clock fit or raw/monotonic mapping unavailable: ")):
@@ -619,7 +642,7 @@ def compare_neg8(R, stage, a_rows, t):
                 {ref["run_id"]: reference_reason_code(ref["meter_unavailable_reason"]) for ref in references
                  if "meter_unavailable_reason" in ref},
                 {ref["run_id"]: reference_reason_code(ref["reason"]) for ref in target_drops
-                 if ref["run_id"] in reference_ids})
+                 if ref["run_id"] in reference_ids and ref["reason"] != "meter request unavailable"})
         for b, ref in (row["neg8_inputs"].get("boundaries") or {}).items():
             g = f"neg8/{sid}/{BMAP[b]}"
             for family, fa in (ref.get("families") or {}).items():
@@ -669,9 +692,15 @@ def compare_points(R, stage, a_points, t):
             R.exact(stage, g, "status", p.get("status"), q.get("status"))
             R.exact(stage, g, "pass_label", p.get("pass_status"), q.get("label"))
             R.exact(stage, g, "n_passes", p.get("n_passes"), q.get("passes_computed"))
+            R.exact(stage, g, "reason", p.get("reason"), q.get("reason"))
             compare_missing(R, stage, g, p, q)
             continue
         R.exact(stage, g, "status", "computed" if a_ok else "unavailable", "computed" if t_ok else "unavailable")
+        if not a_ok and not t_ok:
+            R.exact(stage, g, "reason", p.get("reason"), q.get("reason"))
+            R.exact(stage, g, "pass_label", p.get("pass_status"), q.get("label"))
+            R.exact(stage, g, "n_passes", p.get("n_passes"), q.get("passes_computed"))
+            compare_missing(R, stage, g, p, q)
         if not (a_ok and t_ok):
             continue
         # Addendum 7 D9: the pass label and the number of computed passes; B6 ruling Q1: the flag of a
@@ -744,19 +773,14 @@ def compare_h1(R, stage, a_h1, a_moe, t, a_frozen):
         th = (t.get("h1") or {}).get(b, {}).get(pk) or {}
         tm = (th.get("models") or {}).get(model)
         if tm is None:
-            if th.get("status") == "refused_fit_set_incomplete" and row.get("status") == "missing":
-                # Same unavailable boundary: primary emits null words per model;
-                # twin emits the parent fit-set refusal, with no model words.
-                R.exact(stage, g, "word", row.get("word"), None)
-                R.exact(stage, g, "fit unavailable", row["status"], "missing")
-                continue
             R.exact(stage, g, "word", row.get("word") if row["role"] == "heldout" else None, "absent:" + str(th.get("status")))
             continue
         if row.get("status") == "missing" or tm.get("status") == "missing":
-            # B6 ruling Q1: a `missing` model has no H1 word; the flag is carried.
+            # RL-92: the status records the absence of an H1 word for either cause.
             R.exact(stage, g, "status", row.get("status"), tm.get("status"))
             R.exact(stage, g, "word", row.get("word"), tm.get("word"))
-            compare_missing(R, stage, g, row, tm)
+            R.exact(stage, g, "reason", row.get("reason"), tm.get("reason"))
+            R.exact(stage, g, "flags", row.get("flags", []), tm.get("flags", []))
             continue
         if row["role"] == "heldout":
             R.exact(stage, g, "word", row["word"], tm["word"])
@@ -789,18 +813,14 @@ def compare_h1(R, stage, a_h1, a_moe, t, a_frozen):
         b = BMAP[row["boundary"]]
         group = (t.get("h1") or {}).get(b, {}).get("passes_mean") or {}
         tm = group.get("active_or_resident") or {}
-        if group.get("status") == "refused_fit_set_incomplete":
-            # No MoE answer can be drawn from an unavailable fit set. Recover
-            # the missing-point census from the twin's explicit model statuses.
-            missing = sorted(m for m, block in t.get("cells", {}).items() if
-                block.get("passes_mean", {}).get("boundaries", {}).get(b, {}).get("quantities", {}).get("gross", {}).get("status") != "ok")
-            tm = {"answer": "missing", "missing_models": missing}
-        R.exact(stage, f"moe/{b}/passes_mean", "answer", row["answer"], tm.get("answer"))
+        g = f"moe/{b}/passes_mean"
+        R.exact(stage, g, "answer", row["answer"], tm.get("answer"))
         if row.get("status") == "missing" or tm.get("missing_models"):
-            # B6 ruling Q1: an MoE model without a point leaves the answer `missing`, naming the models.
-            R.exact(stage, f"moe/{b}/passes_mean", "missing_models",
+            R.exact(stage, g, "status", row.get("status"), tm.get("status"))
+            R.exact(stage, g, "reason", row.get("reason"), tm.get("reason"))
+            R.exact(stage, g, "missing_models",
                     sorted(canon(m["model"]) for m in row.get("missing_models") or []), sorted(tm.get("missing_models") or []))
-            compare_missing(R, stage, f"moe/{b}/passes_mean", row, tm)
+            R.exact(stage, g, "flags", row.get("flags", []), tm.get("flags", []))
     # Frozen lines (pass mean, gross primary): central line and the set of eight corner lines.
     # A line coefficient has no half-width (its consequences are compared above at the cells' bars).
     for group in (a_frozen or {}).get("rival_lines", []):
@@ -1372,7 +1392,10 @@ def plant(archive, acceptance, models, pass_id, defects, log):
     for p, model, ordinal, kind in defects:
         if p != pass_id:
             continue
-        rid = _run_ids(archive, models, model)[ordinal]
+        run_ids = _run_ids(archive, models, model)
+        if not run_ids:  # This model belongs to a different sub-pack.
+            continue
+        rid = run_ids[ordinal]
         bundle = archive / "sources/claim-runs" / rid
         if kind == "lost_member":
             shutil.rmtree(bundle)
@@ -1407,8 +1430,28 @@ def plant(archive, acceptance, models, pass_id, defects, log):
     _write(archive / "derived/b6-acceptance.json", acceptance)
 
 
-def build(root, name):
+def plant_missing_inputs(archive, models, pass_id, cases, log, *, before_export):
+    remove_meter = False
+    for p, model, ordinal, mode in cases:
+        if p != pass_id or before_export != (mode == "bundle_before_export") or mode == "lost_member":
+            continue
+        run_ids = _run_ids(archive, models, model)
+        if not run_ids:
+            continue
+        rid = run_ids[ordinal]
+        if mode != "meter_missing":
+            shutil.rmtree(archive / "sources/claim-runs" / rid)
+        remove_meter |= mode in ("meter_missing", "bundle_and_meter_missing")
+        log.append({"pass": pass_id, "model": model, "run_id": rid, "kind": mode})
+    if remove_meter:
+        (archive / "sources/night-custody/hazards/meter/stream-001.jsonl").unlink()
+
+
+def build(root, name, *, missing_inputs=()):
     world, seed, defects, knobs, missing_stores = CAMPAIGNS[name]
+    if name == "no_point_labels_missing_bundle":
+        missing_inputs = (MISSING_BUNDLE_CASE,)
+    defects = [*defects, *(case for case in missing_inputs if case[3] == "lost_member")]
     knobs = dict(knobs)
     truncate_marker = knobs.pop("truncate_marker_window", False)
     root.mkdir(parents=True)
@@ -1417,9 +1460,12 @@ def build(root, name):
     design_models = ba.read_json(FIXTURES / "campaign_design.json")["models"]
 
     def export_with_defects(archive, plan, registration, private, export_dir, **kw):
+        archive = Path(archive)
+        pass_id = 1 if archive.name.endswith("p1") else 2
         if defects:
-            pass_id = 1 if Path(archive).name.endswith("p1") else 2
-            plant(Path(archive), kw["acceptance_record"], design_models, pass_id, defects, log)
+            plant(archive, kw["acceptance_record"], design_models, pass_id, defects, log)
+        if missing_inputs:
+            plant_missing_inputs(archive, design_models, pass_id, missing_inputs, log, before_export=True)
         return original(archive, plan, registration, private, export_dir, **kw)
 
     export_runs.export = export_with_defects
@@ -1428,6 +1474,10 @@ def build(root, name):
                                     pass_duration_scales=PASS_SCALES, clock_latency_ms=CLOCK_LATENCY_MS, **knobs)
     finally:
         export_runs.export = original
+    if missing_inputs:
+        for session in manifest["sessions"]:
+            plant_missing_inputs(Path(session["archive"]), design_models, session["pass_id"], missing_inputs, log,
+                                 before_export=False)
     if truncate_marker:
         for session in manifest["sessions"]:
             archive = Path(session["archive"])
@@ -1473,13 +1523,19 @@ def build(root, name):
     return manifest
 
 
-def run_both(root, manifest):
+def run_both(root, manifest, *, verify_fit_rerun=False):
     """Every stage of both sides, in the desk's order, with key release by file copy in between."""
     o = root / "out"
     o.mkdir()
     private = root / "private-keys/bytes/blinding"
     released = root / "released-keys/bytes/blinding"
     assert list(released.iterdir()) == []
+    from tests.bytes_commitment_support import SyntheticExport
+
+    export = root / "export"
+    desk = SyntheticExport(root / "manifest.json", [export])
+    capture_options = desk.captured()
+    probe = ["--no-key-probe"]
     analysis = [sys.executable, str(ROOT / "scripts/bytes_analyze.py"),
                 "--export", str(root / "export"), "--manifest", str(root / "manifest.json")]
     twin = [sys.executable, str(ROOT / "scripts/bytes_twin.py"),
@@ -1487,27 +1543,48 @@ def run_both(root, manifest):
     for session in manifest["sessions"]:
         twin += ["--archive", session["archive"]]
 
-    def run(tag, command):
+    def run(tag, command, *, expected=0, artifact=None):
         result = subprocess.run(ample_space_command(command), cwd=ROOT, capture_output=True, text=True, check=False)
         (o / (tag + ".exit")).write_text(str(result.returncode) + "\n")
         (o / (tag + ".stdout")).write_text(result.stdout)
         (o / (tag + ".stderr")).write_text(result.stderr)
-        return result.returncode
+        if result.returncode != expected:
+            raise AssertionError(f"{tag} exited {result.returncode}, expected {expected}\n"
+                                 + result.stdout + result.stderr)
+        if artifact is not None and load(o / artifact) is None:
+            raise AssertionError(f"{tag} did not produce {artifact}")
 
-    run("a-blinded", analysis + ["--stage", "blinded", "--out", str(o / "a-blinded")])
-    run("t-blinded", twin + ["--stage", "blinded", "--out", str(o / "t-blinded.json")])
+    run("a-blinded", analysis + capture_options + ["--stage", "blinded", "--out", str(o / "a-blinded")],
+        artifact="a-blinded/blinded_pass_estimates.json")
+    run("t-blinded", twin + capture_options + ["--stage", "blinded", "--out", str(o / "t-blinded.json")],
+        artifact="t-blinded.json")
     # Stage 1 before any release must refuse on both sides.
-    run("a-fit-nokeys", analysis + ["--stage", "fit", "--key-dir", str(released), "--out", str(o / "a-fit-nokeys")])
-    run("t-1-nokeys", twin + ["--stage", "1", "--key-dir", str(released), "--out", str(o / "t-1-nokeys.json")])
+    run("a-fit-nokeys", analysis + capture_options + probe + ["--stage", "fit", "--key-dir", str(released), "--out", str(o / "a-fit-nokeys")], expected=1)
+    run("t-1-nokeys", twin + capture_options + probe + ["--stage", "1", "--key-dir", str(released), "--out", str(o / "t-1-nokeys.json")], expected=1)
     # Stage-1 release: the fit set's keys and the NEG-8 reference key (Addendum 3 item 1).
-    fit_keys = {"neg8_reference", *(m["model"] + "|bytes-synthetic|512" for m in manifest["models"] if m["role"] == "fit")}
-    for name in sorted({"pack.json", *(blinding._config_filename(k) for k in fit_keys)}):
+    fit_keys = {"pack.json", blinding._config_filename("neg8_reference"),
+                *(blinding._config_filename(m["config_key"]) for m in manifest["models"] if m["role"] == "fit")}
+    for name in sorted(fit_keys):
         shutil.copyfile(private / name, released / name)
-    run("a-fit", analysis + ["--stage", "fit", "--key-dir", str(released), "--out", str(o / "a-fit")])
-    run("t-1", twin + ["--stage", "1", "--key-dir", str(released), "--out", str(o / "t-1.json")])
+    fit_options, released = desk.finalized(released)
+    analysis += fit_options
+    twin += fit_options
+    run("a-fit", analysis + ["--stage", "fit", "--key-dir", str(released), "--out", str(o / "a-fit")],
+        artifact="a-fit/predictions.json")
+    run("t-1", twin + ["--stage", "1", "--key-dir", str(released), "--out", str(o / "t-1.json")],
+        artifact="t-1.json")
     predictions = o / "a-fit/predictions.json"
     from tests.bytes_commitment_support import fixture_options
     options = fixture_options(root, predictions)
+    if verify_fit_rerun:
+        rerun = o / "a-fit-rerun"
+        fit = analysis + ["--stage", "fit", "--key-dir", str(released), "--out", str(rerun)]
+        run("a-fit-rerun", fit, artifact="a-fit-rerun/predictions.json")
+        fixture_prediction = Path(options[options.index("--predictions") + 1])
+        if (rerun / "predictions.json").read_bytes() != fixture_prediction.read_bytes():
+            raise AssertionError("synthetic fit rerun changed committed bytes")
+        if (rerun / "predictions.sha256").read_bytes() != fixture_prediction.with_suffix(".sha256").read_bytes():
+            raise AssertionError("synthetic fit rerun changed committed sidecar")
     commit = options[-1]
     analysis += options
     twin += options
@@ -1516,18 +1593,26 @@ def run_both(root, manifest):
         # released, both implementations run on the blinded held-out rows (rails only).  The commit
         # is the desk's git commit of the stage-1 output; its hash admits the withheld store.
         (o / "stage1-commit").write_text(commit + "\n")
-        run("a-blinded-post", analysis + ["--stage", "blinded", "--stage1-commit", commit, "--out", str(o / "a-blinded-post")])
-        run("t-blinded-post", twin + ["--stage", "blinded", "--stage1-commit", commit, "--out", str(o / "t-blinded-post.json")])
+        run("a-blinded-post", analysis + ["--stage", "blinded", "--stage1-commit", commit, "--out", str(o / "a-blinded-post")],
+            artifact="a-blinded-post/blinded_pass_estimates.json")
+        run("t-blinded-post", twin + ["--stage", "blinded", "--stage1-commit", commit, "--out", str(o / "t-blinded-post.json")],
+            artifact="t-blinded-post.json")
     # Stage 2 with only the fit keys released must refuse on both sides (Addendum 3 item 4, D7).
     run("a-held-fitkeys", analysis + ["--stage", "heldout", "--key-dir", str(released), "--predictions", str(predictions),
-                                      "--out", str(o / "a-held-fitkeys")])
-    run("t-2-fitkeys", twin + ["--stage", "2", "--key-dir", str(released), "--out", str(o / "t-2-fitkeys.json")])
-    # Stage-2 release: every key.
-    for path in sorted(private.glob("*.json")):
-        shutil.copyfile(path, released / path.name)
-    run("a-held", analysis + ["--stage", "heldout", "--key-dir", str(released), "--predictions", str(predictions),
-                              "--out", str(o / "a-held")])
-    run("t-2", twin + ["--stage", "2", "--key-dir", str(released), "--out", str(o / "t-2.json")])
+                                      "--out", str(o / "a-held-fitkeys")], expected=1)
+    run("t-2-fitkeys", twin + ["--stage", "2", "--key-dir", str(released), "--out", str(o / "t-2-fitkeys.json")], expected=1)
+    # Model the separate stage-2 release without modifying the sealed fit directory.
+    heldout = root / "heldout-keys/bytes/blinding"
+    heldout.mkdir(parents=True)
+    names = fit_keys | {blinding._config_filename(m["config_key"]) for m in manifest["models"]}
+    for name in sorted(names):
+        source = private / name
+        if source.is_file():
+            shutil.copyfile(source, heldout / name)
+    run("a-held", analysis + ["--stage", "heldout", "--key-dir", str(heldout), "--predictions", str(predictions),
+                              "--out", str(o / "a-held")], artifact="a-held/heldout_pass_estimates.json")
+    run("t-2", twin + ["--stage", "2", "--key-dir", str(heldout), "--out", str(o / "t-2.json")],
+        artifact="t-2.json")
 
 
 def setUpModule():
@@ -1543,7 +1628,7 @@ def campaign(name):
     if name not in WORK:
         root = WORK["root"] / name
         manifest = build(root, name)
-        run_both(root, manifest)
+        run_both(root, manifest, verify_fit_rerun=name == "no_point_labels")
         WORK[name] = compare_campaign(root)
     return WORK[name]
 
@@ -1560,7 +1645,7 @@ def whole_sample_flips(name):
     the twin's own meter reader and export reader after every key is released."""
     root = WORK["root"] / name
     manifest = load(root / "manifest.json")
-    released = root / "released-keys/bytes/blinding"
+    released = root / "heldout-keys/bytes/blinding"
     flips = runs = 0
     largest = 0.0
     sample_intervals = set()
@@ -1614,7 +1699,7 @@ class CompressedRefusalTests(unittest.TestCase):
                     "--key-dir", str(keys), "--stage", "1", "--out", str(output)]
             for session in self.manifest["sessions"]:
                 argv += ["--archive", session["archive"]]
-            result = subprocess.run(ample_space_command(argv), cwd=ROOT, capture_output=True, text=True)
+            result = subprocess.run(ample_space_command(argv, seal_tag=variant), cwd=ROOT, capture_output=True, text=True)
             print(f"\ncompressed probe {variant}: analysis=restore_refused "
                   f"twin_exit={result.returncode} refusal={result.stdout.startswith('refused: ')}",
                   flush=True)
@@ -1684,7 +1769,8 @@ class CompressedRefusalTests(unittest.TestCase):
             for session in self.manifest['sessions']:
                 programs[1] += ['--archive', session['archive']]
             for command in programs:
-                result = subprocess.run(ample_space_command(command), cwd=ROOT, capture_output=True, text=True)
+                result = subprocess.run(ample_space_command(command, seal_tag="journal-less"),
+                                        cwd=ROOT, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
                 self.assertIn('restore_refused:', result.stdout + result.stderr)
                 self.assertIn('compression.jsonl', result.stdout + result.stderr)
@@ -1729,8 +1815,10 @@ class AgreementTests(unittest.TestCase):
             return {**original(archive), "session_flags": []}
         import contextlib
         import io
+        from tests.bytes_commitment_support import synthetic_cli_args
+
         with mock.patch.object(bt, "load_archive", side_effect=run_only), contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(bt.main(argv), 0)
+            self.assertEqual(bt.main(synthetic_cli_args("bytes_twin.py", argv)), 0)
         legacy = Recorder()
         compare_cells(legacy, "fit", load(root / "out/a-fit/fit_pass_estimates.json"), load(output))
         self.assertTrue(legacy.above(), "old run-only flags must fail the exact agreement bar")
@@ -1773,8 +1861,10 @@ class AgreementTests(unittest.TestCase):
                     argv += ["--archive", item["archive"]]
                 import contextlib
                 import io
+                from tests.bytes_commitment_support import synthetic_cli_args
+
                 with mock.patch.object(bt, "_member", side_effect=legacy_member), contextlib.redirect_stdout(io.StringIO()):
-                    self.assertEqual(bt.main(argv), 0)
+                    self.assertEqual(bt.main(synthetic_cli_args("bytes_twin.py", argv)), 0)
                 legacy = Recorder()
                 compare_cells(legacy, "fit", load(root / "out/a-fit/fit_pass_estimates.json"), load(output))
                 hits = [r for r in legacy.above() if r["key"] == "B_kind:anchor"]
@@ -1872,28 +1962,24 @@ class AgreementTests(unittest.TestCase):
         source = (ROOT / "scripts/bytes_twin.py").read_text()
         expression = 'request_energy + request_battery["battery_gross_j"]'
         self.assertEqual(source.count(expression), 1)
-        # The twin's stage-2 guard runs the bytes_commitment.py beside its own file
-        # (RL-7a, 276d05201), so the mutant gets the production guard beside it, by
-        # symlink, and the campaign's synthetic commitment options, exactly as
-        # run_both gives the unmutated twin. Without them the guard refuses before
-        # the twin computes, and NEG-8 would pass or fail without being compared.
-        mutant_dir = root / "neg8-mutant/bin"
-        mutant_dir.mkdir(parents=True)
-        (mutant_dir / "bytes_commitment.py").symlink_to(ROOT / "scripts/bytes_commitment.py")
-        mutant = mutant_dir / "bytes_twin.py"
+        from tests.bytes_commitment_support import copy_cli_checkout, fixture_options
+
+        checkout = root / "neg8-mutant"
+        copy_cli_checkout(checkout)
+        mutant = checkout / "scripts/bytes_twin.py"
         mutant.write_text(source.replace(expression, "request_energy"))
         manifest = load(root / "manifest.json")
         output = root / "no-reference-battery.json"
-        from tests.bytes_commitment_support import fixture_options
         command = [sys.executable, str(mutant), "--export-dir", str(root / "export"),
                    "--manifest", str(root / "manifest.json"), "--stage", "2",
-                   "--key-dir", str(root / "released-keys/bytes/blinding"), "--out", str(output)]
+                   "--key-dir", str(root / "heldout-keys/bytes/blinding"), "--out", str(output)]
         for session in manifest["sessions"]:
             command += ["--archive", session["archive"]]
         command += fixture_options(root, root / "out/a-fit/predictions.json")
-        result = subprocess.run(ample_space_command(command), cwd=ROOT, capture_output=True, text=True)
+        result = subprocess.run(ample_space_command(command), cwd=checkout, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         wrong = load(output)
+        self.assertIsNotNone(wrong)
         original = load
         with mock.patch(__name__ + ".load", side_effect=lambda p: wrong if Path(p) == root / "out/t-2.json" else original(p)):
             above = compare_campaign(root).above()
@@ -1909,7 +1995,7 @@ class AgreementTests(unittest.TestCase):
               f"diagnostics {counts['diagnostic_compared']}, different {counts['diagnostic_different']}")
         root = WORK["root"] / "marker_incomplete"
         manifest = load(root / "manifest.json")
-        records = ba.load_records(root / "export", manifest, stage="all", key_dir=root / "released-keys/bytes/blinding")
+        records = ba.load_records(root / "export", manifest, stage="all", key_dir=root / "heldout-keys/bytes/blinding")
         self.assertTrue(any(r.get("meter") and not r["meter"]["battery_end_window_complete"] for r in records))
         twin = load(root / "out/t-2.json")
         reasons = [str(est.get("without_assisted", {}).get("reason", ""))
@@ -1934,7 +2020,7 @@ class AgreementTests(unittest.TestCase):
               f"diagnostics {counts['diagnostic_compared']}, different {counts['diagnostic_different']}")
         root = WORK["root"] / "late_start"
         manifest = load(root / "manifest.json")
-        records = ba.load_records(root / "export", manifest, stage="all", key_dir=root / "released-keys/bytes/blinding")
+        records = ba.load_records(root / "export", manifest, stage="all", key_dir=root / "heldout-keys/bytes/blinding")
         partial = [r for r in records if r.get("meter") is None and r.get("decode_assist_evaluated")]
         self.assertTrue(partial, "late-start stream must miss decode coverage but reach the marker window")
         self.assertTrue(any("bytes.decode_battery_assist" in r["flags"] for r in partial))
@@ -1961,7 +2047,7 @@ class AgreementTests(unittest.TestCase):
               f"diagnostics {counts['diagnostic_compared']}, different {counts['diagnostic_different']}")
                 root = WORK["root"] / name
                 records = ba.load_records(root / "export", load(root / "manifest.json"), stage="all",
-                                          key_dir=root / "released-keys/bytes/blinding")
+                                          key_dir=root / "heldout-keys/bytes/blinding")
                 self.assertEqual(len(records), 1000)
                 self.assertTrue(all(r["meter"] is None and r.get("decode_assist_evaluated") for r in records))
                 self.assertTrue(any("bytes.decode_battery_assist" in r["flags"] for r in records))
@@ -1975,7 +2061,7 @@ class AgreementTests(unittest.TestCase):
         # This generator reuses run IDs across passes; session + run is the identity.
         unusable = {(s["session_id"], d["run_id"]) for d in planted for s in manifest["sessions"]
                     if s["pass_id"] == d["pass"]}
-        primary = ba.load_records(root / "export", manifest, stage="all", key_dir=root / "released-keys/bytes/blinding")
+        primary = ba.load_records(root / "export", manifest, stage="all", key_dir=root / "heldout-keys/bytes/blinding")
         bad = [r for r in primary if (r["session_id"], r["run_id"]) in unusable]
         self.assertEqual(len(bad), len(unusable))
         self.assertTrue(all(r["status"] == "unusable" and r["invalid_energy_record"] for r in bad))
@@ -2069,6 +2155,212 @@ class AgreementTests(unittest.TestCase):
         self.assertTrue(all(r["status"] == "equal" for r in rows if r["key"] in ("status", "pass_label", "answer", "n")
                             or r["key"].startswith(("flag:", "withheld_"))))
 
+    def test_no_point_labels_campaign(self):
+        name = "no_point_labels"
+        recorder = campaign(name)
+        counts = recorder.counts()
+        self.assertEqual(counts["above_bar"], 0)
+        print(f"\nagreement {name}: compared {counts['compared']}, equal {counts['equal']}, "
+              f"under the bar {counts['under_bar']}, above the bar {counts['above_bar']}")
+        root = WORK["root"] / name / "out"
+        refused, mixed, moe = "Qwen3-32B-4bit", "Llama-3.3-70B-Instruct-4bit", "Qwen3-Next-80B-A3B-Instruct-4bit"
+        for stage in ("a-blinded-post", "a-held"):
+            with self.subTest(stage=stage):
+                self.assertEqual((root / f"{stage}.exit").read_text().strip(), "0")
+                points = load(root / stage / "model_estimates.json")
+                held_h1 = load(root / stage / "h1.json")
+                for model, statuses, reason in (
+                    (refused, ["unavailable", "unavailable"], "all passes refused"),
+                    (mixed, ["missing", "unavailable"], "withheld rows missing and other passes refused"),
+                    (moe, ["unavailable", "unavailable"], "all passes refused"),
+                ):
+                    model_points = [p for p in points if p["model"] == model]
+                    self.assertTrue(model_points)
+                    for point in model_points:
+                        self.assertEqual((point["status"], point["reason"]), ("unavailable", reason))
+                        self.assertEqual([p["status"] for p in point["passes"]], statuses)
+                    rows = [r for r in held_h1 if r["model"] == model]
+                    self.assertEqual(len(rows), len(model_points))
+                    self.assertTrue(all((r["status"], r["reason"], r.get("word")) == ("missing", reason, None)
+                                        for r in rows))
+                self.assertTrue(all(WITHHELD_MISSING not in p.get("flags", [])
+                                    and all(WITHHELD_MISSING not in row["flags"] for row in p["passes"])
+                                    for p in points if p["moe"]))
+                answers = load(root / stage / "moe.json")
+                self.assertTrue(answers)
+                for row in answers:
+                    self.assertEqual((row["status"], row["answer"]), ("missing", "missing"))
+                    self.assertEqual(row["reason"], "active or resident requires all three MoE points")
+                    self.assertEqual([m["model"] for m in row["missing_models"]], [moe])
+                    if stage == "a-held":
+                        self.assertTrue({"registration.default_used", "battery.assist", "member.strict_validation_failed",
+                                         "bytes.decode_battery_assist", WITHHELD_MISSING}.issubset(row["flags"]))
+
+    def test_invalid_runs_contribute_no_meter_assist_flags(self):
+        name = "no_point_labels_invalid_assist"
+        recorder = campaign(name)
+        counts = recorder.counts()
+        self.assertEqual(counts["above_bar"], 0)
+        print(f"\nagreement {name}: compared {counts['compared']}, equal {counts['equal']}, "
+              f"under the bar {counts['under_bar']}, above the bar {counts['above_bar']}")
+        exits = {r["key"]: (r["a"], r["t"]) for r in recorder.rows if r["group"] == "exit"}
+        self.assertEqual(exits["heldout/stage2"], (0, 0))
+        moe, mixed = "qwen3-next-80b-a3b-instruct-4bit", "llama-3.3-70b-instruct-4bit"
+        rows = [r for r in recorder.rows if r["stage"] == "heldout" and r["key"] == "flags"]
+        checks = {
+            "cell": [r for r in rows if r["group"].startswith((f"cell/{moe}/", f"cell/{mixed}/pass2/"))],
+            "h1": [r for r in rows if r["group"].startswith("h1/") and r["group"].endswith((moe, mixed))],
+            "moe": [r for r in rows if r["group"].startswith("moe/")],
+        }
+        self.assertEqual({table: len(flags) for table, flags in checks.items()}, {"cell": 36, "h1": 6, "moe": 3})
+        for flag_rows in checks.values():
+            for row in flag_rows:
+                self.assertIn("battery.assist", row["a"])
+                self.assertNotIn("bytes.decode_battery_assist", row["a"])
+
+    def test_no_point_labels_survivor_campaign(self):
+        name = "no_point_labels_survivor"
+        recorder = campaign(name)
+        counts = recorder.counts()
+        self.assertEqual(counts["above_bar"], 0)
+        print(f"\nagreement {name}: compared {counts['compared']}, equal {counts['equal']}, "
+              f"under the bar {counts['under_bar']}, above the bar {counts['above_bar']}")
+        exits = {r["key"]: (r["a"], r["t"]) for r in recorder.rows if r["group"] == "exit"}
+        self.assertEqual(exits["heldout/stage2"], (0, 0))
+        rows = {(r["group"], r["key"]): (r["a"], r["t"]) for r in recorder.rows if r["stage"] == "heldout"}
+        code = "member.target_phase_precheck_failed"
+
+        for boundary in ("rails", "dc_input", "rest"):
+            with self.subTest(boundary=boundary):
+                suffix = f"/{boundary}/gross"
+                refused = "cell/qwen3-14b-4bit/pass1" + suffix
+                survivor = "point/qwen3-14b-4bit/mean" + suffix
+                answer = f"moe/{boundary}/passes_mean"
+                self.assertEqual(rows[(refused, "status")], ("unavailable", "unavailable"))
+                self.assertEqual(rows[(survivor, "pass_label")], ("one_pass", "one_pass"))
+                self.assertEqual(rows[(answer, "answer")], ("missing", "missing"))
+
+                point_status = {group.split("/")[1]: statuses
+                                for (group, key), statuses in rows.items()
+                                if key == "status" and group.startswith("point/") and group.endswith(suffix)}
+                pass_flags = [(group.split("/")[1], flags) for (group, key), flags in rows.items()
+                              if key == "flags" and group.startswith("cell/") and group.endswith(suffix)]
+                # RL-201b: derive the expected row independently for each implementation.
+                for side, implementation in enumerate(("analysis", "twin")):
+                    with self.subTest(implementation=implementation):
+                        self.assertIn(code, rows[(refused, "flags")][side])
+                        expected = sorted({flag for model, flags in pass_flags
+                                           if point_status[model][side] != "computed" for flag in flags[side]})
+                        answer_flags = rows[(answer, "flags")][side]
+                        self.assertEqual(answer_flags, expected)
+                        self.assertNotIn(code, answer_flags)
+
+    def test_no_point_labels_lost_member_campaign(self):
+        name = "no_point_labels_lost_member"
+        recorder = campaign(name)
+        counts = recorder.counts()
+        self.assertEqual(counts["above_bar"], 0)
+        print(f"\nagreement {name}: compared {counts['compared']}, equal {counts['equal']}, "
+              f"under the bar {counts['under_bar']}, above the bar {counts['above_bar']}")
+        exits = {r["key"]: (r["a"], r["t"]) for r in recorder.rows if r["group"] == "exit"}
+        self.assertEqual(exits["heldout/stage2"], (0, 0))
+        root = WORK["root"] / name
+        manifest = load(root / "manifest.json")
+        fit_keys = {"pack.json", blinding._config_filename("neg8_reference")}
+        fit_keys.update(blinding._config_filename(model["config_key"])
+                        for model in manifest["models"] if model["role"] == "fit")
+        heldout_keys = {blinding._config_filename(model["config_key"])
+                        for model in manifest["models"] if model["role"] == "heldout"}
+        private_keys = {p.name for p in (root / "private-keys/bytes/blinding").glob("*.json")}
+        self.assertTrue(private_keys - fit_keys - heldout_keys, "the lost member must mint an unregistered key")
+        self.assertEqual({p.name for p in (root / "released-keys/bytes/blinding").iterdir()}, fit_keys)
+        self.assertEqual({p.name for p in (root / "heldout-keys/bytes/blinding").iterdir()},
+                         private_keys & (fit_keys | heldout_keys))
+        rows = {(r["group"], r["key"]): (r["a"], r["t"]) for r in recorder.rows if r["stage"] == "heldout"}
+        model = "qwen3-next-80b-a3b-instruct-4bit"
+        for boundary in ("rails", "dc_input", "rest"):
+            with self.subTest(boundary=boundary):
+                cell = f"cell/{model}/pass1/{boundary}/gross"
+                h1 = f"h1/{boundary}/passes_mean/{model}"
+                moe = f"moe/{boundary}/passes_mean"
+                self.assertEqual(rows[(cell, "status")], ("unavailable", "unavailable"))
+                self.assertEqual(rows[(h1, "status")], ("missing", "missing"))
+                self.assertEqual(rows[(moe, "answer")], ("missing", "missing"))
+                for group in (cell, h1, moe):
+                    for flags in rows[(group, "flags")]:
+                        self.assertIn("member.bytes_missing", flags, group)
+
+    def test_no_point_labels_missing_bundle_campaign(self):
+        name = "no_point_labels_missing_bundle"
+        recorder = campaign(name)
+        self.assertEqual(recorder.counts()["above_bar"], 0)
+        exits = {r["key"]: (r["a"], r["t"]) for r in recorder.rows if r["group"] == "exit"}
+        self.assertEqual(exits["heldout/stage2"], (0, 0))
+        model = canon(MISSING_BUNDLE_CASE[1])
+        rows = {(r["group"], r["key"]): (r["a"], r["t"]) for r in recorder.rows if r["stage"] == "heldout"}
+        for boundary in bt.BOUNDARIES:
+            with self.subTest(boundary=boundary):
+                cell = f"cell/{model}/pass1/{boundary}/gross"
+                h1 = f"h1/{boundary}/passes_mean/{model}"
+                moe = f"moe/{boundary}/passes_mean"
+                self.assertEqual(rows[(cell, "status")], ("unavailable", "unavailable"))
+                self.assertEqual(rows[(h1, "status")], ("missing", "missing"))
+                self.assertEqual(rows[(moe, "answer")], ("missing", "missing"))
+                for group in (cell, h1, moe):
+                    for flags in rows[(group, "flags")]:
+                        self.assertNotIn("bytes.meter_decode_unavailable", flags, group)
+
+    def check_missing_input_mode(self, mode):
+        root = WORK["root"] / mode
+        model_names = [m["model"] for m in load(FIXTURES / "campaign_design.json")["models"]]
+        self.assertEqual({canon(name) for name in model_names}, set(bt.ROSTER))
+        # Llama's first pass is already withheld-missing in the label campaign.
+        cases = [(2 if model == "Llama-3.3-70B-Instruct-4bit" else 1, model, 20, mode)
+                 for model in model_names]
+        manifest = build(root, "no_point_labels", missing_inputs=cases)
+        run_both(root, manifest)
+        self.check_missing_input_results(root, mode, cases)
+
+    def check_missing_input_results(self, root, mode, cases):
+        recorder = compare_campaign(root)
+        counts = recorder.counts()
+        print(f"\nagreement {mode}: {counts['compared']} compared, {counts['above_bar']} above bar", flush=True)
+        self.assertEqual(counts["above_bar"], 0, "\n".join(describe(row) for row in recorder.above()[:12]))
+        stages = {r["key"]: (r["a"], r["t"]) for r in recorder.rows if r["group"] == "exit"}
+        for stage in ("blinded", "fit/stage1", "blinded after the stage-1 commit (withheld rows; never refuses)",
+                      "heldout/stage2"):
+            self.assertEqual(stages[stage], (0, 0), stage)
+        flags = {r["group"]: (r["a"], r["t"]) for r in recorder.rows
+                 if r["stage"] == "heldout" and r["key"] == "flags"}
+        twin = load(root / "out/t-2.json")
+        affected = {(d["pass"], d["model"]): d["run_id"] for d in load(root / "build.json")["defects"]
+                    if d["kind"] == mode}
+        self.assertEqual(set(affected), {(p, model) for p, model, _, _ in cases})
+        for (p, model), run_id in affected.items():
+            model = canon(model)
+            block = twin["cells"][model][f"pass{p}"]
+            with self.subTest(model=model):
+                if mode == "meter_missing":
+                    self.assertEqual(block["dc_join_status"][run_id], "no_aligned_stream_covers_span")
+                else:
+                    self.assertNotIn(run_id, block["dc_join_status"])
+                for boundary in bt.BOUNDARIES:
+                    for variant in bt.CELL_VARIANTS:
+                        a, t = flags[f"cell/{model}/pass{p}/{boundary}/{variant}"]
+                        self.assertEqual(a, t)
+        for boundary in bt.BOUNDARIES:
+            a, t = flags[f"moe/{boundary}/passes_mean"]
+            self.assertEqual(a, t)
+            h1_flags = [pair for group, pair in flags.items() if group.startswith(f"h1/{boundary}/passes_mean/")]
+            self.assertTrue(h1_flags)
+            for a, t in h1_flags:
+                self.assertEqual(a, t)
+
+    def test_missing_inputs_across_registered_models(self):
+        for mode in MISSING_INPUT_MODES:
+            with self.subTest(mode=mode):
+                self.check_missing_input_mode(mode)
+
     def test_time_world(self):
         self.check("time", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),
                                 "h2/rest/passes_mean": (11, 11)})
@@ -2108,13 +2400,13 @@ class AgreementTests(unittest.TestCase):
 class ComparerRegressionTests(unittest.TestCase):
     def test_reference_reasons_compare_codes_and_preserve_unknown_words(self):
         for prose in ("meter does not cover decode and own idle spans", "meter span has no samples",
-                      "battery reading missing", "meter request unavailable",
+                      "battery reading missing",
                       "meter clock fit or raw/monotonic mapping unavailable: fewer than two batches with samples"):
             self.assertEqual(reference_reason_code(prose), "bytes.meter_decode_unavailable")
         self.assertEqual(reference_reason_code("dropped device sample in meter span"), "bytes.meter_gap")
         for reason in ("bytes.reference_request_unavailable", "bytes.meter_gap", "status: failed",
                        "excluded: member.anchor_not_bounded", "bytes.__coverage_fault__",
-                       "unrecognized diagnostic", "bytes.meter_gap__coverage_fault__"):
+                       "meter request unavailable", "unrecognized diagnostic", "bytes.meter_gap__coverage_fault__"):
             self.assertEqual(reference_reason_code(reason), reason)
 
     def test_unprinted_differences_are_counted_without_gating_or_a_tolerance(self):
@@ -2318,6 +2610,11 @@ class MarkerPathAgreementTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.directory = self.root / "sources/night-custody/hazards/meter"
         self.directory.mkdir(parents=True)
+        derived = self.root / "derived"
+        derived.mkdir()
+        (derived / "roster.json").write_text('{"members": []}')
+        (derived / "b6-acceptance.json").write_text('{"counting": true}')
+        (derived / "flags.jsonl").write_text('')
         self.path = self.directory / "stream-001.jsonl"
         self.spans = {"decode_ns": [4_000_000_000, 8_000_000_000],
                       "idle_ns": [0, 2_000_000_000], "request_ns": [2_000_000_000, 8_000_000_000]}
@@ -2682,8 +2979,7 @@ class MarkerPathAgreementTests(unittest.TestCase):
             if path == self.path:
                 raise OSError("unreadable stream")
             return original_open(path, *args, **kwargs)
-        # #573 propagates custody read errors. Fail the intended meter stream,
-        # while absent acceptance/roster files retain their missing-file path.
+        # #573 propagates custody read errors. Fail only the intended meter stream.
         with mock.patch.object(Path, "open", unreadable_stream):
             self.assert_agreement()
 

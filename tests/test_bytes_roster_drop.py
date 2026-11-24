@@ -158,7 +158,6 @@ def run_chain(root, manifest, commands, *, twin=False, code_root=ROOT, label="ou
                  "--manifest", root / "manifest.json"]
     for session in manifest["sessions"]:
         twin_args += ["--archive", session["archive"]]
-    withheld = sorted((root / "private-keys/bytes/withheld").rglob("*.runs.csv"))
 
     def analyze(stage, tag, *extra):
         command([*analysis, "--stage", stage, "--out", out / tag, *extra], commands, cwd=code_root)
@@ -168,9 +167,6 @@ def run_chain(root, manifest, commands, *, twin=False, code_root=ROOT, label="ou
         args = [*twin_args, "--stage", stage, "--out", out / (tag + ".json"), *extra]
         if keys:
             args += ["--key-dir", root / keys]
-        if stage == "2":
-            for path in withheld:
-                args += ["--export", path]
         command(args, commands, cwd=code_root)
         (out / (tag + ".exit")).write_text("0\n")
 

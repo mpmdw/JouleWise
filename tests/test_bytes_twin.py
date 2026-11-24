@@ -45,6 +45,9 @@ WORLD = {}
 
 
 def setUpModule():
+    patcher = patch.object(bt, '_check_export')
+    patcher.start()
+    unittest.addModuleCleanup(patcher.stop)
     WORLD["dir"] = tempfile.TemporaryDirectory(prefix="bytes-twin-")
     root = Path(WORLD["dir"].name)
     WORLD["one"] = root / "one"
@@ -94,7 +97,8 @@ class SessionFlagTests(unittest.TestCase):
             emitted = [shared, {"code": "catalog.digest_mismatch"},
                        {"code": "run.acceptance_only", "scope": {"run_id": "other-run"}}]
             (derived / "flags.jsonl").write_text("\n" + "".join(json.dumps(f) + "\n" for f in file_flags))
-            (derived / "b6-acceptance.json").write_text(json.dumps({"emitted_flags": emitted}))
+            (derived / "b6-acceptance.json").write_text(json.dumps({"counting": True, "emitted_flags": emitted}))
+            (derived / "roster.json").write_text('{"members": []}')
             self.assertEqual(bt.load_archive(root)["session_flags"],
                              ["catalog.digest_mismatch", "power.pstar_unsized", "registration.default_used"])
 
@@ -107,10 +111,81 @@ class SessionFlagTests(unittest.TestCase):
                 json.dumps({"code": "audit.early", "scope": {}}) + "\n" +
                 json.dumps({"code": "battery.assist", "scope": {"run_id": "r1"}}) + "\n")
             (root / "derived/b6-acceptance.json").write_text(json.dumps(
-                {"emitted_flags": [{"code": "audit.early"}, {"code": "zeta.late"}]}))
+                {"counting": True, "emitted_flags": [{"code": "audit.early"}, {"code": "zeta.late"}]}))
+            (root / "derived/roster.json").write_text('{"members": []}')
             codes = bt.load_archive(root)["session_flags"]
             self.assertEqual(codes, ["audit.early", "zeta.late"])
             self.assertLess(codes[0], "battery.assist")
+
+
+class ScienceMeterEligibilityTests(unittest.TestCase):
+    def test_all_invalid_members_skip_meter_joins_and_keep_refused_cells(self):
+        model = "qwen3-30b-a3b-4bit"
+        codes = ["", *sorted(bt.VALIDITY_CODES)]
+        rows = [{
+            "session_id": "s1", "role": "science", "model_name": None, "config_key": "||",
+            "cell_ids": model + "-decode",
+            "run_id": f"r{index}", "order_index": index, "status": "succeeded" if code else "failed",
+            "strata": "repeat" if index < 10 else "quad",
+            "unit_ids": str(index if index < 10 else (index - 10) // 4),
+            "excluded": bool(code), "exclusion_codes": code, "flag_codes": "battery.assist",
+            "_unblinded": True,
+        } for index, code in enumerate(codes[i % len(codes)] for i in range(50))]
+        absent = rows.pop()
+        run_id = absent["run_id"]
+        archive = {
+            "session_id": "s1", "session_flags": ["audit.session"],
+            "planned_members": [{"run_id": run_id, "role": "science", "units": [{
+                "cell_id": absent["cell_ids"], "stratum": absent["strata"], "unit_id": absent["unit_ids"],
+            }]}],
+            "run_codes": {**{row["run_id"]: {"battery.assist", row["exclusion_codes"]} - {""} for row in rows},
+                          run_id: {"member.bytes_missing"}},
+            "exclusions": {**{row["run_id"]: {row["exclusion_codes"]} for row in rows if row["excluded"]},
+                           run_id: {"member.bytes_missing"}},
+        }
+        manifest = {name: {"cell_ids": [name + "-decode"]} for name in bt.ROSTER}
+        with patch.object(bt, "unblind", return_value=rows) as unblind, patch.object(bt, "dc_join") as join:
+            result = bt.analyse(rows, manifest, [archive],
+                                stage="2", key_dir="synthetic", listed={"s1": {"pass_id": 1}})
+
+        unblind.assert_called_once_with(rows, "synthetic", {bt.REFERENCE_KEY})
+        join.assert_not_called()
+        block = result["cells"][model]["pass1"]
+        self.assertEqual(block["dc_join_status"], {})
+        for boundary in bt.BOUNDARIES:
+            with self.subTest(boundary=boundary):
+                cell = block["boundaries"][boundary]
+                self.assertEqual(cell["assist_members"], [])
+                quantity = cell["quantities"]["gross"]
+                self.assertEqual(quantity["status"], "refused_below_minimum")
+                self.assertEqual(set(quantity["flags"]), {"audit.session", "battery.assist", *bt.VALIDITY_CODES})
+                self.assertTrue(any(row["run_id"] == run_id and row["codes"] == "member.bytes_missing"
+                                    for row in cell["removed_members"]))
+
+    def test_partial_floor_plan_refuses_before_estimation(self):
+        rows = [{"flag_codes": "battery.assist"}] * 49
+        with patch.object(bt, "_scaled_allowance") as scale:
+            cell = bt.compute_cell(rows, "rails", {}, {}, .05)
+        scale.assert_not_called()
+        for variant in bt.CELL_VARIANTS:
+            self.assertEqual(cell[variant], {"status": "refused_floor_plan",
+                                            "reason": "floor module requires 50 planned runs",
+                                            "flags": ["battery.assist"]})
+
+    def test_missing_events_make_the_science_record_unavailable(self):
+        model = "Qwen3-30B-A3B-4bit"
+        with tempfile.TemporaryDirectory(prefix="bytes-missing-events-") as temp:
+            root = Path(temp)
+            bundle = root / "sources/claim-runs/r1"
+            bundle.mkdir(parents=True)
+            (bundle / "config.json").write_text(json.dumps({"model": {"name": model}}))
+            (bundle / "metadata.json").write_text(json.dumps({
+                "workload_observed": {"output_token_count": 512},
+                "uncertainty_evidence": {"clock_anchor": {"clock_stamps": {"sampling_started": {
+                    "epoch_s": 100, "monotonic_before_s": 1}}}},
+            }))
+            with self.assertRaisesRegex(ValueError, "member decode or idle span unavailable"):
+                bt._science_inputs({"root": root}, {"run_id": "r1"}, model)
 
 
 class MissingWithheldFlagTests(unittest.TestCase):
@@ -161,7 +236,7 @@ class MissingWithheldFlagTests(unittest.TestCase):
             {"code": "battery.assist", "scope": {"run_id": "r2"}},
             {"code": "other.model", "scope": {"run_id": "r3"}}]))
         (root / "derived/b6-acceptance.json").write_text(json.dumps({
-            "session_id": "s1",
+            "session_id": "s1", "counting": True,
             "emitted_flags": [{"code": "audit.early"}, {"code": "zeta.late"}, {"code": "run.emitted", "scope": {"run_id": "r2"}}],
             "excluding": [{"scope": "member", "run_id": "r1", "code": "member.excluded"},
                           {"scope": "member", "run_id": "r2", "code": "member.excluded"},
@@ -299,7 +374,7 @@ class AnchorEnvelopeTests(QuantityTestCase):
 
     def test_blinded_stage_keeps_export_columns(self):
         # §11: "from the blinded export's columns (no archive, key or meter reads)".
-        with patch.object(bt, "decode_anchor_bound", side_effect=AssertionError("blinded anchor read")):
+        with patch.object(bt, "_science_inputs", side_effect=AssertionError("blinded science read")):
             result = run_twin(WORLD["one"], "blinded")
         self.assertTrue(result["cells"])
 
@@ -510,7 +585,9 @@ class Neg8Tests(QuantityTestCase):
                "status": "succeeded", "excluded": False, "flag_codes": "",
                "reference_request_duration_s": 2.0, "reference_request_gross_j": 10.0,
                "reference_request_idle_subtracted_j": 8.0}
-        for joined, reason in (({}, "bytes.meter_decode_unavailable"),
+        for joined, reason in (({}, "meter request unavailable"),
+                               ({"status": "bundle_missing"}, "meter request unavailable"),
+                               ({"status": "spans_unreadable"}, "meter request unavailable"),
                                ({"status": "no_aligned_stream_covers_span"}, "bytes.meter_decode_unavailable"),
                                ({"status": "battery reading missing"}, "bytes.meter_decode_unavailable"),
                                ({"status": "meter_gap", "flags": ["bytes.meter_gap"]}, "bytes.meter_gap")):
@@ -658,24 +735,24 @@ class H1Tests(QuantityTestCase):
         fit = self.points()
         lines = bt.h1_lines(fit)
         held = {**fit, "qwen3-14b-4bit": {"x": {"bytes": 8.0, "resident": 8.0, "time": 3.0}, "e": 8.0, "w": 0.2, "kind": "dense"}}
-        miss = ["qwen3-30b-a3b-4bit"]
         flags = ["audit.early", "battery.assist", "bytes.withheld_missing"]
-        words = bt.h1_words(lines, held, missing=miss, missing_flags=flags)
+        words = bt.h1_words(lines, held, missing_flags=flags)
         self.assertEqual(words["active_or_resident"]["answer"], "missing")
+        self.assertEqual(words["active_or_resident"]["missing_models"], list(bt.MOE))
         self.assertEqual(words["active_or_resident"]["flags"], flags)
-        # the unsorted, duplicated input prints sorted; no MoE model missing prints none.
-        self.assertEqual(bt.h1_words(lines, held, missing=miss, missing_flags=["b", "a"])["active_or_resident"]["flags"], ["a", "b"])
-        # fewer than three MoE points computed: the analysis's row lists the union even with none withheld-missing.
-        self.assertEqual(bt.h1_words(lines, held, missing=[], missing_flags=flags)["active_or_resident"]["flags"], flags)
+        row = bt.h1_words(lines, held, missing_flags=["b", "a", "b"])["active_or_resident"]
+        self.assertEqual((row["answer"], row["flags"]), ("missing", ["a", "b"]))
         # three computed MoE points: no row flags.
         full = {**held, **{n: {"x": {"bytes": 2.0, "resident": 40.0, "time": 1.9}, "e": 2.0, "w": 0.15, "kind": "moe"}
                            for n in bt.MOE}}
-        self.assertEqual(bt.h1_words(lines, full, missing=[], missing_flags=flags)["active_or_resident"]["flags"], [])
+        self.assertEqual(bt.h1_words(lines, full, missing_flags=flags)["active_or_resident"]["flags"], [])
 
     def test_neither_and_mixed(self):
         lines = bt.h1_lines(self.points())
         held = dict(self.points())
-        held["qwen3-30b-a3b-4bit"] = {"x": {"bytes": 2.0, "resident": 40.0, "time": 1.9}, "e": 20.0, "w": 0.1, "kind": "moe"}
+        for model in bt.MOE:
+            held[model] = {"x": {"bytes": 2.0, "resident": 4.0, "time": 1.9}, "e": 2.0, "w": 0.1, "kind": "moe"}
+        held["qwen3-30b-a3b-4bit"]["e"] = 20.0
         words = bt.h1_words(lines, held)
         self.assertEqual(words["models"]["qwen3-30b-a3b-4bit"]["word"], "neither")
         self.assertEqual(words["active_or_resident"]["answer"], "mixed")
@@ -695,7 +772,10 @@ class DeskBundleReadTests(unittest.TestCase):
             bundle = Path(tmp)
             metadata = {"uncertainty_evidence": {"clock_anchor": {"clock_stamps": {
                 "sampling_started": {"epoch_s": 2000, "monotonic_before_s": 1000}}}}}
-            events = [{"event_type": "phase_start", "phase": "tokenize", "timestamp_s": 2000},
+            events = [{"event_type": "stage_started", "phase": "idle_baseline", "timestamp_s": 1998},
+                      {"event_type": "stage_completed", "phase": "idle_baseline", "timestamp_s": 1999},
+                      {"event_type": "phase_start", "phase": "tokenize", "timestamp_s": 2000},
+                      {"event_type": "phase_end", "phase": "tokenize", "timestamp_s": 2000.1},
                       {"event_type": "phase_start", "phase": "decode", "timestamp_s": 2000},
                       {"event_type": "phase_end", "phase": "decode", "timestamp_s": 2001}]
             for name, text in (("metadata.json", json.dumps(metadata)),
@@ -708,27 +788,27 @@ class DeskBundleReadTests(unittest.TestCase):
             # Exact integer ns: one second after the 1000 s monotonic anchor.
             self.assertEqual(bt.member_spans(bundle), {
                 "decode_ns": [1_000_000_000_000, 1_001_000_000_000],
-                "request_ns": [1_000_000_000_000, 1_001_000_000_000], "idle_ns": None})
+                "request_ns": [1_000_000_000_000, 1_001_000_000_000],
+                "idle_ns": [998_000_000_000, 999_000_000_000]})
             (bundle / "metadata.json").write_text('{"plain":true}', encoding="utf-8")
             self.assertEqual(bt.read_json(bundle / "metadata.json"), {"plain": True})
 
     @unittest.skipUnless(shutil.which("zstd"), "compressed twin reader requires zstd on PATH")
-    def test_existing_unreadable_compressed_files_refuse_instead_of_defaulting(self):
+    def test_existing_unreadable_compressed_files_raise_read_errors_instead_of_defaulting(self):
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp)
             (bundle / "metadata.json.zst").write_bytes(b"not a zstd frame")
-            with self.assertRaisesRegex(bt.StorageStop, "compressed file unreadable: "):
+            with self.assertRaisesRegex(OSError, "compressed file unreadable: "):
                 bt.read_json(bundle / "metadata.json", {"missing": True})
-            with self.assertRaisesRegex(bt.StorageStop, "compressed file unreadable: "):
+            with self.assertRaisesRegex(OSError, "compressed file unreadable: "):
                 bt.member_spans(bundle)
             (bundle / "metadata.json").write_text(json.dumps({"uncertainty_evidence": {
                 "clock_anchor": {"clock_stamps": {"sampling_started": {
                     "epoch_s": 2000, "monotonic_before_s": 1000}}}}}), encoding="utf-8")
             (bundle / "events.jsonl.zst").write_bytes(b"not a zstd frame")
-            with self.assertRaisesRegex(bt.StorageStop, "compressed file unreadable: "):
+            with self.assertRaisesRegex(OSError, "compressed file unreadable: "):
                 bt.member_spans(bundle)
-            # Analysis marks these runs unusable; the independent twin refuses
-            # under D7, as it does for a truncated plain events.jsonl.
+            # A readable frame preserves the payload's decode or parse error.
             for name in ("metadata.json", "events.jsonl"):
                 path = bundle / name
                 raw = path.read_bytes() if path.exists() else None
@@ -738,7 +818,7 @@ class DeskBundleReadTests(unittest.TestCase):
                                                 capture_output=True, check=True)
                         Path(str(path) + ".zst").write_bytes(result.stdout)
                         path.unlink(missing_ok=True)
-                        with self.assertRaises((bt.StorageStop, ValueError)):
+                        with self.assertRaises(ValueError):
                             bt.read_json(path) if name == "metadata.json" else bt.member_spans(bundle)
                 if raw is not None:
                     path.write_bytes(raw)
@@ -760,7 +840,7 @@ class DeskBundleReadTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "metadata.json"
             Path(str(path) + ".zst").mkdir()
-            with self.assertRaisesRegex(bt.StorageStop, "compressed file unreadable: "):
+            with self.assertRaisesRegex(OSError, "compressed file unreadable: "):
                 bt.read_json(path, {"missing": True})
 
     def test_compressed_reader_resolves_path_or_homebrew_fallback_independently(self):
@@ -787,9 +867,9 @@ class DeskBundleReadTests(unittest.TestCase):
                     with self.subTest(name=name, error=type(error).__name__), \
                             patch.object(shutil, "which", return_value=None), \
                             patch.object(bt.subprocess, "run", side_effect=error):
-                        with self.assertRaisesRegex(bt.StorageStop, "zstd unavailable: ") as caught:
+                        with self.assertRaisesRegex(OSError, "zstd unavailable: ") as caught:
                             bt.read_json(path) if name == "metadata.json" else bt.member_spans(bundle)
-                        self.assertEqual(str(caught.exception), "restore_refused: zstd unavailable: " + str(compressed))
+                        self.assertEqual(str(caught.exception), "zstd unavailable: " + str(compressed))
                 # Supply the anchor for the events reader, without a decompressor.
                 if name == "metadata.json":
                     path.write_text(json.dumps({"uncertainty_evidence": {"clock_anchor": {
@@ -852,7 +932,10 @@ class MeterTests(QuantityTestCase):
             bundle = Path(tmp)
             (bundle / "metadata.json").write_text(json.dumps({"uncertainty_evidence": {"clock_anchor": {"clock_stamps": {
                 "sampling_started": {"epoch_s": 2000.0, "monotonic_before_s": 1000.0}}}}}))
-            events = [{"event_type": "phase_start", "phase": "tokenize", "timestamp_s": 2000.0},
+            events = [{"event_type": "stage_started", "phase": "idle_baseline", "timestamp_s": 1998},
+                      {"event_type": "stage_completed", "phase": "idle_baseline", "timestamp_s": 1999},
+                      {"event_type": "phase_start", "phase": "tokenize", "timestamp_s": 2000.0},
+                      {"event_type": "phase_end", "phase": "tokenize", "timestamp_s": 2000.0000000006},
                       {"event_type": "phase_start", "phase": "decode", "timestamp_s": 2000.0000000006},
                       {"event_type": "phase_end", "phase": "decode", "timestamp_s": 2001.0000000004}]
             (bundle / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
@@ -1525,30 +1608,29 @@ class ActiveOrResidentFlagsEndToEndTests(unittest.TestCase):
     MOE = "qwen3-30b-a3b-4bit"
     DENSE = "qwen3-14b-4bit"
 
-    def run_with(self, *, all_points):
+    def run_with(self, *, mixed_dense):
         world = WORLD["two"]
         record = {"row_count": 40, "config_row_count": 14, "path": "withheld/x.csv", "config_key_sha256": "x"}
         real, real_cell = bt.analyse, bt.compute_cell
         state = {}
 
         def wrapper(rows, manifest, archives, **kw):
-            sessions = sorted({r["session_id"] for r in rows},
-                              key=lambda sid: bt.pass_identity(sid, kw.get("listed") or {}, (kw.get("sidecars") or {}).get(sid))["pass_id"])
-            state["first"] = sessions[0]
-            for name in (self.MOE, self.DENSE):
-                manifest[name]["cell_ids"] = ["cell-" + name]
+            sessions = bt.group_sessions(rows)
+            identities = {sid: bt.pass_identity(sid, kw["listed"], kw["sidecars"].get(sid)) for sid in sessions}
+            model_sessions = bt.passes_by_model(bt.group_science_rows(rows, manifest), identities)
+            first_dense, state["refused"] = model_sessions[self.DENSE]
+            state["dense_cell"], = manifest[self.DENSE]["cell_ids"]
             for archive in archives:
-                archive["cell_run_codes"] = {"cell-" + self.DENSE: ["audit.c14"]}
-            missing = {s: {self.MOE: record} for s in sessions}
-            missing[sessions[0]][self.DENSE] = record
+                archive["cell_run_codes"] = {state["dense_cell"]: ["audit.c14"]}
+            missing = {sid: {self.MOE: record} for sid in model_sessions[self.MOE]}
+            if mixed_dense:
+                missing.setdefault(first_dense, {})[self.DENSE] = record
             withheld = {s: {"rows": [], "missing": m} for s, m in missing.items()}
-            if not all_points:
-                del withheld[sessions[0]]["missing"][self.DENSE]
             return real(rows, manifest, archives, **{**kw, "withheld": withheld})
 
         def refusing(srows, *args, **kw):
             cell = real_cell(srows, *args, **kw)
-            if bt.canon(srows[0]["model_name"]) == self.DENSE and srows[0]["session_id"] != state["first"]:
+            if srows[0]["cell_ids"] == state["dense_cell"] and srows[0]["session_id"] == state["refused"]:
                 cell["gross"] = {"status": "refused_below_minimum", "flags": ["audit.refusal"]}
             return cell
 
@@ -1556,21 +1638,21 @@ class ActiveOrResidentFlagsEndToEndTests(unittest.TestCase):
             return run_twin(world, "2")
 
     def test_refused_point_without_withheld_flag_contributes(self):
-        # 14B: the first pass withheld-missing (carries audit.c14), every other pass refused: refused, not missing.
-        result = self.run_with(all_points=True)
+        # 14B: the first pass is withheld-missing and the second is refused.
+        result = self.run_with(mixed_dense=True)
         for boundary in bt.BOUNDARIES:
             row = result["h1"][boundary]["passes_mean"]["active_or_resident"]
             self.assertEqual(row["answer"], "missing")
             self.assertEqual(row["missing_models"], [self.MOE])
-            self.assertEqual(row["flags"], ["audit.c14", "bytes.withheld_missing"])
+            self.assertEqual(row["flags"], ["audit.c14", "audit.refusal", "bytes.withheld_missing"])
 
     def test_only_the_missing_moe_model_without_the_refused_point(self):
-        result = self.run_with(all_points=False)
+        result = self.run_with(mixed_dense=False)
         row = result["h1"]["rails"]["passes_mean"]["active_or_resident"]
         self.assertEqual(row["flags"], ["bytes.withheld_missing"])
 
     def test_output_manifest_keeps_no_cell_ids(self):
-        result = self.run_with(all_points=False)
+        result = self.run_with(mixed_dense=False)
         self.assertTrue(all("cell_ids" not in entry for entry in result["manifest"].values()))
 
 
@@ -1682,14 +1764,15 @@ class PassIdentityTests(QuantityTestCase):
                          ["pass_identity_missing"])                                  # a string is not an id
 
     def test_order_follows_the_pass_id_not_the_session_id_or_any_clock(self):
-        rows = lambda sid: [{"role": "science", "model_name": "Qwen3-8B-4bit", "session_id": sid,
-                             "run_start_utc": "2099-01-01T00:00:00+00:00"}]
         # session ids and the (unread) clock both say "zz" first; the registered identity says "aa" is pass 2
-        sessions = {"zz": rows("zz"), "aa": rows("aa"), "mm": rows("mm")}
+        rows = [{"role": "science", "cell_ids": "8b-decode", "model_name": name, "session_id": sid,
+                 "run_start_utc": "2099-01-01T00:00:00+00:00"}
+                for sid, name in (("zz", None), ("aa", "Qwen3-4B-4bit"), ("mm", "Qwen3-8B-4bit"))]
+        science = bt.group_science_rows(rows, {"qwen3-8b-4bit": {"cell_ids": ["8b-decode"]}})
         identities = {"zz": {"pass_id": 1}, "aa": {"pass_id": 2}, "mm": {"pass_id": None}}
-        self.assertEqual(bt.passes_by_model(sessions, identities), {"qwen3-8b-4bit": ["zz", "aa", "mm"]})
+        self.assertEqual(bt.passes_by_model(science, identities), {"qwen3-8b-4bit": ["zz", "aa", "mm"]})
         identities = {"zz": {"pass_id": 2}, "aa": {"pass_id": 1}, "mm": {"pass_id": None}}
-        self.assertEqual(bt.passes_by_model(sessions, identities), {"qwen3-8b-4bit": ["aa", "zz", "mm"]})
+        self.assertEqual(bt.passes_by_model(science, identities), {"qwen3-8b-4bit": ["aa", "zz", "mm"]})
 
     def test_no_printed_field_moves_without_the_clock_column(self):
         """The export's run_start_utc is blanked and the session ids are renamed so that their lexical

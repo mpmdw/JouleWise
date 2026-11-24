@@ -586,6 +586,11 @@ def export(archive_root: Path | str, plan: Mapping, registration_dir: Path | str
     rows, withheld, key_names = [], [], set()
     group = pack_registration.get("blinding_group")
     grouped_blind = bool(group)
+    if group == "bytes":
+        binding = key_dir.parent / "blinding-sessions" / (session_id + ".json")
+        previous = Path(export_dir) / pack_id / (session_id + ".session.json")
+        if (binding.with_suffix(".lock").exists() or previous.exists()) and not binding.is_file():
+            raise ValueError("BYTES export manifest: missing session binding for " + session_id)
     # Every grouped table is offset, including non-claim smoke sessions. The
     # legacy row-level non_claim bit means "offsets not applied" to the existing
     # release reader, so grouped tables keep session provenance in the sidecar

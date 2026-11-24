@@ -14,6 +14,26 @@ The digest-pinned library's low-level `stage1_commit` parameter is unchanged;
 study commands must use these guarded entry points, not call that library as an
 independent authorization mechanism.
 
+## Private export integrity manifest
+
+The stage-1 driver commits `bytes-export-integrity.json` in the private
+export Git checkout before running the blinded comparison and the empty-key
+probes. The inventory records the campaign manifest, export tables and
+session sidecars, each expected session's own binding, and the named archive
+control roots in place. The driver checks the captured commit after the fit
+release, verifies the key bytes against the session bindings, and commits
+the finalized inventory before either keyed fit. Only the integrity manifest
+is staged in this Git operation.
+
+For a keyed fit, commitment check, or guarded post-fit operation, pass
+`--export-seal-repo` and `--export-seal-commit` from the stage-1 summary.
+The shared verifier requires the working manifest to equal the exact blob
+in that private commit and verifies file membership, sizes and hashes.
+The initial driver probes use the capture commit and an explicit empty key
+directory. The protected prediction commitment remains the authority for
+predictions. The live journal and post-fit receipts use their separate
+Git checks.
+
 ## Evidence read, and what is checked
 
 The analysis checkout defaults to the directory containing the scripts. An
@@ -67,9 +87,10 @@ commit regardless of backdated clocks.
 
 The journal contains one JSON object per line, with `event` (`heldout_rows`,
 `heldout_keys`, or `heldout_analysis`), UTC `unblinded_utc`, and `stage1_commit`.
-A guarded command locks the journal and requires its bytes to equal the regular
-blob at `HEAD:docs/bytes/stage1/unblinding.jsonl`. It then checks, appends, flushes
-and fsyncs an admission attempt
+Verification and admission require the journal bytes to equal the regular
+blob at `HEAD:docs/bytes/stage1/unblinding.jsonl` and extend every retained
+committed revision. Admission repeats that check under its append lock. It
+then appends, flushes and fsyncs an admission attempt
 **before** opening heldout rows or keys. A later command failure leaves the
 attempt recorded conservatively. After each append it prints the instruction to
 commit and push the journal before another heldout command. A second admission
@@ -93,7 +114,8 @@ including the push time, origin snapshots and analysis head.
    non-fast-forward pushes. That server configuration was not queried in this
    offline implementation seat.
 4. On the networked Air, run `python3 scripts/bytes_commitment.py record-push
-   --stage1-commit HASH`. This command alone runs
+   --stage1-commit HASH --export-seal-repo PRIVATE_REPO --export-seal-commit EXPORT_SHA`.
+   This command alone runs
    `git ls-remote origin refs/heads/records/2026-11-bytes-stage1` and requires
    exact equality with the local `origin_tip`. It obtains the push event with
    `gh api repos/{owner}/{repo}/activity?ref=refs/heads/records/2026-11-bytes-stage1&activity_type=push&per_page=100`.

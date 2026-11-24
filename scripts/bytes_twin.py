@@ -43,6 +43,7 @@ import bisect
 import csv
 import fcntl
 import os
+import plistlib
 import tempfile
 from contextlib import contextmanager, ExitStack
 import hashlib
@@ -55,6 +56,7 @@ import struct
 import subprocess
 import sys
 from pathlib import Path
+from xml.parsers.expat import ExpatError
 
 
 class StorageStop(BaseException):
@@ -77,6 +79,7 @@ CORPUS_CAP = 12               # the desk cap on the NEG-8 corpus (registration 5
 CORPUS_MINIMUM = 6
 UNIT_MINIMUM = 5              # kept units per stratum (flag catalog rules.cell_unit_minimum)
 BOUNDARIES = ("rails", "dc_input", "rest")
+CELL_VARIANTS = ("gross", "idle_subtracted", "flagged_inclusive", "idle_flagged_inclusive")
 RAILS_KINDS = ("E_clock_anchor_shift_bound_j", "E_interpolation_joint_edge_bound_j",
                "E_whole_window_drift_allowance_j")
 DC_KINDS = ("E_meter_edge_bound_j", "E_whole_window_drift_allowance_j")
@@ -532,10 +535,12 @@ def neg8_allowance(session_rows, family="gross", dc_by_run=None):
                 raise ValueError(f"NEG-8 reference {row['run_id']}: missing or invalid reference_request columns; re-export required")
             if energy(row) is None:
                 joined = dc_by_run.get(row["run_id"], {})
-                # Registration section 6: print the registered disclosure code,
-                # not this reader's internal meter-join status or diagnostic prose.
-                reason = ("bytes.meter_gap" if "bytes.meter_gap" in joined.get("flags", [])
-                          else "bytes.meter_decode_unavailable")
+                if not joined or joined.get("status") in ("bundle_missing", "spans_unreadable"):
+                    reason = "meter request unavailable"
+                else:
+                    # Registration section 6: use the disclosure code for an attempted join.
+                    reason = ("bytes.meter_gap" if "bytes.meter_gap" in joined.get("flags", [])
+                              else "bytes.meter_decode_unavailable")
         if reason is not None:
             dropped.append({"run_id": row["run_id"], "role": row["role"], "reason": reason})
         else:
@@ -712,7 +717,8 @@ def read_manifest(path):
                 raise ValueError("model predictors differ from registered manifest: " + name)
         manifest[name] = {"model": entry.get("_name"), "W_bytes": w, "KV_bytes": kv, "R_bytes": r,
                           "b_GB": (w + kv) / GB, "R_GB": r / GB,
-                          "revision": entry.get("revision"), "cell_ids": entry.get("cell_ids"), "kind": ROSTER.get(name, {}).get("kind"),
+                          "revision": entry.get("revision"), "cell_ids": entry.get("cell_ids", expected["cell_ids"]),
+                          "kind": ROSTER.get(name, {}).get("kind"),
                           # the public configuration identity (lead ruling 2026-10-20 item 1: the sidecar
                           # lists withheld rows by the digest of this key)
                           "config_key": entry.get("config_key")}
@@ -966,8 +972,8 @@ def _read_text(path):
     Keep this reader independent of joulewise: the twin's no-shared-code
     fence applies to archive I/O as well as arithmetic. Resolve zstd by PATH
     or the desk's literal Homebrew fallback, independently of the analysis.
-    Only an absent sibling follows the caller's missing-file path. An
-    existing unreadable file propagates to main's Addendum 7 D7 refusal.
+    Logical file read and decode failures propagate to the owning reader.
+    Verified bundle restoration has its own stage-wide storage gate.
     """
     path = Path(path)
     try:
@@ -980,10 +986,10 @@ def _read_text(path):
         result = subprocess.run([shutil.which("zstd") or "/opt/homebrew/bin/zstd", "-dc", str(compressed)],
                                 capture_output=True, check=True)
         return result.stdout.decode("utf-8")
-    except OSError:
-        raise StorageStop("zstd unavailable: " + str(compressed)) from None
-    except (subprocess.CalledProcessError, UnicodeDecodeError):
-        raise StorageStop("compressed file unreadable: " + str(compressed)) from None
+    except OSError as exc:
+        raise OSError("zstd unavailable: " + str(compressed)) from exc
+    except subprocess.CalledProcessError as exc:
+        raise OSError("compressed file unreadable: " + str(compressed)) from exc
 
 
 def read_json(path, default=None):
@@ -1001,53 +1007,72 @@ def _bundle(root, run_id):
     return None
 
 
-def member_spans(bundle):
+def _phase_edges(events, phase):
+    starts = []
+    ends = []
+    for event in events:
+        if event.get("phase") != phase:
+            continue
+        kind = event["event_type"]
+        if kind in ("phase_start", "stage_started"):
+            starts.append(event)
+        elif kind in ("phase_end", "stage_completed"):
+            ends.append(event)
+    if len(starts) == len(ends) == 1:
+        return starts[0], ends[0]
+    return None
+
+
+def member_spans(bundle, *, metadata=None, reference=True, events=None):
     """Decode-phase and idle-baseline spans of a bundle in the controller's monotonic ns."""
-    metadata = read_json(bundle / "metadata.json", {}) or {}
+    if metadata is None:
+        metadata = read_json(bundle / "metadata.json", {}) or {}
     try:
         pair = metadata["uncertainty_evidence"]["clock_anchor"]["clock_stamps"]["sampling_started"]
-        epoch, mono = float(pair["epoch_s"]), float(pair["monotonic_before_s"])
+        epoch, mono = pair["epoch_s"], pair["monotonic_before_s"]
     except (KeyError, TypeError, ValueError):
         return None
 
-    def mapped(wall):
-        return int(round((mono + (float(wall) - epoch)) * 1_000_000_000))   # Addendum 7 N1: nearest ns
-    spans = {}
+    if events is None:
+        try:
+            events = _member_events(bundle)
+        except FileNotFoundError:
+            return None
+
+    def mapped(event):
+        own = event.get("metadata", {}).get("monotonic_ns")
+        return own if type(own) is int else round((mono + event["timestamp_s"] - epoch) * 1_000_000_000)
+
+    def span(phase):
+        edges = _phase_edges(events, phase)
+        if edges is None:
+            return None
+        start, end = map(mapped, edges)
+        return [start, end] if end > start else None
+
+    decode = span("decode")
+    idle = span("idle_baseline")
     try:
-        lines = _read_text(bundle / "events.jsonl").splitlines()
-    except FileNotFoundError:
+        tokenize = span("tokenize")
+    except (KeyError, TypeError, ValueError, ArithmeticError):
+        if reference:
+            raise
+        tokenize = None
+    if decode is None or idle is None or (reference and tokenize is None):
         return None
-    for line in lines:
-        if not line.strip():
-            continue
-        event = json.loads(line)
-        kind, phase = event.get("event_type"), event.get("phase")
-        meta = event.get("metadata") or {}
-        if kind == "phase_start" and phase == "tokenize":
-            spans["request_start"] = mapped(event["timestamp_s"])
-        if phase == "decode" and kind == "phase_start":
-            spans["decode_start"] = mapped(event["timestamp_s"])
-        elif phase == "decode" and kind == "phase_end":
-            spans["decode_end"] = mapped(event["timestamp_s"])
-        elif phase == "idle_baseline" and kind == "stage_started":
-            spans["idle_start"] = int(meta["monotonic_ns"]) if is_number(meta.get("monotonic_ns")) \
-                else mapped(event["timestamp_s"])
-        elif phase == "idle_baseline" and kind == "stage_completed":
-            spans["idle_end"] = mapped(event["timestamp_s"])
-    if "decode_start" not in spans or "decode_end" not in spans or "request_start" not in spans:
-        return None
-    return {"decode_ns": [spans["decode_start"], spans["decode_end"]],
-            "request_ns": [spans["request_start"], spans["decode_end"]],
-            "idle_ns": [spans["idle_start"], spans["idle_end"]] if "idle_start" in spans and "idle_end" in spans else None}
+    return {"decode_ns": decode, "idle_ns": idle, "request_ns": [tokenize[0], decode[1]] if tokenize else None}
+
+
+def _member_events(bundle):
+    return [json.loads(line) for line in _read_text(bundle / "events.jsonl").splitlines() if line.strip()]
 
 
 def load_archive(root):
     root = Path(root)
-    record = read_json(root / "derived/b6-acceptance.json", {}) or {}
-    try:
-        flag_rows = [json.loads(raw) for raw in _read_text(root / "derived/flags.jsonl").splitlines() if raw.strip()]
-    except FileNotFoundError:
-        flag_rows = []
+    record = json.loads(_read_text(root / "derived/b6-acceptance.json"))
+    if record.get("counting") is not True:
+        raise ValueError("session is not a counting accepted attempt")
+    flag_rows = [json.loads(raw) for raw in (root / "derived/flags.jsonl").read_text().splitlines() if raw.strip()]
     # §6 / §15, RL-82 reading A: session codes have no run attached in
     # either source. Read them independently of the analysis and export.
     session_flags = sorted({flag["code"] for flag in flag_rows + record.get("emitted_flags", [])
@@ -1059,10 +1084,12 @@ def load_archive(root):
         run_id = (flag.get("scope") or {}).get("run_id")
         if run_id:
             run_codes.setdefault(run_id, set()).add(flag["code"])
+    exclusions = {}
     for entry in record.get("excluding", []):
         if entry.get("scope") == "member":
+            exclusions.setdefault(entry["run_id"], set()).add(entry["code"])
             run_codes.setdefault(entry["run_id"], set()).add(entry["code"])
-    roster = read_json(root / "derived/roster.json", {}) or {}
+    roster = json.loads(_read_text(root / "derived/roster.json"))
     cell_run_codes = {}
     for member in roster.get("members", []):
         for unit in member.get("units", []):
@@ -1081,7 +1108,12 @@ def load_archive(root):
     # a calibration bracket". Keep the archive's already evaluated record.
     return {"root": root, "session_id": record.get("session_id"), "pack_id": record.get("pack_id"),
             "streams": streams, "calibration": record.get("calibration") or {}, "session_flags": session_flags,
+            "planned_members": roster.get("members", []), "run_codes": run_codes, "exclusions": exclusions,
             "cell_run_codes": {cell: sorted(codes) for cell, codes in cell_run_codes.items()}}
+
+
+def _interval_energy(intervals, start, end):
+    return math.fsum(power * max(0.0, min(end, right) - max(start, left)) for left, right, power in intervals)
 
 
 def anchor_envelope(intervals, window, common_s, edge_s):
@@ -1106,7 +1138,7 @@ def anchor_envelope(intervals, window, common_s, edge_s):
         raise ValueError("trace does not cover operative decode shifts")
 
     def energy(a, z):
-        return math.fsum(p * max(0.0, min(z, right) - max(a, left)) for left, right, p in trace)
+        return _interval_energy(trace, a, z)
 
     point = energy(start, end)
     values = [point]
@@ -1124,7 +1156,7 @@ def anchor_envelope(intervals, window, common_s, edge_s):
     return max(abs(value - point) for value in values)
 
 
-def decode_anchor_bound(archive, run_id):
+def decode_anchor_bound(archive, run_id, *, plain=None, metadata=None, native=None, include_decode=False):
     """§7: rails bound "re-derived under the session's operative timing bound".
 
     §16: read calibration.operative_bound_s, "never recomputes a calibration
@@ -1138,11 +1170,15 @@ def decode_anchor_bound(archive, run_id):
     operative = float(value)
     if not is_number(operative) or operative < 0:
         raise ValueError("invalid session operative timing bound")
-    bundle = _bundle(archive["root"], run_id)
-    if bundle is None:
-        raise ValueError("anchor bundle missing")
-    with _readable_bundle(bundle, Path(str(archive["root"]) + ".desk") / "compression.jsonl") as plain:
-        metadata = read_json(plain / "metadata.json", {})
+    with ExitStack() as cleanup:
+        if plain is None:
+            bundle = _bundle(archive["root"], run_id)
+            if bundle is None:
+                raise ValueError("anchor bundle missing")
+            journal = Path(str(archive["root"]) + ".desk") / "compression.jsonl"
+            plain = cleanup.enter_context(_readable_bundle(bundle, journal))
+        if metadata is None:
+            metadata = read_json(plain / "metadata.json", {})
         clock = (metadata.get("uncertainty_evidence") or {}).get("clock_anchor") or {}
         if clock.get("status") != "bounded":
             # Existing mock campaigns have no native timing evidence. Match
@@ -1165,10 +1201,10 @@ def decode_anchor_bound(archive, run_id):
         if operative + 1e-12 < mint:
             raise ValueError("operative bound narrows member calibration")
         events = [json.loads(line) for line in _read_text(plain / "events.jsonl").splitlines() if line.strip()]
-        starts = [e["timestamp_s"] for e in events if e.get("phase") == "decode" and e.get("event_type") == "phase_start"]
-        ends = [e["timestamp_s"] for e in events if e.get("phase") == "decode" and e.get("event_type") == "phase_end"]
-        if len(starts) != 1 or len(ends) != 1:
-            raise ValueError("one decode phase required")
+        edges = _phase_edges(events, "decode")
+        if edges is None or tuple(edge["event_type"] for edge in edges) != ("phase_start", "phase_end"):
+            raise ValueError("one runtime decode phase required")
+        start, end = (edge["timestamp_s"] for edge in edges)
         rails = (metadata.get("device") or {}).get("rail_manifest")
         if not isinstance(rails, list) or not rails:
             raise ValueError("anchor rail manifest missing")
@@ -1192,7 +1228,14 @@ def decode_anchor_bound(archive, run_id):
                 raise ValueError("misaligned anchor rails")
             a, z, _ = next(iter(group.values()))
             intervals.append((a + shift, z + shift, math.fsum(v[2] for v in group.values())))
-        return anchor_envelope(intervals, (starts[0], ends[0]), common, operative + span)
+        if native is not None:
+            _verify_native_trace(intervals, native)
+        anchor = anchor_envelope(intervals, (start, end), common, operative + span)
+        if include_decode:
+            origin = intervals[0][1]
+            shifted = [(a - origin, z - origin, power) for a, z, power in intervals]
+            return anchor, _interval_energy(shifted, start - origin, end - origin)
+        return anchor
 
 
 @contextmanager
@@ -1204,6 +1247,8 @@ def _readable_bundle(source, journal):
         return
     with ExitStack() as cleanup:
         try:
+            if not any((source / name).is_file() for name in ("metadata.json", "metadata.json.zst")):
+                raise ValueError("run-dir must name one bundle containing metadata.json[.zst]")
             if not journal.is_file():
                 raise ValueError("compressed run requires compression.jsonl")
             records = {}
@@ -1300,17 +1345,21 @@ def _scratch_lock(root):
         os.close(descriptor)
 
 
-def dc_join(archive, run_id, *, reference=False):
+def dc_join(archive, run_id, *, reference=False, spans=None):
     """DC-input decode energy of one run: meter integral over the decode span, with its clock-fit bound."""
-    bundle = _bundle(archive["root"], run_id)
-    if bundle is None:
-        return {"status": "bundle_missing", "decode_assist_evaluated_reason":
-                f"decode marker not evaluated: selected bundle missing (run {run_id})"}
-    with _readable_bundle(bundle, Path(str(archive["root"]) + ".desk") / "compression.jsonl") as plain:
-        spans = member_spans(plain)
     if spans is None:
-        return {"status": "spans_unreadable", "decode_assist_evaluated_reason":
-                f"decode marker not evaluated: member spans unreadable (run {run_id})"}
+        bundle = _bundle(archive["root"], run_id)
+        if bundle is None:
+            return {"status": "bundle_missing", "decode_assist_evaluated_reason":
+                    f"decode marker not evaluated: selected bundle missing (run {run_id})"}
+        try:
+            with _readable_bundle(bundle, Path(str(archive["root"]) + ".desk") / "compression.jsonl") as plain:
+                spans = member_spans(plain, reference=reference)
+        except (OSError, ValueError, KeyError, TypeError):
+            spans = None
+        if spans is None:
+            return {"status": "spans_unreadable", "decode_assist_evaluated_reason":
+                    f"decode marker not evaluated: member spans unreadable (run {run_id})"}
     failure = None
     markers = []
     for stream in archive["streams"]:
@@ -1363,16 +1412,17 @@ def dc_join(archive, run_id, *, reference=False):
                                 ("excess_latency_ms_p95", "excess_latency_ms_max", "excess_latency_ms_min",
                                  "excess_latency_ms_absmax", "clock_rate_ppm")},
                   "idle_power_w": None}
-        request = [spans["request_ns"][0] + offset, spans["request_ns"][1] + offset]
-        if host[0] <= request[0] and request[1] <= host[-1]:
+        request = [v + offset for v in spans["request_ns"]] if spans["request_ns"] else None
+        if request and host[0] <= request[0] and request[1] <= host[-1]:
             request_energy, n_request = integrate(host, watts, request[0], request[1])
             if request_energy is not None:
                 request_battery = battery_terms(stream, request, base)
-                if request_battery["status"] != "ok":
+                if request_battery["status"] != "ok" and reference:
                     failure = request_battery
                     continue
-                result.update({"request_energy_j": request_energy + request_battery["battery_gross_j"], "request_span_s": (request[1] - request[0]) / 1e9,
-                               "request_samples": n_request})
+                if request_battery["status"] == "ok":
+                    result.update({"request_energy_j": request_energy + request_battery["battery_gross_j"],
+                                   "request_span_s": (request[1] - request[0]) / 1e9, "request_samples": n_request})
         if spans["idle_ns"]:
             base = [spans["idle_ns"][0] + offset, spans["idle_ns"][1] + offset]
             if base[1] > base[0]:
@@ -1430,18 +1480,322 @@ def _units_of(row):
     return None, None, None
 
 
+def _valid_record(row):
+    return row["status"] == "succeeded" and not VALIDITY_CODES.intersection(
+        (row.get("exclusion_codes") or "").split(";"))
+
+
+def _releasable_record(row):
+    # An export placeholder without a model name has no configuration key.
+    # Its registered cell still establishes its membership.
+    return _valid_record(row) and bool(row.get("model_name"))
+
+
+def _science_inputs(archive, row, registered_model, *, synthetic=False):
+    """A member must have a usable science record before evaluating the meter."""
+    root, run_id = archive["root"], row["run_id"]
+    bundle = _bundle(root, run_id)
+    if bundle is None:
+        raise ValueError("selected bundle missing")
+    with _readable_bundle(bundle, Path(str(root) + ".desk") / "compression.jsonl") as plain:
+        config = read_json(plain / "config.json")
+        if not config or config["model"]["name"] != registered_model:
+            raise ValueError("roster/config model mismatch")
+        metadata = json.loads(_read_text(plain / "metadata.json"))
+        # Preserve the distinction between unreadable JSON and a parsed value
+        # that cannot supply metadata fields, including falsey non-objects.
+        if metadata.get("workload_observed", {}).get("output_token_count") != PRINTED_TOKENS:
+            raise ValueError("runtime-observed output count must be 512")
+        try:
+            events = _member_events(plain)
+        except FileNotFoundError as exc:
+            raise ValueError("member decode or idle span unavailable") from exc
+        stored = json.loads(_read_text(root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json")))
+        # Dispatch can raise before the reducer returns a structured failure.
+        version = _check_reducer_dispatch(plain, config, metadata)
+        synthetic_summary = synthetic and (stored or {}).get("bytes_synthetic_timing_fixture") is True
+        v2 = version.startswith("0.6.")
+        auxiliary_available = _v2_artifacts_available(plain, config, metadata, events) if v2 else True
+        if synthetic_summary and auxiliary_available:
+            # The primary returns a structured failure for an absent or partial
+            # curve. A text decoding exception escapes before that fallback.
+            try:
+                _read_text(plain / "power_trace.csv")
+            except FileNotFoundError:
+                pass
+        if not v2:
+            auxiliary_available = _suite_manifest_available(plain)
+        spans = member_spans(plain, metadata=metadata, reference=False, events=events)
+        if spans is None:
+            raise ValueError("member decode or idle span unavailable")
+        if synthetic_summary:
+            return spans, _synthetic_science_columns(stored, archive, spans)
+        if not auxiliary_available:
+            raise ValueError("member reduction inputs unavailable")
+        native = _native_science_inputs(plain, metadata, version)
+        if native is not None and (not row.get("_unblinded") or not is_number(row.get("dur_decode_s"))):
+            anchor, energy = decode_anchor_bound(archive, run_id, plain=plain, metadata=metadata, native=native,
+                                                  include_decode=True)
+            idle = metadata["idle_baseline"]["power_w_mean"]
+            if not is_number(idle) or idle < 0:
+                raise ValueError("native idle baseline unavailable")
+            return spans, _archive_science_columns(spans, energy, idle, anchor)
+        anchor = decode_anchor_bound(archive, run_id, plain=plain, metadata=metadata, native=native)
+        return spans, {"_operative_anchor_j": anchor}
+
+
+def _check_reducer_dispatch(bundle, config, metadata):
+    summary_path = bundle / "summary_metrics.json"
+    try:
+        summary = read_json(summary_path)
+    except (OSError, ValueError):
+        summary = None
+    provenance = summary.get("summary_provenance") if isinstance(summary, dict) else None
+    version = provenance.get("reducer_version") if isinstance(provenance, dict) else None
+    event_v2 = metadata.get("event_semantics_version") == "joulewise.events.v2"
+    config_v2 = config.get("schema_extensions") == ["joulewise.axi_decode_config.v1"]
+    summary_v2 = isinstance(summary, dict) and any(field in summary for field in (
+        "decode_counter_rollup", "batch_group_gross_energy_j", "request_decode_metrics",
+    ))
+    if version is None:
+        if summary_path.is_file() and (event_v2 or summary != {"status": "failed"}):
+            raise ValueError("finalized bundle reducer version missing")
+        version = "0.6.2" if event_v2 else "0.5.2"
+    if version in ("0.6.0", "0.6.1", "0.6.2"):
+        if not (config_v2 and event_v2):
+            raise ValueError("AXI reducer requires its config and event layouts")
+    elif (version not in ("0.4.1", "0.4.2", "0.5.0", "0.5.1", "0.5.2")
+          or event_v2 or config_v2 or summary_v2):
+        raise ValueError("bundle reducer version or layout unsupported")
+    return version
+
+
+def _suite_manifest_available(bundle):
+    path = bundle / "suite_manifest.json"
+    if not path.is_file():
+        return True
+    try:
+        manifest = read_json(path)
+    except (OSError, ValueError):
+        return False
+    return (isinstance(manifest, dict) and manifest.get("schema_version") in ("suite_manifest.v1", "suite_manifest.v2")
+            and isinstance(manifest.get("items"), list) and bool(manifest["items"]))
+
+
+def _v2_roster_bytes(bundle):
+    try:
+        raw = (bundle / "request_roster.json").read_bytes()
+        roster = json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError):
+        return None
+    if (not isinstance(roster, dict) or set(roster) != {"schema_version", "requests"}
+            or roster["schema_version"] != "joulewise.request_roster.v1"
+            or not isinstance(roster["requests"], list) or not roster["requests"]):
+        return None
+    keys = {"request_ordinal", "request_input_id", "prompt_source", "prompt_sha256", "output_policy_name",
+            "requested_output_tokens"}
+    identifiers = set()
+    for ordinal, row in enumerate(roster["requests"]):
+        if not isinstance(row, dict) or set(row) != keys:
+            return None
+        name, digest = row["request_input_id"], row["prompt_sha256"]
+        tokens, policy = row["requested_output_tokens"], row["output_policy_name"]
+        if (type(row["request_ordinal"]) is not int or row["request_ordinal"] != ordinal
+                or not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]*", name)
+                or name in identifiers or row["prompt_source"] not in ("prompt_text", "token_ids", "dataset_item")
+                or not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)
+                or not isinstance(policy, str) or not policy
+                or (tokens is not None and (type(tokens) is not int or tokens < 0))):
+            return None
+        identifiers.add(name)
+    canonical = (json.dumps(roster, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
+    return raw if canonical == raw else None
+
+
+def _v2_output_rows(path):
+    # A malformed JSON row is a structured validation failure. Invalid UTF-8
+    # escapes the primary JSONL reader and cannot reach the synthetic override.
+    try:
+        lines = _read_text(path).splitlines()
+    except OSError:
+        return None
+    try:
+        rows = [json.loads(line) for line in lines if line]
+    except json.JSONDecodeError:
+        return None
+    return rows if all(isinstance(row, dict) for row in rows) else None
+
+
+def _v2_artifacts_available(bundle, config, metadata, events):
+    batch = config.get("batch_policy")
+    if not isinstance(batch, dict) or not isinstance(config.get("speculation"), dict):
+        return False
+    roster = _v2_roster_bytes(bundle)
+    event_keys = {"event_type", "phase", "timestamp_s", "message", "metadata"}
+    if roster is None or any(not isinstance(event, dict) or set(event) != event_keys
+                             or not is_number(event["timestamp_s"]) for event in events):
+        return False
+    outputs = bundle / "outputs"
+    requests = _v2_output_rows(outputs / "requests.jsonl")
+    if requests is None:
+        return False
+    tokens = _v2_output_rows(outputs / "request_tokens.jsonl")
+    if tokens is None:
+        return False
+    response_mirror, tokens_mirror = outputs / "response.txt", outputs / "tokens.jsonl"
+    expected = batch.get("requested_batch_size")
+    mirrors_match = True
+    if expected == 1:
+        if response_mirror.exists():
+            response = requests[0].get("response_text") if len(requests) == 1 else None
+            try:
+                actual = response_mirror.read_bytes()
+            except OSError:
+                mirrors_match = False
+            else:
+                mirrors_match = isinstance(response, str) and actual == response.encode("utf-8")
+        if tokens_mirror.exists():
+            mirror = _v2_output_rows(tokens_mirror)
+            projection = [(row.get("output_token_ordinal"), row.get("timestamp_s"), row.get("token_id")) for row in tokens]
+            mirrors_match = (mirror is not None and mirrors_match
+                             and [(row.get("index"), row.get("timestamp_s"), row.get("token_id")) for row in mirror] == projection)
+    elif response_mirror.exists() or tokens_mirror.exists():
+        mirrors_match = False
+    return (mirrors_match and len(requests) == expected and isinstance(metadata.get("runtime"), dict)
+            and hashlib.sha256(roster).hexdigest() == batch.get("request_roster_sha256"))
+
+
+def _native_science_inputs(bundle, metadata, version):
+    device = metadata.get("device") or {}
+    telemetry = ((metadata.get("adapters") or {}).get("telemetry") or {}).get("name", device.get("telemetry"))
+    if telemetry != "powermetrics":
+        return None
+    calibration = metadata["instrument_calibration"]
+    manifest = None
+    if version in ("0.5.2", "0.6.2"):
+        manifest, raw = _authenticated_native_file(bundle, calibration["validation_manifest_path"],
+                                                    calibration["validation_manifest_sha256"])
+        members = json.loads(raw)["artifacts"]
+        if not members:
+            raise ValueError("empty native calibration manifest")
+        for relative, expected in members.items():
+            _authenticated_native_file(bundle, relative, expected, base=manifest.parent)
+    evidence, raw = _authenticated_native_file(bundle, calibration["artifact_path"], calibration["artifact_sha256"])
+    if manifest is not None and members.get(evidence.relative_to(manifest.parent).as_posix()) != calibration["artifact_sha256"]:
+        raise ValueError("native calibration evidence is absent from its manifest")
+    evidence_hashes = json.loads(raw)["artifact_sha256"]
+    raw_capture = "raw/powermetrics.plist"
+    _, calibration_capture = _authenticated_native_file(bundle, raw_capture, evidence_hashes[raw_capture],
+                                                        base=evidence.parent)
+    _, calibration_events = _authenticated_native_file(bundle, "events.jsonl", evidence_hashes["events.jsonl"],
+                                                       base=evidence.parent)
+    _native_frames(calibration_capture)
+    events = [json.loads(line) for line in calibration_events.decode("utf-8").splitlines() if line.strip()]
+    if not events or not all(isinstance(event, dict) for event in events):
+        raise ValueError("invalid native calibration events")
+    return _native_frames((bundle / raw_capture).read_bytes())
+
+
+def _native_frames(raw):
+    parts = [part for part in raw.split(b"\0") if part.strip()]
+    frames = []
+    for index, part in enumerate(parts):
+        try:
+            frame = plistlib.loads(part)
+        except (ExpatError, plistlib.InvalidFileException, TypeError, ValueError):
+            if index == len(parts) - 1 and frames:
+                break
+            raise ValueError("unreadable native capture frame") from None
+        elapsed = frame["elapsed_ns"]
+        processor = frame["processor"]
+        powers = [processor[rail + "_power"] for rail in ("cpu", "gpu", "ane")]
+        if (not frame["timestamp"] or type(elapsed) is not int or elapsed <= 0
+                or not all(is_number(power) for power in powers)
+                or any(type(processor[k]) is not int for k in ("cpu_energy", "gpu_energy", "ane_energy"))):
+            raise ValueError("invalid native capture frame")
+        frames.append((elapsed / 1e9, math.fsum(powers) / 1e3))
+    if not frames:
+        raise ValueError("native capture has no complete frames")
+    return frames
+
+
+def _authenticated_native_file(bundle, relative, expected, *, base=None):
+    relative = Path(relative)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValueError("native calibration path escapes the bundle")
+    path = ((base or bundle) / relative).resolve(strict=True)
+    if not path.is_relative_to(bundle.resolve()):
+        raise ValueError("native calibration path escapes the bundle")
+    raw = path.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != expected:
+        raise ValueError("native calibration digest mismatch")
+    return path, raw
+
+
+def _verify_native_trace(intervals, frames):
+    if len(intervals) != len(frames):
+        raise ValueError("native capture and trace row counts disagree")
+    preceding = intervals[0][1]
+    for index, ((start, end, trace_power), (elapsed, raw_power)) in enumerate(zip(intervals, frames)):
+        if (not math.isclose(trace_power, raw_power, rel_tol=1e-9, abs_tol=1e-9)
+                or abs(end - start - elapsed) > 1e-6
+                or (index and abs(end - preceding - elapsed) > 1e-6)):
+            raise ValueError("native capture and trace values disagree")
+        preceding = end
+
+
+def _synthetic_science_columns(stored, archive, spans):
+    bound = archive["calibration"].get("operative_bound_s")
+    if bound is None or isinstance(bound, bool) or not is_number(float(bound)) or float(bound) < 0:
+        raise ValueError("session operative timing bound missing or invalid")
+    energy = stored["phase_energy_j"]["decode"]
+    idle = stored["idle_baseline"]["power_w_mean"]
+    anchor = stored["energy_anchor_shift_envelopes"]["/phase_energy_j/decode"]["max_abs_delta_j"]
+    joint = stored["energy_bound_terms_j"].get("E_interpolation_joint_edge_bound_j")
+    if (stored.get("status") != "succeeded" or joint != 0
+            or any(not is_number(value) or value < 0 for value in (energy, idle, anchor))):
+        raise ValueError("synthetic science summary is unusable")
+    return _archive_science_columns(spans, energy, idle, anchor)
+
+
+def _archive_science_columns(spans, energy, idle, anchor):
+    start, end = spans["decode_ns"]
+    return {"phase_decode_j": energy, "idle_power_w": idle, "dur_decode_s": (end - start) / 1e9,
+            "bound_E_interpolation_joint_edge_bound_j": 0.0, "_operative_anchor_j": anchor}
+
+
+def _floor_plan_error(rows):
+    if len(rows) != 50:
+        return "floor module requires 50 planned runs"
+    units = {}
+    for row in rows:
+        stratum, unit, _ = _units_of(row)
+        key = (stratum, unit)
+        units[key] = units.get(key, 0) + 1
+    if sum(s == "repeat" for s, _ in units) != 10 or sum(s == "quad" for s, _ in units) != 10:
+        return "floor module requires ten repeats and ten quads"
+    if any(count != (1 if stratum == "repeat" else 4) for (stratum, _), count in units.items()):
+        return "floor unit census invalid"
+    return None
+
+
+def _cell_flags(rows, *, include_exclusions):
+    flags = ({f for r in rows for f in (r.get("flag_codes") or "").split(";") if f} |
+             {f for r in rows for f in r.get("_meter_flags", [])} |
+             {f for r in rows for f in r.get("_session_flags", [])})
+    if include_exclusions:
+        flags.update(f for r in rows for f in (r.get("exclusion_codes") or "").split(";") if f)
+    return sorted(flags)
+
+
 def restorable(row) -> bool:
     """Addendum 7 D5: any catalog exclusion of a run with a valid energy record, validity failures excepted."""
-    if row["status"] != "succeeded" or not is_number(row.get("phase_decode_j")) or not is_number(row.get("dur_decode_s")):
-        return False
-    codes = [c for c in (row.get("exclusion_codes") or "").split(";") if c]
-    return bool(codes) and not any(c in VALIDITY_CODES for c in codes)
+    return (_valid_record(row) and is_number(row.get("phase_decode_j")) and is_number(row.get("dur_decode_s"))
+            and any((row.get("exclusion_codes") or "").split(";")))
 
 
 def _kept(row, *, restore_load_correlated=False):
-    if row["status"] != "succeeded":
-        return False
-    if set((row.get("exclusion_codes") or "").split(";")) & VALIDITY_CODES:
+    if not _valid_record(row):
         return False
     if not row["excluded"]:
         return True
@@ -1561,6 +1915,12 @@ def compute_cell(rows, boundary, dc_by_run, allowances, alpha, *, diagnostic=Fal
     allowances: {(boundary, "gross"|"idle"): neg8_allowance record} (Addendum 7 D2, D3, D6: each
     boundary and family carries its own allowance with its own scale).
     """
+    if not diagnostic:
+        reason = _floor_plan_error(rows)
+        if reason is not None:
+            flags = _cell_flags(rows, include_exclusions=True)
+            return {variant: {"status": "refused_floor_plan", "reason": reason, "flags": flags}
+                    for variant in CELL_VARIANTS}
     kinds = RAILS_KINDS if boundary == "rails" else DC_KINDS if boundary == "dc_input" else REST_KINDS
     gross_allowance = allowances.get((boundary, "gross"), {})
     idle_allowance = allowances.get((boundary, "idle"), {})
@@ -1607,10 +1967,8 @@ def compute_cell(rows, boundary, dc_by_run, allowances, alpha, *, diagnostic=Fal
                        meter_phase_edge_mean_j=est["kind_averages_j"].get("E_meter_edge_bound_j", 0.0))
         kept_ids = {m["id"] for m in kept}
         kept_rows = [r for r in rows if r["run_id"] in kept_ids]
-        flag_rows = kept_rows if est["status"] == "ok" else rows
-        est["flags"] = sorted({f for r in flag_rows for f in (r.get("flag_codes") or "").split(";") if f} |
-                              {f for r in flag_rows for f in r.get("_meter_flags", [])} |
-                              {f for r in flag_rows for f in r.get("_session_flags", [])})
+        refused = est["status"] != "ok"
+        est["flags"] = _cell_flags(rows if refused else kept_rows, include_exclusions=refused)
         est["harvest_assisted_member_counts"] = {s: sum(_units_of(r)[0] == s and
             "battery.assist" in (r.get("flag_codes") or "").split(";") for r in kept_rows) for s in ("repeat", "quad")}
         evaluated = all(r.get("_decode_assisted") is not None for r in kept_rows)
@@ -1689,6 +2047,48 @@ def group_sessions(rows):
     return sessions
 
 
+def group_science_rows(rows, manifest):
+    """Group planned science rows by registered cell ownership, including lost members."""
+    registrations = [(cell, model) for model, entry in manifest.items() for cell in entry.get("cell_ids") or ()]
+    models_by_cell = dict(registrations)
+    if len(models_by_cell) != len(registrations):
+        raise ValueError("duplicate registered cell ID")
+    grouped = {}
+    for row in rows:
+        if row["role"] != "science":
+            continue
+        cells = (row.get("cell_ids") or "").split(";")
+        if not any(cell in models_by_cell for cell in cells):
+            continue
+        if len(cells) != 1:
+            raise ValueError("ambiguous export unit")
+        model = models_by_cell[cells[0]]
+        grouped.setdefault(model, {}).setdefault(row["session_id"], []).append(row)
+    return grouped
+
+
+def absent_science_rows(sessions, archives):
+    """Represent archived planned runs absent from the admitted export."""
+    for session_id, rows in sessions.items():
+        archive = archives.get(session_id, {})
+        exported = {row["run_id"] for row in rows}
+        for member in archive.get("planned_members", []):
+            run_id = member["run_id"]
+            if member.get("role") != "science" or run_id in exported:
+                continue
+            units = member.get("units", [])
+            exclusions = archive["exclusions"].get(run_id, ())
+            yield {
+                "session_id": session_id, "run_id": run_id, "role": "science",
+                "cell_ids": ";".join(unit["cell_id"] for unit in units),
+                "strata": ";".join(unit["stratum"] for unit in units),
+                "unit_ids": ";".join(str(unit["unit_id"]) for unit in units),
+                "status": "unusable", "excluded": bool(exclusions), "_unblinded": False,
+                "exclusion_codes": ";".join(sorted(exclusions)),
+                "flag_codes": ";".join(sorted(archive["run_codes"].get(run_id, ()))),
+            }
+
+
 def pass_identity(session_id, listed_sessions, sidecar):
     """The registered pass identity of one session (ruling of 2026-10-20, item 2): never a clock.
 
@@ -1707,7 +2107,7 @@ def pass_identity(session_id, listed_sessions, sidecar):
     return {"pass_id": None, "source": None, "flags": ["pass_identity_missing"]}
 
 
-def passes_by_model(sessions, identities, withheld_missing=None):
+def passes_by_model(science, identities, withheld_missing=None):
     """Model -> ordered list of session ids: by registered pass id, pass 1 first.
 
     identities: {session_id: pass_identity record}.  Sessions without an identity come after
@@ -1715,11 +2115,7 @@ def passes_by_model(sessions, identities, withheld_missing=None):
     withheld_missing: {session_id: {model: record}} of passes whose withheld file is missing; such
     a pass has no rows but is a collected pass of the model (B6 ruling Q1).
     """
-    order = {}
-    for session_id, rows in sessions.items():
-        for row in rows:
-            if row["role"] == "science" and row.get("model_name"):
-                order.setdefault(canon(row["model_name"]), set()).add(session_id)
+    order = {model: set(sessions) for model, sessions in science.items()}
     for session_id, models in (withheld_missing or {}).items():
         for model in models:
             order.setdefault(model, set()).add(session_id)
@@ -1771,8 +2167,10 @@ def load_withheld(export_path, sidecar, manifest):
         return {"rows": [], "missing": {}}
     store = Path(export_path).parent / info["path"]
     try:
+        if not Path(export_path).is_file():
+            raise FileNotFoundError(export_path)
         rows = read_export(store)
-    except OSError:
+    except FileNotFoundError:
         digests = info.get("config_key_sha256") or {}
         missing = {}
         for model, entry in manifest.items():
@@ -1787,12 +2185,14 @@ def load_withheld(export_path, sidecar, manifest):
 def quantities(cell_block, manifest_entry):
     """e, tau, b, R, P, BW with intervals, from a computed cell (all three variants)."""
     out = {}
-    for variant in ("gross", "idle_subtracted", "flagged_inclusive", "idle_flagged_inclusive", "without_assisted"):
+    for variant in (*CELL_VARIANTS, "without_assisted"):
         est = cell_block.get(variant)
         if not est or est.get("status") != "ok":
             out[variant] = {"status": (est or {}).get("status", "absent")}
             if est and "reason" in est:
                 out[variant]["reason"] = est["reason"]
+            if est and "flags" in est:
+                out[variant]["flags"] = est["flags"]
             continue
         m, lo, hi = est["mean_j"], est["lower_j"], est["upper_j"]
         t = est["duration_s"]
@@ -1851,10 +2251,13 @@ def mean_of_passes(per_pass, *, pass_ids=None):
     flags = sorted({f for p in per_pass for f in (p.get("flags") or [])})
     statuses = [p.get("status") for p in per_pass]
     if not passes:
-        if per_pass and all(s == "missing" for s in statuses):
-            return {"status": "missing", "label": "no_pass", "flags": flags, "passes_collected": collected,
-                    "passes_computed": 0, "pass_statuses": statuses}
-        return {"status": "refused_no_pass_computed", "label": "no_pass", "flags": flags,
+        missing = statuses.count("missing")
+        if missing and missing == collected:
+            status, reason = "missing", "withheld rows missing"
+        else:
+            status = "refused_no_pass_computed"
+            reason = "withheld rows missing and other passes refused" if missing else "all passes refused"
+        return {"status": status, "reason": reason, "label": "no_pass", "flags": flags,
                 "passes_collected": collected, "passes_computed": 0, "pass_statuses": statuses}
     keys = ("E_dec_j", "T_dec_s", "e_j_per_step", "tau_s_per_step", "e_half_width_j_per_step",
             "e_printed_j_per_token")
@@ -1959,10 +2362,8 @@ def h1_predict(lines, hyp, x):
     return {"x": x, "central": central, "lower": min(values), "upper": max(values)}
 
 
-def h1_words(lines, models, missing=(), missing_flags=None):
-    """models: {model: {"x": {hyp: v}, "e", "w", "kind"}} for every model with a number; missing: the
-    models whose point is `missing` (B6 ruling Q1), which have no word and leave the active-or-resident
-    answer `missing` when one of them is an MoE model."""
+def h1_words(lines, models, missing_flags=()):
+    """Compute words for models with points and draw an answer only with all three MoE points."""
     per_model = {}
     for name, point in models.items():
         measured = [point["e"] - point["w"], point["e"] + point["w"]]
@@ -1980,27 +2381,25 @@ def h1_words(lines, models, missing=(), missing_flags=None):
                            "word": word if point["kind"] != "fit" else None,
                            "role": "held_out" if point["kind"] != "fit" else "fit_set"}
     moe_present = [n for n in MOE if n in per_model]
-    moe_missing = [n for n in MOE if n in missing and n not in per_model]
+    moe_missing = [n for n in MOE if n not in per_model]
     answer, misses = "mixed", []
     if moe_missing:
-        # B6 ruling Q1: a `missing` MoE model leaves the three-model answer undrawable; it prints
-        # `missing` with the models, never `mixed` (which R5 draws from three evaluated models).
-        answer = "missing"
-    elif len(moe_present) == 3:
+        moe = {"status": "missing", "answer": "missing", "moe_models": moe_present, "misses": [],
+               "reason": "active or resident requires all three MoE points",
+               "missing_models": moe_missing, "flags": sorted(set(missing_flags))}
+    else:
         if all(per_model[n]["checks"]["resident"]["miss"] == "prediction_above" for n in moe_present):
             answer = "active"
         elif all(per_model[n]["checks"]["bytes"]["miss"] == "prediction_below" for n in moe_present):
             answer = "resident"
-    if answer == "mixed":
-        for n in moe_present:
-            for hyp in ("resident", "bytes"):
-                c = per_model[n]["checks"][hyp]
-                misses.append({"model": n, "hypothesis": hyp, "consistent": c["consistent"], "miss": c["miss"]})
+        if answer == "mixed":
+            for n in moe_present:
+                for hyp in ("resident", "bytes"):
+                    c = per_model[n]["checks"][hyp]
+                    misses.append({"model": n, "hypothesis": hyp, "consistent": c["consistent"], "miss": c["miss"]})
+        moe = {"answer": answer, "moe_models": moe_present, "misses": misses, "missing_models": [], "flags": []}
     return {"models": per_model,
-            "active_or_resident": {"answer": answer, "moe_models": moe_present, "misses": misses,
-                                   "missing_models": moe_missing,
-                                   "flags": (([] if len(moe_present) == 3 else sorted(missing_flags)) if missing_flags is not None
-                                             else [WITHHELD_MISSING] if moe_missing else [])},
+            "active_or_resident": moe,
             "dense_note": ("Dense held-out models test the line's linearity over the bytes range, not which "
                            "hypothesis is right.")}
 
@@ -2150,7 +2549,7 @@ def sha256_of(value) -> str:
     return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
 
-def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, listed=None, withheld=None):
+def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, listed=None, withheld=None, synthetic=False):
     """sidecars: {session_id: export sidecar dict}; listed: {session_id: manifest sessions entry};
     withheld: {session_id: load_withheld record} for the sessions whose withheld store was read (after
     the stage-1 commit) or found missing."""
@@ -2160,28 +2559,39 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
     held_out = tuple(name for name in HELD_OUT if name in roster)
     h1_family = len(HYPOTHESES) * len(held_out)  # R5: manifest membership, including missing rows.
     sessions = group_sessions(rows)
+    science = group_science_rows(rows, manifest)
+    archive_by_session = {a["session_id"]: a for a in archives if a.get("session_id")}
     sidecars, listed, withheld = sidecars or {}, listed or {}, withheld or {}
+    for session_id in sidecars:
+        sessions.setdefault(session_id, [])
     identities = {s: pass_identity(s, listed, sidecars.get(s)) for s in sessions}
     # B6 ruling Q1: a session whose withheld file is missing is still a collected pass of the models
     # it withheld; their cells print `missing` with the flag and the sidecar's counts.
     withheld_missing = {s: w["missing"] for s, w in withheld.items() if w.get("missing")}
-    model_sessions = passes_by_model(sessions, identities, withheld_missing)
-    model_keys = {}
-    for row in rows:
-        if row["role"] == "science" and row.get("model_name"):
-            model_keys.setdefault(canon(row["model_name"]), set()).add(row["config_key"])
+    # A lost member still belongs to its cell and pass, while its export
+    # placeholder has no configuration key to release.
+    model_keys = {model: {row["config_key"] for members in collected.values()
+                        for row in members if _releasable_record(row)}
+                  for model, collected in science.items()}
     for models in withheld_missing.values():
         for model in models:
             if manifest.get(model, {}).get("config_key"):
                 model_keys.setdefault(model, set()).add(manifest[model]["config_key"])
-    stage_models = set(FIT_SET) if stage == "1" else set(model_keys) if stage == "2" else set()
     if stage in ("1", "2"):
         if key_dir is None:
             raise ValueError("stages 1 and 2 need --key-dir")
-        keys = {k for m in stage_models for k in model_keys.get(m, ())} | {REFERENCE_KEY}
+        selected = {m: entry for m, entry in manifest.items() if stage == "2" or m in FIT_SET}
+        keys = {k for m in selected for k in model_keys.get(m, ())} | {REFERENCE_KEY}
         rows = unblind(rows, key_dir, keys)
         sessions = group_sessions(rows)
-    archive_by_session = {a["session_id"]: a for a in archives if a.get("session_id")}
+        for session_id in sidecars:
+            sessions.setdefault(session_id, [])
+        science = group_science_rows(rows, manifest)
+        missing_science = group_science_rows(absent_science_rows(sessions, archive_by_session), selected)
+        for model, collected in missing_science.items():
+            for session_id, members in collected.items():
+                science.setdefault(model, {}).setdefault(session_id, []).extend(members)
+    model_sessions = passes_by_model(science, identities, withheld_missing)
     alpha_h1 = ALPHA / h1_family
 
     cells, notes, flags = {}, [], []
@@ -2206,8 +2616,9 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
         allowances[session_id] = record
         archive = archive_by_session.get(session_id)
         references = [r for r in srows if r["role"] in ("corpus", "start", "midpoint", "end")]
-        if archive is not None and references and all(r["_unblinded"] for r in references):
-            reference_dc[session_id] = {r["run_id"]: dc_join(archive, r["run_id"], reference=True) for r in references}
+        if archive is not None and stage in ("1", "2") and all(r["_unblinded"] for r in references):
+            reference_dc[session_id] = {r["run_id"]: dc_join(archive, r["run_id"], reference=True)
+                                        for r in references if archive["streams"]}
             flags.extend({"flag": "bytes.meter_gap", "session_id": session_id, "run_id": run_id}
                          for run_id, joined in reference_dc[session_id].items() if joined["status"] == "meter_gap")
             for (boundary, variant), family in FAMILIES.items():
@@ -2216,10 +2627,8 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
         elif archive is not None:
             notes.append(f"{session_id}: reference rows still blinded, no DC-input or rest allowance")
     for model, session_ids in sorted(model_sessions.items()):
-        if stage in ("1", "2") and model not in stage_models:
+        if stage == "1" and model not in FIT_SET:
             continue
-        if model not in ROSTER:
-            notes.append(f"{model}: not in the R1 roster; computed but outside H1/H2")
         for pass_index, session_id in enumerate(session_ids, 1):
             missing = withheld_missing.get(session_id, {}).get(model)
             if missing is not None:
@@ -2241,41 +2650,55 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                                        "withheld_config_row_count": missing["config_row_count"],
                                        "quantities": missing_pass_quantities(missing, missing_flags)} for b in BOUNDARIES}}
                 continue
-            srows = [r for r in sessions[session_id] if r["role"] == "science" and canon(r["model_name"]) == model]
-            unblinded = all(r["_unblinded"] for r in srows)
+            srows = science[model][session_id]
+            unblinded = stage in ("1", "2") and all(r["_unblinded"] for r in srows if _releasable_record(r))
             archive = archive_by_session.get(session_id)
+            can_join_archive = archive is not None and unblinded
             dc_by_run = {}
             anchor_status = {}
-            if archive is not None and unblinded:
-                for r in srows:
-                    dc_by_run[r["run_id"]] = dc_join(archive, r["run_id"])
-            elif archive is not None:
+            if archive is not None and not unblinded:
                 notes.append(f"{model} {session_id}: DC-input skipped, rows still blinded (raw meter cannot be blinded)")
             for r in srows:
                 r["_session_flags"] = archive.get("session_flags", []) if archive is not None and stage in ("1", "2") else []
-                r["_decode_assisted"] = dc_by_run.get(r["run_id"], {}).get("decode_assisted")
-                r["_decode_assist_reason"] = ("not evaluated at the blinded stage" if not unblinded else
-                    dc_by_run.get(r["run_id"], {}).get("decode_assist_evaluated_reason",
-                        f"decode marker not evaluated: archive unavailable (run {r['run_id']})"))
-                valid = r["status"] == "succeeded" and not (
-                    set((r.get("exclusion_codes") or "").split(";")) & VALIDITY_CODES)
+                r["_decode_assisted"] = None
+                r["_meter_flags"] = []
                 if stage in ("1", "2"):
-                    # §7's operative decode-phase bound supplies every rails
-                    # and rest variant and their attribution floors via _member.
                     r["_operative_anchor_j"] = None
-                    if valid and unblinded and archive is not None:
-                        try:
-                            r["_operative_anchor_j"] = decode_anchor_bound(archive, r["run_id"])
-                            anchor_status[r["run_id"]] = "ok"
-                        except (OSError, ValueError, KeyError, TypeError) as exc:
-                            anchor_status[r["run_id"]] = str(exc)
-                r["_meter_flags"] = (["bytes.decode_battery_assist"] if r["_decode_assisted"] else [])
-                if valid and unblinded and dc_by_run.get(r["run_id"], {}).get("status") != "ok":
-                    r["_meter_flags"].append("bytes.meter_gap" if
-                        dc_by_run.get(r["run_id"], {}).get("status") == "meter_gap" else "bytes.meter_decode_unavailable")
+                run_id = r["run_id"]
+                if can_join_archive:
+                    # The admitted archive supplies the authoritative recorded codes.
+                    codes = archive["exclusions"].get(run_id, ())
+                    r["excluded"] = bool(codes)
+                    r["exclusion_codes"] = ";".join(sorted(codes))
+                    r["flag_codes"] = ";".join(sorted(archive["run_codes"].get(run_id, ())))
+                if not _valid_record(r):
+                    continue
+                if not can_join_archive:
+                    r["_decode_assist_reason"] = ("not evaluated at the blinded stage" if not unblinded else
+                        f"decode marker not evaluated: archive unavailable (run {run_id})")
+                    continue
+                # Establish availability before deriving any decode or meter flag.
+                try:
+                    spans, science_columns = _science_inputs(archive, r, manifest[model]["model"], synthetic=synthetic)
+                    r.update(science_columns)
+                except (OSError, ValueError, KeyError, TypeError, ArithmeticError) as exc:
+                    anchor_status[run_id] = str(exc)
+                    r["status"] = "unusable"
+                    continue
+                anchor_status[run_id] = "ok"
+                joined = dc_by_run[run_id] = dc_join(archive, run_id, spans=spans)
+                r["_decode_assisted"] = joined.get("decode_assisted")
+                r["_decode_assist_reason"] = joined.get("decode_assist_evaluated_reason")
+                if r["_decode_assisted"]:
+                    r["_meter_flags"].append("bytes.decode_battery_assist")
+                if joined.get("status") != "ok":
+                    r["_meter_flags"].append("bytes.meter_gap" if joined.get("status") == "meter_gap"
+                                             else "bytes.meter_decode_unavailable")
             per_boundary = {}
             for boundary in BOUNDARIES:
-                if boundary != "rails" and not dc_by_run:
+                # A released archive can have zero valid members. Its cell
+                # still prints a refusal on every boundary.
+                if boundary != "rails" and not can_join_archive:
                     per_boundary[boundary] = {"status": "no_archive_join"}
                     continue
                 cell = compute_cell(srows, boundary, dc_by_run, allowances[session_id], alpha_h1)
@@ -2335,18 +2758,22 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
         q = point(model, "passes_mean", boundary) or {}
         return {"label": q.get("label", "pass_mean"), "flags": q.get("flags") or [], "passes_computed": q.get("passes_computed")}
 
-    def missing_models(pass_key):
-        """Models whose point is `missing` (every pass's withheld file missing; B6 ruling Q1)."""
-        return sorted(m for m in roster if m in cells and pass_key in cells[m]
-                      and (cells[m][pass_key].get("status") == "missing"
-                           or cells[m][pass_key]["boundaries"]["rails"].get("quantities", {}).get("gross", {}).get("status") == "missing"))
-
     h1, h2, multiplicity = {}, {}, {"H1": {"family_size": h1_family, "alpha_per_check": alpha_h1,
                                             "t_quantile_level": 1 - alpha_h1 / 2}, "H2": {}}
     stage1 = {"fit_cells": {}, "h1_lines": {}, "h2_tier1_inputs": {}}
     for boundary in BOUNDARIES:
         h1[boundary], h2[boundary] = {}, {}
         for pass_key in pass_keys:
+            no_points = {}
+            for model, spec in roster.items():
+                block = cells.get(model, {}).get(pass_key)
+                if not block or point(model, pass_key, boundary):
+                    continue
+                q = block["boundaries"][boundary].get("quantities", {}).get("gross", {})
+                reason = q.get("reason", "withheld rows missing" if q.get("status") == "missing" else "all passes refused")
+                no_points[model] = {"kind": spec["kind"], "role": "fit_set" if model in FIT_SET else "held_out",
+                                    "word": None, "status": "missing", "reason": reason, "flags": q.get("flags", [])}
+            missing_flags = {f for row in no_points.values() for f in row["flags"]}
             fit_points = {}
             for model in FIT_SET:
                 q = point(model, pass_key, boundary)
@@ -2354,7 +2781,12 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                     fit_points[model] = {"x": {"bytes": q["b_GB_per_step"], "resident": q["R_GB"], "time": q["tau_s_per_step"]},
                                          "e": q["e_j_per_step"], "w": q["e_half_width_j_per_step"], "kind": "fit"}
             if len(fit_points) < 3:
-                h1[boundary][pass_key] = {"status": "refused_fit_set_incomplete", "fit_models_present": sorted(fit_points)}
+                h1[boundary][pass_key] = {
+                    "status": "refused_fit_set_incomplete", "fit_models_present": sorted(fit_points),
+                    "models": no_points,
+                    "active_or_resident": {"status": "missing", "answer": "missing",
+                                           "reason": "H1 requires complete fit cells", "misses": [],
+                                           "missing_models": sorted(no_points), "flags": sorted(missing_flags)}}
             else:
                 lines = h1_lines(fit_points)
                 all_points = dict(fit_points)
@@ -2364,25 +2796,12 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                         all_points[model] = {"x": {"bytes": q["b_GB_per_step"], "resident": q["R_GB"], "time": q["tau_s_per_step"]},
                                              "e": q["e_j_per_step"], "w": q["e_half_width_j_per_step"], "kind": ROSTER[model]["kind"],
                                              **model_pass_status(model, boundary)}
-                # The analysis's row lists the sorted union of every non-computed point's pass flags
-                # (refused as well as withheld-missing), whenever fewer than three MoE points computed.
-                missing_here = missing_models(pass_key)
-                missing_flags = sorted({f for m in roster if m in cells and pass_key in cells[m]
-                                        for q in [cells[m][pass_key]["boundaries"].get(boundary, {}).get("quantities", {}).get("gross", {})]
-                                        if q.get("status") != "ok" for f in (q.get("flags") or [])})
-                words = h1_words(lines, all_points, missing=missing_here, missing_flags=missing_flags)
+                # RL-92: no word for any model without a point. The MoE answer's
+                # flags include refused and withheld-missing passes of all such models.
+                words = h1_words(lines, all_points, missing_flags)
+                words["models"].update(no_points)
                 for model in held_out:
-                    if model not in all_points and model in cells:
-                        q = cells[model].get(pass_key, {}).get("boundaries", {}).get(boundary, {}).get("quantities", {}).get("gross", {})
-                        if q.get("status") == "missing":
-                            # B6 ruling Q1: a pass (or model) whose withheld file is missing prints
-                            # `missing` with the flag; it has no word.
-                            words["models"][model] = {"kind": ROSTER[model]["kind"], "word": None, "role": "held_out",
-                                                      "status": "missing", "flags": list(q.get("flags") or [])}
-                        else:
-                            words["models"][model] = {"kind": ROSTER[model]["kind"], "word": None, "role": "held_out",
-                                                      "refused": q.get("status", "absent")}
-                    elif model not in cells and stage == "2":
+                    if model not in cells and stage == "2":
                         # Lead ruling 2026-10-20 item 4: a held-out model whose rows are missing (a
                         # withheld file not supplied) prints as `missing` with a flag, never a refusal.
                         words["models"][model] = {"kind": ROSTER[model]["kind"], "word": "missing", "role": "held_out",
@@ -2436,6 +2855,24 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
             "stage1_commit": {"content": stage1, "sha256": stage1_hash}}
 
 
+def _check_export(args, read_withheld):
+    checker = Path(__file__).resolve().parents[1] / "joulewise/b6/bytes_integrity.py"
+    stage = "heldout" if read_withheld else "fit" if args.stage == "1" else "blinded"
+    command = [sys.executable, str(checker), "--stage", stage, "--manifest", str(args.manifest)]
+    for flag, paths in (("--table", args.export), ("--archive", args.archive)):
+        for path in paths:
+            command += [flag, str(path)]
+    for flag, value in (("--export-dir", args.export_dir), ("--key-dir", args.key_dir),
+                        ("--export-seal-repo", args.export_seal_repo), ("--export-seal-commit", args.export_seal_commit)):
+        if value is not None:
+            command += [flag, str(value)]
+    if args.no_key_probe:
+        command.append("--no-key-probe")
+    checked = subprocess.run(command, capture_output=True, text=True, check=False)
+    if checked.returncode:
+        raise ValueError(checked.stderr.strip() or "BYTES export manifest refused")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--export", action="append", default=[], type=Path, help="a <session>.runs.csv (repeatable)")
@@ -2450,23 +2887,27 @@ def main(argv=None):
     parser.add_argument("--predictions", type=Path, help="committed stage-1 predictions (default: receipt locator)")
     parser.add_argument("--commitment-repo", type=Path)
     parser.add_argument("--stage1-receipt", type=Path)
+    parser.add_argument("--export-seal-repo", type=Path)
+    parser.add_argument("--export-seal-commit")
+    parser.add_argument("--no-key-probe", action="store_true")
     args = parser.parse_args(argv)
-    exports = list(args.export)
-    if args.export_dir:
-        exports += sorted(args.export_dir.rglob("*.runs.csv"))
-    # Each file is read once.  A withheld store may also be named with --export (the convention
-    # before the store was located through the sidecar); its rows then enter once, not twice.
-    named, unique = set(), []
-    for path in exports:
-        if path.resolve() not in named:
-            named.add(path.resolve())
-            unique.append(path)
-    exports = unique
     # Lead ruling 2026-10-20 item 1: a held-out configuration's withheld rows enter only after the
     # stage-1 commit (stage 2, or the blinded post-commit agreement run named by --stage1-commit).
     read_withheld = args.stage == "2" or (args.stage == "blinded" and bool(args.stage1_commit))
     # Addendum 7 D7: a refusal is printed as "refused: <reason>" with exit 1, never a traceback.
     try:
+        _check_export(args, read_withheld)
+        exports = list(args.export)
+        if args.export_dir:
+            exports += sorted(args.export_dir.rglob("*.runs.csv"))
+            exports += sorted(p.with_name(p.name.removesuffix(".session.json") + ".runs.csv")
+                              for p in args.export_dir.rglob("*.session.json"))
+        named, unique = set(), []
+        for path in exports:
+            if path.resolve() not in named:
+                named.add(path.resolve())
+                unique.append(path)
+        exports = unique
         if not exports:
             raise ValueError("no export given")
         verification = None
@@ -2477,7 +2918,8 @@ def main(argv=None):
                      "--event", "heldout_rows" if args.stage == "blinded" else "heldout_analysis",
                      "--stage1-commit", args.stage1_commit or ""]
             for flag, value in (("--predictions", args.predictions), ("--commitment-repo", args.commitment_repo),
-                                ("--stage1-receipt", args.stage1_receipt)):
+                                ("--stage1-receipt", args.stage1_receipt), ("--export-seal-repo", args.export_seal_repo),
+                                ("--export-seal-commit", args.export_seal_commit)):
                 if value is not None:
                     guard += [flag, str(value)]
             if args.key_dir:
@@ -2492,10 +2934,15 @@ def main(argv=None):
         manifest = read_manifest(args.manifest)
         rows, sidecars, withheld = [], {}, {}
         for path in exports:
-            batch = read_export(path)
+            batch = read_export(path) if path.is_file() else []
             rows += batch
-            sidecar = read_sidecar(path)
-            session_ids = {r["session_id"] for r in batch} or {str(sidecar.get("session_id") or path.name)}
+            try:
+                sidecar = read_sidecar(path)
+            except (OSError, ValueError):
+                if read_withheld:
+                    raise
+                sidecar = {}
+            session_ids = {r["session_id"] for r in batch} or {path.name.removesuffix(".runs.csv")}
             for session_id in session_ids:
                 # A store named directly has no sidecar beside it; it never hides the export's.
                 if not sidecars.get(session_id):
@@ -2509,8 +2956,10 @@ def main(argv=None):
         # Registration 6/11: the blinded stage does not open a raw meter stream;
         # its decode-assist counts and without-assisted numbers remain unevaluated.
         archives = [load_archive(root) for root in args.archive] if args.stage != "blinded" else []
+        document = read_json(args.manifest)
+        synthetic = isinstance(document, dict) and document.get("synthetic") is True
         result = analyse(rows, manifest, archives, stage=args.stage, key_dir=args.key_dir,
-                         sidecars=sidecars, listed=listed_sessions(args.manifest), withheld=withheld)
+                         sidecars=sidecars, listed=listed_sessions(args.manifest), withheld=withheld, synthetic=synthetic)
         if args.stage == "blinded" and args.archive:
             result["notes"].append("DC-input skipped at the blinded stage; raw meter streams were not opened")
     except StorageStop as exc:

@@ -251,7 +251,7 @@ class RunTests(unittest.TestCase):
         out = Path(WORK["dir"].name) / "stage1-run"
         code, summary = s1.run_stage1(root / "manifest.json", [root / "export"], root / "private-keys", out,
                                       release_fn=fit_release(root), wrap=ample_space_command,
-                                      check_registered_models=False)
+                                      check_registered_models=False, export_seal_repo=out.with_suffix(".seal"))
         self.assertEqual((code, summary["verdict"]), (0, "READY_TO_COMMIT"), json.dumps(summary, indent=1))
         exits = summary["exits"]
         self.assertEqual((exits["a-blinded"], exits["t-blinded"], exits["a-fit"], exits["t-1"]), (0, 0, 0, 0))
@@ -342,7 +342,7 @@ class RunTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "comparer exploded"):
                 s1.run_stage1(root / "manifest.json", [root / "export"], root / "private-keys", out,
                               release_fn=fit_release(root), wrap=ample_space_command,
-                              check_registered_models=False)
+                              check_registered_models=False, export_seal_repo=out.with_suffix(".seal"))
         summary = json.loads((out / "stage1-summary.json").read_text())
         self.assertEqual(summary["verdict"], "ABORTED_ON_ERROR")
         self.assertIn("comparer exploded", summary["error"])
@@ -412,6 +412,8 @@ class ReleaseGateTests(unittest.TestCase):
             return {"stage": "fit", "keys": keys}
 
         with mock.patch.object(s1.subprocess, "run", side_effect=child), \
+                mock.patch.object(s1.bytes_integrity, "capture", return_value="synthetic-capture"), \
+                mock.patch.object(s1.bytes_integrity, "finalize", return_value="synthetic-final"), \
                 mock.patch.object(s1, "_git_state", return_value=("synthetic", False)), \
                 mock.patch("tests.test_bytes_agreement.compare_campaign", side_effect=compare_campaign if actual_comparer else comparer):
             result = s1.run_stage1(path, [root / "export"], root, root / "run", release_fn=release)

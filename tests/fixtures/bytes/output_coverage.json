@@ -271,6 +271,7 @@
     "h1.json/[]/n_passes",
     "h1.json/[]/pass_id",
     "h1.json/[]/pass_status",
+    "h1.json/[]/reason",
     "h1.json/[]/role",
     "h1.json/[]/status",
     "h1.json/[]/word",
@@ -963,6 +964,7 @@
     "model_estimates.json/[]/passes/[]/session_id",
     "model_estimates.json/[]/passes/[]/status",
     "model_estimates.json/[]/passes/[]/tier",
+    "model_estimates.json/[]/passes/[]/unavailable_runs",
     "model_estimates.json/[]/passes/[]/unavailable_runs/[]",
     "model_estimates.json/[]/passes/[]/upper_j",
     "model_estimates.json/[]/passes/[]/with_assisted_label",
@@ -1141,6 +1143,7 @@
     "model_estimates.json/[]/power",
     "model_estimates.json/[]/power_half_w",
     "model_estimates.json/[]/printed_j_per_output_token",
+    "model_estimates.json/[]/reason",
     "model_estimates.json/[]/resident",
     "model_estimates.json/[]/role",
     "model_estimates.json/[]/selection",
@@ -1360,6 +1363,7 @@
     "moe.json/[]/missing_models/[]/model",
     "moe.json/[]/missing_models/[]/n_passes",
     "moe.json/[]/missing_models/[]/pass_status",
+    "moe.json/[]/reason",
     "moe.json/[]/status",
     "predictions.json/fit_points/[]/BW",
     "predictions.json/fit_points/[]/B_j",
@@ -1821,7 +1825,6 @@
         "h1.json/[]/basis",
         "h1.json/[]/boundary",
         "h1.json/[]/description_only",
-        "h1.json/[]/reason",
         "h1.json/[]/selection"
       ]
     },
@@ -1842,7 +1845,6 @@
       "fields": [
         "moe.json/[]/basis",
         "moe.json/[]/boundary",
-        "moe.json/[]/reason",
         "moe.json/[]/selection"
       ]
     },
@@ -1986,8 +1988,8 @@
         "blinded_pass_estimates.json/[]/unavailable_runs/[]",
         "fit_pass_estimates.json/[]/unavailable_runs/[]",
         "heldout_pass_estimates.json/[]/reason",
+        "heldout_pass_estimates.json/[]/unavailable_runs",
         "heldout_pass_estimates.json/[]/unavailable_runs/[]",
-        "model_estimates.json/[]/reason",
         "predictions.json/fit_points/[]/passes/[]/unavailable_runs/[]"
       ]
     },
@@ -2091,6 +2093,11 @@
     "minimum",
     "edge_locked",
     "withheld",
+    "no_point_labels",
+    "no_point_labels_invalid_assist",
+    "no_point_labels_survivor",
+    "no_point_labels_lost_member",
+    "no_point_labels_missing_bundle",
     "invalid_anchor",
     "marker_incomplete",
     "late_start",

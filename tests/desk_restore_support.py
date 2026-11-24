@@ -21,10 +21,10 @@ def compress_member(path, archive):
     return journal
 
 
-def ample_space_command(command, *, free=1024**4):
+def ample_space_command(command, *, free=1024**4, seal_tag=''):
     """Supply fixture free space and, when requested, its synthetic commitment checkout."""
     from tests.bytes_commitment_support import commitment_command
-    command = commitment_command(command)
+    command = commitment_command(command, seal_tag=seal_tag)
     if command[1:2] == ["-B"]:
         del command[1]
     return [command[0], '-B', '-c',

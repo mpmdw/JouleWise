@@ -228,6 +228,7 @@ class Session:
                    "decode_latency_s": durations["decode"], "status": status}
         bundle = {"events": events, "metadata": {
             "run_id": run_id, "status": {"state": status}, "schema": "joulewise.metadata.synthetic.v1",
+            "workload_observed": {"output_token_count": out},
             "synthetic_idle_dc_w": idle_dc_w,
             # §7: re-reduce the decode-phase envelope under the session's
             # operative bound. This toy world has explicit interval supports.
@@ -470,6 +471,7 @@ def generate(out: Path, *, seed=1, passes=1, defects=True, models=None, refuse_p
         "schema": "joulewise.bytes_manifest.synthetic.v1", "note": "registered predictors; synthetic energy and timing",
         "models": {name: {"revision": "synthetic", **{k: REGISTERED[name][k] for k in ("W_bytes", "KV_bytes", "R_bytes")},
                           "tokenizer": "synthetic", "tied_embeddings": False,
+                          "cell_ids": ["bytes-decode-" + canon(name)],
                           # the public configuration identity of the model's science rows (the key the
                           # export sidecar's withheld digests name; lead ruling 2026-10-20 item 1)
                           "config_key": "bytes-decode-" + canon(name)}

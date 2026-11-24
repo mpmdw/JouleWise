@@ -11,10 +11,21 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from joulewise import bytes_analysis as ba
+from joulewise.b6 import bytes_integrity
 from joulewise.desk_restore import StorageStop
 from scripts import bytes_commitment as bc
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _check_export(args):
+    if not args.export:
+        raise ValueError("BYTES export manifest: sealed table directories are required")
+    stage = "fit" if args.stage == "all" else args.stage
+    if stage == "blinded" and args.stage1_commit:
+        stage = "heldout"
+    bytes_integrity.check_inputs(args.export_seal_repo, args.export_seal_commit, stage=stage,
+        campaign=args.manifest, export_dirs=args.export, archives=None, key_dir=args.key_dir, probe=args.no_key_probe)
 
 
 def _write(out, name, payload):
@@ -40,12 +51,17 @@ def _reduce(source, manifest, stage, key_dir=None, stage1_commit=None):
 def _missing_labels(points):
     """Disclose pass flags on survivors and label models with no point."""
     for point in points:
+        passes = point.get("passes", [])
         flags = set(point.get("flags", [])) | {
-            flag for row in point.get("passes", []) for flag in row.get("flags", [])}
+            flag for row in passes for flag in row.get("flags", [])}
         if "bytes.withheld_missing" in flags:
             point["flags"] = sorted(flags)
-            if point.get("status") == "unavailable":
+        if point.get("status") == "unavailable":
+            missing = sum(row.get("status") == "missing" for row in passes)
+            if missing and missing == len(passes):
                 point.update(status="missing", reason="withheld rows missing")
+            elif missing:
+                point["reason"] = "withheld rows missing and other passes refused"
 
 
 def main(argv=None):
@@ -59,9 +75,11 @@ def main(argv=None):
     parser.add_argument("--stage1-commit", help="recorded stage-1 commit; permits blinded held-out agreement")
     parser.add_argument("--predictions", type=Path, help="fit-stage predictions.json, with predictions.sha256 beside it")
     parser.add_argument("--out", required=True, type=Path)
+    parser.add_argument("--no-key-probe", action="store_true", help="check RL-33 refusals against the captured export")
     bc.add_arguments(parser)
     args = parser.parse_args(argv)
     try:
+        _check_export(args)
         manifest = ba.validate_manifest(ba.read_json(args.manifest))
         source = args.export or args.records
         if args.stage == "heldout" and args.predictions is None:

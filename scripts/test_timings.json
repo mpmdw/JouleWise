@@ -31,6 +31,32 @@
   "split_modules": {
     "_what_this_is": "Runner-only, opt-in test-granularity splits. Every declared test plus the computed remainder still runs once per suite/interpreter. Only previously audited independent splits remain enabled. tests.test_calibration_exits stays absent: its WitnessCorpusOwner executes the complete ordered witness sweep for every process-local cache, so distributing consumers duplicates work and separates generation-bound inventory checks. The old _WITNESS_RESULTS/alphabetical-priming explanation is superseded by that explicit owner.",
     "_why_declared_plus_remainder": "Only the heavy test ids are named. Everything else is gathered at run time into one remainder unit. A test ADDED to a split module therefore lands in the remainder automatically - it cannot be silently dropped from the suite. A DECLARED id that disappears (a rename) fails the build closed, which is the case a computed complement would otherwise absorb silently while handing one shard ~20 minutes of unaccounted work.",
+    "tests.test_bytes_availability": {
+      "granularity": "test",
+      "reason": "Each file-fault shard builds and mutates an isolated synthetic archive. Schedule member, campaign, optional-control and admission probes independently for both timing bases.",
+      "declared": {
+        "tests.test_bytes_availability.BytesAvailabilityTests.test_mock_timing_member_faults": 420.0,
+        "tests.test_bytes_availability.BytesAvailabilityTests.test_native_timing_member_faults": 420.0,
+        "tests.test_bytes_availability.BytesAvailabilityTests.test_mock_timing_campaign_faults": 300.0,
+        "tests.test_bytes_availability.BytesAvailabilityTests.test_native_timing_campaign_faults": 300.0,
+        "tests.test_bytes_availability.BytesAvailabilityTests.test_mock_timing_control_faults": 380.0,
+        "tests.test_bytes_availability.BytesAvailabilityTests.test_native_timing_control_faults": 380.0,
+        "tests.test_bytes_availability.BytesAvailabilityTests.test_mock_timing_admission_faults": 110.0,
+        "tests.test_bytes_availability.BytesAvailabilityTests.test_native_timing_admission_faults": 110.0,
+        "tests.test_bytes_availability.BytesAvailabilityTests.test_duplicate_decode_end_drops_member_in_both_fit_clis": 130.0,
+        "tests.test_bytes_availability.BytesAvailabilityTests.test_absent_last_compressed_input_drops_member_without_refusing_fit": 85.0
+      },
+      "remainder_weight_seconds": 280.0
+    },
+    "tests.test_bytes_conditional_availability": {
+      "granularity": "test",
+      "reason": "The two timing bases generate independent synthetic archives and can run on separate CI shards. Each took 31.5 seconds in a concurrent local run.",
+      "declared": {
+        "tests.test_bytes_conditional_availability.ConditionalAvailabilityTests.test_mock_timing_conditional_file_faults": 65.0,
+        "tests.test_bytes_conditional_availability.ConditionalAvailabilityTests.test_native_timing_conditional_file_faults": 65.0
+      },
+      "remainder_weight_seconds": 30.0
+    },
     "tests.test_reduce": {
       "granularity": "test",
       "reason": "Retain the TEST-SPEED-01 audited method split (2026-08-23): no module/class setup or teardown, with a prior concurrent split execution passing. CI-12 (2026-10-05) refreshes the same three declared units and the remainder from hosted medians; no test membership changes. Per-process memo-cache refill remains a reason not to scatter additional methods.",

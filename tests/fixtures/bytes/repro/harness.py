@@ -87,18 +87,19 @@ def run(root: Path, out_name="out", *, two_stage=True):
             shutil.rmtree(d)
     err = io.StringIO()
     codes = []
+    from tests.bytes_commitment_support import fixture_options, synthetic_checkout, synthetic_cli_args
+
+    common = ["--export", root / "export", "--manifest", root / "manifest.json"]
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
-        codes.append(bytes_analyze.main(["--export", str(root / "export"), "--manifest", str(root / "manifest.json"),
-                                         "--stage", "fit", "--out", str(out_fit)]))
+        fit = synthetic_cli_args("bytes_analyze.py", [*common, "--stage", "fit", "--out", out_fit], seal_tag=out_name)
+        codes.append(bytes_analyze.main(fit))
         if codes[-1] == 0 and two_stage:
-            # RL-7a: the held-out stage runs against a synthetic commitment of the fit predictions.
-            from tests.bytes_commitment_support import fixture_options, synthetic_checkout
             options = fixture_options(root, out_fit / "predictions.json")
-            with synthetic_checkout(options):
-                codes.append(bytes_analyze.main(["--export", str(root / "export"), "--manifest", str(root / "manifest.json"),
-                                                 "--stage", "heldout", *options,
-                                                 "--predictions", str(out_fit / "predictions.json"),
-                                                 "--out", str(out_held)]))
+            heldout = synthetic_cli_args("bytes_analyze.py", [
+                *common, "--stage", "heldout", *options, "--predictions", out_fit / "predictions.json",
+                "--out", out_held], seal_tag=out_name)
+            with synthetic_checkout(heldout):
+                codes.append(bytes_analyze.main(heldout))
     return codes, err.getvalue().strip(), out_held
 
 

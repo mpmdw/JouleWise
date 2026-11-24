@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Offline BYTES commitment preflight, outside the registered estimator.
 
-Only named prediction/provenance files, Git objects/refs, and the canonical
-metadata journal are read. No exports, archives, factors or outcomes are read.
+The private export manifest authenticates fit input bytes before the existing
+prediction provenance and journal checks. The manifest is anchored in the
+private export checkout's own Git commit.
 Only record-push contacts origin/GitHub, through an injectable runner. Checks and
 admissions replay its recorded server evidence offline. See docs/design/bytes_commitment.md.
 """
@@ -19,6 +20,9 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+if __package__ in (None, ''):
+    sys.path.insert(0, str(ROOT))
+from joulewise.b6 import bytes_integrity
 METADATA = 'docs/bytes/stage1'
 JOURNAL = METADATA + '/unblinding.jsonl'
 RELEASE = METADATA + '/heldout-release.json'
@@ -102,7 +106,23 @@ def _check_events(events, commit, committed, pushed, now):
             raise ValueError('BYTES commitment/push must predate every unblinding record')
 
 
-def verify_commitment(commit, predictions=None, *, repo=ROOT, receipt=None, unblinding_records=()):
+def _check_journal(repo, head, raw, commit, committed, pushed, now):
+    events = _events(raw, JOURNAL)
+    if raw and not events:
+        raise ValueError('BYTES commitment: initialized empty journal must be zero bytes')
+    _check_events(events, commit, committed, pushed, now)
+    if raw != _blob(repo, head, JOURNAL):
+        raise ValueError('BYTES commitment: commit and push the journal before another admission')
+    history = _git(repo, 'rev-list', head, '--all', '--full-history', '--', JOURNAL).decode().splitlines()
+    for revision in history:
+        prior = _blob(repo, revision, JOURNAL, optional=True)
+        if prior is not None and not raw.startswith(prior):
+            raise ValueError('BYTES commitment: journal must extend every committed version')
+
+
+def verify_commitment(commit, predictions=None, *, repo=ROOT, receipt=None, unblinding_records=(),
+                      export_seal_repo=None, export_seal_commit=None):
+    bytes_integrity.verify(export_seal_repo, export_seal_commit)
     repo = Path(repo).resolve()
     if _git(repo, 'rev-parse', '--show-toplevel') != _git(ROOT, 'rev-parse', '--show-toplevel'):
         raise ValueError('BYTES commitment repo must be the running checkout')
@@ -134,6 +154,7 @@ def verify_commitment(commit, predictions=None, *, repo=ROOT, receipt=None, unbl
     pushed, now = _utc(record['pushed_utc']), datetime.now(timezone.utc)
     if not committed <= pushed <= now:
         raise ValueError('BYTES commitment push time precedes commit or is in the future')
+    _check_journal(repo, head, (repo / JOURNAL).read_bytes(), commit, committed, pushed, now)
     path = record['predictions_path']
     if not isinstance(path, str) or str(PurePosixPath(path)) != path or PurePosixPath(path).is_absolute() or '..' in PurePosixPath(path).parts:
         raise ValueError('BYTES commitment requires a repository-relative predictions path')
@@ -153,9 +174,6 @@ def verify_commitment(commit, predictions=None, *, repo=ROOT, receipt=None, unbl
             raise ValueError('BYTES commitment estimator differs from its registered digest')
     if frozen['bytes_analysis_sha256'] != ESTIMATORS['joulewise/bytes_analysis.py']:
         raise ValueError('BYTES commitment predictions name an unregistered estimator')
-    # Require an explicitly initialized journal. Missing evidence is not an empty history.
-    journal = repo / JOURNAL
-    _check_events(_events(journal.read_bytes(), JOURNAL), commit, committed, pushed, now)
     files = [repo / RELEASE, *map(Path, unblinding_records)]
     for file in files:
         if file.is_file():
@@ -185,6 +203,7 @@ def verify_commitment(commit, predictions=None, *, repo=ROOT, receipt=None, unbl
 def add_arguments(parser):
     parser.add_argument('--commitment-repo', type=Path, help='analysis Git checkout (default: script checkout)')
     parser.add_argument('--stage1-receipt', type=Path, help='push receipt (default: docs/bytes/stage1/push-receipt.json)')
+    bytes_integrity.add_arguments(parser)
 
 
 def admit(args, event, *, repo=ROOT, unblinding_records=()):
@@ -192,17 +211,17 @@ def admit(args, event, *, repo=ROOT, unblinding_records=()):
     import fcntl
     repo = args.commitment_repo or repo
     result = verify_commitment(args.stage1_commit, getattr(args, 'predictions', None), repo=repo,
-                               receipt=args.stage1_receipt, unblinding_records=unblinding_records)
+                               receipt=args.stage1_receipt, unblinding_records=unblinding_records,
+                               export_seal_repo=getattr(args, 'export_seal_repo', None),
+                               export_seal_commit=getattr(args, 'export_seal_commit', None))
     journal = Path(repo) / JOURNAL
     with journal.open('r+b') as stream:
         fcntl.flock(stream, fcntl.LOCK_EX)
         now = datetime.now(timezone.utc)
         prior = stream.read()
-        if prior != _blob(repo, 'HEAD', JOURNAL):
-            raise ValueError('BYTES commitment: commit and push the journal before another admission')
-        _check_events(_events(prior, JOURNAL), result['stage1_commit'],
-                      datetime.fromisoformat(_git(repo, 'show', '-s', '--format=%cI', result['stage1_commit']).decode().strip()).astimezone(timezone.utc),
-                      _utc(result['pushed_utc']), now)
+        committed = datetime.fromisoformat(_git(repo, 'show', '-s', '--format=%cI', result['stage1_commit'])
+                                           .decode().strip()).astimezone(timezone.utc)
+        _check_journal(repo, 'HEAD', prior, result['stage1_commit'], committed, _utc(result['pushed_utc']), now)
         stream.seek(0, os.SEEK_END)
         if prior and not prior.endswith(b'\n'):
             stream.write(b'\n')
@@ -229,8 +248,10 @@ def _push_event(raw, tip):
 
 
 def record_push(commit, predictions=None, *, repo=ROOT, receipt=None,
-                predictions_path=METADATA + '/predictions.json', runner=subprocess.run):
+                predictions_path=METADATA + '/predictions.json', runner=subprocess.run,
+                export_seal_repo=None, export_seal_commit=None):
     """The single online step. Capture server evidence, validate, then commit its receipt."""
+    bytes_integrity.verify(export_seal_repo, export_seal_commit)
     repo = Path(repo).resolve()
     if _git(repo, 'rev-parse', '--show-toplevel') != _git(ROOT, 'rev-parse', '--show-toplevel'):
         raise ValueError('BYTES commitment repo must be the running checkout')
@@ -251,7 +272,8 @@ def record_push(commit, predictions=None, *, repo=ROOT, receipt=None,
               'pushed_utc': event['timestamp'], 'origin_ref': ORIGIN_REF, 'origin_tip': tip,
               'predictions_path': predictions_path, 'github_activity_raw': raw,
               'github_repository': repository, 'force_push': False}
-    result = verify_commitment(commit, predictions, repo=repo, receipt=record)
+    result = verify_commitment(commit, predictions, repo=repo, receipt=record,
+                               export_seal_repo=export_seal_repo, export_seal_commit=export_seal_commit)
     path = Path(receipt or repo / METADATA / 'push-receipt.json').resolve()
     relative = path.relative_to(repo).as_posix()
     with path.open('x') as stream:
@@ -277,17 +299,18 @@ def main(argv=None, *, runner=subprocess.run):
     args = parser.parse_args(argv)
     repo = args.commitment_repo or ROOT
     receipt = args.stage1_receipt or repo / METADATA / 'push-receipt.json'
+    seal = {'export_seal_repo': args.export_seal_repo, 'export_seal_commit': args.export_seal_commit}
     try:
         if args.command == 'record-push':
             result = record_push(args.stage1_commit, args.predictions, repo=repo, receipt=receipt,
-                                 predictions_path=args.predictions_path, runner=runner)
+                                 predictions_path=args.predictions_path, runner=runner, **seal)
         elif args.command == 'admit':
             if args.event is None:
                 raise ValueError('BYTES commitment admission requires an event')
             result = admit(args, args.event, repo=repo, unblinding_records=args.unblinding_record)
         else:
             result = verify_commitment(args.stage1_commit, args.predictions, repo=repo, receipt=receipt,
-                                       unblinding_records=args.unblinding_record)
+                                       unblinding_records=args.unblinding_record, **seal)
         print(json.dumps(result, sort_keys=True))
         return 0
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
