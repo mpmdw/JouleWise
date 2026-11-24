@@ -205,10 +205,12 @@ def _redirect_at(restricted):
 
 
 def calculate_private(positions, *, kernel, pooled, instrument_manifest_sha256, schema_bytes,
-                      instrument_reasons=(), gap_limits_ns=None, view_refusals=None):
-    report = analysis.print_controls(positions, kernel=kernel, pooled=pooled, gap_limits_ns=gap_limits_ns,
-                                     instrument_manifest_sha256=instrument_manifest_sha256,
-                                     view_refusals=view_refusals)
+                      instrument_reasons=(), gap_limits_ns=None, native=False):
+    options = dict(kernel=kernel, pooled=pooled, instrument_manifest_sha256=instrument_manifest_sha256)
+    if native:
+        report = analysis.print_admitted_controls(positions, **options)
+    else:
+        report = analysis.print_controls(positions, gap_limits_ns=gap_limits_ns, **options)
     return prepare_private(report, schema_bytes, instrument_reasons=instrument_reasons)
 
 
@@ -333,7 +335,7 @@ def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, l
                 positions, kernel=kernel, pooled=freeze.instrument_pool,
                 instrument_manifest_sha256=freeze.instrument_manifest_sha256,
                 schema_bytes=freeze.restricted_schema, instrument_reasons=freeze.instrument_pool.reason_enum,
-                view_refusals=native.inputs.view_refusals if native is not None else None,
+                native=native is not None,
             )
             phase = "publish"
             sys.stdout.flush()

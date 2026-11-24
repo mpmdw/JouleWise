@@ -106,6 +106,13 @@ class Nullable:
         self.fields = fields
 
 
+class DiscardedField:
+    """Validate a required or optional member and omit it from the projection."""
+
+    def __init__(self, fields):
+        self.fields = fields
+
+
 class DigestFields(dict):
     """A projection paired with a digest of the object's compact JSON bytes."""
 
@@ -569,8 +576,10 @@ def _project(it, token, fields, depth, *, strict):
                 raise _Bad()
             result[name] = _project(it, value, fields.values, depth + 1, strict=strict)
         elif name in fields:
-            projected = _project(it, value, fields[name], depth + 1, strict=strict)
-            if not extension:
+            field = fields[name]
+            discarded = isinstance(field, DiscardedField)
+            projected = _project(it, value, field.fields if discarded else field, depth + 1, strict=strict)
+            if not extension and not discarded:
                 result[name] = projected
         elif extension:
             _skip_value(it, value, depth + 1, strict=True, finite=True)

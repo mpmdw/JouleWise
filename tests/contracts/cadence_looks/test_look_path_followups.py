@@ -1,7 +1,10 @@
 """Synthetic regressions for the pre-reservation audit findings."""
 
+import ast
 from collections import Counter
+from copy import deepcopy
 from dataclasses import asdict
+import inspect
 import json
 import os
 from pathlib import Path
@@ -10,6 +13,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import textwrap
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest import TestCase
@@ -19,6 +23,7 @@ from joulewise.cadence_looks import controls_analysis as analysis
 from joulewise.cadence_looks import controls_book as book
 from joulewise.cadence_looks import controls_inputs as inputs
 from joulewise.cadence_looks import controls_layout as layout
+from joulewise.cadence_looks import controls_metadata as metadata
 from joulewise.cadence_looks import controls_reader as reader
 from joulewise.cadence_looks import controls_release as release
 from joulewise.cadence_looks import controls_time_fields as blind
@@ -1036,7 +1041,7 @@ class LookPathFollowupTests(TestCase):
 
     def test_v9_role_schema_member_matrix(self):
         def sample(schema):
-            if isinstance(schema, blind.Nullable):
+            if isinstance(schema, (blind.Nullable, blind.DiscardedField)):
                 return sample(schema.fields)
             if isinstance(schema, blind.TokenForms):
                 form, shape = next(iter(schema.variants.items()))
@@ -1065,7 +1070,7 @@ class LookPathFollowupTests(TestCase):
             return blind.project_json(json.dumps(data).encode(), schema, strict=True)
 
         def inspect(schema, path):
-            if isinstance(schema, blind.Nullable):
+            if isinstance(schema, (blind.Nullable, blind.DiscardedField)):
                 return inspect(schema.fields, path)
             if isinstance(schema, blind.TokenForms):
                 for token, variant in schema.variants.items():
@@ -1104,6 +1109,8 @@ class LookPathFollowupTests(TestCase):
             ("episode", reader.EPISODE_FIELDS), ("metadata", reader.METADATA_FIELDS),
             ("producer-metadata", reader.PRODUCER_METADATA_FIELDS), ("config", reader.CONFIG_FIELDS),
             ("work", inputs.WORK_FIELDS), ("result", inputs.RUNTIME_RESULT_FIELDS), ("copy", inputs.RESULT_FIELDS),
+            ("native-result", inputs.NATIVE_RUNTIME_RESULT_FIELDS),
+            ("native-copy", inputs.NATIVE_LEG_RECORD_FIELDS["result"]),
             ("meter", blind.METER_FIELDS),
         ):
             inspect(schema, (name,))
@@ -1313,22 +1320,42 @@ class LookPathFollowupTests(TestCase):
 
         def configure(world):
             audit7_short_visible_call(world)
+            control(world)
+
+        def setup(name, short=False):
+            world, bench = self.prepare(name, configure=configure if short else control)
+            self.assertEqual(self.invoke(world, bench, "project"), (0, b"", b""))
+            rows = []
+            for leg in disposed:
+                certificate = self.private(bench) / "certificates" / f"{leg}.json"
+                code = registrar.read(certificate)["dc_code"]
+                self.assertEqual(code, "not_bracketed")
+                rows.append(dict(leg_id=leg, code=code, certificate_sha256=registrar.digest(certificate.read_bytes())))
+            registrar.put(world / "authority/disposition.json",
+                          dict(schema="joulewise.cadence_ctl_dc_disposition.v1", legs=rows))
+            self.assertEqual(self.invoke(world, bench, "attest-disposition"), (0, b"", b""))
+            return world, bench
+
+        def control(world):
             span, _, _ = FROZEN["location"](world, disposed[0])
             profile["partition"](world, span, FROZEN["IDS"][3:], dict.fromkeys(disposed, "meter_absent"))
 
-        world, bench = self.prepare("short-fourth-dc", configure=configure)
-        self.assertEqual(self.invoke(world, bench, "project"), (0, b"", b""))
-        rows = []
-        for leg in disposed:
-            certificate = self.private(bench) / "certificates" / f"{leg}.json"
-            code = registrar.read(certificate)["dc_code"]
-            self.assertEqual(code, "not_bracketed")
-            rows.append(dict(leg_id=leg, code=code, certificate_sha256=registrar.digest(certificate.read_bytes())))
-        registrar.put(world / "authority/disposition.json",
-                      dict(schema="joulewise.cadence_ctl_dc_disposition.v1", legs=rows))
-        self.assertEqual(self.invoke(world, bench, "attest-disposition"), (0, b"", b""))
-        self.assertEqual(self.invoke(world, bench, "stage1"), (2, b"", b"REFUSE PREFLIGHT insufficient_legs\n"))
-        self.assert_fresh(world, bench)
+        clean_world, clean_bench = setup("fourth-dc-control")
+        for operation in ("stage1", "commit-stage1", "preflight"):
+            self.assertEqual(self.invoke(clean_world, clean_bench, operation), (0, b"", b""))
+        self.assert_fresh(clean_world, clean_bench)
+        clean = self.round8_release(clean_world, clean_bench)
+        eligible = ("L002", "L009", "L011", "L012")
+        self.assertEqual(tuple(clean["dose_response"]["dc_in"]["legs"]), eligible)
+        for row in clean["legs"]:
+            certificate = registrar.read(self.private(clean_bench) / "certificates" / (row["leg_id"] + ".json"))
+            self.assertEqual((certificate["admission"], row["disposition"]), ("admitted", "admitted"))
+
+        world, bench = setup("short-fourth-dc", short=True)
+        self.assert_refuses_at_blind_gates(
+            world, bench, self.private(clean_bench), token=b"REFUSE PREFLIGHT insufficient_legs\n",
+            driver_fault="none",
+        )
 
     def test_round8_short_recovery_is_ineligible_before_the_marker(self):
         world, bench = self.prepare("short-recovery", configure=audit7_short_recovery)
@@ -1338,6 +1365,17 @@ class LookPathFollowupTests(TestCase):
         self.assert_fresh(world, bench)
         certificate = registrar.read(self.private(bench) / "certificates/L002.json")
         self.assertEqual(certificate.get("admission_reason"), "recovery_incomplete")
+        report = self.round8_release(world, bench)
+        row = next(row for row in report["legs"] if row["leg_id"] == "L002")
+        self.assertEqual((row["disposition"], row["reason"]),
+                         (certificate["admission"], certificate["admission_reason"]))
+        self.assertNotIn("L002", report["dose_response"]["gpu_rail"]["legs"])
+
+    def round8_release(self, world, bench):
+        reservation = "SYNTHETIC-RESERVATION"
+        self.assertEqual(self.invoke(world, bench, "stage2", "synthetic_reservation"), (0, b"", b""))
+        self.assertEqual(self.invoke(world, bench, "status", "synthetic_reservation"), (3, b"", b"REFUSE SPENT\n"))
+        return registrar.read(self.private(bench) / reservation / "controls.json")
 
     def test_round8_blind_tool_sizes_do_not_change_typed_projection(self):
         _, _, bundle = FROZEN["location"](self.pristine, "L002")
@@ -1352,7 +1390,172 @@ class LookPathFollowupTests(TestCase):
             raw = registrar.manifest.canonical(episode)
             return registrar.manifest.canonical(asdict(reader.episode_timing(raw, {}).projected_episode))
 
-        self.assertEqual(projection(99183, 876543), projection(3, 7))
+        original = blind._convert
+
+        def guard(kind, token):
+            self.assertNotIn(token, ("99183", "876543"))
+            return original(kind, token)
+
+        with patch.object(blind, "_convert", guard):
+            first = projection(99183, 876543)
+            self.assertEqual(first, projection(3, 7))
+        self.assertNotIn(b"args_bytes", first)
+        self.assertNotIn(b"result_bytes", first)
+
+        for label, sizes in (("large", (99183, 876543)), ("small", (3, 7))):
+            def change(document):
+                document["turns"][0]["tool_calls"] = [dict(call, args_bytes=sizes[0], result_bytes=sizes[1])]
+
+            world, bench = self.prepare(f"round8-tools-{label}", role="episode", fault=change)
+            for operation in ("stage1", "commit-stage1", "preflight"):
+                guard_fault = "guard_measured_sizes" if operation != "commit-stage1" else "none"
+                self.assertEqual(self.invoke(world, bench, operation, guard_fault), (0, b"", b""))
+                if operation != "commit-stage1":
+                    observed = bench / f"projection-{operation}.json"
+                    self.assertEqual(observed.read_bytes(), first)
+            self.assert_fresh(world, bench)
+
+    def test_round8_all_measured_sizes_are_discarded(self):
+        cases = [
+            (reader.TOOL_FIELDS, wire_matrix.sample(reader.TOOL_FIELDS), ("args_bytes", "result_bytes")),
+            (reader.ARTIFACT_IDENTITY["inventory"][0], wire_matrix.sample(reader.ARTIFACT_IDENTITY["inventory"][0]),
+             ("size_bytes",)),
+            (metadata.ENVIRONMENT["memory"], wire_matrix.sample(metadata.ENVIRONMENT["memory"]),
+             ("page_size_bytes", "compressor_bytes", "swap_usage")),
+            (inputs.NATIVE_RUNTIME_RESULT_FIELDS, wire_matrix.sample(inputs.NATIVE_RUNTIME_RESULT_FIELDS),
+             ("prefill_chars",)),
+            (inputs.NATIVE_LEG_RECORD_FIELDS["result"], wire_matrix.sample(inputs.NATIVE_LEG_RECORD_FIELDS["result"]),
+             ("prefill_chars",)),
+        ]
+        for schema, document, fields in cases:
+            for name in fields:
+                with self.subTest(field=name):
+                    values = (({"total": "91G", "used": "90G", "free": "1G"},
+                               {"total": "37G", "used": "35G", "free": "2G"})
+                              if name == "swap_usage" else (99183, 876543))
+                    projections = []
+                    for value in values:
+                        candidate = {**document, name: value}
+                        projection = blind.project_json(registrar.manifest.canonical(candidate), schema, strict=True)
+                        self.assertNotIn(name, projection)
+                        projections.append(registrar.manifest.canonical(projection))
+                    self.assertEqual(*projections)
+
+    def test_round8_blind_and_measured_admission_agree_for_structural_mutations(self):
+        disposition = dict(admitted=True, g0_released=True, script_complete=True)
+        kernel = SimpleNamespace(phases=SimpleNamespace(qualify_ctl01=lambda _: {}, TIMING_EDGE_J=1.0))
+        roster = {"extra-turn": "L001", "hidden": "L002", "cpu": "L003", "split": "L006", "plain": "L007"}
+        for kind, leg in roster.items():
+            _, runtime, bundle = FROZEN["location"](self.pristine, leg)
+            source_episode = registrar.read(bundle / "outputs/align_episode.json")
+            source_work = registrar.read(runtime / "script-work.json")
+            issued = source_work["script"]
+            steps = source_work["steps"]
+
+            def verdict(episode, work):
+                timing = reader.episode_timing(registrar.manifest.canonical(episode), {})
+                trace = analysis.TraceTiming(tuple(range(timing.start_ns, timing.end_ns + analysis.NS, analysis.NS)),
+                                             analysis.NS)
+                plan = SimpleNamespace(episode=timing, trace_timing=lambda: dict.fromkeys(
+                    analysis.CHANNELS, (trace, None)))
+                return inputs.admit_leg(disposition, work, issued, plan)
+
+            def rejected(episode, work, reason):
+                decision = verdict(episode, work)
+                self.assertEqual((decision.disposition, decision.reason), ("not_evaluable", reason))
+                # A row that was ruled ineligible has no scientific episode
+                # to inspect. The measured entry point only prints its verdict.
+                read = analysis.LegInput(leg, kind, False, True, admission=decision)
+                report = analysis.print_admitted_controls((read,), kernel=kernel, pooled=None,
+                                                          instrument_manifest_sha256="a" * 64)
+                self.assertEqual(report["legs"], [dict(leg_id=leg, kind=kind,
+                                                      disposition=decision.disposition, reason=decision.reason)])
+                self.assertTrue(all(not result["legs"] for result in report["dose_response"].values()))
+
+            self.assertTrue(verdict(source_episode, source_work).admitted, kind)
+            for index, step in enumerate(steps):
+                with self.subTest(kind=kind, step=index):
+                    if step["kind"] in ("hidden", "turn"):
+                        work, episode = deepcopy(source_work), deepcopy(source_episode)
+                        work["steps"][index]["actual_tokens"] -= 1
+                        if step["kind"] == "turn":
+                            episode["turns"][0]["decode_tokens"] -= 1
+                        rejected(episode, work, "token_delivery")
+                        for boundary, delta in (("started_ns", -1), ("ended_ns", 1)):
+                            work = deepcopy(source_work)
+                            work["steps"][index]["first_token_ns"] = step[boundary] + delta
+                            with self.assertRaises(blind.TimeFieldError):
+                                verdict(source_episode, work)
+                    if step["kind"] in ("gap", "recovery"):
+                        for short_by in (1, analysis.NS):
+                            work = deepcopy(source_work)
+                            work["steps"][index]["ended_ns"] -= short_by
+                            work["steps"][index]["ended_epoch_s"] -= short_by / analysis.NS
+                            rejected(source_episode, work, step["kind"] + "_incomplete")
+                    bounds = {
+                        "started_ns": (steps[index - 1]["ended_ns"] if index else source_episode["start_ns"]) - 1,
+                        "ended_ns": (steps[index + 1]["started_ns"] if index + 1 < len(steps)
+                                     else source_episode["end_ns"]) + 1,
+                    }
+                    for stamp, value in bounds.items():
+                        work = deepcopy(source_work)
+                        work["steps"][index][stamp] = value
+                        rejected(source_episode, work, "step_order_or_episode_bounds")
+                    work = deepcopy(source_work)
+                    work["steps"].pop(index)
+                    with self.assertRaises(blind.TimeFieldError):
+                        verdict(source_episode, work)
+
+            work = deepcopy(source_work)
+            work["steps"][0], work["steps"][-1] = work["steps"][-1], work["steps"][0]
+            with self.subTest(kind=kind, step="order"), self.assertRaises(blind.TimeFieldError):
+                verdict(source_episode, work)
+            episode = deepcopy(source_episode)
+            gate = next(row for row in episode["hardware"]["thermal"]["intervals"] if row["kind"] == "G0")
+            gate["end_ns"] = episode["start_ns"] + 1
+            rejected(episode, source_work, "leg_record_invalid")
+
+    def test_round8_missing_and_reordered_steps_refuse_without_a_claim_or_read(self):
+        scaffold = self.stage_scaffold("round8-order-control")
+        for leg in ("L002", "L003", "L006", "L007"):
+            for variant in ("missing", "reordered"):
+                def change(work):
+                    steps = work["steps"]
+                    if variant == "missing":
+                        steps.pop(0)
+                    else:
+                        steps[0], steps[-1] = steps[-1], steps[0]
+
+                with self.subTest(leg=leg, variant=variant):
+                    world, bench = self.prepare(f"round8-order-{leg}-{variant}",
+                                                configure=lambda world: mutate(world, "script", change, leg=leg))
+                    self.assert_refuses_at_blind_gates(world, bench, scaffold)
+
+    def test_round8_post_marker_refusal_and_drop_reason_inventory(self):
+        roots = (reader.first_read, reader._attach_dc, reader._join_native_rails, analysis.print_admitted_controls,
+                 analysis._measured_fit_point)
+        observed = set()
+        for function in roots:
+            syntax = ast.parse(textwrap.dedent(inspect.getsource(function)))
+            for node in ast.walk(syntax):
+                if isinstance(node, ast.Raise):
+                    self.assertIsInstance(node.exc, ast.Call, function.__name__)
+                    target = ast.unparse(node.exc.func).split(".")[-1]
+                    if target == "ReaderBindingError":
+                        self.assertIn(function, (reader._attach_dc, reader._join_native_rails))
+                    else:
+                        self.assertEqual(target, "ValueReadError")
+                        observed.add(ast.literal_eval(node.exc.args[0]))
+                if isinstance(node, ast.ExceptHandler):
+                    self.assertEqual(ast.unparse(node.type), "ValueReadError")
+                    self.assertEqual([type(statement) for statement in node.body], [ast.Continue])
+                if isinstance(node, ast.Call):
+                    invoked = ast.unparse(node.func).split(".")[-1]
+                    self.assertNotIn(invoked, {"physical_call_view", "prepare_admission", "admit_leg", "script_steps",
+                                               "binding_projection", "rail_timing", "select_dc", "from_json", "_decode"})
+                if isinstance(node, ast.keyword) and node.arg in ("disposition", "reason"):
+                    self.fail(f"{function.__name__} assigns a fresh {node.arg}")
+        self.assertEqual(observed, analysis.VALUE_DEPENDENT_REASONS)
 
     def test_incomplete_script_allows_a_native_interrupted_tail(self):
         work = {"steps": [{"kind": "turn", "complete": False, "actual_tokens": None,

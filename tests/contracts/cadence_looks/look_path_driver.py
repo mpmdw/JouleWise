@@ -1,7 +1,7 @@
 #!/usr/bin/env python3.13
 """Synthetic-only registrar and observer for the frozen ctl bundle driver."""
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 from contextlib import contextmanager
 from hashlib import sha256
 from importlib import import_module, util
@@ -274,12 +274,14 @@ def run(operation, world, bench, fault):
     make_inputs = inputs.make_inputs
     inputs.make_inputs = lambda *args: make_inputs(*args, synthetic=True)
 
-    if fault in ("guard_blind_values", "guard_metadata_extensions"):
+    if fault in ("guard_blind_values", "guard_metadata_extensions", "guard_measured_sizes"):
         from joulewise.cadence_looks import controls_time_fields as fields
 
         forbidden = ("91827.375", "19.8375")
         if fault == "guard_metadata_extensions":
             forbidden += ("synthetic_extension_opaque",)
+        if fault == "guard_measured_sizes":
+            forbidden = ("99183", "876543")
         original_loads, original_convert = json.loads, fields._convert
         original_project = fields.project_json
 
@@ -299,6 +301,18 @@ def run(operation, world, bench, fault):
 
         json.loads, fields._convert = guarded_loads, guarded_convert
         inputs.project_json = reader.project_json = guarded_project
+
+    if fault == "guard_measured_sizes":
+        episode_timing = reader.episode_timing
+
+        def observe_tool_timing(*args, **kwargs):
+            timing = episode_timing(*args, **kwargs)
+            episode = timing.projected_episode
+            if any(turn.tool_calls for turn in episode.turns):
+                put(bench / f"projection-{operation}.json", manifest.canonical(asdict(episode)))
+            return timing
+
+        reader.episode_timing = observe_tool_timing
 
     if fault == "guard_battery_observations":
         original_project = reader.project_json

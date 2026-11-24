@@ -24,7 +24,7 @@ class ShapeAccepted(Exception):
 
 
 def wrong_type(schema):
-    if isinstance(schema, wire.Nullable):
+    if isinstance(schema, (wire.Nullable, wire.DiscardedField)):
         return wrong_type(schema.fields)
     if isinstance(schema, wire.TokenForms):
         return {} if "{" not in schema.variants else False
@@ -32,7 +32,7 @@ def wrong_type(schema):
 
 
 def numeric_boundary(schema):
-    if isinstance(schema, wire.Nullable):
+    if isinstance(schema, (wire.Nullable, wire.DiscardedField)):
         return numeric_boundary(schema.fields)
     if schema is wire.INT64:
         return 2**63 - 1, 2**63
@@ -46,6 +46,8 @@ def numeric_boundary(schema):
 
 
 def sample(schema):
+    if isinstance(schema, wire.DiscardedField):
+        return sample(schema.fields)
     if isinstance(schema, wire.Nullable):
         return None
     if isinstance(schema, wire.TaggedFields):
@@ -73,7 +75,9 @@ def sample(schema):
 
 def records(schema, value, path=(), variant=()):
     """Yield each reachable record with a witness for its enclosing variant."""
-    if isinstance(schema, wire.Nullable):
+    if isinstance(schema, wire.DiscardedField):
+        yield from records(schema.fields, value, path, variant)
+    elif isinstance(schema, wire.Nullable):
         yield from records(schema.fields, sample(schema.fields) if value is None else value, path, variant)
     elif isinstance(schema, wire.TaggedFields):
         for kind, fields in schema.fields.items():

@@ -1,19 +1,19 @@
 """Build the private ctl-01 roster and bind its native sources to two Checks."""
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from hashlib import sha256
 import os
 from pathlib import Path
 import re
 
-from .controls_analysis import ViewError, blind_view_refusal, script_steps
+from .controls_analysis import ViewError, has_dose_quorum, prepare_admission, script_steps
 from .controls_layout import GateRefusal, open_file, require_private, write_exclusive
 from .controls_manifest import ISSUED_SETTINGS, STAGE1_SCHEMA, canonical
-from .controls_print import KIT_ID, MASTER_SEED, PILOT, REMAINDER, _hex_pin
+from .controls_print import CHANNELS, KIT_ID, MASTER_SEED, PILOT, REMAINDER, _hex_pin
 from .controls_reader import (
     AC_POWERMODE,
-    ELIGIBLE, ReaderBindingError, binding_projection, blind_stream, rail_timing, select_dc,
+    ELIGIBLE, LegTiming, ReaderBindingError, binding_projection, blind_stream, rail_timing, select_dc,
 )
 from .custody_pins import PinRefusal, safe_relative
 from .description_inputs import PinnedInput
@@ -21,7 +21,8 @@ from .qualification_manifest import _decode
 from .controls_time_fields import (
     BOOLEAN, EMPTY_ARRAY, INT64, INTEGER, NUMBER, OPAQUE_BOOLEAN, OPAQUE_FINITE_NUMBER, OPAQUE_INTEGER,
     OPAQUE_NONNEGATIVE_INTEGER, OPAQUE_STRING, STRING,
-    DigestFields, Nullable, RecordFields, RequiredRecordFields, TaggedFields, TimeFieldError, WireRecord, project_json,
+    DigestFields, DiscardedField, Nullable, RecordFields, RequiredRecordFields, TaggedFields, TimeFieldError, WireRecord,
+    project_json,
 )
 
 
@@ -76,7 +77,7 @@ RESULT_OPTIONAL = {
     **dict.fromkeys(("turn_start_ns", "turn_end_ns", "first_token_ns"), Nullable(INT64)),
     "config_sha256": STRING, "g0_outcome": Nullable(OPAQUE_STRING),
     "g0_wait_s": Nullable(OPAQUE_FINITE_NUMBER), "g0_timeout_s": OPAQUE_FINITE_NUMBER,
-    "quiet_s": OPAQUE_FINITE_NUMBER, "prefill_chars": OPAQUE_INTEGER, "decode_cap": OPAQUE_INTEGER,
+    "quiet_s": OPAQUE_FINITE_NUMBER, "prefill_chars": DiscardedField(OPAQUE_INTEGER), "decode_cap": OPAQUE_INTEGER,
     "decode_cap_reached": BOOLEAN, "episode_flags": [OPAQUE_STRING], "incomplete_reasons": [OPAQUE_STRING],
     "ac_powermode": Nullable(AC_POWERMODE), "quiet_spans_ns": [[INT64]], "g0_shape": OPAQUE_STRING,
     "g0_reference_source": Nullable(OPAQUE_STRING), "os_level_max": Nullable(OPAQUE_INTEGER),
@@ -127,6 +128,16 @@ CLOSE_FIELDS = {
 }
 LEG_RECORD_FIELDS = RequiredRecordFields(schema=STRING, spec=DigestFields(), attempts=[ATTEMPT_FIELDS],
                                          result=RESULT_FIELDS)
+NATIVE_LEG_RECORD_FIELDS = RequiredRecordFields(
+    LEG_RECORD_FIELDS,
+    result=WireRecord({**RESULT_REQUIRED, **{key: RESULT_FIELDS[key] for key in NATIVE_RESULT_COPY}},
+                      RESULT_FIELDS),
+)
+NATIVE_RUNTIME_RESULT_FIELDS = WireRecord(
+    {**RESULT_REQUIRED, **RUNTIME_IDENTITY, **RUNTIME_ONLY,
+     **{key: RESULT_OPTIONAL[key] for key in NATIVE_RESULT_COPY | {"episode_flags"}}},
+    RUNTIME_RESULT_FIELDS,
+)
 TERMINAL_FIELDS = {"schema": None, "status": None, "files": {"runtime_result.json": None}}
 STREAM = re.compile(r"hazards/meter/stream-[0-9]{3,}\.jsonl")
 
@@ -290,7 +301,8 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
     prefix = f"legs/{leg_id}/"
     leg_record = _entry_from_check(check, "leg_record", prefix + "leg_record.json")
     leg_spec = _entry_from_check(check, "leg_spec", prefix + "leg_spec.json")
-    record = project_json(_read(root / leg_record["path"], leg_record), LEG_RECORD_FIELDS, strict=True)
+    record_fields = LEG_RECORD_FIELDS if synthetic else NATIVE_LEG_RECORD_FIELDS
+    record = project_json(_read(root / leg_record["path"], leg_record), record_fields, strict=True)
     # Both the runner's file writer and its script binding sort object keys.
     # Compact the verified tokens to obtain the binding without decoding extras.
     spec, canonical_spec_sha = project_json(_read(root / leg_spec["path"], leg_spec), SPEC_FIELDS, strict=True)
@@ -323,15 +335,11 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
         return _entry_from_check(check, role, runtime + "/" + member, pin, parent=terminal["sha256"])
 
     result_entry = file("result", "runtime_result.json")
-    result = project_json(_read(root / result_entry["path"], result_entry), RUNTIME_RESULT_FIELDS, strict=True)
+    result_fields = RUNTIME_RESULT_FIELDS if synthetic else NATIVE_RUNTIME_RESULT_FIELDS
+    result = project_json(_read(root / result_entry["path"], result_entry), result_fields, strict=True)
     expected_turn = {"turn_start_ns", "turn_end_ns", "first_token_ns"} if result["prefill_tokens"] is not None else set()
     if expected_turn - result.keys() or expected_turn - record["result"].keys():
         raise TimeFieldError("missing native runtime turn fields")
-    if not synthetic and (
-        (NATIVE_RESULT_COPY | RUNTIME_ONLY.keys() | {"episode_flags"}) - result.keys()
-        or NATIVE_RESULT_COPY - record["result"].keys()
-    ):
-        raise TimeFieldError("missing native runtime result fields")
     _require(result["schema"] == "joulewise.align.r1_runtime_result.v1"
              and result["kind"] == "cadence-leg" and result["leg_id"] == leg_id
              and result["g0_role"] == role and (synthetic or result["backend"] != "synthetic")
@@ -368,13 +376,9 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
                  and work["leg_spec_sha256"] == canonical_spec_sha and work["script"] == spec["script"])
         if work.get("complete") is not script_complete:
             raise TimeFieldError("native work completion disagrees with both result records")
-        _check_script_requests(work, spec["script"])
         hidden = [step["actual_tokens"] for step in work["steps"] if step["kind"] == "hidden"]
         if len(hidden) == 1:
             hidden_delivered = hidden[0]
-            _require(hidden_delivered is None or 0 <= hidden_delivered <= spec["script"]["hidden_tokens"])
-        if work["complete"] and spec["script"]["kind"] == "hidden":
-            _require(hidden_delivered == spec["script"]["hidden_tokens"])
         for name, member in FILES.items():
             files[name] = file(name, bundle + "/" + member)
     if role == "capture":
@@ -398,15 +402,25 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
     return position, work
 
 
+def admit_leg(position, work, issued, plan):
+    """Apply the single scientific admission predicate to a bound leg."""
+    if work is not None:
+        _check_script_requests(work, issued)
+    episode = plan.episode.projected_episode if plan is not None else None
+    traces = plan.trace_timing() if plan is not None else None
+    return prepare_admission(position, episode, work, issued, traces)
+
+
 @dataclass
 class Inputs:
     source: Path
     private: Path
     inventory: dict
-    legs: dict
-    certificates: dict
-    view_refusals: dict
-    synthetic: bool = False
+    issued: dict
+    legs: dict = field(default_factory=dict)
+    certificates: dict = field(default_factory=dict)
+    admissions: dict = field(default_factory=dict)
+    timing: dict = field(default_factory=dict)
 
     @property
     def positions(self):
@@ -443,7 +457,7 @@ def _make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic):
     kit = _kit_inputs(kit_raw, runner_commit, synthetic=synthetic)
     inventory = dict(schema=INVENTORY_SCHEMA, kit_sha256=kit_sha, runner_commit=runner_commit,
                      spans={}, positions={})
-    result = Inputs(source, private, inventory, {}, {}, {}, synthetic=synthetic)
+    result = Inputs(source, private, inventory, kit)
     episode_ids = set()
     _require(len(checks) == 2 and len({row["span_id"].casefold() for row in checks}) == 2
              and len({row["check_item"] for row in checks}) == len({row["close_item"] for row in checks}) == 2)
@@ -473,6 +487,7 @@ def _make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic):
 
             files = position["files"]
             episode_id = episode_sha = script_sha = None
+            issued = kit[leg_id]["script"]
             if position["g0_released"]:
                 payloads = {name: _read(root / files[name]["path"], files[name]) for name in FILES}
                 timing, period, evidence = binding_projection(
@@ -482,15 +497,18 @@ def _make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic):
                 if timing.episode_id in episode_ids:
                     raise TimeFieldError("duplicate native episode identity")
                 episode_ids.add(timing.episode_id)
-                reason = blind_view_refusal(timing.projected_episode, work, position["kind"])
-                if reason is not None:
-                    result.view_refusals[leg_id] = reason
                 rail = rail_timing(payloads["rails"], timing, period, evidence)
                 dc = select_dc(timing, stream_views)
+                plan = LegTiming(timing, rail, evidence, dc)
+                result.timing[leg_id] = plan
+                admission = admit_leg(position, work, issued, plan)
                 episode_id, episode_sha, script_sha = timing.episode_id, files["episode"]["sha256"], files["script"]["sha256"]
                 certificate = canonical({
                     "schema": CERTIFICATE_SCHEMA, "leg_id": leg_id, "span_id": span_id,
                     "episode_sha256": episode_sha, "rails": rail.evidence(),
+                    "admission": admission.disposition, "admission_reason": admission.reason,
+                    "fit_channels": [name for name in CHANNELS if admission.admitted
+                                     and position["kind"] == "hidden" and admission.channels[name].fit_supported],
                     "input_sha256": {name: pin["sha256"] for name, pin in files.items()},
                     "stream_sha256": {entry["path"]: entry["sha256"] for entry in streams},
                     **dc.evidence(),
@@ -499,6 +517,9 @@ def _make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic):
                 position["certificate"] = _pin("certificate", f"certificates/{leg_id}.json",
                                                {"size": len(certificate), "sha256": digest(certificate)},
                                                close_entry["sha256"])
+            else:
+                admission = admit_leg(position, None, issued, None)
+            result.admissions[leg_id] = admission
             result.legs[leg_id] = {
                 "identity": [KIT_ID, kit_sha, runner_commit, number, leg_id, position["attempt"]],
                 "role": position["role"], "reference": position["reference_sha256"],
@@ -529,25 +550,30 @@ def apply_disposition(inputs, disposition_raw):
         dispositions = {row["leg_id"]: row for row in document["legs"]}
         _require(dispositions and len(dispositions) == len(document["legs"]), "INPUT_CHANNELS")
         disposition_sha = digest(disposition_raw)
-    supported_hidden = []
+    disposed_legs = frozenset(dispositions)
     for leg, raw in inputs.certificates.items():
         certificate = load_canonical(raw)
         code = certificate["dc_code"]
         row = dispositions.pop(leg, None)
-        position = inputs.positions[leg]
         if code == "ok":
             _require(row is None, "INPUT_CHANNELS")
-            if (position["admitted"] and position["kind"] == "hidden" and position["script_complete"]
-                    and type(position["hidden_delivered"]) is int and position["hidden_delivered"] > 0):
-                supported_hidden.append(position["hidden_delivered"])
         else:
             _require(code in ELIGIBLE and row == {"leg_id": leg, "code": code, "certificate_sha256": digest(raw)},
                      "INPUT_CHANNELS")
     _require(not dispositions, "INPUT_CHANNELS")
     if disposition_sha is not None:
-        _require(len(supported_hidden) >= 4 and len(set(supported_hidden)) == 3, "INPUT_CHANNELS")
+        # Authorize the requested DC exclusions against the issued roster.
+        # The actual fit quorum below also accounts for the blind verdicts.
+        authorized_doses = (row["script"]["hidden_tokens"] for leg, row in inputs.issued.items()
+                            if row["script"]["kind"] == "hidden" and leg not in disposed_legs)
+        _require(has_dose_quorum(authorized_doses), "INPUT_CHANNELS")
         for position in inputs.positions.values():
             position["disposition_sha256"] = disposition_sha
+    for name in CHANNELS:
+        doses = (inputs.positions[leg]["hidden_delivered"] for leg, admission in inputs.admissions.items()
+                 if admission.admitted and inputs.positions[leg]["kind"] == "hidden"
+                 and admission.channels[name].fit_supported)
+        _require(has_dose_quorum(doses), "insufficient_legs")
 
 
 def write_or_compare(directory, name, data):

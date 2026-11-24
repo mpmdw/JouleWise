@@ -14,19 +14,20 @@ from joulewise.align.apple.sampler import (
     NS_PER_SECOND as NS, _restore_stamp, seconds_ns, stamp_mapping,
 )
 from joulewise.align.power.windows import _support_edge_quantum_ns
-from joulewise.align.records import ClockMapping, Episode, PowerTrace, _build, from_json
+from joulewise.align.records import ClockMapping, Episode, PowerTrace, _build, _check_interval
 from joulewise.external import km003c_parse as meter
 from joulewise.schemas import BenchmarkConfig
 
 from . import controls_analysis as analysis
 from . import controls_metadata as metadata_wire
-from .qualification_manifest import _decode
 from .controls_time_fields import (
     BOOLEAN, EMPTY_ARRAY, INT64, INTEGER, NUMBER, OPAQUE_BOOLEAN, OPAQUE_FINITE_NUMBER, OPAQUE_INTEGER,
     OPAQUE_NONBLANK_STRING,
-    OPAQUE_NONNEGATIVE_NUMBER, OPAQUE_OBJECT, OPAQUE_PERCENT, OPAQUE_STRING, OPAQUE_STRING_OR_INTEGER,
+    OPAQUE_NONNEGATIVE_INTEGER, OPAQUE_NONNEGATIVE_NUMBER, OPAQUE_OBJECT, OPAQUE_PERCENT, OPAQUE_STRING,
+    OPAQUE_STRING_OR_INTEGER,
     RAIL_COLUMNS, STRING,
-    DependentRecord, ExtensionRecord, KeyedFields, Nullable, OpaqueIndex, RequiredRecordFields, TaggedFields,
+    DependentRecord, DiscardedField, ExtensionRecord, KeyedFields, Nullable, OpaqueIndex, RequiredRecordFields,
+    TaggedFields,
     TimeFieldError, TokenForms, WireRecord,
     project_json, rail_rows, stream_fields,
 )
@@ -41,7 +42,8 @@ RAILS = frozenset(("cpu_power", "gpu_power", "ane_power"))
 STAMP_FIELDS = RequiredRecordFields.fromkeys(("epoch_ns", "monotonic_before_ns", "monotonic_after_ns",
                                              "wall_resolution_ns", "monotonic_resolution_ns"), INT64)
 TOOL_FIELDS = RequiredRecordFields(
-    start_ns=INT64, end_ns=INT64, args_bytes=INTEGER, result_bytes=INTEGER,
+    start_ns=INT64, end_ns=INT64, args_bytes=DiscardedField(OPAQUE_NONNEGATIVE_INTEGER),
+    result_bytes=DiscardedField(OPAQUE_NONNEGATIVE_INTEGER),
     logged=OPAQUE_BOOLEAN, state_changed=Nullable(OPAQUE_BOOLEAN), name=OPAQUE_STRING,
     state_before_sha256=Nullable(OPAQUE_STRING), state_after_sha256=Nullable(OPAQUE_STRING),
 )
@@ -102,7 +104,7 @@ ARTIFACT_IDENTITY = WireRecord(
      "marker": RequiredRecordFields(adapter=OPAQUE_STRING, model_name=OPAQUE_STRING,
                                     model_revision=Nullable(OPAQUE_STRING), model_source=Nullable(OPAQUE_STRING)),
      "inventory": [RequiredRecordFields(path=OPAQUE_STRING, resolved_path=OPAQUE_STRING, sha256=OPAQUE_STRING,
-                                        size_bytes=OPAQUE_INTEGER, symlink=BOOLEAN)],
+                                        size_bytes=DiscardedField(OPAQUE_INTEGER), symlink=BOOLEAN)],
      "files": KeyedFields(r".+", OPAQUE_STRING)},
 )
 TOKEN_BUDGET = WireRecord(
@@ -354,6 +356,15 @@ class ReaderBindingError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class ToolCallTiming:
+    start_ns: int
+    end_ns: int
+
+    def __post_init__(self):
+        _check_interval("ToolCall", self.start_ns, self.end_ns)
+
+
+@dataclass(frozen=True)
 class EpisodeTiming:
     episode_id: str
     clock_domain: str
@@ -376,6 +387,7 @@ class RailTiming:
     supports_sha256: str
     mapping: ClockMapping
     count: int
+    times: tuple[int, ...]
 
     def evidence(self):
         return {
@@ -405,6 +417,8 @@ class StreamCheck:
     times_sha256: str | None
     excess_p95_ms: float | None
     excess_max_ms: float | None
+    times: tuple[int, ...]
+    period_ns: int | None
 
     def evidence(self):
         return {
@@ -430,6 +444,25 @@ class DCSelection:
         return fields
 
 
+@dataclass(frozen=True)
+class LegTiming:
+    episode: EpisodeTiming
+    rail: RailTiming
+    rail_evidence: dict | None
+    dc: DCSelection
+
+    def trace_timing(self):
+        rail = (analysis.TraceTiming(self.rail.times, self.rail.period_ns), self.rail.mapping)
+        traces = dict.fromkeys(("cpu_rail", "gpu_rail", "rail_sum"), rail)
+        dc = self.dc.selected
+        if dc is None:
+            traces["dc_in"] = (None, None)
+        else:
+            traces["dc_in"] = (analysis.TraceTiming(dc.times, dc.period_ns),
+                               dc_mapping(self.episode.clock_domain, dc))
+        return traces
+
+
 def _one_identity(values):
     recorded = {value for value in values if value is not None}
     if len(recorded) > 1 or any(type(value) is not str or not value for value in recorded):
@@ -442,7 +475,12 @@ def episode_timing(episode_raw, metadata):
     try:
         # Use the installed record constructor on the blind envelope. Scores,
         # router observations and non-timing hardware values are skipped or masked.
-        episode = _build(Episode, view)
+        tools = tuple(tuple(ToolCallTiming(call["start_ns"], call["end_ns"]) for call in turn["tool_calls"])
+                      for turn in view["turns"])
+        turns = [dict(turn, tool_calls=[]) for turn in view["turns"]]
+        episode = _build(Episode, dict(view, turns=turns))
+        episode = replace(episode, turns=tuple(replace(turn, tool_calls=calls)
+                                               for turn, calls in zip(episode.turns, tools, strict=True)))
         analysis.thermal_intervals(episode.hardware)
     except (AttributeError, KeyError, TypeError, ValueError, OverflowError) as error:
         raise TimeFieldError("invalid native episode envelope") from error
@@ -556,13 +594,11 @@ def rail_timing(payload, timing, period_ns, evidence):
     mapping, _ = _rail_mapping(timing, evidence)
     if grid[0][1] + mapping.offset_ns > timing.start_ns or grid[-1][2] + mapping.offset_ns < timing.end_ns:
         raise TimeFieldError("native rail trace does not cover episode extent")
-    return RailTiming(period_ns, _support_digest(grid), mapping, len(grid))
+    return RailTiming(period_ns, _support_digest(grid), mapping, len(grid), tuple(row[0] for row in grid))
 
 
-def _join_native_rails(episode, payload, timing, rail, evidence):
+def _join_native_rails(episode, payload, rail, evidence):
     """The buffer form of the runner's read_episode_bundle sampler join."""
-    if episode.power_traces or episode.clock_mappings or episode.clock_domain != timing.clock_domain:
-        raise ReaderBindingError("episode is not the original native envelope")
     rows = (dict(zip(RAIL_COLUMNS, row, strict=True)) for row in rail_rows(payload))
     joined = join_episode_trace(episode, rows, nominal_interval_ns=rail.period_ns, evidence=evidence)
     traces = joined.power_traces
@@ -573,9 +609,10 @@ def _join_native_rails(episode, payload, timing, rail, evidence):
         supports = json.loads(trace.notes)["sample_support_ns"]
         grid = ((stamp, start, end) for stamp, (start, end) in zip(trace.t_ns, supports, strict=True))
         if (trace.source != "powermetrics" or trace.clock_domain != mapping.trace_domain
-                or len(trace.t_ns) != rail.count or _support_digest(grid) != rail.supports_sha256
-                or not all(map(isfinite, trace.values))):
+                or len(trace.t_ns) != rail.count or _support_digest(grid) != rail.supports_sha256):
             raise ReaderBindingError("decoded rail support")
+        if not all(map(isfinite, trace.values)):
+            raise analysis.ValueReadError("nonfinite_sample")
     return joined
 
 
@@ -658,7 +695,8 @@ def _candidate(stream, timing):
     if identity_bad:
         failures.add("boot_mismatch")
 
-    width = sample_range = times_sha256 = offset = None
+    width = sample_range = times_sha256 = offset = period = None
+    window = ()
     fit = stream.fit or {}
     if not complete_anchors or not fit:
         failures.add("anchor_unusable")
@@ -670,10 +708,10 @@ def _candidate(stream, timing):
             rtt = meter.FIT_MAX_RTT_MS if fit["filtered"] else fit["request_rtt_ms_max"]
             if not isfinite(rtt) or rtt < 0:
                 raise TimeFieldError("invalid native meter request duration")
-            step_ns = meter.STEP_MS[stream.header["rate_idx"]] * 1_000_000
+            period = meter.STEP_MS[stream.header["rate_idx"]] * 1_000_000
             spread = abs((end_raw - end_mono) - (start_raw - start_mono))
             excess = max(0, -Fraction(fit["excess_latency_ms_min"]))
-            width = spread + 1_000_000 + step_ns + ceil(1_000_000 * (excess + Fraction(rtt)))
+            width = spread + 1_000_000 + period + ceil(1_000_000 * (excess + Fraction(rtt)))
             if width < 0:
                 raise TimeFieldError("negative native meter uncertainty")
             if width > CAP_NS:
@@ -697,7 +735,7 @@ def _candidate(stream, timing):
 
     return StreamCheck(stream.path, tuple(code for code in FAILURES if code in failures), width, offset,
                        sample_range, times_sha256, fit.get("excess_latency_ms_p95"),
-                       fit.get("excess_latency_ms_max"))
+                       fit.get("excess_latency_ms_max"), window, period)
 
 
 def select_dc(timing, streams):
@@ -714,73 +752,53 @@ def select_dc(timing, streams):
     return DCSelection(next((code for code in FAILURES if code in failures), "not_bracketed"), candidates)
 
 
-def _attach_dc(episode, selected, decoded):
-    source = decoded[selected.path]
-    lo, stop = selected.sample_slice
+def dc_mapping(clock_domain, selected):
     domain = "joulewise.km003c.raw:" + selected.path
+    return ClockMapping(domain, clock_domain, -selected.offset_ns, selected.width_ns, METHOD)
+
+
+def _attach_dc(episode, selected, source):
+    lo, stop = selected.sample_slice
+    times = tuple(source.host_ns[lo:stop])
+    if times != selected.times:
+        raise ReaderBindingError("decoded meter timing")
     samples = tuple(source.watts[lo:stop])
-    if len(samples) != stop - lo or not all(map(isfinite, samples)):
-        raise ReaderBindingError("decoded meter values")
-    period = meter.STEP_MS[source.header["rate_idx"]] * 1_000_000
-    trace = PowerTrace("wall_meter", "dc_in", domain, tuple(source.host_ns[lo:stop]), samples,
-                       "W", period)
-    mapping = ClockMapping(domain, episode.clock_domain, -selected.offset_ns, selected.width_ns, METHOD)
+    if len(samples) != stop - lo:
+        raise ReaderBindingError("decoded meter sample count")
+    if not all(map(isfinite, samples)):
+        raise analysis.ValueReadError("nonfinite_sample")
+    mapping = dc_mapping(episode.clock_domain, selected)
+    trace = PowerTrace("wall_meter", "dc_in", mapping.trace_domain, times, samples,
+                       "W", selected.period_ns)
     return replace(episode, power_traces=(*episode.power_traces, trace),
                    clock_mappings=(*episode.clock_mappings, mapping))
 
 
 def first_read(inputs, stage1):
-    """Rebind each dispatched leg and join the authenticated inputs in memory."""
+    """Authenticate source bytes and attach values to the committed blind plans."""
     inputs.verify_stage1(stage1)
     cache = {}
     positions = []
     for leg in stage1.legs:
         leg_id = leg.binding.leg_id
         position = inputs.positions[leg_id]
+        admission = inputs.admissions[leg_id]
         if not leg.g0_released:
-            positions.append(analysis.LegInput(leg_id, leg.kind, leg.admitted, False))
+            positions.append(analysis.LegInput(leg_id, leg.kind, admission.admitted, False, admission=admission))
             continue
 
         pin = position["files"]
-        files = {role: inputs.read_entry(position["span_id"], pin[role])
-                 for role in ("episode", "config", "metadata", "rails", "script")}
-        timing, period, evidence = binding_projection(
-            files["episode"], files["config"], files["metadata"], run_id=position["run_id"],
-            config_sha256=pin["config"]["sha256"], synthetic=inputs.synthetic,
-        )
-        rail = rail_timing(files["rails"], timing, period, evidence)
-        certificate = inputs.certificate(leg_id)
-        if timing.episode_id != leg.episode_id or rail.evidence() != certificate["rails"]:
-            raise ReaderBindingError("certificate rail or episode identity")
         span_id = position["span_id"]
+        files = {role: inputs.read_entry(span_id, pin[role])
+                 for role in ("episode", "config", "metadata", "rails", "script")}
+        plan = inputs.timing[leg_id]
+        inputs.certificate(leg_id)
         if span_id not in cache:
-            decoded = {}
-            projected = []
-            for entry in inputs.spans[span_id]["streams"]:
-                path = entry["path"]
-                view, decoded[path] = decoded_stream(path, inputs.read_entry(span_id, entry))
-                projected.append(view)
-            cache[span_id] = (projected, decoded)
-        projected, decoded = cache[span_id]
-        dc = select_dc(timing, projected)
-        if any(certificate.get(key) != value for key, value in dc.evidence().items()):
-            raise ReaderBindingError("certificate meter timing")
-
-        work = _decode(files["script"])
-        if (work["leg_id"] != leg_id or work["leg_spec_sha256"] != position["spec_sha256"]
-                or work["script"]["kind"] != leg.kind):
-            raise ReaderBindingError("script identity")
-        try:
-            episode = from_json(Episode, files["episode"])
-        except ValueError:
-            positions.append(analysis.LegInput(leg_id, leg.kind, leg.admitted, True, analysis.INVALID_LEG_RECORD))
-            continue
-        if (episode.episode_id, episode.clock_domain, episode.start_ns, episode.end_ns) != (
-                timing.episode_id, timing.clock_domain, timing.start_ns, timing.end_ns):
-            raise ReaderBindingError("decoded episode identity")
-        episode = _join_native_rails(episode, files["rails"], timing, rail, evidence)
-        if dc.selected is not None:
-            episode = _attach_dc(episode, dc.selected, decoded)
-        positions.append(analysis.LegInput(leg_id, leg.kind, leg.admitted, True, episode, files["script"],
-                                           pin["script"]["sha256"]))
+            cache[span_id] = {entry["path"]: decoded_stream(entry["path"], inputs.read_entry(span_id, entry))[1]
+                              for entry in inputs.spans[span_id]["streams"]}
+        episode = _join_native_rails(plan.episode.projected_episode, files["rails"], plan.rail, plan.rail_evidence)
+        if plan.dc.selected is not None:
+            episode = _attach_dc(episode, plan.dc.selected, cache[span_id][plan.dc.selected.path])
+        positions.append(analysis.LegInput(leg_id, leg.kind, admission.admitted, True, episode, files["script"],
+                                           pin["script"]["sha256"], admission))
     return tuple(positions)

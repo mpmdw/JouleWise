@@ -2,7 +2,7 @@
 
 from .controls_time_fields import (
     OPAQUE_BOOLEAN, OPAQUE_FINITE_NUMBER, OPAQUE_INTEGER, OPAQUE_STRING,
-    Nullable, RequiredRecordFields, TokenForms, WireRecord,
+    DiscardedField, Nullable, RequiredRecordFields, TokenForms, WireRecord,
 )
 
 
@@ -96,9 +96,10 @@ ENVIRONMENT = WireRecord(
                       "load_average_5m", "load_average_15m", "captured_at_s", "settle_s"), NULL_NUMBER),
      "capture_skipped": OPAQUE_BOOLEAN, "capture_scope": OPAQUE_STRING, "env_capture_duration_s": OPAQUE_FINITE_NUMBER,
      "memory": RequiredRecordFields(
-         swap_usage=Nullable(RequiredRecordFields.fromkeys(("total", "used", "free"), OPAQUE_STRING)),
-         **dict.fromkeys(("page_size_bytes", "pages_free", "pageins", "pageouts", "pages_occupied_by_compressor",
-                          "pages_stored_in_compressor", "compressor_bytes"), NULL_INT)),
+         swap_usage=DiscardedField(Nullable(RequiredRecordFields.fromkeys(("total", "used", "free"), OPAQUE_STRING))),
+         **dict.fromkeys(("page_size_bytes", "compressor_bytes"), DiscardedField(NULL_INT)),
+         **dict.fromkeys(("pages_free", "pageins", "pageouts", "pages_occupied_by_compressor",
+                          "pages_stored_in_compressor"), NULL_INT)),
      "display": WireRecord(
          {**DISPLAY_BASE, **dict.fromkeys(("framebuffer_pipes_total", "framebuffer_pipes_external_capable"), NULL_INT)},
          ASLEEP_COUNTS),
