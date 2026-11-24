@@ -15,6 +15,7 @@ from unittest.mock import Mock, patch
 
 from joulewise.cadence_looks import controls_analysis as analysis
 from joulewise.cadence_looks import controls_book as book
+from joulewise.cadence_looks import controls_inputs as inputs
 from joulewise.cadence_looks import controls_layout as layout
 from joulewise.cadence_looks import controls_reader as reader
 from joulewise.cadence_looks import controls_release as release
@@ -108,6 +109,15 @@ def add_diagnostic_flag(document):
 
 def project_label(document):
     document["run_metadata"]["project"] = "JouleWise (synthetic ambient_temp_c=19.8375)"
+
+
+def recovery_diagnostic(work):
+    recovery = next(step for step in work["steps"] if step["kind"] == "recovery")
+    recovery["first_token_ns"] = "no first token during recovery; synthetic power_w=91827.375"
+
+
+def link_observation(config):
+    config["interconnect"].update(name="synthetic test link", link_speed_mbps=91827.375)
 
 
 def overlapping_support(raw):
@@ -520,23 +530,10 @@ class LookPathFollowupTests(TestCase):
                 self.assert_refuses_at_blind_gates(world, bench, scaffold)
 
     def test_inapplicable_script_fields_and_config_link_rate_are_opaque(self):
-        def annotate(world):
-            def work(record):
-                recovery = next(step for step in record["steps"] if step["kind"] == "recovery")
-                recovery["first_token_ns"] = "no first token during recovery; synthetic power_w=91827.375"
-                visible = next(step for step in record["steps"] if step["kind"] == "turn")
-                visible["requested_s"] = "synthetic diagnostic 91827.375"
-
-            mutate(world, "script", work)
-
-        def link_rate(world):
-            def config(document):
-                document["interconnect"].update(name="synthetic test link", link_speed_mbps=91827.375)
-
-            mutate(world, "config", config)
-
-        for name, configure in (("script-incidental", annotate), ("config-link-rate", link_rate)):
-            world, bench = self.prepare(name, configure=configure)
+        cases = (("script-incidental", "script", recovery_diagnostic),
+                 ("config-link-rate", "config", link_observation))
+        for name, role, fault in cases:
+            world, bench = self.prepare(name, role=role, fault=fault)
             with self.subTest(name=name, operation="stage1"):
                 self.assertEqual(self.invoke(world, bench, "stage1", "guard_blind_values"), (0, b"", b""))
             self.assertEqual(self.invoke(world, bench, "stage1"), (0, b"", b""))
@@ -544,6 +541,38 @@ class LookPathFollowupTests(TestCase):
             with self.subTest(name=name, operation="preflight"):
                 self.assertEqual(self.invoke(world, bench, "preflight", "guard_blind_values"), (0, b"", b""))
             self.assert_fresh(world, bench)
+
+    def test_step_projection_keeps_only_applicable_fields_independent_of_key_order(self):
+        rows = [dict(first_token_ns={"synthetic": "opaque"}, requested_s=600, kind="recovery"),
+                dict(kind="turn", requested_s="opaque", requested_tokens=4)]
+        expected = {"steps": [{"kind": "recovery", "requested_s": 600},
+                              {"kind": "turn", "requested_tokens": 4}]}
+        original = blind._convert
+
+        def checked(kind, text):
+            self.assertNotIn("opaque", text)
+            return original(kind, text)
+
+        for sort_keys in (False, True):
+            with patch.object(blind, "_convert", checked):
+                raw = json.dumps({"steps": rows}, sort_keys=sort_keys).encode()
+                self.assertEqual(blind.project_json(raw, inputs.WORK_FIELDS, strict=True), expected)
+
+    def test_opaque_numeric_shape_preserves_binary64_boundaries(self):
+        midpoint = 2**1024 - 2**970
+        half_subnormal = 5**1075
+        valid = (b"91827.375", b"-0.0", b"-1e-9999", str(midpoint - 1).encode(),
+                 f"-{half_subnormal}e-1075".encode())
+        invalid = (b"-0.25", str(midpoint).encode(), b"1e9999", b'"91827.375"',
+                   f"-{half_subnormal + 1}e-1075".encode())
+        with patch.object(blind, "_convert", side_effect=AssertionError("opaque value converted")):
+            for raw in valid:
+                with self.subTest(raw=raw):
+                    self.assertEqual(blind.project_json(raw, blind.OPAQUE_NONNEGATIVE_NUMBER), 0)
+            for raw in invalid:
+                with self.subTest(raw=raw), self.assertRaises(blind.TimeFieldError):
+                    blind.project_json(raw, blind.OPAQUE_NONNEGATIVE_NUMBER)
+            self.assertEqual(blind.project_json(b"-0.25", blind.OPAQUE_FINITE_NUMBER), 0)
 
     def test_rail_edge_snapping_preserves_rounded_edges_and_gaps(self):
         def rows(start):
@@ -579,9 +608,11 @@ class LookPathFollowupTests(TestCase):
         def configure(world):
             blind_values(world)
             mutate(world, "config", project_label)
+            mutate(world, "config", link_observation)
             mutate(world, "episode", add_diagnostic_flag)
 
             def mismatch(work):
+                recovery_diagnostic(work)
                 turn = next(step for step in work["steps"] if step["kind"] == "turn")
                 turn["first_token_ns"] += 1
 

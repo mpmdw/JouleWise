@@ -29,7 +29,10 @@ MAX_DEPTH = 64
 NESTED = object()                    # a member whose value is an object or an array: never converted
 EMPTY_ARRAY = object()
 SKIP = object()
+NUMBER = object()
 OPAQUE_NUMBER = object()
+OPAQUE_FINITE_NUMBER = object()
+OPAQUE_NONNEGATIVE_NUMBER = object()
 OPAQUE_STRING = object()
 OPAQUE_NONBLANK_STRING = object()
 
@@ -47,6 +50,14 @@ class Nullable:
 
 class DigestFields(dict):
     """A projection paired with a digest of the object's compact JSON bytes."""
+
+
+class TaggedFields:
+    """Select an object's field projection by an order-independent tag."""
+
+    def __init__(self, tag, fields):
+        self.tag = tag
+        self.fields = fields
 
 
 class _Bad(Exception):
@@ -68,6 +79,30 @@ def _has_nonblank_text(raw):
         elif escape not in ("t", "n", "r", "f"):
             return True
     return False
+
+
+# Binary64 rounds to infinity at this midpoint, and to zero at half the
+# smallest subnormal. Compare decimal spellings without converting a reading.
+_OVERFLOW = (308, str(2**1024 - 2**970).rstrip("0"))
+_HALF_SUBNORMAL = (-324, str(5**1075))
+
+
+def _valid_opaque_number(text, *, nonnegative):
+    significand, _, exponent = text.lower().partition("e")
+    whole, _, fraction = significand.lstrip("-").partition(".")
+    digits = (whole + fraction).lstrip("0")
+    if not digits:
+        return True
+    exponent_digits = exponent.lstrip("+-").lstrip("0")
+    # Saturate exponents that are already decisive without integer parsing.
+    cap = len(significand) + 400
+    shift = cap if len(exponent_digits) > len(str(cap)) else int(exponent_digits or "0")
+    if exponent.startswith("-"):
+        shift = -shift
+    magnitude = (len(digits) - len(fraction) - 1 + shift, digits.rstrip("0"))
+    if nonnegative and significand.startswith("-"):
+        return magnitude <= _HALF_SUBNORMAL
+    return magnitude < _OVERFLOW
 
 
 def _unstring(raw):
@@ -305,8 +340,18 @@ def _project(it, token, fields, depth, *, strict):
     if fields is SKIP:
         _skip_value(it, token, depth, strict=strict)
         return None
+    if fields is NUMBER:
+        if token[0] != "num":
+            raise _Bad()
+        return _convert(*token)
     if fields is OPAQUE_NUMBER:
         if token[0] != "num":
+            raise _Bad()
+        return 0
+    if fields in (OPAQUE_FINITE_NUMBER, OPAQUE_NONNEGATIVE_NUMBER):
+        if token[0] != "num" or not _valid_opaque_number(
+            token[1], nonnegative=fields is OPAQUE_NONNEGATIVE_NUMBER,
+        ):
             raise _Bad()
         return 0
     if fields is OPAQUE_STRING:
@@ -317,6 +362,19 @@ def _project(it, token, fields, depth, *, strict):
         if token[0] != "str" or not _has_nonblank_text(token[1]):
             raise _Bad()
         return "opaque"
+    if isinstance(fields, TaggedFields):
+        captured = []
+
+        def capture_row():
+            for row_token in it:
+                captured.append(row_token)
+                yield row_token
+
+        tag = _project(capture_row(), token, {fields.tag: None}, depth, strict=strict).get(fields.tag)
+        projection = fields.fields.get(tag)
+        if projection is None:
+            raise _Bad()
+        return _project(iter(captured), token, projection, depth, strict=strict)
     if isinstance(fields, DigestFields):
         digest = sha256()
 

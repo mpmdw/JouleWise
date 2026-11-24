@@ -17,7 +17,9 @@ from .controls_reader import (
 from .custody_pins import PinRefusal, safe_relative
 from .description_inputs import PinnedInput
 from .qualification_manifest import _decode
-from .controls_time_fields import DigestFields, Nullable, OPAQUE_STRING, RecordFields, TimeFieldError, project_json
+from .controls_time_fields import (
+    NUMBER, OPAQUE_STRING, DigestFields, Nullable, RecordFields, TaggedFields, TimeFieldError, project_json,
+)
 
 
 IDS = PILOT + REMAINDER
@@ -36,11 +38,15 @@ SPEC_FIELDS = DigestFields(
                      "start_band", "decode_tokens", "g0_shape")),
     script=SCRIPT_FIELDS,
 )
+STEP_FIELDS = {"kind": None, "complete": None, "started_ns": NUMBER, "ended_ns": NUMBER}
+CALL_FIELDS = {**STEP_FIELDS, "first_token_ns": Nullable(NUMBER), "actual_tokens": Nullable(NUMBER),
+               "requested_tokens": NUMBER, "context_tokens": NUMBER}
+INTERVAL_FIELDS = {**STEP_FIELDS, "requested_s": NUMBER}
 WORK_FIELDS = {
     **dict.fromkeys(("schema", "leg_id", "leg_spec_sha256", "complete")),
     "script": SCRIPT_FIELDS,
-    "steps": [dict.fromkeys(("kind", "complete", "started_ns", "ended_ns", "first_token_ns",
-                            "actual_tokens", "requested_tokens", "context_tokens", "requested_s"))],
+    "steps": [TaggedFields("kind", {**dict.fromkeys(("turn", "hidden"), CALL_FIELDS),
+                                    **dict.fromkeys(("cpu", "gap", "recovery"), INTERVAL_FIELDS)})],
 }
 REFERENCE_FIELDS = {"schema": None, "status": None, "source": {"run_id": None, "config_sha256": None},
                     "record_sha256": None}
@@ -192,6 +198,8 @@ def _check_script_requests(work, issued):
         script_steps(work, issued["kind"], allow_interrupted=not work["complete"])
     except ViewError as error:
         raise TimeFieldError("invalid native script step record") from error
+    if work["complete"] and any(row["complete"] is not True for row in work["steps"]):
+        raise TimeFieldError("incomplete step in completed native script")
     turns = iter(issued["turn_tokens"])
     intervals = {"cpu": "cpu_s", "gap": "gap_s", "recovery": "recovery_s"}
     for row in work["steps"]:

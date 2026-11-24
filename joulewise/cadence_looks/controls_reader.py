@@ -21,8 +21,8 @@ from joulewise.schemas import BenchmarkConfig
 from . import controls_analysis as analysis
 from .qualification_manifest import _decode
 from .controls_time_fields import (
-    EMPTY_ARRAY, OPAQUE_NONBLANK_STRING, OPAQUE_NUMBER, OPAQUE_STRING, RAIL_COLUMNS, SKIP,
-    Nullable, RecordFields, TimeFieldError, project_json, rail_rows, stream_fields,
+    EMPTY_ARRAY, OPAQUE_FINITE_NUMBER, OPAQUE_NONBLANK_STRING, OPAQUE_NONNEGATIVE_NUMBER, OPAQUE_NUMBER,
+    OPAQUE_STRING, RAIL_COLUMNS, SKIP, Nullable, RecordFields, TimeFieldError, project_json, rail_rows, stream_fields,
 )
 
 
@@ -90,12 +90,15 @@ CONFIG_FIELDS = {
         ))),
     },
     "interconnect": Nullable({
-        "name": OPAQUE_NONBLANK_STRING, "link_speed_mbps": None, "notes": OPTIONAL_CONFIG_TEXT,
+        "name": OPAQUE_NONBLANK_STRING, "link_speed_mbps": Nullable(OPAQUE_NONNEGATIVE_NUMBER),
+        "notes": OPTIONAL_CONFIG_TEXT,
     }),
-    "sampling": Nullable(dict.fromkeys(("power_hz", "idle_seconds", "warmup_seconds"))),
+    "sampling": Nullable({
+        "power_hz": None, **dict.fromkeys(("idle_seconds", "warmup_seconds"), Nullable(OPAQUE_NONNEGATIVE_NUMBER)),
+    }),
     "run_metadata": Nullable({
         "project": OPAQUE_NONBLANK_STRING, "operator": OPTIONAL_CONFIG_TEXT, "notes": OPTIONAL_CONFIG_TEXT,
-        "tags": [OPAQUE_STRING], "ambient_temp_c": Nullable(OPAQUE_NUMBER),
+        "tags": [OPAQUE_STRING], "ambient_temp_c": Nullable(OPAQUE_FINITE_NUMBER),
     }),
     "schema_extensions": Nullable([SKIP]),
     "batch_policy": SKIP,
@@ -208,7 +211,9 @@ def episode_timing(episode_raw, metadata):
             or type(start) is not int or type(end) is not int or start >= end
             or not stamp_rows or any(
                 row.keys() != STAMP_FIELDS.keys() or any(type(v) is not int for v in row.values())
-                or row["monotonic_before_ns"] > row["monotonic_after_ns"] for row in stamp_rows)):
+                or row["monotonic_before_ns"] > row["monotonic_after_ns"]
+                or min(row["wall_resolution_ns"], row["monotonic_resolution_ns"]) < 0
+                for row in stamp_rows)):
         raise TimeFieldError("invalid episode timing")
     return EpisodeTiming(episode_id, view["clock_domain"], start, end, stamp_rows,
                          _one_identity((hardware.get("boot_id"), metadata.get("boot_id"))), episode)
@@ -243,14 +248,22 @@ def _rail_mapping(timing, evidence):
     anchor = (evidence or {}).get("clock_anchor", {})
     if anchor.get("status") == "bounded":
         bound = anchor.get("effective_clock_anchor_bound_s")
-        if type(bound) not in (int, float) or not isfinite(bound * NS):
+        lower = anchor.get("wall_minus_monotonic_lower_s")
+        upper = anchor.get("wall_minus_monotonic_upper_s")
+        if (not all(analysis._finite(value) and analysis._finite(value * NS) for value in (lower, upper, bound))
+                or bound < 0 or lower > upper):
             raise TimeFieldError("invalid native rail clock bound")
-    mapping, flags = stamp_mapping(
-        tuple(_restore_stamp(row) for row in timing.stamp_rows),
-        episode_domain=timing.clock_domain, evidence=evidence,
-    )
+    try:
+        mapping, flags = stamp_mapping(
+            tuple(_restore_stamp(row) for row in timing.stamp_rows),
+            episode_domain=timing.clock_domain, evidence=evidence,
+        )
+    except (OverflowError, KeyError, TypeError, ValueError) as error:
+        raise TimeFieldError("invalid native rail clock mapping") from error
     if mapping.method == "unmeasured":
         raise TimeFieldError("native rail clock is unresolved")
+    if not analysis._finite(mapping.uncertainty_ns) or mapping.uncertainty_ns < 0:
+        raise TimeFieldError("invalid native rail clock uncertainty")
     return mapping, flags
 
 
