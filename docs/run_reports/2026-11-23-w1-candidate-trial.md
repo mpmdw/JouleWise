@@ -60,7 +60,28 @@ Seat `opus-w1-integration-owner-1123` (Claude Opus 5.5), Mon 23 Nov 21:46 PST on
   - `partc-frozen-differential` run [45345268155](https://github.com/mpmdw/JouleWise/actions/runs/45345268155): **green, 17/17**. `totals` gives 16 shards with a clean control and 4/4 bindings. The matrix is 25,300 cases: 1,079 AGREES_PASS, 4,673 OTHER_REFUSAL and 19,548 REFUSED, with 0 FALSE_PASS, 0 WRONG_VERDICT and 0 HARNESS_ERROR. It ran v3.1 with 144 stand-in points, so it is interim evidence and not signing evidence (RL-209).
   - Local checks at `348bc1603`: kit regeneration and template regeneration change no file, and `--check` stops at `R0.record_sha256` (F-4a).
   - This docs-only commit starts its own CI run.
-- Note for the lead (L4): six S6 failures came from `r1_runtime.registered_s6()` (one of the ten frozen sources) reading `r1_slots.json` as the S6 registration. After #886's fill, that file is the R1 hardware record, and its `s6_tuning` has no `from_c`/`to_c`. The tests now pin a synthetic S6 registration. No W1 path calls it, but the lead may want one line on record.
+- Note for the lead (L4): six S6 failures came from `r1_runtime.registered_s6()` (one of the ten frozen sources) reading `r1_slots.json` as the S6 registration. After #886's fill, that file is the R1 hardware record, and its `s6_tuning` has no `from_c`/`to_c`. The tests now pin a synthetic S6 registration. **Decided by D1:** it is recorded as a known limitation (§9, and `R1-S6-SHARED-PATH`), with no frozen-source change.
+
+### 0.1 Session 3: lead decisions D1–D4 (2026-11-24 00:30)
+
+The lead authorized this seat to do four "lead" items itself (D2). Each is a normal commit on the branch where it belongs, with no rebase and no force push. The step-1 work waits on #824 (D3).
+
+| Item | Status | Where, and the evidence | Remaining |
+|---|---|---|---|
+| D1: `registered_s6()` | **DONE** | No frozen-source change. A known limitation is recorded in §9, in `DEVIATIONS.md` row `R1-S6-SHARED-PATH` and in `W1-SIGNING-RECORD.md` §4 (PR #961). `synthetic_s6_registration()` stays in #886's tests | Before any R1 re-run: split the S6 registration and rebind `r1_runtime` |
+| D2a: RL-93 C09 reason texts | **DONE** | PR #959 `08dcb66d6`. `r1_smoke_existing_dependency` gets C09's verbatim reason and now covers the R1 driver, kit and runtime. `v4_registration.py` moves to `v4_desk`, because every importer is a desk, arm, smoke or R1 program, and importing the night driver, `run_night`, `run_campaign`, workload and endpoint does not load it. The census is clean and the allowlist test gives 24 OK. ‹CI-959› | none |
+| D2b: RL-203, RL-204, anti-hindsight list | **DONE (draft PR)** | PR #961 `0baa173c1` adds `docs/align/v4/W1-SIGNING-RECORD.md`. §1 records RL-182b's four conditions per RL-203. §2 records the RL-204 cause: the test's wait, not the bounded close; the red run's time of 27.8 s lies inside the passing range of 23.2–35.2 s, and the in-the-ten question is named but not claimed. §3 is the anti-hindsight list, from the first R1 session of 18 November: the 488 s line, the two-session line, and the rules changed with their ruling ids. ‹CI-961› | The research lead confirms §3's reference point in the cold pass. The lead merges after review |
+| D2c: RL-212 on the W1 line | **DONE (draft PR)** | PR #960 `96ffb3fd5` sits on #944's `bef3ea87c`, base `ops/2026-11-11-w1-presign`. Its diff is byte-identical to `e2cf3ca00`, and the three blobs equal the trial's. ‹CI-960› | The lead merges after #944 |
+| D3: step 1 made mechanical | **READY** | `docs/run_reports/2026-11-24-w1-step1/` holds `w1_step1.py` and its checklist. A synthetic dry run on a throwaway checkout reached every gate before registration; `--check` stops at the receipt, by design (§9 step 1.6, corrected). The refusals were tested | Waits on #824 r3: the R0 digest and the lead's `member_s` file |
+| D4: CI on `59314f6a7` | ‹D4› | ‹D4-EV› | |
+
+**Trial assembly, continued:**
+
+| # | Step | Trial commit | Ten R1 blobs |
+|---:|---|---|---|
+| 18 | PR #959 at `08dcb66d6` (D2a) | `e49455cd7` | 10/10 |
+| 19 | PR #960 at `96ffb3fd5` (D2c). No file changes; the trial already carries `e2cf3ca00` | `1d6435007` | 10/10 |
+| 20 | PR #961 at `0baa173c1` (D1, D2b). `DEVIATIONS.md` merges clean, and all four owners' hunks reverse-apply | `5a7b1bae4` | 10/10 |
 
 ## 1. Composition and order
 
@@ -433,7 +454,13 @@ this trial does. After every merge, the ten-blob check must give 10/10
       - the dynamic closure trace: `python3.13 -B scripts/align_v4_dynamic_trace.py`, committed only if every scenario is `ok: true`.
    5. Run the refusal census and the reader census. Both must pass at this
       head.
-   6. `python3.13 -B scripts/align_v4_kit.py --check` must exit 0.
+   6. `python3.13 -B scripts/align_v4_kit.py --check` must pass every gate before registration. At this
+      step its first stop is exactly `registration_receipt is pending or malformed`. `require_registration`
+      reads the receipt, then `u3_bar.json`, `battery_window_policy.json` and `wp19_receipt.json`, which
+      steps 2 and 3 supply. `--check` exits 0 only after step 4 (found by the 2026-11-24 synthetic dry run).
+   **Mechanical form:** `docs/run_reports/2026-11-24-w1-step1/w1_step1.py`, with its checklist `README.md`
+   (lead D3). It does items 1–6 from the R0 digest and the lead's `member_s` file, prints digests only,
+   commits nothing, and has been dry-run end to end on synthetic inputs.
    7. Exact-tree CI on this head, all suites, including the 16-shard
       `partc-frozen-differential` workflow.
 2. **Step 4: the RL-184 §4 three-blob check (lead and magistrate).** Run it
@@ -454,9 +481,19 @@ this trial does. After every merge, the ten-blob check must give 10/10
    `ARTIFACTS` (PR #959 `df018026d`).
    The receipt is the only file that changes after step 1. Any other change
    sends the run back to step 1.
-4. **Signing.** The lead signs the receipt STRICT at the final pin. Then
+4. **Signing.** `--check` must now exit 0. The lead signs the receipt STRICT at the final pin. Then
    comes Fable's W1 cold pass on the promoted candidate (RL-193 item 9).
    E3's install-only rehearsal follows promotion (§6.3).
+
+**Known limitation (lead D1, 2026-11-24): the S6 registration shares a path with the R1 record.**
+`r1_slots.json` now holds the R1 record; before ANY R1 re-run from this tree, split the ruled S6
+registration into `registration/r1_s6_registration.json` and rebind `r1_runtime` (cited rebind, new pin).
+
+`r1_runtime.registered_s6()`, one of the ten, reads `r1_slots.json` as the ruled S6 registration. After
+#886's fill, that file is the R1 hardware record. There is no frozen-source change now: R1 is complete
+(RUN_STATE 459) and no re-run is planned, so the shared path harms no data. `synthetic_s6_registration()`
+stays in the tests. The deviation list records it as `R1-S6-SHARED-PATH` (PR #961), and
+`docs/align/v4/W1-SIGNING-RECORD.md` §4 records it too.
 
 ## 10. Reproduce
 
