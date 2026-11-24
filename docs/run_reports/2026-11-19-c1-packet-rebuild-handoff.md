@@ -1547,3 +1547,87 @@ spec run, and stopped it before it finished. Hosted CI runs it.
 
 Open, LOW: the derivation route reads no `--log`, so preflight does not
 bind one on that stage.
+
+## Round 15 · audit 6, the night plan's launch identity and fresh write roots
+
+Audit 6 checked head `690295274` and verified two HIGHs and the open MED.
+In both HIGHs, build and install exited 0, direct arm admitted, and each
+route entered its host checkpoint once:
+1. **Night-plan window.** Changing only the night plan's
+   `hazard_window.pack.window_id` to `C2` made the production lineage
+   publisher record `C2`, and both runs roots authenticated it.
+2. **Linked default log.** A link at `claim_runs_root/campaign_log.jsonl`,
+   pointing at a previous attempt's log and placed before finalization, made
+   the campaign append two attestations to that log.
+3. **MED.** The MED from round 14 (a missing `launch_lineage_required` tag)
+   is unchanged.
+
+The cases were committed first, as specs `4bc9e9bfb` and `ad50017c5`. On
+the unchanged preflight every negative case was admitted, except one: the
+chain comparison already refuses another window plan id. Both controls
+passed.
+
+| Finding | Commit | Named regression | Result |
+| --- | --- | --- | --- |
+| HIGH 1: night-plan pack `window_id` `C2` (the audit's reproduction), refused on both routes | `e1b42912c` | `test_audit6_high1_night_plan_window_is_the_reserved_window` | PASS |
+| HIGH 1 class: pack plan id, pack id, evidence root, plan tree digest, bracket session, a previous attempt's claim runs root, attempt, window plan id, custody root, measurement root | `e1b42912c` | `test_r15_night_plan_launch_identity_and_locations_are_this_attempts` | PASS |
+| HIGH 2: a link at the default campaign log, refused on both routes with the previous log unchanged | `e1b42912c` | `test_audit6_high2_linked_default_log_refuses_before_host` | PASS |
+| HIGH 2 class: a hard-linked log, a linked claim runs root, a stale bound, a linked capture root. Control: both roots exist empty and both routes admit. | `e1b42912c` | `test_r15_runs_roots_are_fresh_before_arm` | PASS |
+| HIGH 2 class: a linked custody night directory, a linked custody root, a linked operator log. Control: custody holding ordinary records builds. | `e1b42912c` | `test_r15_custody_and_operator_logs_hold_no_links` | PASS |
+
+- **HIGH 1 root cause.** The driver publishes the window lineage from the
+  night plan, and preflight checked only that plan's `pack_root`. A new
+  check, `check_launch_records`, now binds every launch field the driver
+  reads from the plan to the value `b5.plan` writes from this attempt's
+  inputs:
+  - the lineage identity, read through the driver's own `lineage_identity`.
+    The window and pack plan id must match the rendered reservation, and
+    so must the bracket session.
+  - the pack's evidence root, pack id and plan tree digest;
+  - the runs roots, matching the chain's bindings;
+  - the attempt, window plan id and custody root, matching the prepared
+    session inputs;
+  - the measurement root, matching the launch view.
+- **HIGH 2 root cause.** `b5.plan` refuses an existing runs root and
+  creates both roots empty, because a window never reuses a runs root.
+  Nothing re-checked that before arm, so any entry placed since took this
+  attempt's writes. `check_fresh_runs_roots` now requires each runs root to
+  be absent, or an empty directory that is not a link. That covers every
+  write inside the roots: logs, bounds, capture outputs, flags, locks and
+  bundles. The custody root holds the lineage and night records, and the
+  operator log root holds the chain's logs. Both may already hold records,
+  but `check_no_links` refuses a link at or below either one.
+- **Order.** All three checks run after every earlier check, so each
+  frozen refusal keeps its own reason. A frozen decision records only
+  outcomes.
+- **Fixture.** The invented adapter now writes the night-plan fields that
+  `b5.plan` writes from the same inputs, and the session's `attempt` and
+  `plan_id`. It also gains an `edit_night` hook. The nine frozen files are
+  unchanged.
+- **Test change.** The Gemini 6.2 test stubs `_check_consumers`, so it
+  also stubs the new launch-record check.
+
+**MED, still NEEDS_SPEC**, unchanged from round 14. The frozen suite's
+invented first collection stage mixes tagged and untagged configs (7 of
+11 carry the tag). A preflight marker check would therefore change the
+frozen clean admits.
+
+Local checks, within the lead's test budget:
+- 29 focused tests pass on the final code. They cover the five round-15
+  tests, every round-11 to round-14 regression, the closed-environment
+  class and the 137-case duplicate-option sweep.
+- `tests.align.test_v4_next_arm_packet` (69) and `tests.align.test_v4_series_e2e` (11),
+  which build packets from production-shaped night plans and runs roots, pass at `e1b42912c`.
+- The census scan is clean.
+- The nine frozen files match `SUITE.sha256`.
+- Hosted CI runs the 94-case replay.
+
+A background module run overlapped a 25-second temporary stash of
+`v4_registration.py`. I stopped that run and reran it on the committed
+code.
+
+Open, LOW:
+- `hazard_window.pack.pack_sha256` is not bound. It is a git digest of the
+  committed pack that preflight cannot recompute from the staged view, and
+  the harvest recomputes pack identity.
+- A link placed after arm is outside preflight's reach.

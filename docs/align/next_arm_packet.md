@@ -228,6 +228,21 @@ state at `--series-commit`, with:
   writes `<bound runs root>/neg8-drift-bound.json`. Each path is compared
   as spelled from the launch view, so another root, a previous attempt or
   a parent step refuses.
+  Prepare creates both runs roots empty and never reuses one. Before arm,
+  each runs root must still be absent or an empty directory that is not a
+  link, so no entry placed since can take this attempt's writes. The
+  custody and operator log roots may hold records but no link at or below
+  them. The driver publishes the window lineage from the night plan, so
+  preflight binds each launch field it reads:
+  - the pack's window, pack plan id and evidence root, as the reservation
+    renders them;
+  - the bracket session, read through the driver's own `lineage_identity`;
+  - the pack id and the plan tree digest;
+  - the runs roots, as the chain's bindings;
+  - the attempt, window plan id and custody root, as the prepared session
+    inputs;
+  - the measurement root, as the launch view.
+
   Consumers must agree: each capture's `--power-policy`
   equals the policy the reservation records (desk epoch, then desk T1, then
   `POWER_POLICY`). Its `--sampler-binary` selects the reservation's sampler,
