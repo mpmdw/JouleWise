@@ -320,8 +320,10 @@ class LedgerTests(unittest.TestCase):
             attempt = Attempt(Path(tmp))
             with rehearsal_double(attempt, lambda _argv: self.fail("must not launch member")):
                 out, err = StringIO(), StringIO()
+                # A runtime argv that names its config once (R4), so the outer evidence is what refuses.
+                runtime = ["synthetic-runtime", "--config", str(attempt.config)]
                 with redirect_stdout(out), redirect_stderr(err), self.assertRaisesRegex(ValueError, "other_failure"):
-                    pc.run_bound_part_c(attempt.output.parent / "native-attempt", [], soak_reference=attempt.soak)
+                    pc.run_bound_part_c(attempt.output.parent / "native-attempt", runtime, soak_reference=attempt.soak)
                 self.assertIn("evidence_unverifiable", out.getvalue())
                 self.assertIn("evidence_ledger.jsonl", out.getvalue())
                 self.assertFalse((attempt.output.parent / "native-attempt" / evidence.LEDGER_NAME).exists())
@@ -2283,14 +2285,15 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
     """The frozen differential suite's audit-named cases, run from this checkout against its own evaluator.
 
     The suite materializes the issued R1 sources from Git, so it needs the two pinned commits in the local
-    object database. A shallow checkout lacks them and this test skips. The full 25,083-case matrix is run by
-    hand. These cases are the regressions of audits 1 and 2 that need the frozen workload, driver and D-018
+    object database. A shallow checkout lacks them and this test skips. The full matrix runs in hosted CI
+    (.github/workflows/partc-frozen-differential.yml). These cases are the regressions of audits 1 and 2 that need the frozen workload, driver and D-018
     validator: the five named audit reproductions, the eight predecessor CSV cases, the orphan tokenize event,
     the empty final phase, and the turn-flag classes the frozen workload decides. The eight CSV cases are the
     seven RL-193 section 1 confirmed and its supplement, the six-column header with zero rows, which passes.
     """
 
     SUITE = Path(__file__).resolve().parent / "align" / "test_partc_frozen_differential.py"
+    SUITE_RUNNER = Path(__file__).resolve().parent / "align" / "partc_suite_census.py"
     SELECTOR = (r"audit-|predecessor-30b/v3/raw/runs/[^/]+/power_trace\.csv/file/|orphan-tokenize|empty-final-phase"
                 r"|runner\.error|0\.flags/set-turn_budget_reached")
     PINS = ("b2e01464d6d4fbf2901ff4d4154df9455104a12a", "2d02a6f0e42b7ac7a51ea5d5830867eea9ff2911")
@@ -2306,9 +2309,11 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
             self.skipTest("the pinned R1 commits are not in this object database")
         env = {**os.environ, "JW_PARTC_CASE": self.SELECTOR, "JW_PARTC_WORKERS": "1", "JW_PARTC_REPO": str(root),
                "PYTHONDONTWRITEBYTECODE": "1"}
+        # The suite file runs byte for byte; the runner adds only the census points the v3.1 clean fixture lacks
+        # (R3; a no-op on the lead's v3.2 fixture).
         with TemporaryDirectory() as tmp:
-            proc = subprocess.run([sys.executable, "-IB", str(self.SUITE)], cwd=tmp, env={**env, "TMPDIR": tmp},
-                                  capture_output=True, text=True)
+            proc = subprocess.run([sys.executable, "-IB", str(self.SUITE_RUNNER)], cwd=tmp,
+                                  env={**env, "TMPDIR": tmp}, capture_output=True, text=True)
         output = proc.stdout + proc.stderr
         self.assertEqual(proc.returncode, 0, output[-3000:])
         self.assertIn("descriptor rows PASS (4/4)", output)
@@ -2405,6 +2410,91 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
         entries = {line.split()[1]: tuple(map(int, line.split()[2:4])) for line in proc.stdout.splitlines()
                    if line.startswith("SWEEP ")}
         self.assertTrue(entries, output[-3000:])
+        for name, (generated, refused) in entries.items():
+            with self.subTest(entry=name):
+                self.assertGreater(generated, 0)
+                self.assertEqual(refused, generated)
+        self.assertNotIn("\nFAIL ", "\n" + proc.stdout, output[-3000:])
+        self.assertEqual(proc.returncode, 0, output[-3000:])
+
+    # Fix round r2 (wide audit round 1 of 2026-11-22): F1 to F11, each damaged case refused and each paired
+    # control passing, through the native launcher (tests/align/partc_audit_probe.py, ``R2``).
+    def check_probe(self, expected):
+        proc, output, seen = self.run_probe(list(expected))
+        self.assertEqual(seen, expected, output[-3000:])
+        self.assertEqual(proc.returncode, 0, output[-3000:])
+
+    def test_r2_f1_f4_cpu_samples_lie_inside_the_census_and_strictly_advance(self):
+        """F1: samples that cannot lie inside the census (disjoint, too narrow, a census at [0, 100], negative
+        offsets); F4: 1,801 samples all at t=0, cool or hot. The clean control passes."""
+        self.check_probe({"control": "pass -",
+                          "census-enclosure-disjoint": "other_failure member_order",
+                          "census-enclosure-too-narrow": "other_failure evidence_unverifiable",
+                          "census-literal": "other_failure member_order",
+                          "cpu-negative-offsets": "other_failure evidence_unverifiable",
+                          "cpu-instant": "other_failure quiet_load", "cpu-hot": "other_failure quiet_load"})
+
+    def test_r2_f2_f3_f5_soak_and_battery_are_judged_against_their_bound_session(self):
+        """F2: a soak missing its last 600 s of readings; F3: a soak with 5 CPU samples; F5: a battery row or a
+        whole battery journal outside the member. A battery row added in order passes."""
+        self.check_probe({"soak-tail-missing": "other_failure soak_readings",
+                          "soak-short-load": "other_failure soak_load",
+                          "battery-row-ordered": "pass -",
+                          "battery-row-outside": "other_failure battery_evidence",
+                          "battery-journal-shifted": "other_failure battery_evidence",
+                          "battery-reduced": "other_failure battery_evidence"})
+
+    def test_r2_f6_endpoint_identity_is_one_nonempty_string(self):
+        """F6: equal but non-string endpoint identities ([17], true and 1, ints, bools, arrays), and one copy
+        changed, are refused."""
+        self.check_probe({name: "other_failure episode_binding" for name in (
+            "endpoint-list", "endpoint-mixed-type", "endpoint-integer-pair", "endpoint-boolean-pair",
+            "endpoint-array-pair", "endpoint-one-copy")})
+
+    def test_r2_f7_own_stop_only_on_a_clean_finish(self):
+        """F7: D_bank's last finish reason a time guard (two or three admissions), unknown, or the deadman, is
+        refused; a two-turn D_bank that stopped cleanly passes (RL-149)."""
+        self.check_probe({"ownstop-short-clean": "pass -", "ownstop-short-cut": "other_failure member_cut",
+                          "stop-cut": "other_failure member_cut", "stop-unknown": "other_failure stop_evidence",
+                          "stop-deadman": "other_failure member_cut"})
+
+    def test_r2_f8_f9_busy_cores_and_process_tables(self):
+        """F8: negative busy cores and empty process tables; F9: a census PID twice. Distinct PIDs pass."""
+        self.check_probe({"cpu-negative": "other_failure quiet_load", "process-empty": "other_failure quiet_load",
+                          "census-pid-distinct": "pass -", "census-pid-conflicting": "other_failure quiet_load",
+                          "census-pid-duplicate-row": "other_failure quiet_load"})
+
+    def test_r2_f10_f11_complete_census_and_one_runtime_config(self):
+        """F10: the soak, D_bank or X_G without its closing census point is refused; the complete census passes.
+        F11: ``--config=COPY`` and two ``--config`` options are refused before dispatch; ``--config COPY`` passes."""
+        self.check_probe({"census-complete": "pass -", "census-omit-idle": "other_failure soak_load",
+                          "census-omit-d-bank-benign-s1": "other_failure load_evidence",
+                          "census-omit-x-g": "other_failure load_evidence",
+                          "config-separate": "pass -", "config-equals": "other_failure issued_inputs",
+                          "config-repeated": "other_failure issued_inputs"})
+
+    DOMAIN_SWEEP = Path(__file__).resolve().parent / "align" / "partc_domain_sweep.py"
+
+    def test_r2_generated_temporal_and_schema_sweeps_refuse_every_mutation(self):
+        """R1: every timestamped source with one row outside its bound interval, one stamp repeated, or its tail
+        dropped. R2: every schema field with a wrong type, a value out of range, an unknown enumeration value, a
+        missing or extra field, or a duplicate key. Every mutation refuses and every clean record passes."""
+        import os
+        import subprocess
+
+        root = Path(__file__).resolve().parents[1]
+        if not self.DOMAIN_SWEEP.is_file() or any(
+                subprocess.run(["git", "-C", str(root), "cat-file", "-e", pin + "^{commit}"],
+                               capture_output=True).returncode for pin in self.PINS):
+            self.skipTest("the pinned R1 commits are not in this object database")
+        with TemporaryDirectory() as tmp:
+            proc = subprocess.run([sys.executable, "-IB", str(self.DOMAIN_SWEEP)], cwd=tmp, capture_output=True,
+                                  text=True, env={**os.environ, "JW_PARTC_REPO": str(root), "TMPDIR": tmp,
+                                                  "PYTHONDONTWRITEBYTECODE": "1"})
+        output = proc.stdout + proc.stderr
+        entries = {line.split()[1]: tuple(map(int, line.split()[2:4])) for line in proc.stdout.splitlines()
+                   if line.startswith("SWEEP ")}
+        self.assertEqual(len(entries), 15, output[-3000:])
         for name, (generated, refused) in entries.items():
             with self.subTest(entry=name):
                 self.assertGreater(generated, 0)
