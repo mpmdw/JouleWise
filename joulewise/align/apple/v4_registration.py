@@ -1446,6 +1446,33 @@ WRITE_ROOT_BINDINGS = ('claim_runs_root', 'bound_runs_root', 'operator_log_root'
 FRESH_ROOT_BINDINGS = ('claim_runs_root', 'bound_runs_root', 'operator_log_root')
 
 
+def campaign_marker_refusal(measurement_root, tree):
+    """The campaign runner's launch-marker rule, judged at prepare instead of after arm.
+
+    run_campaign refuses a selection that mixes configs tagged
+    ``launch_lineage_required`` with legacy ones (``launch_binding_mismatch``).
+    It does so before measurement but after arm. Prepare applies the runner's
+    own per-config predicate to each in-chain collection stage's dispatched
+    selection, and to each of its spare sets, so such a pack never reaches arm.
+    """
+    from joulewise.b5 import chain
+    from scripts import run_campaign as runner
+
+    root = Path(measurement_root)
+    for stage in chain.stage_plan(tree, c1=True):
+        if stage.kind != 'campaign_collection' or not stage.in_chain:
+            continue
+        selected, _ = chain.c1_dispatch_selection(stage, tree)
+        for directory in (Path(selected), *(Path(path).parent for path in (stage.spare_sets or {}).values())):
+            order, _ = runner.load_order_entries(root / directory)
+            configs = runner.apply_order_manifest(runner.discover_configs(root / directory), order)
+            marked = [runner._config_requires_launch_lineage(config) for config in configs]
+            if any(marked) and not all(marked):
+                raise ValueError(f'C1 stage {stage.stage_id} mixes marker-bearing and legacy configs '
+                                 f'({sum(marked)} of {len(marked)} in {directory}); the campaign would refuse '
+                                 'launch_binding_mismatch after arm')
+
+
 def staged_pack_sha256(pack_root, read=None):
     """The D-134 pack digest of the staged pack bytes this attempt launches.
 

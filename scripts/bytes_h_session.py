@@ -469,6 +469,9 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
     if c1:
         view, pack, handoff, runtime_inputs, outputs = c1_measurement_view(measurement, session, kit=kit, public_inputs=c1_public_inputs)
         stage = Path(handoff['stage'])
+        from joulewise.align.apple import v4_registration as c1_closure
+        # The campaign refuses a mixed launch-marker selection only after arm.
+        c1_closure.campaign_marker_refusal(view, json.loads((Path(pack) / 'plan_tree.json').read_bytes()))
     identities, notes = desk_identity.collect(measurement, stage / 'inputs' if c1 else session / 'staging/inputs',
                                                run=run)
     inputs = plan_inputs.build(measurement, reg, pack_id, session_id, identities,
