@@ -11,7 +11,7 @@ import struct
 from joulewise.adapters.powermetrics import RAIL_MANIFEST
 from joulewise.align.apple.episode_bundle import join_episode_trace
 from joulewise.align.apple.sampler import (
-    NS_PER_SECOND as NS, _restore_stamp, monotonic_ns, seconds_ns, stamp_mapping,
+    NS_PER_SECOND as NS, _restore_stamp, seconds_ns, stamp_mapping,
 )
 from joulewise.align.power.windows import _support_edge_quantum_ns
 from joulewise.align.records import ClockMapping, Episode, PowerTrace, _build, from_json
@@ -21,9 +21,11 @@ from joulewise.schemas import BenchmarkConfig
 from . import controls_analysis as analysis
 from .qualification_manifest import _decode
 from .controls_time_fields import (
-    BOOLEAN, EMPTY_ARRAY, INTEGER, OPAQUE_FINITE_NUMBER, OPAQUE_INTEGER, OPAQUE_NONBLANK_STRING,
-    OPAQUE_NONNEGATIVE_NUMBER, OPAQUE_STRING, OPAQUE_STRING_OR_INTEGER, RAIL_COLUMNS, SKIP, STRING,
-    Nullable, RecordFields, RequiredRecordFields, TaggedFields, TimeFieldError, project_json, rail_rows, stream_fields,
+    BOOLEAN, EMPTY_ARRAY, INT64, INTEGER, NUMBER, OPAQUE_FINITE_NUMBER, OPAQUE_INTEGER, OPAQUE_NONBLANK_STRING,
+    OPAQUE_NONNEGATIVE_NUMBER, OPAQUE_OBJECT, OPAQUE_PERCENT, OPAQUE_STRING, OPAQUE_STRING_OR_INTEGER,
+    RAIL_COLUMNS, SKIP, STRING,
+    KeyedFields, Nullable, RequiredRecordFields, TaggedFields, TimeFieldError, TokenForms, WireRecord,
+    project_json, rail_rows, stream_fields,
 )
 
 
@@ -34,84 +36,258 @@ FAILURES = ("boot_mismatch", "stream_unclosed", "anchor_unusable",
 ELIGIBLE = frozenset(("meter_absent", *FAILURES[1:]))
 RAILS = frozenset(("cpu_power", "gpu_power", "ane_power"))
 STAMP_FIELDS = RequiredRecordFields.fromkeys(("epoch_ns", "monotonic_before_ns", "monotonic_after_ns",
-                                             "wall_resolution_ns", "monotonic_resolution_ns"), INTEGER)
+                                             "wall_resolution_ns", "monotonic_resolution_ns"), INT64)
 TOOL_FIELDS = RequiredRecordFields(
-    **dict.fromkeys(("start_ns", "end_ns", "args_bytes", "result_bytes"), INTEGER),
+    start_ns=INT64, end_ns=INT64, args_bytes=INTEGER, result_bytes=INTEGER,
     logged=BOOLEAN, state_changed=Nullable(BOOLEAN), name=OPAQUE_STRING,
     state_before_sha256=Nullable(OPAQUE_STRING), state_after_sha256=Nullable(OPAQUE_STRING),
 )
 TURN_FIELDS = RequiredRecordFields(
-    **dict.fromkeys(("index", "start_ns", "end_ns", "context_tokens", "prefill_tokens",
-                     "decode_tokens", "hidden_tokens"), INTEGER),
-    first_token_ns=Nullable(INTEGER), logged=BOOLEAN, tool_calls=[TOOL_FIELDS],
+    **dict.fromkeys(("index", "context_tokens", "prefill_tokens", "decode_tokens", "hidden_tokens"), INTEGER),
+    start_ns=INT64, end_ns=INT64, first_token_ns=Nullable(INT64), logged=BOOLEAN, tool_calls=[TOOL_FIELDS],
 )
-INTERVAL_FIELDS = {"kind": STRING, "start_ns": INTEGER, "end_ns": INTEGER}
-GATE_FIELDS = {**INTERVAL_FIELDS, "turn": Nullable(OPAQUE_STRING_OR_INTEGER)}
+REFERENCE_TEMPERATURES = WireRecord(dict.fromkeys(("fast_c", "slow_c"), Nullable(OPAQUE_FINITE_NUMBER)),
+                                    {"source_member": OPAQUE_STRING, "span_ns": [INT64]})
+AC_POWERMODE = WireRecord(
+    {"value": Nullable(OPAQUE_INTEGER), "source": OPAQUE_STRING, "observed_at": OPAQUE_STRING},
+    {"error": OPAQUE_STRING, "attempts": OPAQUE_INTEGER},
+)
+THERMAL_POLICY_SENSORS = WireRecord(
+    {"s_fast": STRING, "s_slow": STRING, "fan_keys": [STRING], "r0_sha256": OPAQUE_STRING},
+    {"record_keys": [STRING]},
+)
+THERMAL_POLICY = WireRecord(
+    {"sensors": THERMAL_POLICY_SENSORS, **dict.fromkeys(("delta_fast_c", "delta_slow_c", "turn_cap_s"), OPAQUE_FINITE_NUMBER),
+     "per_turn": BOOLEAN, "heavy": BOOLEAN, "chunk_tokens": OPAQUE_INTEGER,
+     "window_reference": TaggedFields("role", {
+         "capture": RequiredRecordFields(role=STRING),
+         "consume": RequiredRecordFields(role=STRING, source_run_id=OPAQUE_STRING, source_config_sha256=OPAQUE_STRING),
+     })},
+    {"g0_cap_s": OPAQUE_FINITE_NUMBER,
+     "g0_cap_receipt": RequiredRecordFields(authority=OPAQUE_STRING, receipt_sha256=OPAQUE_STRING),
+     "contrast_fit": WireRecord(
+         {"authority": OPAQUE_STRING, "role": OPAQUE_STRING, "value_s": OPAQUE_FINITE_NUMBER,
+          "nominal_cap_s": OPAQUE_FINITE_NUMBER, "deadman_s": OPAQUE_FINITE_NUMBER,
+          "episode_s": Nullable(OPAQUE_FINITE_NUMBER)},
+         {"predeclared": Nullable(OPAQUE_STRING)})},
+)
+INTERVAL_REQUIRED = {"kind": STRING, "start_ns": INT64, "end_ns": INT64}
+INTERVAL_OPTIONAL = {
+    "outcome": OPAQUE_STRING, "clock": OPAQUE_STRING, "token_count": Nullable(OPAQUE_INTEGER),
+    "entry_stamp": STAMP_FIELDS, "exit_stamp": STAMP_FIELDS, "exit_sample_ns": Nullable(INT64),
+    **dict.fromkeys(("entry_epoch_s", "exit_epoch_s", "duration_s"), OPAQUE_FINITE_NUMBER),
+    **dict.fromkeys(("slope_c_per_min", "entry_slope_c_per_min"), Nullable(OPAQUE_FINITE_NUMBER)),
+    **dict.fromkeys(("reference", "release"), Nullable(REFERENCE_TEMPERATURES)),
+    "entry_sensors": KeyedFields(r"(?:T[!-~]{3}|F[!-~]Ac)", Nullable(OPAQUE_FINITE_NUMBER)),
+}
+GATE_FIELDS = WireRecord(INTERVAL_REQUIRED, {**INTERVAL_OPTIONAL, "turn": Nullable(OPAQUE_STRING_OR_INTEGER)})
 THERMAL_FIELDS = TaggedFields("kind", {"G0": GATE_FIELDS, "G1": GATE_FIELDS,
-                                      "H": {**INTERVAL_FIELDS, "turn": INTEGER}})
+                                      "H": WireRecord({**INTERVAL_REQUIRED, "turn": INTEGER},
+                                                      {**INTERVAL_OPTIONAL, "condition_met_stamp": STAMP_FIELDS})})
+THERMAL_RECORD = WireRecord(
+    {"intervals": [THERMAL_FIELDS]},
+    {"policy": THERMAL_POLICY, "window_reference": Nullable(REFERENCE_TEMPERATURES),
+     "episode_reference": Nullable(REFERENCE_TEMPERATURES), "flags": [OPAQUE_STRING],
+     "custody": Nullable(WireRecord(
+         {"record_sha256": OPAQUE_STRING, "source_run_id": OPAQUE_STRING, "source_journal_sha256": Nullable(OPAQUE_STRING)},
+         {"source_config_sha256": OPAQUE_STRING}))},
+)
+ARTIFACT_IDENTITY = WireRecord(
+    {"status": OPAQUE_STRING},
+    {**dict.fromkeys(("algorithm", "kind", "reason", "path", "root", "source"), OPAQUE_STRING),
+     **dict.fromkeys(("sha256", "folded_sha256"), Nullable(OPAQUE_STRING)),
+     "marker": RequiredRecordFields(adapter=OPAQUE_STRING, model_name=OPAQUE_STRING,
+                                    model_revision=Nullable(OPAQUE_STRING), model_source=Nullable(OPAQUE_STRING)),
+     "inventory": [RequiredRecordFields(path=OPAQUE_STRING, resolved_path=OPAQUE_STRING, sha256=OPAQUE_STRING,
+                                        size_bytes=OPAQUE_INTEGER, symlink=BOOLEAN)],
+     "files": KeyedFields(r".+", OPAQUE_STRING)},
+)
+TOKEN_BUDGET = WireRecord(
+    {**dict.fromkeys(("max_episode_decode_tokens", "max_context_tokens", "effective_context_cap"), Nullable(OPAQUE_INTEGER)),
+     **dict.fromkeys(("max_tokens_per_turn", "decode_tokens_used", "prefill_tokens_used",
+                      "cached_context_tokens_used"), OPAQUE_INTEGER),
+     "deadman_s": Nullable(OPAQUE_FINITE_NUMBER), "stop_reason": OPAQUE_STRING, "incomplete": BOOLEAN},
+    {"deadline_ns": INT64, "deadline_origin": OPAQUE_STRING, "planned_g0_allowance_s": OPAQUE_FINITE_NUMBER},
+)
+HARDWARE_FIELDS = WireRecord(
+    {"paired_clock_stamps_ns": [STAMP_FIELDS], "run_bundle_id": OPAQUE_STRING,
+     "controller_clock_domain": OPAQUE_STRING, "power_scope": OPAQUE_STRING,
+     "context_limits": RequiredRecordFields.fromkeys(("max_position_embeddings", "max_context_tokens"),
+                                                     Nullable(OPAQUE_INTEGER)),
+     "runtime_identity": RequiredRecordFields(
+         mlx_version=Nullable(OPAQUE_STRING), mlx_lm_version=Nullable(OPAQUE_STRING),
+         model_artifact_identity=Nullable(ARTIFACT_IDENTITY)),
+     "task_diagnostics": RequiredRecordFields(
+         give_hint=Nullable(BOOLEAN), main_task_score=Nullable(OPAQUE_FINITE_NUMBER),
+         evaluation_outputs=OPAQUE_OBJECT, flags=[OPAQUE_STRING], tool_schemas=[OPAQUE_OBJECT])},
+    {"boot_id": Nullable(STRING), "thermal": THERMAL_RECORD, "ac_powermode": AC_POWERMODE, "token_budget": TOKEN_BUDGET},
+)
 EPISODE_FIELDS = RequiredRecordFields(
     **dict.fromkeys(("schema", "episode_id", "clock_domain", "condition"), STRING),
-    **dict.fromkeys(("start_ns", "end_ns"), INTEGER),
+    **dict.fromkeys(("start_ns", "end_ns"), INT64),
     **dict.fromkeys(("task_pair", "agent_model", "endpoint"), OPAQUE_STRING),
     seed=OPAQUE_INTEGER,
-    hardware={"paired_clock_stamps_ns": [STAMP_FIELDS], "boot_id": Nullable(STRING),
-              "thermal": {"intervals": [THERMAL_FIELDS]}},
+    hardware=HARDWARE_FIELDS,
     turns=[TURN_FIELDS], flags=[OPAQUE_STRING], power_traces=EMPTY_ARRAY, clock_mappings=EMPTY_ARRAY,
     main_task_score=Nullable(OPAQUE_FINITE_NUMBER), side_task_success=Nullable(BOOLEAN),
     monitor_verdicts=[RequiredRecordFields(monitor_model=OPAQUE_STRING, visibility=STRING,
-                                           suspicion=OPAQUE_FINITE_NUMBER, prompt_sha256=OPAQUE_STRING)],
+                                           suspicion=OPAQUE_PERCENT, prompt_sha256=OPAQUE_STRING)],
     router_log=Nullable(RequiredRecordFields(model=OPAQUE_STRING, num_experts=INTEGER, top_k=INTEGER,
                                              layers=[OPAQUE_INTEGER], phase=[STRING], experts=[[[OPAQUE_INTEGER]]])),
 )
-METADATA_FIELDS = {
-    "run_id": None,
-    "config_sha256": None,
-    "device": {"rail_manifest": [None]},
-    "boot_id": None,
-    "uncertainty_evidence": {"clock_anchor": dict.fromkeys((
-        "status", "method", "wall_minus_monotonic_lower_s", "wall_minus_monotonic_upper_s",
-        "effective_clock_anchor_bound_s",
-    ))},
+PRODUCER_CLOCK_STAMP = RequiredRecordFields.fromkeys((
+    "epoch_s", "monotonic_before_s", "monotonic_after_s", "wall_resolution_s", "monotonic_resolution_s",
+), OPAQUE_FINITE_NUMBER)
+IDENTITY_CLOCK_FIELDS = WireRecord(
+    {"status": STRING, "method": STRING, "wall_minus_monotonic_lower_s": NUMBER,
+     "wall_minus_monotonic_upper_s": NUMBER, "effective_clock_anchor_bound_s": NUMBER},
+    {**dict.fromkeys((
+        "rate_fit_baseline_s", "model_departure_allowance_s", "min_l_infinity_residual_upper_bound_s",
+        "anchor_lower_epoch_s", "anchor_upper_epoch_s", "admissible_lower_epoch_s", "admissible_upper_epoch_s",
+        "first_sample_end_point_epoch_s", "anchor_only_bound_s", "wall_minus_monotonic_span_s",
+        "stamp_resolution_s", "numeric_padding_s", "epoch_representation_term_s", "first_parse_lag_s",
+        "placement_bound_s", "rate_lower", "rate_upper", "rate_limit_ppm", "wall_minus_monotonic_rate_ppm",
+        "max_sustained_rate_ppm", "native_intersection_lower_epoch_s", "native_intersection_upper_epoch_s",
+        "causal_lower_epoch_s", "causal_upper_epoch_s",
+    ), OPAQUE_FINITE_NUMBER),
+     **dict.fromkeys(("records_checked", "native_rollover_count"), OPAQUE_INTEGER),
+     "first_sample_end_point_epoch_ns": INT64, "arithmetic": OPAQUE_STRING,
+     "clock_anchor_method": OPAQUE_STRING, "schema_version": OPAQUE_STRING,
+     "clock_stamps": WireRecord({}, dict.fromkeys((
+         "pre_spawn", "first_parse", "sampling_started", "sampling_stopped", "post_parse",
+     ), PRODUCER_CLOCK_STAMP)),
+     "caps": WireRecord({"form": OPAQUE_STRING}, dict.fromkeys((
+         "max_wall_minus_monotonic_span_s", "max_effective_clock_anchor_bound_s",
+         "max_sustained_rate_ppm", "max_placement_bound_s",
+     ), OPAQUE_FINITE_NUMBER))},
+)
+SAMPLER_PROBE = WireRecord(
+    {"ok": BOOLEAN},
+    {"reason": OPAQUE_STRING, "method": OPAQUE_STRING},
+)
+POWERMETRICS_DEVICE = WireRecord(
+    {"executable_path": OPAQUE_STRING, "executable_sha256": Nullable(OPAQUE_STRING),
+     "samplers_requested": OPAQUE_STRING,
+     "samplers_available": TokenForms({"str": OPAQUE_STRING, "[": [OPAQUE_STRING]}),
+     "samplers_probe": SAMPLER_PROBE},
+)
+DEVICE_FIELDS = WireRecord(
+    {"rail_manifest": [STRING]},
+    {**dict.fromkeys(("device", "telemetry", "boundary", "timestamp_derivation", "power_units"),
+                     Nullable(OPAQUE_STRING)),
+     "plist_anchor_offset_s": OPAQUE_FINITE_NUMBER, "powermetrics": POWERMETRICS_DEVICE,
+     "capability_precheck": WireRecord({"ok": BOOLEAN}, {"reason": OPAQUE_STRING})},
+)
+SAMPLE_PHASE_FIELDS = WireRecord(
+    {"status": OPAQUE_STRING},
+    {"method": OPAQUE_STRING, "reason": OPAQUE_STRING, **dict.fromkeys((
+        "sampling_started_epoch_s", "sampling_stopped_epoch_s", "first_elapsed_s", "last_elapsed_s",
+        "marker_to_first_sample_phase_bound_s", "marker_to_last_sample_phase_bound_s",
+    ), OPAQUE_FINITE_NUMBER)},
+)
+IDLE_DRIFT_FIELDS = WireRecord(
+    {"status": OPAQUE_STRING},
+    {**dict.fromkeys(("method", "reason", "pre_artifact", "post_artifact", "calibration_status"), OPAQUE_STRING),
+     **dict.fromkeys(("pre_sample_count", "post_sample_count"), OPAQUE_INTEGER),
+     **dict.fromkeys(("pre_idle_window_suspect", "post_idle_window_suspect"), BOOLEAN),
+     **dict.fromkeys(("pre_power_w_mean", "run_observed_envelope_w", "effective_bound_w"), OPAQUE_FINITE_NUMBER),
+     "calibration_guard_w": Nullable(OPAQUE_FINITE_NUMBER),
+     **dict.fromkeys(("calibration_artifact_sha256", "calibration_cell_id"), Nullable(OPAQUE_STRING))},
+)
+IDLE_GUARD_FIELDS = RequiredRecordFields(
+    calibration_status=OPAQUE_STRING, method=OPAQUE_STRING, guard_w=Nullable(OPAQUE_FINITE_NUMBER),
+    n_bundles=OPAQUE_INTEGER, bundle_sha256=[OPAQUE_STRING], cell_id=Nullable(OPAQUE_STRING),
+    artifact_sha256=Nullable(OPAQUE_STRING),
+)
+SOURCE_STATE_FIELDS = RequiredRecordFields.fromkeys(("git_commit", "tracked", "staged", "untracked", "diff_sha256"),
+                                                    OPAQUE_STRING)
+SOURCE_PROVENANCE_FIELDS = RequiredRecordFields(
+    schema=OPAQUE_STRING, diff_identity=RequiredRecordFields(algorithm=OPAQUE_STRING, version=OPAQUE_STRING),
+    start=SOURCE_STATE_FIELDS, end=SOURCE_STATE_FIELDS, changed_during_run=Nullable(BOOLEAN),
+    claim_eligible=BOOLEAN, reason_codes=[OPAQUE_STRING],
+)
+CLOCK_INFO_FIELDS = TaggedFields("kind", {
+    "fake": RequiredRecordFields(kind=STRING, start_s=OPAQUE_FINITE_NUMBER),
+    "system": RequiredRecordFields(kind=STRING, **dict.fromkeys((
+        "monotonic_minus_wall_s", "wall_resolution_s", "monotonic_resolution_s",
+        "wall_minus_monotonic_start_s", "wall_minus_monotonic_end_s",
+    ), OPAQUE_FINITE_NUMBER)),
+})
+PRODUCER_PAYLOAD = TokenForms({"{": SKIP})
+WORKLOAD_PROVENANCE_FIELDS = WireRecord(
+    {**dict.fromkeys(("kind", "episode_spec_sha256", "transcript_sha256", "endpoint_identity", "cache_policy"),
+                     OPAQUE_STRING),
+     **dict.fromkeys(("prompt", "tokenizer", "model", "sampler", "output_policy",
+                      "episode_outcome"), PRODUCER_PAYLOAD),
+     "generator": RequiredRecordFields(name=OPAQUE_STRING, version=OPAQUE_STRING),
+     "flags": [OPAQUE_STRING]},
+)
+METADATA_REQUIRED = {
+    "run_id": STRING, "config_sha256": STRING, "device": DEVICE_FIELDS,
+    "uncertainty_evidence": WireRecord(
+        {"clock_anchor": IDENTITY_CLOCK_FIELDS},
+        {"telemetry_backend": OPAQUE_STRING, "schema_version": OPAQUE_STRING, "sample_phase": SAMPLE_PHASE_FIELDS,
+         "idle_drift": IDLE_DRIFT_FIELDS, "idle_drift_guard": IDLE_GUARD_FIELDS,
+         "process_group_teardown": PRODUCER_PAYLOAD}),
 }
 OPTIONAL_CONFIG_TEXT = Nullable(OPAQUE_NONBLANK_STRING)
-CONFIG_FIELDS = {
-    "schema_version": None,
-    "run_id": OPTIONAL_CONFIG_TEXT,
-    "model": {
-        "name": OPAQUE_NONBLANK_STRING,
-        **dict.fromkeys(("family", "source", "revision", "weight_format"), OPTIONAL_CONFIG_TEXT),
-        **dict.fromkeys(("context_window", "tokenizer_json_sha256", "chat_template_sha256")),
-    },
-    "quantization": {"name": OPAQUE_NONBLANK_STRING, "bits": None, "group_size": None},
-    "hardware_target": {
-        "id": OPAQUE_NONBLANK_STRING,
-        **dict.fromkeys(("transport", "runtime_backend", "telemetry_backend")),
-        **dict.fromkeys(("host", "device_kind", "notes"), OPTIONAL_CONFIG_TEXT),
-    },
-    "workload_profile": {
-        "name": OPAQUE_NONBLANK_STRING,
-        **dict.fromkeys(("prompt_tokens", "output_tokens", "prompt_token_evidence_policy", "repetitions", "warmup_runs")),
-        **dict.fromkeys(("prompt_text", "dataset_ref", "suite_manifest_ref", "suite_manifest_sha256",
-                         "generator_sidecar_ref"), OPTIONAL_CONFIG_TEXT),
-        "prompt_token_expectation": Nullable(RecordFields.fromkeys((
-            "schema_version", "token_hash_domain", "token_count", "token_ids_sha256",
-        ))),
-    },
-    "interconnect": Nullable({
-        "name": OPAQUE_NONBLANK_STRING, "link_speed_mbps": Nullable(OPAQUE_NONNEGATIVE_NUMBER),
-        "notes": OPTIONAL_CONFIG_TEXT,
-    }),
-    "sampling": Nullable({
-        "power_hz": None, **dict.fromkeys(("idle_seconds", "warmup_seconds"), Nullable(OPAQUE_NONNEGATIVE_NUMBER)),
-    }),
-    "run_metadata": Nullable({
-        "project": OPAQUE_NONBLANK_STRING, "operator": OPTIONAL_CONFIG_TEXT, "notes": OPTIONAL_CONFIG_TEXT,
-        "tags": [OPAQUE_STRING], "ambient_temp_c": Nullable(OPAQUE_FINITE_NUMBER),
-    }),
-    "schema_extensions": Nullable([SKIP]),
-    "batch_policy": SKIP,
-    "speculation": SKIP,
-}
+CONFIG_FIELDS = RequiredRecordFields(
+    schema_version=STRING, run_id=OPTIONAL_CONFIG_TEXT,
+    model=WireRecord(
+        {"name": OPAQUE_NONBLANK_STRING, "context_window": Nullable(INTEGER),
+         **dict.fromkeys(("family", "source", "revision", "weight_format"), OPTIONAL_CONFIG_TEXT)},
+        dict.fromkeys(("tokenizer_json_sha256", "chat_template_sha256"), STRING)),
+    quantization=RequiredRecordFields(name=OPAQUE_NONBLANK_STRING, bits=Nullable(INTEGER), group_size=Nullable(INTEGER)),
+    hardware_target=RequiredRecordFields(
+        id=OPAQUE_NONBLANK_STRING, **dict.fromkeys(("transport", "runtime_backend", "telemetry_backend"), STRING),
+        **dict.fromkeys(("host", "device_kind", "notes"), OPTIONAL_CONFIG_TEXT)),
+    workload_profile=WireRecord(
+        {"name": OPAQUE_NONBLANK_STRING, **dict.fromkeys(("prompt_tokens", "output_tokens"), Nullable(INTEGER)),
+         **dict.fromkeys(("repetitions", "warmup_runs"), INTEGER),
+         **dict.fromkeys(("prompt_text", "dataset_ref"), OPTIONAL_CONFIG_TEXT)},
+        {**dict.fromkeys(("suite_manifest_ref", "suite_manifest_sha256", "generator_sidecar_ref"), OPTIONAL_CONFIG_TEXT),
+         "prompt_token_evidence_policy": STRING,
+         "prompt_token_expectation": RequiredRecordFields(schema_version=STRING, token_hash_domain=STRING,
+                                                         token_count=INTEGER, token_ids_sha256=STRING)}),
+    interconnect=RequiredRecordFields(name=OPAQUE_NONBLANK_STRING, link_speed_mbps=Nullable(OPAQUE_NONNEGATIVE_NUMBER),
+                                      notes=OPTIONAL_CONFIG_TEXT),
+    sampling=RequiredRecordFields(power_hz=NUMBER,
+                                   **dict.fromkeys(("idle_seconds", "warmup_seconds"), OPAQUE_NONNEGATIVE_NUMBER)),
+    run_metadata=RequiredRecordFields(
+        project=OPAQUE_NONBLANK_STRING, operator=OPTIONAL_CONFIG_TEXT, notes=OPTIONAL_CONFIG_TEXT,
+        tags=[OPAQUE_STRING], ambient_temp_c=Nullable(OPAQUE_FINITE_NUMBER)),
+)
+METADATA_FIELDS = WireRecord(
+    METADATA_REQUIRED,
+    {"boot_id": Nullable(STRING),
+     **dict.fromkeys(("platform", "machine", "python_version", "joulewise_version", "schema_version",
+                      "git_commit"), OPAQUE_STRING),
+     "source_provenance": SOURCE_PROVENANCE_FIELDS, "clock": CLOCK_INFO_FIELDS,
+     "config_warnings": [RequiredRecordFields(code=OPAQUE_STRING, path=OPAQUE_STRING, message=OPAQUE_STRING)],
+     "model": CONFIG_FIELDS["model"], "quantization": CONFIG_FIELDS["quantization"],
+     "workload_observed": WireRecord(
+         {"token_count": Nullable(OPAQUE_INTEGER), "output_token_count": Nullable(OPAQUE_INTEGER)},
+         {"token_count_source": OPAQUE_STRING}),
+     "serialization_quarantine": [WireRecord(
+         {"path": OPAQUE_STRING, "reason": OPAQUE_STRING}, {"key_type": OPAQUE_STRING, "value_type": OPAQUE_STRING})],
+     "adapters": WireRecord({}, dict.fromkeys(("runtime", "telemetry"), PRODUCER_PAYLOAD)),
+     "workload_provenance": WORKLOAD_PROVENANCE_FIELDS,
+     **dict.fromkeys(("battery_float", "connection", "environment", "campaign_policy",
+                      "campaign_environment_preflight", "environment_admission", "instrument_calibration",
+                      "trace_window_margins", "idle_baseline", "thermal_pre", "thermal_post",
+                      "suite", "extra"), PRODUCER_PAYLOAD),
+     **dict.fromkeys(("clock_anchor_bound_s", "marker_to_first_sample_phase_bound_s",
+                      "marker_to_last_sample_phase_bound_s", "idle_drift_bound_w"), Nullable(OPAQUE_FINITE_NUMBER))},
+)
+_METADATA_PRODUCER_MEMBERS = frozenset((
+    "platform", "machine", "python_version", "joulewise_version", "schema_version", "git_commit",
+    "source_provenance", "clock", "battery_float", "config_warnings", "model", "quantization", "adapters",
+))
+PRODUCER_METADATA_FIELDS = WireRecord(
+    {name: METADATA_FIELDS[name] for name in METADATA_FIELDS.required | _METADATA_PRODUCER_MEMBERS},
+    {name: schema for name, schema in METADATA_FIELDS.items()
+     if name not in METADATA_FIELDS.required | _METADATA_PRODUCER_MEMBERS},
+)
 
 
 class ReaderBindingError(RuntimeError):
@@ -131,7 +307,8 @@ class EpisodeTiming:
     @property
     def epoch_minus_monotonic_ns(self):
         row = self.stamp_rows[0]
-        return row["epoch_ns"] - monotonic_ns(_restore_stamp(row))
+        midpoint = round(Fraction(row["monotonic_before_ns"] + row["monotonic_after_ns"], 2))
+        return row["epoch_ns"] - midpoint
 
 
 @dataclass(frozen=True)
@@ -211,6 +388,13 @@ def episode_timing(episode_raw, metadata):
     except (AttributeError, KeyError, TypeError, ValueError, OverflowError) as error:
         raise TimeFieldError("invalid native episode envelope") from error
     hardware = view["hardware"]
+    thermal = hardware.get("thermal", {})
+    policy = thermal.get("policy")
+    sensors = policy["sensors"] if policy else None
+    names = ({sensors["s_fast"], sensors["s_slow"], *sensors["fan_keys"], *sensors.get("record_keys", ())}
+             if sensors is not None else set())
+    if any(row.get("entry_sensors", {}).keys() - names for row in thermal.get("intervals", ())):
+        raise TimeFieldError("native thermal sensor key is absent from its policy")
     episode_id = view["episode_id"]
     start, end = view["start_ns"], view["end_ns"]
     stamp_rows = tuple(hardware.get("paired_clock_stamps_ns", ()))
@@ -227,8 +411,9 @@ def episode_timing(episode_raw, metadata):
                          _one_identity((hardware.get("boot_id"), metadata.get("boot_id"))), episode)
 
 
-def binding_projection(episode, config, metadata, *, run_id, config_sha256):
-    metadata = project_json(metadata, METADATA_FIELDS)
+def binding_projection(episode, config, metadata, *, run_id, config_sha256, synthetic=False):
+    shape = METADATA_FIELDS if synthetic else PRODUCER_METADATA_FIELDS
+    metadata = project_json(metadata, shape, strict=True)
     if (metadata["run_id"] != run_id or metadata["config_sha256"] != config_sha256):
         raise ReaderBindingError("bundle identity")
     manifest = metadata["device"]["rail_manifest"]
@@ -280,10 +465,11 @@ def _native_grid(rows):
     for timestamp, _, source, rail, start, end in rows:
         if source != "powermetrics" or rail not in grids:
             raise TimeFieldError("noncomponent native rail")
-        stamps = tuple(float(value) for value in (timestamp, start, end))
-        if not all(map(isfinite, stamps)):
-            raise TimeFieldError("nonfinite rail support")
-        t, a, b = map(seconds_ns, stamps)
+        try:
+            stamps = tuple(float(value) for value in (timestamp, start, end))
+            t, a, b = (_packed_ns(seconds_ns(stamp)) for stamp in stamps)
+        except (ValueError, OverflowError) as error:
+            raise TimeFieldError("invalid native rail support timestamp") from error
         if not a < b == t:
             raise TimeFieldError("invalid native rail interval")
         grids[rail].append((t, a, b))
@@ -302,7 +488,7 @@ def _support_digest(grid):
     pack = struct.Struct(">qqq").pack
     digest = sha256()
     for triple in grid:
-        digest.update(pack(*triple))
+        digest.update(pack(*(_packed_ns(stamp) for stamp in triple)))
     return digest.hexdigest()
 
 
@@ -382,9 +568,15 @@ def _stream_anchors(stream):
             _integer_field(stream.trailer, "end_mono_ns"))
 
 
+def _packed_ns(stamp):
+    if type(stamp) is not int or not -(2**63) <= stamp < 2**63:
+        raise TimeFieldError("native time does not fit a signed 64-bit digest field")
+    return stamp
+
+
 def _times_digest(times, offset):
     pack = struct.Struct(">q").pack
-    return sha256(b"".join(pack(stamp - offset) for stamp in times)).hexdigest()
+    return sha256(b"".join(pack(_packed_ns(stamp - offset)) for stamp in times)).hexdigest()
 
 
 def _candidate(stream, timing):
@@ -489,7 +681,7 @@ def first_read(inputs, stage1):
                  for role in ("episode", "config", "metadata", "rails", "script")}
         timing, period, evidence = binding_projection(
             files["episode"], files["config"], files["metadata"], run_id=position["run_id"],
-            config_sha256=pin["config"]["sha256"],
+            config_sha256=pin["config"]["sha256"], synthetic=inputs.synthetic,
         )
         rail = rail_timing(files["rails"], timing, period, evidence)
         certificate = inputs.certificate(leg_id)

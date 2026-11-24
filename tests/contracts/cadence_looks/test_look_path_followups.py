@@ -88,20 +88,9 @@ def mutate(world, role, fault, *, leg="L002"):
 
 
 def blind_values(world):
-    def config_observations(document):
-        document["synthetic_telemetry"] = {"power_w": 91827.375}
-        document["run_metadata"]["ambient_temp_c"] = 19.8375
-
-    mutate(world, "config", config_observations)
-    span, runtime, _ = FROZEN["location"](world, "L002")
-    receipt_path, record_path = span / "runner_receipt.json", runtime.parent / "leg_record.json"
-    receipt, record = registrar.read(receipt_path), registrar.read(record_path)
-    receipt_leg = next(row for row in receipt["legs"] if row["leg_id"] == "L002")
-    for row in (receipt_leg, record):
-        row["attempts"][0]["os_load"] = {"synthetic_observation": 91827.375}
-    registrar.put(receipt_path, receipt)
-    registrar.put(record_path, record)
-    FROZEN["reanchor"](world, span)
+    mutate(world, "config", lambda cfg: cfg["run_metadata"].update(ambient_temp_c=19.8375))
+    mutate(world, "episode", lambda ep: ep["hardware"]["task_diagnostics"]["evaluation_outputs"].update(
+        synthetic_telemetry={"power_w": 91827.375}))
 
 
 def add_diagnostic_flag(document):
@@ -465,7 +454,7 @@ class LookPathFollowupTests(TestCase):
                 world, bench = self.prepare(name, configure=configure)
                 self.assert_refuses_at_blind_gates(world, bench, scaffold, driver_fault="none")
 
-    def test_stage1_and_preflight_skip_config_and_receipt_observations(self):
+    def test_stage1_and_preflight_skip_declared_diagnostic_observations(self):
         world, bench = self.prepare("blind-values", configure=blind_values)
         self.assertEqual(self.invoke(world, bench, "stage1", "guard_blind_values"), (0, b"", b""))
         self.assertEqual(self.invoke(world, bench, "commit-stage1"), (0, b"", b""))
@@ -551,18 +540,12 @@ class LookPathFollowupTests(TestCase):
                 world, bench = self.prepare(name, configure=configure)
                 self.assert_refuses_at_blind_gates(world, bench, scaffold)
 
-    def test_inapplicable_script_fields_and_config_link_rate_are_opaque(self):
-        cases = (("script-incidental", "script", recovery_diagnostic),
-                 ("config-link-rate", "config", link_observation))
-        for name, role, fault in cases:
-            world, bench = self.prepare(name, role=role, fault=fault)
-            with self.subTest(name=name, operation="stage1"):
-                self.assertEqual(self.invoke(world, bench, "stage1", "guard_blind_values"), (0, b"", b""))
-            self.assertEqual(self.invoke(world, bench, "stage1"), (0, b"", b""))
-            self.assertEqual(self.invoke(world, bench, "commit-stage1"), (0, b"", b""))
-            with self.subTest(name=name, operation="preflight"):
-                self.assertEqual(self.invoke(world, bench, "preflight", "guard_blind_values"), (0, b"", b""))
-            self.assert_fresh(world, bench)
+    def test_config_link_rate_is_opaque(self):
+        world, bench = self.prepare("config-link-rate", role="config", fault=link_observation)
+        self.assertEqual(self.invoke(world, bench, "stage1", "guard_blind_values"), (0, b"", b""))
+        self.assertEqual(self.invoke(world, bench, "commit-stage1"), (0, b"", b""))
+        self.assertEqual(self.invoke(world, bench, "preflight", "guard_blind_values"), (0, b"", b""))
+        self.assert_fresh(world, bench)
 
     def test_native_admission_and_score_wire_faults_refuse_fresh(self):
         scaffold = self.stage_scaffold("admission-wire-scaffold")
@@ -650,6 +633,9 @@ class LookPathFollowupTests(TestCase):
         stamps = (9007199254740992, 9007199254740993)
         for ns in stamps:
             self.assertEqual(blind.project_json(str(ns).encode(), blind.INTEGER, strict=True), ns)
+            record = {"epoch_ns": ns + 77, "monotonic_before_ns": ns, "monotonic_after_ns": ns}
+            timing = reader.EpisodeTiming("synthetic", "synthetic", ns, ns + 1, (record,), None, None)
+            self.assertEqual(timing.epoch_minus_monotonic_ns, 77)
         for raw in (b"1.0", b"1e0", b"true", b'"1"'):
             with self.subTest(raw=raw), self.assertRaises(blind.TimeFieldError):
                 blind.project_json(raw, blind.INTEGER, strict=True)
@@ -659,6 +645,103 @@ class LookPathFollowupTests(TestCase):
             reader._times_digest([2**63 - 1], -1)
         with self.assertRaises(blind.TimeFieldError):
             reader._support_digest([(2**63, 0, 2**63)])
+
+    def test_v9_opaque_object_syntax_and_rounded_range(self):
+        for payload in (b'{"x":1e309}', b'{"x":NaN}', br'{"x":1,"\u0078":2}',
+                        b'{"x":' + b"[" * 66 + b"0" + b"]" * 66 + b"}", b"[]"):
+            with self.subTest(payload=payload), self.assertRaises(blind.TimeFieldError):
+                blind.project_json(payload, blind.OPAQUE_OBJECT, strict=True)
+        with patch.object(blind, "_convert", side_effect=AssertionError("opaque reading converted")):
+            self.assertEqual(blind.project_json(b'{"arbitrary":{"reading":0.0001}}', blind.OPAQUE_OBJECT), {})
+            self.assertEqual(blind.project_json(b"100.000000000000001", blind.OPAQUE_PERCENT), 0)
+            for raw in (b"100.00000000000001", b"-0.01", b'"100"', b"true"):
+                with self.subTest(raw=raw), self.assertRaises(blind.TimeFieldError):
+                    blind.project_json(raw, blind.OPAQUE_PERCENT)
+
+    def test_v9_role_schema_member_matrix(self):
+        def sample(schema):
+            if isinstance(schema, blind.Nullable):
+                return sample(schema.fields)
+            if isinstance(schema, blind.TokenForms):
+                form, shape = next(iter(schema.variants.items()))
+                return {} if form == "{" and shape is blind.SKIP else sample(shape)
+            if isinstance(schema, blind.TaggedFields):
+                name, fields = next(iter(schema.fields.items()))
+                return {**sample(fields), schema.tag: name}
+            if isinstance(schema, dict):
+                return {key: sample(value) for key, value in schema.items()}
+            if isinstance(schema, list):
+                return [sample(schema[0])]
+            if schema in (blind.OPAQUE_OBJECT,) or isinstance(schema, blind.KeyedFields):
+                return {}
+            if schema is blind.EMPTY_ARRAY:
+                return []
+            if schema is blind.BOOLEAN:
+                return True
+            if schema in (blind.STRING, blind.OPAQUE_STRING, blind.OPAQUE_NONBLANK_STRING,
+                          blind.OPAQUE_STRING_OR_INTEGER):
+                return "synthetic"
+            return 0
+
+        def project(data, schema):
+            return blind.project_json(json.dumps(data).encode(), schema, strict=True)
+
+        def inspect(schema, path):
+            if isinstance(schema, blind.Nullable):
+                return inspect(schema.fields, path)
+            if isinstance(schema, blind.TokenForms):
+                for token, variant in schema.variants.items():
+                    inspect(variant, (*path, token))
+            if isinstance(schema, blind.TaggedFields):
+                for name, variant in schema.fields.items():
+                    inspect(variant, (*path, name))
+            elif isinstance(schema, list):
+                inspect(schema[0], (*path, "[]"))
+            elif isinstance(schema, blind.RecordFields):
+                data = sample(schema)
+                project(data, schema)
+                required = (schema.keys() if isinstance(schema, blind.RequiredRecordFields)
+                            else getattr(schema, "required", ()))
+                with self.subTest(path=path, mutation="unknown"), self.assertRaises(blind.TimeFieldError):
+                    project(dict(data, undeclared=True), schema)
+                for field, field_schema in schema.items():
+                    with self.subTest(path=path, field=field, mutation="missing"):
+                        without = {key: value for key, value in data.items() if key != field}
+                        if field in required:
+                            with self.assertRaises(blind.TimeFieldError):
+                                project(without, schema)
+                        else:
+                            project(without, schema)
+                    if field_schema is not blind.SKIP:
+                        wrong = {} if type(data[field]) is bool else False
+                        with self.subTest(path=path, field=field, mutation="type"), self.assertRaises(blind.TimeFieldError):
+                            project(dict(data, **{field: wrong}), schema)
+                    inspect(field_schema, (*path, field))
+
+        for name, schema in (
+            ("episode", reader.EPISODE_FIELDS), ("metadata", reader.METADATA_FIELDS),
+            ("producer-metadata", reader.PRODUCER_METADATA_FIELDS), ("config", reader.CONFIG_FIELDS),
+            ("work", inputs.WORK_FIELDS), ("result", inputs.RUNTIME_RESULT_FIELDS), ("copy", inputs.RESULT_FIELDS),
+            ("meter", blind.METER_FIELDS),
+        ):
+            inspect(schema, (name,))
+
+    def test_v9_required_native_step_members_by_kind(self):
+        world = self.pristine
+        for leg in FROZEN["IDS"]:
+            _, runtime, _ = FROZEN["location"](world, leg)
+            raw = registrar.read(runtime / "script-work.json")
+            with self.subTest(leg=leg):
+                projected = blind.project_json(json.dumps(raw).encode(), inputs.WORK_FIELDS, strict=True)
+                inputs._check_script_requests(projected, projected["script"])
+            for index, row in enumerate(raw["steps"]):
+                for field in row:
+                    with self.subTest(leg=leg, step=index, field=field, mutation="missing"):
+                        child = json.loads(json.dumps(raw))
+                        child["steps"][index].pop(field)
+                        with self.assertRaises(blind.TimeFieldError):
+                            projected = blind.project_json(json.dumps(child).encode(), inputs.WORK_FIELDS, strict=True)
+                            inputs._check_script_requests(projected, projected["script"])
 
     def test_episode_record_fields_refuse_missing_type_and_numeric_faults(self):
         _, _, bundle = FROZEN["location"](self.pristine, "L002")
@@ -692,6 +775,11 @@ class LookPathFollowupTests(TestCase):
                             row[field] = {"wrong-type": False, "nonfinite": float("inf"), "oversized": 10**309}[mutation]
                             if field in ("logged", "state_changed", "side_task_success") and mutation == "wrong-type":
                                 row[field] = []
+                            if mutation == "oversized" and field in (
+                                "seed", "index", "context_tokens", "prefill_tokens", "decode_tokens", "hidden_tokens",
+                                "args_bytes", "result_bytes", "num_experts", "top_k",
+                            ):
+                                row[field] = 1.0
                         with self.assertRaises(blind.TimeFieldError):
                             reader.episode_timing(json.dumps(document).encode(), metadata)
             document = json.loads(json.dumps(episode))
@@ -715,20 +803,18 @@ class LookPathFollowupTests(TestCase):
                 self.assertEqual(self.invoke(world, bench, "status", fault), (3, b"", b"REFUSE SPENT\n"))
 
     def test_step_projection_keeps_only_applicable_fields_independent_of_key_order(self):
-        rows = [dict(first_token_ns={"synthetic": "opaque"}, requested_s=600, kind="recovery"),
-                dict(kind="turn", requested_s="opaque", requested_tokens=4)]
-        expected = {"steps": [{"kind": "recovery", "requested_s": 600},
-                              {"kind": "turn", "requested_tokens": 4}]}
-        original = blind._convert
-
-        def checked(kind, text):
-            self.assertNotIn("opaque", text)
-            return original(kind, text)
-
+        _, runtime, _ = FROZEN["location"](self.pristine, "L003")
+        work = registrar.read(runtime / "script-work.json")
+        expected = blind.project_json(json.dumps(work).encode(), inputs.WORK_FIELDS, strict=True)
         for sort_keys in (False, True):
-            with patch.object(blind, "_convert", checked):
-                raw = json.dumps({"steps": rows}, sort_keys=sort_keys).encode()
-                self.assertEqual(blind.project_json(raw, inputs.WORK_FIELDS, strict=True), expected)
+            raw = json.dumps(work, sort_keys=sort_keys).encode()
+            self.assertEqual(blind.project_json(raw, inputs.WORK_FIELDS, strict=True), expected)
+        for row, key in ((work["steps"][0], "requested_s"), (work["steps"][-1], "first_token_ns")):
+            with self.subTest(key=key):
+                row[key] = "opaque"
+                with self.assertRaises(blind.TimeFieldError):
+                    blind.project_json(json.dumps(work).encode(), inputs.WORK_FIELDS, strict=True)
+                del row[key]
 
     def test_opaque_numeric_shape_preserves_binary64_boundaries(self):
         midpoint = 2**1024 - 2**970
@@ -785,7 +871,6 @@ class LookPathFollowupTests(TestCase):
             mutate(world, "episode", g0_diagnostic)
 
             def mismatch(work):
-                recovery_diagnostic(work)
                 turn = next(step for step in work["steps"] if step["kind"] == "turn")
                 turn["first_token_ns"] += 1
 
@@ -864,17 +949,18 @@ class LookPathFollowupTests(TestCase):
             payload = b'{"clock":17,"cpu":{"thread_cpu_ns":987654321}}'
             self.assertEqual(blind.project_json(payload, {"clock": None}, strict=True), {"clock": 17})
             stream = (b'{"k":"h","schema":"joulewise.km003c_stream.v1","rate_idx":2,"status":"streaming"}\n'
-                      b'{"k":"b","rx":1,"n":0,"p":"","smc":{"sensor":987654321}}\n')
+                      b'{"k":"b","rx":1,"n":0,"p":"","smc":{"PDTR":987654321}}\n')
             self.assertFalse(reader.blind_stream("synthetic", stream).present)
             _, _, bundle = FROZEN["location"](self.pristine, "L002")
             episode = registrar.read(bundle / "outputs/align_episode.json")
-            episode["main_task_score"] = episode["hardware"]["ignored_sensor"] = int(forbidden)
+            episode["main_task_score"] = int(forbidden)
+            episode["hardware"]["task_diagnostics"]["evaluation_outputs"]["ignored_sensor"] = int(forbidden)
             timing = reader.episode_timing(registrar.manifest.canonical(episode), {})
             rails = (bundle / "power_trace.csv").read_bytes().splitlines()
             masked = [rails[0]]
             for row in rails[1:]:
                 fields = row.split(b",")
-                fields[1] = b"opaque-value"
+                fields[1] = forbidden.encode()
                 masked.append(b",".join(fields))
             metadata = registrar.read(bundle / "metadata.json")
             evidence = metadata["uncertainty_evidence"]

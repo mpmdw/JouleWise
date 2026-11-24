@@ -12,13 +12,16 @@ from .controls_layout import GateRefusal, open_file, require_private, write_excl
 from .controls_manifest import ISSUED_SETTINGS, STAGE1_SCHEMA, canonical
 from .controls_print import KIT_ID, MASTER_SEED, PILOT, REMAINDER, _hex_pin
 from .controls_reader import (
+    AC_POWERMODE,
     ELIGIBLE, ReaderBindingError, binding_projection, blind_stream, rail_timing, select_dc,
 )
 from .custody_pins import PinRefusal, safe_relative
 from .description_inputs import PinnedInput
 from .qualification_manifest import _decode
 from .controls_time_fields import (
-    NUMBER, OPAQUE_STRING, DigestFields, Nullable, RecordFields, TaggedFields, TimeFieldError, project_json,
+    BOOLEAN, EMPTY_ARRAY, INT64, INTEGER, NUMBER, OPAQUE_FINITE_NUMBER, OPAQUE_INTEGER, OPAQUE_NONNEGATIVE_INTEGER,
+    OPAQUE_STRING, STRING,
+    DigestFields, Nullable, RecordFields, RequiredRecordFields, TaggedFields, TimeFieldError, WireRecord, project_json,
 )
 
 
@@ -31,29 +34,79 @@ FILES = {
     "metadata": "metadata.json",
     "rails": "power_trace.csv",
 }
-SCRIPT_FIELDS = RecordFields.fromkeys(("kind", "hidden_tokens", "cpu_s", "gap_s", "recovery_s"))
-SCRIPT_FIELDS["turn_tokens"] = [None]
+SCRIPT_FIELDS = RequiredRecordFields(
+    kind=STRING, hidden_tokens=INTEGER, cpu_s=INTEGER, gap_s=INTEGER, recovery_s=NUMBER,
+    turn_tokens=[INTEGER],
+)
 SPEC_FIELDS = DigestFields(
     **dict.fromkeys(("schema", "campaign_id", "g0_role", "prefill_tokens", "leg_id", "seed",
                      "start_band", "decode_tokens", "g0_shape")),
     script=SCRIPT_FIELDS,
 )
-STEP_FIELDS = {"kind": None, "complete": None, "started_ns": NUMBER, "ended_ns": NUMBER}
-CALL_FIELDS = {**STEP_FIELDS, "first_token_ns": Nullable(NUMBER), "actual_tokens": Nullable(NUMBER),
-               "requested_tokens": NUMBER, "context_tokens": NUMBER}
-INTERVAL_FIELDS = {**STEP_FIELDS, "requested_s": NUMBER}
-WORK_FIELDS = {
-    **dict.fromkeys(("schema", "leg_id", "leg_spec_sha256", "complete")),
-    "script": SCRIPT_FIELDS,
-    "steps": [TaggedFields("kind", {**dict.fromkeys(("turn", "hidden"), CALL_FIELDS),
-                                    **dict.fromkeys(("cpu", "gap", "recovery"), INTERVAL_FIELDS)})],
+STEP_FIELDS = {"kind": STRING, "complete": BOOLEAN}
+STEP_TIMES = dict.fromkeys(("started_ns", "ended_ns"), INT64)
+CALL_RETURN_FIELDS = {
+    **STEP_TIMES, "first_token_ns": Nullable(INT64), "context_tokens": INTEGER, "cached_prompt_tokens": INTEGER,
 }
+CALL_FIELDS = WireRecord({**STEP_FIELDS, "requested_tokens": INTEGER, "actual_tokens": Nullable(INTEGER)},
+                         CALL_RETURN_FIELDS)
+INTERVAL_TIMES = {**STEP_TIMES, **dict.fromkeys(("started_epoch_s", "ended_epoch_s"), OPAQUE_FINITE_NUMBER)}
+INTERVAL_FIELDS = WireRecord({**STEP_FIELDS, "requested_s": NUMBER}, INTERVAL_TIMES)
+CPU_FIELDS = WireRecord({**STEP_FIELDS, "requested_s": INTEGER},
+                        {**INTERVAL_TIMES, "thread_cpu_ns": OPAQUE_NONNEGATIVE_INTEGER})
+STEP_VARIANTS = {**dict.fromkeys(("turn", "hidden"), CALL_FIELDS),
+                 **dict.fromkeys(("gap", "recovery"), INTERVAL_FIELDS), "cpu": CPU_FIELDS}
+WORK_FIELDS = WireRecord(
+    {"schema": STRING, "leg_id": STRING, "leg_spec_sha256": STRING, "complete": BOOLEAN,
+     "script": SCRIPT_FIELDS, "steps": [TaggedFields("kind", STEP_VARIANTS)]},
+    {"failed_envelope": RequiredRecordFields(
+        **dict.fromkeys(("index", "context_tokens", "prefill_tokens", "decode_tokens", "hidden_tokens"), OPAQUE_INTEGER),
+        start_ns=INT64, end_ns=INT64, first_token_ns=Nullable(INT64), tool_calls=EMPTY_ARRAY, logged=BOOLEAN,
+    )},
+)
 REFERENCE_FIELDS = {"schema": None, "status": None, "source": {"run_id": None, "config_sha256": None},
                     "record_sha256": None}
-RESULT_FIELDS = dict.fromkeys((
-    "schema", "kind", "backend", "leg_id", "leg_status", "bundle", "member_status", "g0_released",
-    "g0_role", "g0_reference_record_sha256", "config_sha256", "script_complete", "script_record_sha256",
-    "decode_tokens", "prefill_tokens", "turn_start_ns", "turn_end_ns", "first_token_ns",
+RESULT_REQUIRED = {
+    **dict.fromkeys(("leg_id", "leg_status", "bundle", "member_status", "g0_role", "script_record_sha256"), STRING),
+    **dict.fromkeys(("g0_released", "script_complete"), BOOLEAN),
+    "g0_reference_record_sha256": Nullable(STRING),
+    "decode_tokens": Nullable(INTEGER), "prefill_tokens": Nullable(INTEGER),
+}
+RESULT_OPTIONAL = {
+    **dict.fromkeys(("turn_start_ns", "turn_end_ns", "first_token_ns"), Nullable(INT64)),
+    "config_sha256": STRING, "g0_outcome": Nullable(OPAQUE_STRING),
+    "g0_wait_s": Nullable(OPAQUE_FINITE_NUMBER), "g0_timeout_s": OPAQUE_FINITE_NUMBER,
+    "quiet_s": OPAQUE_FINITE_NUMBER, "prefill_chars": OPAQUE_INTEGER, "decode_cap": OPAQUE_INTEGER,
+    "decode_cap_reached": BOOLEAN, "episode_flags": [OPAQUE_STRING], "incomplete_reasons": [OPAQUE_STRING],
+    "ac_powermode": Nullable(AC_POWERMODE), "quiet_spans_ns": [[INT64]], "g0_shape": OPAQUE_STRING,
+    "g0_reference_source": Nullable(OPAQUE_STRING), "os_level_max": Nullable(OPAQUE_INTEGER),
+    "pm_nominal": Nullable(BOOLEAN),
+}
+BATTERY_SAMPLE = RequiredRecordFields(epoch_s=OPAQUE_FINITE_NUMBER, soc_pct=OPAQUE_INTEGER,
+                                      state=Nullable(OPAQUE_STRING), ac=BOOLEAN, raw=OPAQUE_STRING)
+BATTERY_RESULT = RequiredRecordFields(
+    samples=OPAQUE_INTEGER, valid_samples=OPAQUE_INTEGER, drain_pct_per_h=Nullable(OPAQUE_FINITE_NUMBER),
+    drain_unavailable_reason=Nullable(OPAQUE_STRING),
+    charge_resume_events=[RequiredRecordFields(epoch_s=OPAQUE_FINITE_NUMBER, soc_pct=OPAQUE_INTEGER,
+                                              prior_soc_pct=OPAQUE_INTEGER)],
+    charge_resume_soc_pct=Nullable(OPAQUE_INTEGER), first=Nullable(BATTERY_SAMPLE), last=Nullable(BATTERY_SAMPLE),
+    resolution=OPAQUE_STRING,
+)
+RUNTIME_ONLY = {
+    "cpu_busy_cores": [OPAQUE_FINITE_NUMBER], "cpu_busy_t_s": [OPAQUE_FINITE_NUMBER],
+    "census": [RequiredRecordFields(
+        label=OPAQUE_STRING, t_s=OPAQUE_FINITE_NUMBER,
+        processes=[RequiredRecordFields(pid=OPAQUE_INTEGER, ppid=OPAQUE_INTEGER,
+                                        pcpu=OPAQUE_FINITE_NUMBER, comm=OPAQUE_STRING)])],
+    "load_journal_errors": [OPAQUE_STRING], "battery": BATTERY_RESULT,
+}
+RUNTIME_IDENTITY = dict.fromkeys(("schema", "kind", "backend"), STRING)
+RESULT_FIELDS = WireRecord(RESULT_REQUIRED, {**RESULT_OPTIONAL, **RUNTIME_IDENTITY, **RUNTIME_ONLY})
+RUNTIME_RESULT_FIELDS = WireRecord({**RESULT_REQUIRED, **RUNTIME_IDENTITY}, {**RESULT_OPTIONAL, **RUNTIME_ONLY})
+NATIVE_RESULT_COPY = frozenset((
+    "config_sha256", "g0_outcome", "g0_wait_s", "g0_timeout_s", "quiet_s", "prefill_chars", "decode_cap",
+    "decode_cap_reached", "os_level_max", "pm_nominal", "incomplete_reasons", "ac_powermode", "quiet_spans_ns",
+    "g0_shape", "g0_reference_source",
 ))
 ATTEMPT_FIELDS = DigestFields.fromkeys(("attempt", "redone", "output_dir", "leg_status", "contaminated"))
 CLOSE_FIELDS = {
@@ -72,8 +125,8 @@ CLOSE_FIELDS = {
         "span_reference": Nullable(dict.fromkeys(("leg_id", "attempt", "excluded"))),
     }],
 }
-LEG_RECORD_FIELDS = {"schema": None, "spec": DigestFields(), "attempts": [ATTEMPT_FIELDS],
-                     "result": RESULT_FIELDS}
+LEG_RECORD_FIELDS = RequiredRecordFields(schema=STRING, spec=DigestFields(), attempts=[ATTEMPT_FIELDS],
+                                         result=RESULT_FIELDS)
 TERMINAL_FIELDS = {"schema": None, "status": None, "files": {"runtime_result.json": None}}
 STREAM = re.compile(r"hazards/meter/stream-[0-9]{3,}\.jsonl")
 
@@ -202,8 +255,24 @@ def _check_script_requests(work, issued):
         raise TimeFieldError("incomplete step in completed native script")
     turns = iter(issued["turn_tokens"])
     intervals = {"cpu": "cpu_s", "gap": "gap_s", "recovery": "recovery_s"}
-    for row in work["steps"]:
+    for index, row in enumerate(work["steps"]):
         kind = row["kind"]
+        trailing = not work["complete"] and index == len(work["steps"]) - 1 and not row["complete"]
+        if kind in ("turn", "hidden"):
+            if row["actual_tokens"] is None:
+                if not trailing or {"first_token_ns", "context_tokens", "cached_prompt_tokens"} & row.keys():
+                    raise TimeFieldError("invalid native interrupted call")
+            elif (CALL_RETURN_FIELDS.keys() - row.keys()
+                  or not 0 <= row["cached_prompt_tokens"] <= row["context_tokens"]):
+                raise TimeFieldError("missing or invalid native returned call fields")
+        else:
+            required = INTERVAL_TIMES.keys() | ({"thread_cpu_ns"} if kind == "cpu" else set())
+            if trailing:
+                required = {"started_ns", "started_epoch_s"}
+            if (required - row.keys()
+                    or ("ended_ns" in row) != ("ended_epoch_s" in row)
+                    or (kind == "cpu" and ("ended_ns" in row) != ("thread_cpu_ns" in row))):
+                raise TimeFieldError("missing or unmatched native interval stamps")
         if kind == "turn":
             actual, expected = row["requested_tokens"], next(turns, None)
         elif kind == "hidden":
@@ -254,7 +323,15 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
         return _entry_from_check(check, role, runtime + "/" + member, pin, parent=terminal["sha256"])
 
     result_entry = file("result", "runtime_result.json")
-    result = project_json(_read(root / result_entry["path"], result_entry), RESULT_FIELDS)
+    result = project_json(_read(root / result_entry["path"], result_entry), RUNTIME_RESULT_FIELDS, strict=True)
+    expected_turn = {"turn_start_ns", "turn_end_ns", "first_token_ns"} if result["prefill_tokens"] is not None else set()
+    if expected_turn - result.keys() or expected_turn - record["result"].keys():
+        raise TimeFieldError("missing native runtime turn fields")
+    if not synthetic and (
+        (NATIVE_RESULT_COPY | RUNTIME_ONLY.keys() | {"episode_flags"}) - result.keys()
+        or NATIVE_RESULT_COPY - record["result"].keys()
+    ):
+        raise TimeFieldError("missing native runtime result fields")
     _require(result["schema"] == "joulewise.align.r1_runtime_result.v1"
              and result["kind"] == "cadence-leg" and result["leg_id"] == leg_id
              and result["g0_role"] == role and (synthetic or result["backend"] != "synthetic")
@@ -295,7 +372,7 @@ def _terminal(root, check, close_leg, kit_leg, ordinal, *, synthetic):
         hidden = [step["actual_tokens"] for step in work["steps"] if step["kind"] == "hidden"]
         if len(hidden) == 1:
             hidden_delivered = hidden[0]
-            _require(type(hidden_delivered) is int and 0 <= hidden_delivered <= spec["script"]["hidden_tokens"])
+            _require(hidden_delivered is None or 0 <= hidden_delivered <= spec["script"]["hidden_tokens"])
         if work["complete"] and spec["script"]["kind"] == "hidden":
             _require(hidden_delivered == spec["script"]["hidden_tokens"])
         for name, member in FILES.items():
@@ -329,6 +406,7 @@ class Inputs:
     legs: dict
     certificates: dict
     view_refusals: dict
+    synthetic: bool = False
 
     @property
     def positions(self):
@@ -365,7 +443,7 @@ def _make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic):
     kit = _kit_inputs(kit_raw, runner_commit, synthetic=synthetic)
     inventory = dict(schema=INVENTORY_SCHEMA, kit_sha256=kit_sha, runner_commit=runner_commit,
                      spans={}, positions={})
-    result = Inputs(source, private, inventory, {}, {}, {})
+    result = Inputs(source, private, inventory, {}, {}, {}, synthetic=synthetic)
     episode_ids = set()
     _require(len(checks) == 2 and len({row["span_id"].casefold() for row in checks}) == 2
              and len({row["check_item"] for row in checks}) == len({row["close_item"] for row in checks}) == 2)
@@ -399,7 +477,7 @@ def _make_inputs(source, private, kit_raw, checks, runner_commit, *, synthetic):
                 payloads = {name: _read(root / files[name]["path"], files[name]) for name in FILES}
                 timing, period, evidence = binding_projection(
                     payloads["episode"], payloads["config"], payloads["metadata"],
-                    run_id=position["run_id"], config_sha256=files["config"]["sha256"],
+                    run_id=position["run_id"], config_sha256=files["config"]["sha256"], synthetic=synthetic,
                 )
                 if timing.episode_id in episode_ids:
                     raise TimeFieldError("duplicate native episode identity")

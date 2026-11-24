@@ -6,6 +6,8 @@ import io
 import re
 import sys
 
+from joulewise.hazards.smc import KEYS as SMC_KEYS
+
 
 SAMPLE_BYTES = 20
 HEADER_KEYS = ("k", "schema", "status", "rate_idx", "start_raw_ns", "start_real_ns", "start_mono_ns", "boot_id")
@@ -32,10 +34,14 @@ SKIP = object()
 BOOLEAN = object()
 STRING = object()
 INTEGER = object()
+INT64 = object()
 NUMBER = object()
 OPAQUE_INTEGER = object()
+OPAQUE_NONNEGATIVE_INTEGER = object()
+OPAQUE_OBJECT = object()
 OPAQUE_FINITE_NUMBER = object()
 OPAQUE_NONNEGATIVE_NUMBER = object()
+OPAQUE_PERCENT = object()
 OPAQUE_STRING = object()
 OPAQUE_NONBLANK_STRING = object()
 OPAQUE_STRING_OR_INTEGER = object()
@@ -47,6 +53,29 @@ class RecordFields(dict):
 
 class RequiredRecordFields(RecordFields):
     """A record whose native serializer always emits every field."""
+
+
+class WireRecord(RecordFields):
+    """A closed producer record with required and conditional members."""
+
+    def __init__(self, required, optional=None):
+        super().__init__(required, **(optional or {}))
+        self.required = frozenset(required)
+
+
+class KeyedFields:
+    """A vocabulary-constrained map whose entries share one value schema."""
+
+    def __init__(self, key_pattern, values):
+        self.key_pattern = re.compile(key_pattern)
+        self.values = values
+
+
+class TokenForms:
+    """A field whose producer has variants with distinct JSON types."""
+
+    def __init__(self, variants):
+        self.variants = variants
 
 
 class Nullable:
@@ -93,9 +122,13 @@ def _has_nonblank_text(raw):
 # smallest subnormal. Compare decimal spellings without converting a reading.
 _OVERFLOW = (308, str(2**1024 - 2**970).rstrip("0"))
 _HALF_SUBNORMAL = (-324, str(5**1075))
+# The halfway point above 100 rounds to 100 (its low significand bit is even).
+_PERCENT_CEILING = (2, str((100 * 2**47 + 1) * 5**47))
 
 
-def _valid_opaque_number(text, *, nonnegative):
+def _valid_opaque_number(text, *, nonnegative, ceiling=None):
+    if not nonnegative and ceiling is None and len(text) < 309 and "e" not in text and "E" not in text:
+        return True
     significand, _, exponent = text.lower().partition("e")
     whole, _, fraction = significand.lstrip("-").partition(".")
     digits = (whole + fraction).lstrip("0")
@@ -110,7 +143,7 @@ def _valid_opaque_number(text, *, nonnegative):
     magnitude = (len(digits) - len(fraction) - 1 + shift, digits.rstrip("0"))
     if nonnegative and significand.startswith("-"):
         return magnitude <= _HALF_SUBNORMAL
-    return magnitude < _OVERFLOW
+    return magnitude <= ceiling if ceiling is not None else magnitude < _OVERFLOW
 
 
 def _unstring(raw):
@@ -176,10 +209,12 @@ def _tokens(s):
             return
 
 
-def _skip_value(it, first, depth, *, strict=False):
+def _skip_value(it, first, depth, *, strict=False, finite=False):
     kind, text = first
     if kind in ("str", "lit", "num"):
         if strict and kind == "lit" and text not in ("true", "false", "null"):
+            raise _Bad()
+        if finite and kind == "num" and not _valid_opaque_number(text, nonnegative=False):
             raise _Bad()
         return
     if kind != "punct" or text not in "{[":
@@ -203,7 +238,7 @@ def _skip_value(it, first, depth, *, strict=False):
             nxt = next(it, None)
         if nxt is None:
             raise _Bad()
-        _skip_value(it, nxt, depth + 1, strict=strict)
+        _skip_value(it, nxt, depth + 1, strict=strict, finite=finite)
         sep = next(it, None)
         if sep == ("punct", close):
             return
@@ -283,52 +318,75 @@ def _counters(text, where):
     return tuple(raw[i] | (raw[i + 1] << 8) for i in range(0, len(raw), SAMPLE_BYTES))
 
 
+_METER_HEADER = WireRecord(
+    {"k": STRING, "schema": STRING, "status": STRING, "rate_idx": INTEGER},
+    {**dict.fromkeys(("start_raw_ns", "start_real_ns", "start_mono_ns"), INT64),
+     **dict.fromkeys(("reason", "model", "hardware_version", "manufacture_date",
+                      "firmware_version", "firmware_date", "info_error"), Nullable(OPAQUE_STRING)),
+     **dict.fromkeys(("vid", "pid", "qos", "hardware_id", "hardware_id_form"), OPAQUE_STRING),
+     **dict.fromkeys(("sps", "process_id", "init_attempts", "auth_level"), OPAQUE_INTEGER),
+     "poll_s": OPAQUE_FINITE_NUMBER, "boot_id": Nullable(STRING), "init_errors": [OPAQUE_STRING],
+     "smc_keys": [OPAQUE_STRING], "smc_units": WireRecord(dict.fromkeys(SMC_KEYS, OPAQUE_STRING)),
+     "descriptor": RequiredRecordFields.fromkeys(("bcd_device", "manufacturer", "product", "serial"),
+                                                Nullable(OPAQUE_STRING))},
+)
+_METER_POLL = WireRecord(
+    {"k": STRING, "rx": INT64, "n": INTEGER, "p": STRING},
+    {"tx": INT64, "rt": INT64, "smc": WireRecord({}, {
+        key: Nullable(OPAQUE_INTEGER if key in ("B0AC", "B0AV") else OPAQUE_FINITE_NUMBER)
+        for key in SMC_KEYS
+     }),
+     "smc_err": WireRecord({}, dict.fromkeys(SMC_KEYS, OPAQUE_STRING))},
+)
+_METER_TRAILER = WireRecord(
+    {"k": STRING},
+    {**dict.fromkeys(("end_raw_ns", "end_mono_ns"), INT64),
+     **dict.fromkeys(("polls", "empties", "bad", "usb_errors", "maxrss", "nvcsw", "nivcsw"), OPAQUE_INTEGER),
+     **dict.fromkeys(("elapsed_s", "utime_s", "stime_s"), OPAQUE_FINITE_NUMBER),
+     "stop_reason": OPAQUE_STRING},
+)
+_METER_ERROR = WireRecord({"k": STRING, "rx": INT64}, {"raw": OPAQUE_STRING, "usb_error": OPAQUE_STRING})
+METER_FIELDS = TaggedFields("k", {"h": _METER_HEADER, "t": _METER_TRAILER, "b": _METER_POLL, "e": _METER_ERROR})
+_METER_PREFIX = re.compile(r'\s*\{\s*"k"\s*:\s*"([htbe])"')
+
+
 def stream_fields(payload, name):
     """One stream's time view: {"name", "header", "trailer", "first_line_header", "polls", "errors"}. ``header`` is
     the last line of kind "h" and ``trailer`` the last of kind "t" (km003c_parse.load); ``first_line_header`` is the
     first line when it is a header (rule 4's reading). ``polls`` are the kind-"b" lines in file order, each
     {"tx", "rx", "rt", "n", "seq"} with ``seq`` the payload's counters or None (no payload). Absent fields are omitted."""
-    lines = payload.decode("utf-8").split("\n")
+    try:
+        lines = payload.decode("utf-8").split("\n")
+    except UnicodeError as error:
+        raise TimeFieldError("invalid native stream encoding") from error
     header = trailer = first = None
     polls, errors, seen = [], 0, False
     for number, line in enumerate(lines, 1):
         if not line.strip():
             continue
         is_first, seen = not seen, True
-        members = scan_line(line)
-        if members is None:
-            if number != len(lines):
-                errors += 1                            # a protocol error line in the decoder's count
-            continue
-        kind = _kind(members)
+        prefix = _METER_PREFIX.match(line)
+        fields = METER_FIELDS.fields[prefix[1]] if prefix else METER_FIELDS
+        members = project_json(line, fields, strict=True)
+        kind = members["k"]
         if kind == "h":
             if header is not None or not is_first:
                 raise TimeFieldError("unexpected native stream header")
-            header = _pick(members, HEADER_KEYS)
+            header = {key: members[key] for key in HEADER_KEYS if key in members}
             if is_first:
                 first = header
         elif kind == "t":
             if trailer is not None:
                 raise TimeFieldError("duplicate native stream trailer")
-            trailer = _pick(members, TRAILER_KEYS)
+            trailer = {key: members[key] for key in TRAILER_KEYS if key in members}
         elif kind == "e":
             errors += 1
         elif kind == "b":
             if header is None or trailer is not None:
                 raise TimeFieldError("poll outside native stream anchors")
-            poll = _pick(members, POLL_KEYS)
-            if "smc" in members and members["smc"] != (NESTED, "{"):
-                raise TimeFieldError("non-object native poll smc")
-            if "p" in members:
-                pk, ptext = members["p"]
-                if pk is NESTED:
-                    poll["p_shape"] = "nested"
-                else:
-                    p = _unstring(ptext) if pk == "str" else None
-                    if pk == "str" and p:
-                        poll["seq"] = _counters(p, f"{name}:{number}")
-                    elif pk != "str":
-                        poll["p_shape"] = "not a string"
+            poll = {key: members[key] for key in POLL_KEYS if key in members}
+            if members["p"]:
+                poll["seq"] = _counters(members["p"], f"{name}:{number}")
             polls.append(poll)
     return {"name": name, "header": header, "trailer": trailer, "first_line_header": first,
             "polls": polls, "errors": errors}
@@ -341,12 +399,23 @@ def _project(it, token, fields, depth, *, strict):
         if token == ("lit", "null"):
             return None
         fields = fields.fields
+    if isinstance(fields, TokenForms):
+        form = token[1] if token[0] == "punct" else token[0]
+        if form not in fields.variants:
+            raise _Bad()
+        return _project(it, token, fields.variants[form], depth, strict=strict)
     if fields is EMPTY_ARRAY:
         if token != ("punct", "[") or next(it) != ("punct", "]"):
             raise _Bad()
         return []
     if fields is SKIP:
-        _skip_value(it, token, depth, strict=strict)
+        _skip_value(it, token, depth, strict=strict, finite=strict)
+        return None
+    if fields is OPAQUE_OBJECT:
+        if token != ("punct", "{"):
+            raise _Bad()
+        _skip_value(it, token, depth, strict=True, finite=True)
+        return {}
         return None
     if fields is BOOLEAN:
         if token not in (("lit", "false"), ("lit", "true")):
@@ -358,18 +427,25 @@ def _project(it, token, fields, depth, *, strict):
         return _convert(*token)
     if fields is OPAQUE_STRING_OR_INTEGER and token[0] == "str":
         return None
-    if fields in (INTEGER, OPAQUE_INTEGER, OPAQUE_STRING_OR_INTEGER):
-        if (token[0] != "num" or any(marker in token[1] for marker in ".eE")
-                or not _valid_opaque_number(token[1], nonnegative=False)):
+    if fields in (INTEGER, INT64, OPAQUE_INTEGER, OPAQUE_NONNEGATIVE_INTEGER, OPAQUE_STRING_OR_INTEGER):
+        if token[0] != "num" or any(marker in token[1] for marker in ".eE"):
             raise _Bad()
-        return _convert(*token) if fields is INTEGER else 0
+        if fields is OPAQUE_NONNEGATIVE_INTEGER and token[1].startswith("-") and token[1] != "-0":
+            raise _Bad()
+        if fields in (INTEGER, INT64):
+            value = _convert(*token)
+            if fields is INT64 and not -(2**63) <= value < 2**63:
+                raise _Bad()
+            return value
+        return 0
     if fields is NUMBER:
-        if token[0] != "num":
+        if token[0] != "num" or not _valid_opaque_number(token[1], nonnegative=False):
             raise _Bad()
-        return _convert(*token)
-    if fields in (OPAQUE_FINITE_NUMBER, OPAQUE_NONNEGATIVE_NUMBER):
+        return float(_convert(*token))
+    if fields in (OPAQUE_FINITE_NUMBER, OPAQUE_NONNEGATIVE_NUMBER, OPAQUE_PERCENT):
         if token[0] != "num" or not _valid_opaque_number(
-            token[1], nonnegative=fields is OPAQUE_NONNEGATIVE_NUMBER,
+            token[1], nonnegative=fields in (OPAQUE_NONNEGATIVE_NUMBER, OPAQUE_PERCENT),
+            ceiling=_PERCENT_CEILING if fields is OPAQUE_PERCENT else None,
         ):
             raise _Bad()
         return 0
@@ -406,7 +482,7 @@ def _project(it, token, fields, depth, *, strict):
         view = _project(capture_tokens(), token, dict(fields), depth, strict=strict)
         return view, digest.hexdigest()
     if (token == ("lit", "null") and isinstance(fields, RecordFields)
-            and not isinstance(fields, RequiredRecordFields)):
+            and not isinstance(fields, (RequiredRecordFields, WireRecord))):
         return None
     if fields is None:
         kind, value = token
@@ -433,9 +509,10 @@ def _project(it, token, fields, depth, *, strict):
     if token != ("punct", "{"):
         raise _Bad()
     result, seen = {}, set()
+    required = fields.keys() if isinstance(fields, RequiredRecordFields) else getattr(fields, "required", ())
     item = next(it)
     if item == ("punct", "}"):
-        if isinstance(fields, RequiredRecordFields) and fields:
+        if required:
             raise _Bad()
         return result
     while True:
@@ -446,7 +523,11 @@ def _project(it, token, fields, depth, *, strict):
             raise _Bad()
         seen.add(name)
         value = next(it)
-        if name in fields:
+        if isinstance(fields, KeyedFields):
+            if not fields.key_pattern.fullmatch(name):
+                raise _Bad()
+            result[name] = _project(it, value, fields.values, depth + 1, strict=strict)
+        elif name in fields:
             result[name] = _project(it, value, fields[name], depth + 1, strict=strict)
         elif isinstance(fields, RecordFields):
             raise _Bad()
@@ -454,7 +535,7 @@ def _project(it, token, fields, depth, *, strict):
             _skip_value(it, value, depth + 1, strict=strict)
         separator = next(it)
         if separator == ("punct", "}"):
-            if isinstance(fields, RequiredRecordFields) and seen != fields.keys():
+            if required and not required <= seen:
                 raise _Bad()
             return result
         if separator != ("punct", ","):
@@ -465,7 +546,7 @@ def _project(it, token, fields, depth, *, strict):
 def project_json(payload, fields, *, strict=False):
     """Convert only scalars on the allowlist; lex past every other value."""
     try:
-        tokens = _tokens(payload.decode("utf-8"))
+        tokens = _tokens(payload if isinstance(payload, str) else payload.decode("utf-8"))
         value = _project(tokens, next(tokens), fields, 0, strict=strict)
         if next(tokens, None) is not None:
             raise _Bad()
@@ -476,11 +557,18 @@ def project_json(payload, fields, *, strict=False):
 
 def rail_rows(payload):
     """Lex the native rail CSV without interpreting its measurement field."""
-    with io.StringIO(payload.decode("utf-8"), newline="") as stream:
-        rows = csv.reader(stream, strict=True)
-        if tuple(next(rows, ())) != RAIL_COLUMNS:
-            raise TimeFieldError("wrong native rail columns")
-        for row in rows:
-            if len(row) != len(RAIL_COLUMNS):
-                raise TimeFieldError("wrong native rail row width")
-            yield row
+    try:
+        with io.StringIO(payload.decode("utf-8"), newline="") as stream:
+            rows = csv.reader(stream, strict=True)
+            if tuple(next(rows, ())) != RAIL_COLUMNS:
+                raise TimeFieldError("wrong native rail columns")
+            for row in rows:
+                if len(row) != len(RAIL_COLUMNS):
+                    raise TimeFieldError("wrong native rail row width")
+                token = _TOKEN.fullmatch(row[1])
+                if (token is None or token.lastgroup != "num"
+                        or not _valid_opaque_number(token.group("num"), nonnegative=False)):
+                    raise TimeFieldError("invalid native rail reading token")
+                yield row
+    except (UnicodeError, csv.Error) as error:
+        raise TimeFieldError("invalid native rail CSV") from error
