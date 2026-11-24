@@ -47,6 +47,7 @@ def mutate(world, role, fault, *, leg="L002"):
         "episode": bundle / "outputs/align_episode.json",
         "config": bundle / "config.json",
         "metadata": bundle / "metadata.json",
+        "result": runtime / "runtime_result.json",
         "rails": bundle / "power_trace.csv",
         "script": runtime / "script-work.json",
     }[role]
@@ -592,6 +593,72 @@ class LookPathFollowupTests(TestCase):
         self.assertEqual(registrar.read(report)["aligned_power"]["qualified"], "yes")
         public = bench / "public" / registrar.LOOK / layout.PUBLIC_NAME
         self.assertNotIn(b"91827.375", public.read_bytes())
+
+    def test_v9_closed_wire_faults_refuse_at_every_entry_point(self):
+        scaffold = self.stage_scaffold("v9-schema-scaffold")
+        midpoint = 2**1024 - 2**970
+
+        def drop_step(kind, field):
+            return lambda work: next(row for row in work["steps"] if row["kind"] == kind).pop(field)
+
+        def stamp(value):
+            return lambda ep: ep["hardware"]["paired_clock_stamps_ns"][0].update(monotonic_before_ns=value)
+
+        def diagnostic(ep, **fields):
+            ep["hardware"]["task_diagnostics"].update(fields)
+
+        cases = (
+            ("diagnostic-sibling", "episode", "L002", lambda ep: diagnostic(ep, synthetic_observation=91827.375)),
+            ("wrong-object", "episode", "L002", lambda ep: diagnostic(ep, evaluation_outputs=[])),
+            ("wrong-tool-schema", "episode", "L002", lambda ep: diagnostic(ep, tool_schemas=[4])),
+            ("overflow-opaque-object", "episode", "L002", lambda ep: diagnostic(ep, evaluation_outputs={"x": 1 << 1024})),
+            ("hardware-unknown", "episode", "L002", lambda ep: ep["hardware"].update(synthetic_observation=0)),
+            ("thermal-unknown", "episode", "L002", lambda ep: ep["hardware"]["thermal"].update(extra=1)),
+            ("config-unknown", "config", "L002", lambda cfg: cfg.update(synthetic_telemetry={})),
+            ("config-nullable-missing", "config", "L002", lambda cfg: cfg["run_metadata"].pop("ambient_temp_c")),
+            ("metadata-unknown", "metadata", "L002", lambda meta: meta.update(extra_field=1)),
+            ("result-unknown", "result", "L002", lambda row: row.update(extra_field=1)),
+            ("script-undeclared", "script", "L002", recovery_diagnostic),
+            ("missing-cached-prompt", "script", "L002", drop_step("turn", "cached_prompt_tokens")),
+            ("missing-cpu-thread", "script", "L003", drop_step("cpu", "thread_cpu_ns")),
+            ("missing-interval-epoch-stamp", "script", "L002", drop_step("recovery", "ended_epoch_s")),
+            ("smc-unknown-key", "stream", "L002", lambda h, p: p.update(smc={"not_a_sensor": 1})),
+            ("smc-overflow", "stream", "L002", lambda h, p: p.update(smc={"PDTR": 10**309})),
+            ("split-integer-spelling", "episode", "L002", stamp(1.0)),
+            ("timestamp-int64-overflow", "stream", "L002", lambda h, p: h.update(start_real_ns=2**63)),
+            ("score-overflow-midpoint", "episode", "L002", lambda ep: ep.update(main_task_score=midpoint)),
+        )
+        for name, role, leg, fault in cases:
+            with self.subTest(name=name):
+                world, bench = self.prepare("v9-" + name, configure=lambda source: mutate(source, role, fault, leg=leg))
+                self.assert_refuses_at_blind_gates(world, bench, scaffold)
+
+    def test_v9_declared_diagnostic_payloads_and_numeric_rounding_are_valid(self):
+        def observations(ep):
+            ep["main_task_score"] = 2**1024 - 2**970 - 1
+            diagnostics = ep["hardware"]["task_diagnostics"]
+            diagnostics["evaluation_outputs"]["synthetic_observation"] = {"power_w": 91827.375}
+            diagnostics["tool_schemas"].append({"synthetic_observation": 91827.375})
+
+        world, bench = self.prepare("v9-valid", role="episode", fault=observations)
+        self.assertEqual(self.invoke(world, bench, "stage1", "guard_blind_values"), (0, b"", b""))
+        self.assertEqual(self.invoke(world, bench, "commit-stage1"), (0, b"", b""))
+        self.assertEqual(self.invoke(world, bench, "preflight", "guard_blind_values"), (0, b"", b""))
+        self.assert_fresh(world, bench)
+
+    def test_v9_integer_stamps_and_packed_time_bounds(self):
+        stamps = (9007199254740992, 9007199254740993)
+        for ns in stamps:
+            self.assertEqual(blind.project_json(str(ns).encode(), blind.INTEGER, strict=True), ns)
+        for raw in (b"1.0", b"1e0", b"true", b'"1"'):
+            with self.subTest(raw=raw), self.assertRaises(blind.TimeFieldError):
+                blind.project_json(raw, blind.INTEGER, strict=True)
+        self.assertNotEqual(reader._times_digest(stamps[:1], 0), reader._times_digest(stamps[1:], 0))
+        self.assertTrue(reader._times_digest([2**63 - 1, -(2**63)], 0))
+        with self.assertRaises(blind.TimeFieldError):
+            reader._times_digest([2**63 - 1], -1)
+        with self.assertRaises(blind.TimeFieldError):
+            reader._support_digest([(2**63, 0, 2**63)])
 
     def test_episode_record_fields_refuse_missing_type_and_numeric_faults(self):
         _, _, bundle = FROZEN["location"](self.pristine, "L002")
