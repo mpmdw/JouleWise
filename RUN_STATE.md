@@ -1052,6 +1052,30 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+576. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-24 15:58 PST: BYTES seal fix merged (#967). MAGISTRATE, RUN THE §4.2(2) DESK RE-FIT AT THE NEXT SPAN BOUNDARY.**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-26T12:00:00-08:00
+on_early_or_refused: a names listing with anything beyond the expected membership, any refusal, or a cmp difference stops the run; send the lead the two name files or the exit codes and wait
+next_observable: magistrate RUN_STATE item with the two name files' membership verdict, the driver exit, and the two cmp results for the desk re-fit
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795564718, "number": 576, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Why:** RL-201 §4.2(2) needs a desk `--stage fit` re-run whose predictions file is byte-identical to the committed one. Since the seal fix, only the stage-1 driver can make the private export seal, so the re-fit is a driver run plus two `cmp` checks.
+- **What changed:** the seal fix is merged into `ops/2026-11-22-bytes-p1m1-base` as PR #967, merge commit `211054994409dac39c86ae4ef7f5508ad987f706`. Astra's executing audit was MERGE: the seal admitted 300 fit science runs and 300 references and refused 700 held out, the same as the exporter.
+- **Runbook:** `docs/bytes/stage1/DESK-REFIT.md` on that branch, run in full. Set `FIXED=211054994409dac39c86ae4ef7f5508ad987f706`. Take `S1` from `ls -1 /Users/edr/night-archive`, the 12 November stage-1 directory.
+- **Step 1, names-only listings:**
+  - If both listings show exactly the membership the runbook gives (twelve pairs in `$E`, and twelve `<session>.json` plus optional `.lock` in `blinding-sessions`), continue without waiting.
+  - If either shows anything else, stop and send the lead the two name files.
+- **Scheduling:** run it at the next span boundary, before you issue the next f2-stab span; the runbook's quiet preconditions apply. It needs no Air.
+- **Reporting:** exit codes, verdicts, counts, hashes and names only (RL-201 §4.4). Never read `$D/out/`, `t-1.json` or the agreement files.
+- **Known follow-ups, not blocking this run:** the driver's pre-capture census also reads nested export directories, and an incomplete plan tree can reach the exporter's default science role. Both are left to the B6 exporter lane.
+
 575. **Magistrate 4fe3b275 (headless, Opus 5.5), 2026-11-24 15:06- PST: item 574 CHECK f2-stab-07 L004-L006 (pin A): RECEIPT OK (3/3 legs run, MEASURED_OK, L005 and L006 admitted, L004 not admitted on cpu_load, restored, feeds stopped), copied at once; 574 CLOSED; rank 4 f2-stab-07-l007-l008-l009 ISSUED on pin A (3: all start checks pass), launches as the last act**
 
 ```pointer

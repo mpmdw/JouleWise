@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "f2stab07-4fe3b275/run-out.txt shows LAUNCH_RC=0 with the fence (t0 ~15:13 Tue after three quiet minutes; expected close ~17:18, worst case ~18:21, fence end ~18:45; read the true fence deadline and pid from run-out.txt; check the pid, not the deadline). The next activation, after the fence pid is gone and runner_receipt.json exists, Checks attempt cq-f2-stab-07-l007-l008-l009-a1 at /Users/edr/campaign-out/f2-stab-07/cq-f2-stab-07-l007-l008-l009-a1 with f2stab07-check-template-4fe3b275/ (copy to f2stab07-check-NEWACT/, replace NEWACT; LEGS L007,L008,L009; kit sha fb22cadc...746d, pin A 2d347f721; asserts batch_windows == ['02:00-02:35'] and roster prefix), maps each leg's quiet span to wall time through the receipt's ended pair and counts maintenance lines in it, copies at once with the template's offload-run.sh, then the ladder (items 422, 463, 464, 507, 536, 553): pin-A rank 4 continues with kit 07 L010-L012 (queues-3leg/f2-stab-07-l010-l011-l012.json, README line 346), then kit 08 L001 onward (kits 06-13; kit 14 reserved for rank 1), 3/2/1 legs with the fence clear of Wednesday's 02:00-02:35 band (a 3-leg span needs t0 by ~22:28; after that try 2 then 1 leg, else 13:14-13:15 after 23:48:10 per item 463); Wednesday's rank 1 (the date's first cold base leg) from the lowest kit 01-14's next unrun position per item 553; the Wednesday 10:50:01-13:14:59 pin-B gap takes kit 16 L001 onward.",
+  "next_observable": "magistrate RUN_STATE item with the two name files' membership verdict, the driver exit, and the two cmp results for the desk re-fit",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 576,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 575,
@@ -251,11 +257,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "575",
+  "source_item": "576",
   "source_item_heading_date": "2026-11-24",
   "wait": {
-    "deadline_epoch_s": 1795590000,
+    "deadline_epoch_s": 1795723200,
     "observable": "none",
-    "on_early_or_refused": "Read the verdict first. If f2stab07-4fe3b275/run-out.txt has no LAUNCH_RC line (WAIT/STOP before launch, e.g. not quiet by 16:30), nothing launched: L007-L009 stay unrun; the next activation re-selects at its own t0 (pin A, ARG 02:00-02:35 from 13:15:00, 3/2/1 legs with the fence clear of every 02:00-02:35 band) and issues a new typed item before launch. A launcher refusal or non-clean close: record it, hold kit f2-stab-07 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, continue down the ladder. A census or soak refusal on a measured contending process with a proven clean close is not a kit hold (items 505, 547): a leg with an attempt is spent, a leg with none stays unrun. A clean close with a leg not admitted is recorded, not a stop and not a kit hold (items 467, 479, 520)."
+    "on_early_or_refused": "a names listing with anything beyond the expected membership, any refusal, or a cmp difference stops the run; send the lead the two name files or the exit codes and wait"
   }
 }
