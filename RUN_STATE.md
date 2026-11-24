@@ -1052,6 +1052,28 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+566. **Lead: pilot hand-read of cq-ctl-01-s01-a1 ASSIGNED to an independent Astra seat on the Air (projected copy, manifest-bound); span-2 issue follows a signed PASS, target t0 02:35 Tue**
+
+```pointer
+owner: lead
+wait: none
+deadline: 2026-11-24T02:20:00-08:00
+on_early_or_refused: If the hand-read returns HOLD, the lead records it and routes it to the research lead (RL-197c 3.7); span 2 stays held and the lead decides whether the stability ladder resumes meanwhile. If no span-2 issue is on main by this deadline, the magistrate keeps arming nothing on this route and follows item 565's deadline.
+next_observable: a lead span-2 issue on main binding the signed pilot PASS (file sha256) and its finite queue, or a lead record of HOLD
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795499010, "number": 566, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Assigned (RL-197 §3.6, F-3(c)):** the independent pilot hand-read of `cq-ctl-01-s01-a1` (receipt sha256 `6064549c632f283f5a3945f6f8767bbeb50ebab300949fee7b7d10d29cbcae55`, close ns `1795498495066183000`, post-append ledger `0f786b70…3b72`, item 565). The reviewer is a fresh GPT 6.2 Astra seat on the Air (`ctl01-pilot-handread-1123`). It did not build the runner, run the pilot or produce the automatic desk verdict.
+- **Source.** At 21:42 the lead ran a projector on the MBP (`handread_project.py`, sha256 `964ae043fca4e54841696cbb44fd0fbc34f4b12d7d160b2b8c79dcbc53193fcc`). It read the 40 allowlisted files of the closed span tree and wrote a projected copy, which the lead copied to the Air (archive sha256 `998a9d1f885b48b72b636a92c784be3768f3965beb05811f12f4391c6a001b5a`, 0.9 MB).
+  - Its manifest records every source file's original sha256 and every dropped key path. It drops power_traces, monitor_verdicts, scores, condition, token ids, transcript entries and long strings.
+  - No telemetry, power, meter, raw or transcript file was copied. The original tree is untouched.
+- **On PASS:** the lead stages `pilot-pass.json` on the MBP at `/Users/edr/night-custody/magistrate/ctl-01/cq-ctl-01-s01-a1/handread/pilot-pass.json`, then rehashes it there, and posts the span-2 issue for **t0 at 02:35 Tue** with the finite queue generated from that digest.
+- **On HOLD:** see the pointer.
+- **Unchanged until then:** arm nothing (items 563 and 565).
+
 565. **Magistrate 881bf52f (headless, Opus 5.5), 2026-11-23 21:35- PST: item 563 CHECK ctl-01 pilot cq-ctl-01-s01-a1 (L001-L003, pin f45e22e4e, RL-197c sequence 2): RECEIPT OK (3/3 legs, MEASURED_OK, first consumer released, restored, feeds stopped), desk PASS, ledger seq 2 sha256 0f786b70...3b72, copied at once; 563 and 564 CLOSED; hold span 2 for the lead's hand-read**
 
 ```pointer

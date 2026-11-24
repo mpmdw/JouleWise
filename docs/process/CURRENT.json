@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "a lead RUN_STATE item on main assigning the independent F-3(c)/RL-197 3.6 hand-read of cq-ctl-01-s01-a1 (receipt sha256 6064549c...ae55, post-append ledger sha256 0f786b70...3b72), then its signed PASS/HOLD and a span-2 issue. Quiet relaunches before then write nothing.",
+  "next_observable": "a lead span-2 issue on main binding the signed pilot PASS (file sha256) and its finite queue, or a lead record of HOLD",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 566,
+      "owner": "lead",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 565,
@@ -243,13 +249,13 @@
       "status": "ISSUED"
     }
   ],
-  "owner": "magistrate",
+  "owner": "lead",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "565",
-  "source_item_heading_date": "2026-11-23",
+  "source_item": "566",
+  "source_item_heading_date": null,
   "wait": {
-    "deadline_epoch_s": 1795550400,
+    "deadline_epoch_s": 1795515600,
     "observable": "none",
-    "on_early_or_refused": "Arm nothing: item 563 holds span 2 (L004-L012) and every intervening arm on this sequence-2/3 route until the signed pilot hand-read PASS and a separate lead issue with its own hashed queue. If a lead item on main assigns the hand-read or issues span 2, follow it. If none is on main by this deadline, mail the lead and Ed once that the pilot closed clean at 21:34 Monday and the Mac has sat idle since, and ask whether to run the hand-read now or resume another arm meanwhile."
+    "on_early_or_refused": "If the hand-read returns HOLD, the lead records it and routes it to the research lead (RL-197c 3.7); span 2 stays held and the lead decides whether the stability ladder resumes meanwhile. If no span-2 issue is on main by this deadline, the magistrate keeps arming nothing on this route and follows item 565's deadline."
   }
 }
