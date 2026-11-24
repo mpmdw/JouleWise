@@ -1,11 +1,11 @@
 {
   "armed": null,
-  "next_observable": "a lead span-2 issue on main binding the signed pilot PASS (file sha256) and its finite queue, or a lead record of HOLD",
+  "next_observable": "the lead's span-2 issue on main (cq-ctl-01-s02-a1), binding this PASS file sha256 and queue sha256 c65f9c8b…7c18",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 566,
-      "owner": "lead",
+      "item": 567,
+      "owner": "magistrate",
       "status": "ISSUED"
     },
     {
@@ -249,13 +249,13 @@
       "status": "ISSUED"
     }
   ],
-  "owner": "lead",
+  "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "566",
+  "source_item": "567",
   "source_item_heading_date": null,
   "wait": {
     "deadline_epoch_s": 1795515600,
     "observable": "none",
-    "on_early_or_refused": "If the hand-read returns HOLD, the lead records it and routes it to the research lead (RL-197c 3.7); span 2 stays held and the lead decides whether the stability ladder resumes meanwhile. If no span-2 issue is on main by this deadline, the magistrate keeps arming nothing on this route and follows item 565's deadline."
+    "on_early_or_refused": "If the span-2 issue is not on main by this deadline, arm nothing on this route and follow item 565's pointer."
   }
 }

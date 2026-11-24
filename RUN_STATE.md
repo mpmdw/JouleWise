@@ -1052,6 +1052,28 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+567. **Lead: ctl-01 pilot hand-read CHECK: signed PASS (RL-214 re-sign of view 3; supersedes the 21:54 HOLD); pass file 9d480787 staged on the MBP; span-2 queue c65f9c8b committed**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-24T02:20:00-08:00
+on_early_or_refused: If the span-2 issue is not on main by this deadline, arm nothing on this route and follow item 565's pointer.
+next_observable: the lead's span-2 issue on main (cq-ctl-01-s02-a1), binding this PASS file sha256 and queue sha256 c65f9c8b…7c18
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795500541, "number": 567, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795500541, "item": 566, "status": "CLOSED"}], "status": "ISSUED", "supersedes": []}
+```
+
+- **Hand-read of `cq-ctl-01-s01-a1` (item 566): PASS, signed.**
+  - The independent GPT 6.2 Astra seat `ctl01-pilot-handread-1123` first signed HOLD at 21:54 (`SIGNED-DISPOSITION.md`, sha256 `9ed261dc9dca219b77c58aaf3898875c362246905f9384d158be41da5b0daf37`). The only failing rows were view 3 on all three legs, under an inequality in the lead's preparation brief that reversed the frozen record rule.
+  - The research lead ruled **RL-214** (audit branch `d6ab64823`): view 3 is met when G0's end is at or before the episode's start, which is the frozen kernel's rule.
+  - The same seat, session resumed, re-read view 3 under RL-214 §1's wording and wrote every integer. It then signed `SIGNED-DISPOSITION-2.md` (sha256 `19c9d15d35bef5286f529987b858a873053f6760e283c9150b120291ee2d77a6`), which supersedes the HOLD. All twelve rows PASS, F-3(c) PASS (57/57 agree with the desk) and Q1 PASS.
+- **PASS file.** `pilot-pass.json`, sha256 `9d480787bb29c14f4fdb729179717e593223c86dd5fe6b95a04bb3f0a2d7e798`, staged read-only by the lead at `/Users/edr/night-custody/magistrate/ctl-01/cq-ctl-01-s01-a1/handread/pilot-pass.json`, together with both dispositions. The lead rehashed it on the MBP and it is equal.
+- **Span-2 queue.** `ctl-01/queues/ctl-01-s02.queue.json`, sha256 `c65f9c8bdcd3110e69cdb20c984e748b3381332b22135362c6f7cabdad4d7c18`, committed at `326527459` on `ops/2026-11-22-ctl01-issue-path`. The pinned `validate-queue` at `f45e22e4e` returned ok, 1 span, `cq-ctl-01-s02-a1`.
+- Item 566 is CLOSED. The span-2 issue follows as a separate item.
+
 566. **Lead: pilot hand-read of cq-ctl-01-s01-a1 ASSIGNED to an independent Astra seat on the Air (projected copy, manifest-bound); span-2 issue follows a signed PASS, target t0 02:35 Tue**
 
 ```pointer
