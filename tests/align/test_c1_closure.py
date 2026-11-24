@@ -957,6 +957,29 @@ class C1ClosureTests(unittest.TestCase):
             self.assertIn('plan_window_mismatch', error.getvalue())
             self.assertEqual(ledger.read_bytes(), before)
 
+    def test_r13_reservation_matches_the_frozen_window_identity(self):
+        """Round 13: a tree's window identity binds the reservation's window and evidence root."""
+        def identity(window, root=None):
+            def apply(tree):
+                row = next(row for row in tree['stage_graph'] if row['kind'] == 'bracket_reservation')
+                arguments = adapter.arguments(row)
+                reserved = arguments[arguments.index(adapter.literal('--evidence-root-id')) + 1]['value']
+                tree['window_identity'] = {'window_id': window, 'evidence_root_id': root or reserved}
+                return {}
+            return apply
+
+        with self.subTest(case='identity names another window'):
+            self.assert_refused_on_both_routes(self.attempt(edit_source=identity('C2')),
+                                               "window identity 'C2'")
+        with self.subTest(case='identity names another evidence root'):
+            self.assert_refused_on_both_routes(
+                self.attempt(edit_source=identity('C1', 'synthetic-other-evidence')),
+                'evidence root differs from the frozen window identity')
+        with self.subTest(control='identity agrees with the reservation'):
+            attempt = self.attempt(edit_source=identity('C1'))
+            code, _ = attempt.build()
+            self.assertEqual(code, 0, attempt.build_error)
+
     def test_audit4_m1_max_blocks_below_one_refuses_before_host(self):
         """Audit 4 M1: preflight refuses --max-blocks 0 with the campaign's own message."""
         def edit(tree):
