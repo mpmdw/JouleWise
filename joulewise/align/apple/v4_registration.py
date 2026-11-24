@@ -287,6 +287,7 @@ EXECUTED_CLOSURE = (
     'scripts/align_pilot_kit.py',
     'scripts/align_r0_checks.py',
     'scripts/align_r1_part_c.py',
+    'scripts/align_r1_part_c_evidence.py',
     'scripts/align_r1_rehearsal.py',
     'scripts/align_r1_turn_counts_export.py',
     'scripts/align_smc_enumerate.py',

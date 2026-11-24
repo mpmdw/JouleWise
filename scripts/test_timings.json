@@ -28,6 +28,10 @@
       ],
       "fallback_rejection_threshold_seconds": 300,
       "_evidence": "CI-12 (2026-10-05): seconds is the median heavy unit (463.593 s) plus the median remainder unit (236.753 s) over runs 37402996922, 37402992313, 37402988115, 37397353773, 37397232989; the two units run in separate exclusive jobs, so this sum is not a serial observation. evidence_range_seconds is the min and max of the per-run sums. Dedicated runners and the 120-minute ceiling are unchanged."
+    },
+    "tests.align.test_partc_frozen_differential": {
+      "runs_in": ".github/workflows/partc-frozen-differential.yml",
+      "_evidence": "W1 Part C port PR #959, 2026-11-23 (trial PR #958 F-13). PR #809's frozen differential acceptance suite is a 16-shard matrix (23,712 cases on 15 of 16 shards in trial run 45320845394) that its own workflow runs on every pull request touching the evaluator, the suite or the workflow, through tests/align/partc_suite_census.py. That workflow's header states that ordinary discovery never collects it because tests/align has no __init__.py; that holds on main, but on the W1 line tests/align is a package, so the twelve ordinary shards would otherwise run the raw file in one shard. Listing it here keeps it out of the ordinary shards and the quick tier, as on main; it is still discovered (ci.yml asserts every exclusive module is). Its exclusive job is the dedicated workflow, not a ci.yml job. Which fixture that workflow runs (v3.1 through the shim, or v3.2) is lead decision L9 and does not change this entry."
     }
   },
   "split_modules": {
