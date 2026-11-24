@@ -37,6 +37,35 @@ class Tokenizer:
 
 
 class AppleEndpointTests(unittest.TestCase):
+    def test_outside_first_token_stamp_keeps_the_affected_turn_index(self) -> None:
+        clock = FakeClock(start=10)
+        runtime = MlxRuntimeAdapter(clock)
+        runtime._model = object()
+        runtime._tokenizer = Tokenizer()
+        runtime._mlx_lm = SimpleNamespace(
+            stream_generate=lambda *args, **kwargs: iter([
+                SimpleNamespace(token=1, text="x", finish_reason="stop"),
+            ]),
+            make_sampler=lambda temp: object(),
+        )
+        config = base_config()
+        config = replace(config, hardware_target=replace(
+            config.hardware_target, runtime_backend=RuntimeBackend.MLX,
+        ))
+        endpoint = MlxEndpoint(runtime, config, clock, episode_domain="synthetic.monotonic",
+                               prepare_metadata={"mlx_version": "synthetic", "mlx_lm_version": "synthetic"})
+        messages = [ChatMessage("user", "Reconcile the ledger.")]
+        # The first turn's runtime clock reports a stamp before the endpoint's turn start.
+        with patch.object(runtime, "_clock", FakeClock(start=9)):
+            result = endpoint.chat(messages, tools=(), max_tokens=2, temperature=0.0, seed=19)
+        self.assertEqual(result.first_token_ns, result.start_ns)
+        flag = "first_token_clock_outside_turn"
+        self.assertIn(flag, endpoint.flags)
+        self.assertIn(f"{flag}:0", endpoint.flags)
+        following = endpoint.chat(messages, tools=(), max_tokens=2, temperature=0.0, seed=19)
+        self.assertEqual(following.first_token_ns, following.start_ns)
+        self.assertNotIn(f"{flag}:1", endpoint.flags)
+
     def test_real_mlx_generation_helper_with_a_synthetic_stream(self) -> None:
         clock = FakeClock()
         runtime = MlxRuntimeAdapter(clock)
