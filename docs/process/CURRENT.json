@@ -1,16 +1,10 @@
 {
   "armed": null,
-  "next_observable": "/Users/edr/campaign-out/cl-ctl-01/cq-ctl-01-s01-a1/runner_receipt.json with the fence pid from ctl01-6040003d/run-out.txt gone (t0 ~19:50 Mon; expected close ~22:10, worst case ~00:22 Tue, fence deadline ~01:10 Tue; read the true values from run-out.txt). The next activation Checks it per item 563 \"Close and handoff\": adapt f2stab15-check-template-03c6e63b to LEGS L001,L002,L003, kit sha 1d7d6f5f...f2bf, pin f45e22e4e, batch_windows == ['02:00-02:35'], span_id cq-ctl-01-s01-a1; also record the post-append ledger sha256 (sequence 2), copy at once, record the automatic desk disposition; the lead then assigns the independent F-3(c)/RL-197 3.6 hand-read. Hold span 2 and every other arm.",
+  "next_observable": "a lead RUN_STATE item on main assigning the independent F-3(c)/RL-197 3.6 hand-read of cq-ctl-01-s01-a1 (receipt sha256 6064549c...ae55, post-append ledger sha256 0f786b70...3b72), then its signed PASS/HOLD and a span-2 issue. Quiet relaunches before then write nothing.",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 564,
-      "owner": "magistrate",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": 1795579200,
-      "item": 563,
+      "item": 565,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -251,11 +245,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "564",
+  "source_item": "565",
   "source_item_heading_date": "2026-11-23",
   "wait": {
-    "deadline_epoch_s": 1795599900,
-    "observable": "result_json_exists",
-    "on_early_or_refused": "Read the verdict first (item 563's on_early_or_refused governs). If ctl01-6040003d/run-out.txt has no LAUNCH_RC line, nothing launched (WAIT before launch, e.g. not quiet by 21:24): the pilot is unspent and item 563 re-runs at the next eligible start until Tue 20:00. If LAUNCH_RC is nonzero, read whether sequence 2 was appended to the attempt ledger: a pre-leg refusal spends no ctl leg; an appended row with no receipt, a refused ledger state or an unexplained predecessor-proof refusal goes via the lead to the research lead (RL-197c 3.7); preserve ledger, sidecar and outputs; no second launch."
+    "deadline_epoch_s": 1795550400,
+    "observable": "none",
+    "on_early_or_refused": "Arm nothing: item 563 holds span 2 (L004-L012) and every intervening arm on this sequence-2/3 route until the signed pilot hand-read PASS and a separate lead issue with its own hashed queue. If a lead item on main assigns the hand-read or issues span 2, follow it. If none is on main by this deadline, mail the lead and Ed once that the pilot closed clean at 21:34 Monday and the Mac has sat idle since, and ask whether to run the hand-read now or resume another arm meanwhile."
   }
 }
