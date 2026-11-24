@@ -313,7 +313,7 @@ def run(operation, world, bench, fault):
         with (bench/"events.jsonl").open("ab") as stream:
             stream.write(manifest.canonical(value) + b"\n")
 
-    if fault == "marker_final_sync":
+    if fault == "marker_final_sync" or fault.startswith("typed_failure_"):
         # Keep the production claim path usable on hosts that deny the
         # literal reservation name even in a synthetic temporary directory.
         layout.PRIVATE_NAME = "SYNTHETIC-RESERVATION"
@@ -407,6 +407,18 @@ def run(operation, world, bench, fault):
         return positions
 
     reader.meter.parse_bytes, reader.first_read = decode, first_read
+    if fault.startswith("typed_failure_"):
+        from joulewise.cadence_looks import controls_release
+
+        def fail(*args, **kwargs):
+            raise ValueError("synthetic injected failure")
+
+        if fault == "typed_failure_read":
+            reader.first_read = fail
+        elif fault == "typed_failure_calculate":
+            controls_release.calculate_private = fail
+        elif fault == "typed_failure_publish":
+            controls_release._write_outputs_at = fail
     if fault in ("observe_ruled_h", "observe_zero_h_on_clone"):
         observe_kernel(reader, bench, force_zero=fault == "observe_zero_h_on_clone")
     if fault == "worker_entrypoint":

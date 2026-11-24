@@ -116,6 +116,27 @@ def recovery_diagnostic(work):
     recovery["first_token_ns"] = "no first token during recovery; synthetic power_w=91827.375"
 
 
+def g0_diagnostic(episode):
+    gate = next(row for row in episode["hardware"]["thermal"]["intervals"] if row["kind"] == "G0")
+    gate["turn"] = "synthetic power_w=91827.375"
+
+
+def inconsistent_admission(world, *, runtime_flag=False, copy_flag=False):
+    def change(work):
+        next(row for row in work["steps"] if row["kind"] == "cpu")["complete"] = False
+        work["complete"] = False
+
+    mutate(world, "script", change, leg="L003")
+    span, runtime, _ = FROZEN["location"](world, "L003")
+    result_path, copy_path = runtime / "runtime_result.json", runtime.parent / "leg_record.json"
+    result, copy = map(registrar.read, (result_path, copy_path))
+    result["script_complete"] = runtime_flag
+    copy["result"]["script_complete"] = copy_flag
+    registrar.put(result_path, result)
+    registrar.put(copy_path, copy)
+    FROZEN["reanchor"](world, span)
+
+
 def link_observation(config):
     config["interconnect"].update(name="synthetic test link", link_speed_mbps=91827.375)
 
@@ -542,6 +563,85 @@ class LookPathFollowupTests(TestCase):
                 self.assertEqual(self.invoke(world, bench, "preflight", "guard_blind_values"), (0, b"", b""))
             self.assert_fresh(world, bench)
 
+    def test_native_admission_and_score_wire_faults_refuse_fresh(self):
+        scaffold = self.stage_scaffold("admission-wire-scaffold")
+        cases = (
+            ("incomplete-admitted", inconsistent_admission),
+            ("incomplete-runtime-copy-mismatch", lambda world: inconsistent_admission(world, copy_flag=True)),
+            ("incomplete-work-result-mismatch", lambda world: inconsistent_admission(
+                world, runtime_flag=True, copy_flag=True)),
+            ("oversized-score", lambda world: mutate(world, "episode", lambda ep: ep.update(main_task_score=10**309))),
+            ("score-type", lambda world: mutate(world, "episode", lambda ep: ep.update(main_task_score="0.0"))),
+        )
+        for name, configure in cases:
+            with self.subTest(name=name):
+                world, bench = self.prepare(name, configure=configure)
+                self.assert_refuses_at_blind_gates(world, bench, scaffold)
+
+    def test_g0_turn_is_opaque_at_both_blind_gates(self):
+        world, bench = self.prepare("g0-diagnostic", role="episode", fault=g0_diagnostic)
+        with self.subTest(operation="stage1"):
+            self.assertEqual(self.invoke(world, bench, "stage1", "guard_blind_values"), (0, b"", b""))
+        self.assertEqual(self.invoke(world, bench, "stage1"), (0, b"", b""))
+        self.assertEqual(self.invoke(world, bench, "commit-stage1"), (0, b"", b""))
+        with self.subTest(operation="preflight"):
+            self.assertEqual(self.invoke(world, bench, "preflight", "guard_blind_values"), (0, b"", b""))
+        self.assert_fresh(world, bench)
+
+    def test_episode_record_fields_refuse_missing_type_and_numeric_faults(self):
+        _, _, bundle = FROZEN["location"](self.pristine, "L002")
+        episode = registrar.read(bundle / "outputs/align_episode.json")
+        metadata = registrar.read(bundle / "metadata.json")
+        episode["monitor_verdicts"] = [{"monitor_model": "synthetic", "visibility": "full",
+                                       "suspicion": 0, "prompt_sha256": "a" * 64}]
+        episode["router_log"] = {"model": "synthetic", "num_experts": 2, "top_k": 1,
+                                 "layers": [0], "phase": ["decode"], "experts": [[[0]]]}
+        turn = episode["turns"][0]
+        turn["tool_calls"] = [{"name": "synthetic", "start_ns": turn["start_ns"], "end_ns": turn["end_ns"],
+                               "args_bytes": 1, "result_bytes": 1, "logged": True, "state_changed": None,
+                               "state_before_sha256": None, "state_after_sha256": None}]
+        reader.episode_timing(json.dumps(episode).encode(), metadata)
+        paths = ((), ("turns", 0), ("turns", 0, "tool_calls", 0), ("monitor_verdicts", 0), ("router_log",))
+
+        def locate(document, path):
+            for key in path:
+                document = document[key]
+            return document
+
+        for path in paths:
+            for field in locate(episode, path):
+                for mutation in ("missing", "wrong-type", "nonfinite", "oversized"):
+                    with self.subTest(path=path, field=field, mutation=mutation):
+                        document = json.loads(json.dumps(episode))
+                        row = locate(document, path)
+                        if mutation == "missing":
+                            del row[field]
+                        else:
+                            row[field] = {"wrong-type": False, "nonfinite": float("inf"), "oversized": 10**309}[mutation]
+                            if field in ("logged", "state_changed", "side_task_success") and mutation == "wrong-type":
+                                row[field] = []
+                        with self.assertRaises(blind.TimeFieldError):
+                            reader.episode_timing(json.dumps(document).encode(), metadata)
+            document = json.loads(json.dumps(episode))
+            locate(document, path)["unexpected"] = True
+            with self.subTest(path=path, mutation="extra"), self.assertRaises(blind.TimeFieldError):
+                reader.episode_timing(json.dumps(document).encode(), metadata)
+
+    def test_post_start_failure_reports_phase_and_preserves_spend(self):
+        for phase in ("read", "calculate", "publish"):
+            with self.subTest(phase=phase):
+                world, bench = self.prepare("failure-" + phase)
+                self.assertEqual(self.invoke(world, bench, "stage1"), (0, b"", b""))
+                self.assertEqual(self.invoke(world, bench, "commit-stage1"), (0, b"", b""))
+                fault = "typed_failure_" + phase
+                self.assertEqual(self.invoke(world, bench, "stage2", fault), (1, b"", b"stage2_error\nValueError\n"))
+                private = self.private(bench)
+                self.assertTrue((private / layout.MARKER_NAME).is_file())
+                diagnostics = private / "SYNTHETIC-RESERVATION" / "stderr"
+                self.assertIn(f"stage2_error {phase} ValueError\n", diagnostics.read_text())
+                self.assertEqual(list((bench / "public" / registrar.LOOK).iterdir()), [])
+                self.assertEqual(self.invoke(world, bench, "status", fault), (3, b"", b"REFUSE SPENT\n"))
+
     def test_step_projection_keeps_only_applicable_fields_independent_of_key_order(self):
         rows = [dict(first_token_ns={"synthetic": "opaque"}, requested_s=600, kind="recovery"),
                 dict(kind="turn", requested_s="opaque", requested_tokens=4)]
@@ -610,6 +710,7 @@ class LookPathFollowupTests(TestCase):
             mutate(world, "config", project_label)
             mutate(world, "config", link_observation)
             mutate(world, "episode", add_diagnostic_flag)
+            mutate(world, "episode", g0_diagnostic)
 
             def mismatch(work):
                 recovery_diagnostic(work)
