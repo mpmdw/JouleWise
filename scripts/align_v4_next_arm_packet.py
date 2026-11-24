@@ -29,6 +29,7 @@ from joulewise.align.apple import v4_cadence as cadence
 from joulewise.align.apple import v4_registration as registration
 from joulewise.align.apple.v4_estimands import FROZEN_D_SLOT_KEYS, d_configuration_assertion
 from joulewise.arm_retry import terminal_window_release
+from scripts import align_v4_series as frozen_series
 
 RECORD_SCHEMA = 'joulewise.align_v4.window_record.v1'
 SERIES_SCHEMA = 'joulewise.align_v4.series_state.v1'
@@ -479,7 +480,7 @@ def template():
             'quiet_requirements': {'cooldown_s': None, 'display_off_s': None, 'dwell_s': None,
                                    'max_age_s': None},
             'next_plan': dict(ref), 'last_passed_record': {'commit': 'REPLACE', **ref},
-            'lead_rulings': [{'ruling_id': 'REPLACE', 'after_window': 'C1',
+            'lead_rulings': [{'ruling_id': 'REPLACE', 'after_window': registration.C1_WINDOW,
                               'text': dict(ref), 'lead_signature': 'REPLACE'}],
             'pool_members': [], 'sentinel_ids': [], 'escalations': []},
         'packet': {'schema': cadence.TRIAGE_SCHEMA,
@@ -509,10 +510,10 @@ def canonical(packet):
     return json.dumps(kept, sort_keys=True, separators=(',', ':'), allow_nan=False)
 
 
-def rebuild_and_compare(repo, supplied, *, now_epoch_s, current_artifact_set_sha256):
+def rebuild_and_compare(repo, supplied, *, now_epoch_s, current_artifact_set_sha256, verified_closure=None):
     """The arm's own build from the supplied packet's identities, and whether the supplied packet equals it."""
     built = build_packet(repo, **identities(supplied), now_epoch_s=now_epoch_s,
-                         current_artifact_set_sha256=current_artifact_set_sha256)
+                         current_artifact_set_sha256=current_artifact_set_sha256, c1_closure=verified_closure)
     return built, canonical(supplied) == canonical(built)
 
 
@@ -618,8 +619,67 @@ def desk_passes(desk):
             and (desk.get('pilot_status') == 'instrument_ok' or only_exempt_failed))
 
 
+def frozen_sentinel_ids(manifest, plan, *, needs_supplemental):
+    """Require the digest-bound projection to match the series producer's R20 roster."""
+    refusal = ('next frozen roster must include two extra sentinels after a U4 inconclusive'
+               if needs_supplemental else 'next sentinel roster differs from the frozen series')
+    window = frozen_series.selected(manifest, frozen_series.slot_of(plan['window']))
+    ordinary = window['members']
+    supplemental = frozen_series.escalation_allocations(window)
+    members = plan['members']
+    require(isinstance(members, list), refusal)
+    with_extras = needs_supplemental or len(members) == len(ordinary) + len(supplemental)
+    allocations = ordinary + supplemental if with_extras else ordinary
+    require(len(members) == len(allocations)
+            and all(isinstance(m, dict) and isinstance(m.get('run_id'), str) and m['run_id']
+                    and ('ordinal' not in m or (type(m['ordinal']) is int and m['ordinal'] == position))
+                    for position, m in enumerate(members, 1))
+            and len({m['run_id'] for m in members}) == len(members), refusal)
+
+    pack = frozen_series.pack_id(window['id'])
+    expected = {row['ordinal']: f"{pack}-e{row['ordinal']:02}"
+                for row in ordinary + supplemental if row['pool'] == 'sentinel'}
+    sentinel_names = set(expected.values())
+    wanted = {row['ordinal']: expected[row['ordinal']]
+              for row in allocations if row['ordinal'] in expected}
+    planned = {position: m['run_id'] for position, m in enumerate(members, 1) if m.get('role') == 'sentinel'}
+    require(planned == wanted and all(m['run_id'] not in sentinel_names
+                                      for m in members if m.get('role') != 'sentinel'), refusal)
+    return list(wanted.values())
+
+
+def committed_c1_kit(evidence, commit, manifest_sha256, projection):
+    """Bind the materialization in the same commit as the ledger and its projection."""
+    directory = frozen_series.kit_path(registration.C1_WINDOW).as_posix()
+    entries = evidence.git('ls-tree', '-r', '-z', commit, '--', directory).split(b'\0')[:-1]
+    if not entries:
+        return None    # projection-only packets can still be evaluated off-host
+    file_hashes = {}
+    plan, tree = None, None
+    for entry in entries:
+        _, name = entry.split(b'\t', 1)
+        path = name.decode()
+        relative = PurePosixPath(path).relative_to(directory)
+        require(frozen_series.c1_kit_file(relative), 'unexpected file in materialized C1 kit: ' + path)
+        raw = evidence.read(commit, path)
+        file_hashes[relative.as_posix()] = digest(raw)
+        if relative.as_posix() == frozen_series.C1_PLAN:
+            plan = decode(raw)
+        elif relative.as_posix() == 'plan_tree.json':
+            tree = decode(raw)
+    require(plan is not None and tree is not None, 'committed C1 kit is incomplete')
+    require(plan.get('series_manifest_sha256') == manifest_sha256, 'materialized C1 kit names a different series')
+    require(frozen_series.c1_plan_projection(plan) ==
+            [{'run_id': row['run_id'], 'role': row['role']} for row in projection],
+            'materialized C1 roster disagrees with the committed next plan')
+    def read(path):
+        return evidence.read(commit, path.as_posix())
+
+    return frozen_series.c1_kit_identity(file_hashes, plan, tree, read)
+
+
 def build_packet(repo, *, record_commit, record_path, series_commit, series_path, pushed_ref,
-                 now_epoch_s, current_artifact_set_sha256):
+                 now_epoch_s, current_artifact_set_sha256, c1_closure=None):
     require(number(now_epoch_s), 'arm clock unavailable')
     require(isinstance(current_artifact_set_sha256, str) and SHA.fullmatch(current_artifact_set_sha256),
             'current artifact-set digest unavailable')
@@ -642,6 +702,8 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
         'last_desk_passed_artifact_set_sha256': None,
         'checks': {}, 'arm_pending': [r['id'] for r in cadence.NEXT_ARM_TRIAGE if r['source'] == cadence.ARM],
         'entry_sources': {r['id']: r['source'] for r in cadence.NEXT_ARM_TRIAGE}}
+    if c1_closure is not None:
+        packet['c1_closure'] = c1_closure
 
     def source(name):
         return evidence.source(series_commit, series.get(name))
@@ -866,12 +928,16 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
     def sentinels():
         reports = previous.thermal()['model_windows']
         # A15 / R21: only a U4 inconclusive triggers the R20 escalation sentinels; U5 is inconclusive by construction
-        needed = 4 if any(r['U4']['status'] == 'inconclusive' for r in reports.values()) else 2
-        planned = [m['run_id'] for m in next_plan()['members'] if m.get('role') == 'sentinel']
-        frozen = series.get('sentinel_ids')
-        require(isinstance(frozen, list) and len(frozen) == len(set(frozen)) and len(frozen) >= needed
-                and planned == frozen, 'next frozen roster must include two extra sentinels after a U4 inconclusive')
-        return {'basis': 'next sentinel roster recorded with the U4 consequence', 'sentinel_ids': planned}
+        needs_supplemental = any(r['U4']['status'] == 'inconclusive' for r in reports.values())
+        manifest_raw = evidence.read(series_commit, MANIFEST_PATH)
+        plan = next_plan()
+        expected = frozen_sentinel_ids(decode(manifest_raw), plan, needs_supplemental=needs_supplemental)
+        require(series.get('sentinel_ids') == expected, 'ledger sentinel IDs disagree with the frozen next roster')
+        if plan['window'].split('#')[0] == registration.C1_WINDOW:
+            binding = committed_c1_kit(evidence, series_commit, digest(manifest_raw), plan['members'])
+            if binding is not None:
+                packet['c1_kit'] = binding
+        return {'basis': 'next sentinel roster recorded with the U4 consequence', 'sentinel_ids': expected}
 
     def eligibility():
         counts = previous.eligibility(allow_provisional=provisional_allowed())
@@ -900,7 +966,22 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
         require(desk.get('plan_id') == previous.source('plan')['plan_id'], 'full desk plan mismatch')
         require(last_digest == current_artifact_set_sha256 or not required,
                 'full desk passed on a different code/config state than the arm will run')
-        return {'basis': 'full desk completed and passing for the current code/config state'}
+        result = {'basis': 'full desk completed and passing for the current code/config state'}
+        if previous.window == 'W1':
+            # The artifact digest must come from the same committed record as the W1 desk.
+            require((last_record.commit, last_record.path, last_record.sha256)
+                    == (previous.commit, previous.path, previous.sha256),
+                    'full desk last-passed record must identify the authenticated W1 predecessor')
+            result['desk_sha256'] = digest(previous.source('desk', json_value=False))
+            # Carry any receipt exported with W1, or its canonical committed copy. Signing stays upstream.
+            receipt = (previous.source('registration_receipt', json_value=False)
+                       if 'registration_receipt' in previous.record['sources'] else None)
+            path = registration.REGISTRATION + 'registration_receipt.json'
+            if evidence.git('ls-tree', '-z', previous.commit, '--', path):
+                receipt = evidence.read(previous.commit, path, digest(receipt) if receipt is not None else None)
+            if receipt is not None:
+                result['registration_receipt_sha256'] = digest(receipt)
+        return result
 
     for name, action in (('record_committed', committed), ('terminal_completion', terminal),
                          ('quiet_start_state', quiet), ('meter_coverage', meter_coverage),
@@ -1105,6 +1186,7 @@ def main(argv=None):
     for flag in ('record-commit', 'record-path', 'series-commit', 'series-path', 'pushed-ref'):
         parser.add_argument('--' + flag)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--c1-prepared', type=Path, help='C1 prepare handoff before attempt commit')
     args = parser.parse_args(argv)
     if args.emit_triage_template:
         value, code = template(), 0
@@ -1113,10 +1195,15 @@ def main(argv=None):
         if any(getattr(args, name) is None for name in names):
             parser.error('record/series commits and paths and --pushed-ref are required')
         try:
+            closure = None
+            if args.c1_prepared:
+                from joulewise.align.apple import v4_registration as c1_closure
+                closure = c1_closure.finalize(args.repo, c1_closure.decode(args.c1_prepared.read_bytes()))
             value = build_packet(args.repo, **{name: getattr(args, name) for name in names},
                                  now_epoch_s=time.time(),
-                                 current_artifact_set_sha256=registration.artifact_set_digest(args.repo))
-        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+                                 current_artifact_set_sha256=(registration.artifact_set_digest_at(args.repo, closure["repo"]["commit"])
+                                     if closure else registration.artifact_set_digest(args.repo)), c1_closure=closure)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
             print('next-arm packet refused: ' + str(exc), file=sys.stderr)
             return 2
         code = 0 if value['packet_preflight']['ready'] else 2

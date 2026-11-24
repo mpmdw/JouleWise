@@ -39,6 +39,68 @@ def held_window_acceptance(measurement_root, packet, *, ruling_path=None):
     return {'ok': True, 'reasons': [], 'synthetic': True}
 
 
+def localize_c1_artifacts(root, paths=None):
+    """Keep the legacy mirror's selected templates inside its fixture root."""
+    for relative in sorted(reg.ARTIFACTS if paths is None else paths):
+        path = Path(root)
+        for part in Path(relative).parts[:-1]:
+            path /= part
+            if path.is_symlink() and path.is_dir():
+                source = path.resolve()
+                path.unlink()
+                path.mkdir()
+                for child in source.iterdir():
+                    (path / child.name).symlink_to(child)
+            if not path.is_dir():
+                break
+        else:
+            path /= Path(relative).name
+            if path.is_symlink():
+                raw = path.read_bytes() if path.is_file() else None
+                path.unlink()
+                if raw is not None:
+                    path.write_bytes(raw)
+
+
+def fixture_c1_preflight(state, supplied, packet_builder):
+    """Stand in for Git authority in the pre-existing cadence and runtime witnesses.
+
+    The checkout mirrors in those witnesses are intentionally not attempt
+    exports. test_c1_closure exercises the committed C1 authentication boundary.
+    """
+    from types import SimpleNamespace
+    from scripts import align_v4_series as series
+
+    root, view = (Path(state[name]) for name in ('source_measurement_root', 'measurement_root'))
+    plan = json.loads((root / series.kit_path('C1') / series.C1_PLAN).read_bytes())
+    current = reg.artifact_set_digest(root)
+
+    def preflight(handoff, *, now_epoch_s, **_):
+        packet, matches = packet_builder(root, supplied, now_epoch_s=now_epoch_s,
+                                        current_artifact_set_sha256=current)
+        if not matches:
+            raise AssertionError('the cadence fixture builder did not match')
+        # The real preflight binds the plan's heads to the pinned execution
+        # commit and hands that commit to the installer (CAP 10 I1). A
+        # synthetic plan without heads only reaches a stand-in installer.
+        night = json.loads(Path(state['plan_path']).read_bytes())
+        return {'authority': root, 'state': state, 'plan': plan, 'packet': packet, 'packet_sha256': None,
+                'current_digest': current, 'kit': {'ok': True}, 'execution_commit': night.get('repo_head'),
+                'view': SimpleNamespace(root=view, roots=SimpleNamespace(repo=root))}
+
+    return preflight
+
+
+def projection_arm_checks(arm):
+    """Keep the independent Git/triage deltas on the packet projection path."""
+    def run(root, plan, **kwargs):
+        # These witnesses deliberately have no prepared attempt or O1 commit.
+        # C1 admission and its host checkpoint are covered by the frozen tape.
+        return arm(root, {key: value for key, value in plan.items() if key != 'window_id'}, **kwargs)
+
+    return run
+
+
 def export():
     pairs = [dict(session=f'pilot-{i}', population='30B', phase='pilot',
                   ordinals=[5, 17], token_identical=True, clock_difference_fraction=0.,

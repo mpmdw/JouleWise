@@ -1,13 +1,19 @@
 """V4 registration evidence. Pure stdlib; no probes, data discovery or weights."""
 from __future__ import annotations
 
+from contextlib import contextmanager
+from dataclasses import dataclass
 import hashlib
+import importlib
 import json
 import math
+import os
 import re
 from pathlib import Path
+import stat
 import statistics
 import subprocess
+import unicodedata
 
 REGISTRATION = 'configs/campaigns/align_v4/registration/'
 RECEIPT_SCHEMA = 'joulewise.align_v4.registration_receipt.v1'
@@ -457,10 +463,1268 @@ def artifact_set_digest(root):
     return artifact_set_digest_from(reader)
 
 
+def confined_reader(root, *other_roots):
+    """Read repository-relative files, following links within the named roots.
+
+    Check each target before touching it. In particular, resolving an
+    escaping link must not stat the file or directory it names.
+    """
+    aliases = {Path(path).absolute(): Path(path).resolve(strict=True) for path in (root, *other_roots)}
+    aliases.update({path: path for path in tuple(aliases.values())})
+    ordered_aliases = sorted(aliases, key=lambda path: -len(path.parts))
+    roots = sorted(set(aliases.values()), key=lambda path: -len(path.parts))
+    prefixes = {parent for scope in roots for parent in scope.parents}
+    blocked = {'.git', 'restricted', 'night-custody', 'night-archive'}
+
+    def scope_for(path):
+        return next((scope for scope in roots if path.is_relative_to(scope)), None)
+
+    def read(relative, *, metadata_only=False):
+        relative = Path(relative)
+        if relative.is_absolute() or not relative.parts or '..' in relative.parts:
+            raise ValueError('staged input needs a repository-relative path')
+        directory = aliases[Path(root).absolute()]
+        parts = relative.parts
+        links = 0
+        while parts:
+            name, *parts = parts
+            if name == '..':
+                directory = directory.parent
+                continue
+            target = directory / name
+            scope = scope_for(target)
+            if scope is None:
+                if target in prefixes and parts:
+                    directory = target
+                    continue
+                raise ValueError(f'staged input escapes its allowed roots: {relative}')
+            if any(part in blocked or part.startswith('jw-b5-') for part in target.relative_to(scope).parts):
+                raise ValueError(f'staged input names a restricted path: {relative}')
+            status = target.lstat()
+            if stat.S_ISLNK(status.st_mode):
+                links += 1
+                if links > 40:
+                    raise ValueError(f'staged input has a symlink loop: {relative}')
+                link = Path(os.readlink(target))
+                if link.is_absolute():
+                    alias = next((scope for scope in ordered_aliases if link.is_relative_to(scope)), None)
+                    if alias is None:
+                        raise ValueError(f'staged input escapes its allowed roots: {relative}')
+                    directory = aliases[alias]
+                    link = link.relative_to(alias)
+                parts = [*link.parts, *parts]
+            elif parts:
+                if not stat.S_ISDIR(status.st_mode):
+                    raise ValueError(f'staged input parent is not a directory: {relative}')
+                directory = target
+            elif stat.S_ISREG(status.st_mode):
+                return None if metadata_only else target.read_bytes()
+        raise ValueError(f'staged input is not a regular file: {relative}')
+
+    return read
+
+
+# C1 execution export and prepared-input closure.
+
+SCHEMA = 'joulewise.c1_staged_closure.v1'
+PACKET = 'series/c1-next-arm.json'
+OUTPUTS = 'prepare-outputs.json'
+RESTRICTED = frozenset({'.git', 'restricted', 'night-custody', 'night-archive'})
+HEX = re.compile(r'[0-9a-f]+')
+PIN = re.compile(r'[0-9a-f]{64}')
+
+
+def decode(raw):
+    def unique(pairs):
+        values = {}
+        for key, value in pairs:
+            if key in values:
+                raise ValueError(f'duplicate JSON key: {key}')
+            values[key] = value
+        return values
+    return json.loads(raw, object_pairs_hook=unique)
+
+
+def key(name):
+    if not isinstance(name, str) or '\0' in name or any(
+            part in ('', '.', '..') for part in name.split('/')):
+        raise ValueError(f'invalid closure path: {name!r}')
+    for part in name.split('/'):
+        if part in RESTRICTED or part.startswith('jw-b5-'):
+            raise ValueError(f'restricted closure path: {name}')
+    return name
+
+
+def distinct(names):
+    spellings = set()
+    for name in names:
+        normalized = unicodedata.normalize('NFC', key(name)).casefold()
+        if normalized in spellings:
+            raise ValueError(f'aliased closure path: {name}')
+        spellings.add(normalized)
+
+
+def git(root, *args):
+    env = {**os.environ, 'GIT_NO_LAZY_FETCH': '1', 'GIT_OPTIONAL_LOCKS': '0'}
+    for name in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE'):
+        env.pop(name, None)
+    result = subprocess.run(['git', '--literal-pathspecs', '-C', str(root), *args],
+                            env=env, capture_output=True, check=False)
+    if result.returncode:
+        raise ValueError(f'C1 Git authority unavailable: {args[0]}')
+    return result.stdout
+
+
+def full_oid(root, value, *, object_format=None):
+    fmt = object_format or git(root, 'rev-parse', '--show-object-format').decode().strip()
+    lengths = {'sha1': 40, 'sha256': 64}
+    if fmt not in lengths or not isinstance(value, str) or len(value) != lengths[fmt] or not HEX.fullmatch(value):
+        raise ValueError('C1 authority requires a full Git object ID')
+    if git(root, 'rev-parse', '--verify', value + '^{commit}').decode().strip() != value:
+        raise ValueError('C1 authority must identify a commit object')
+    return value
+
+
+def tree_identity(authority, commit):
+    fmt = git(authority, 'rev-parse', '--show-object-format').decode().strip()
+    commit = full_oid(authority, commit, object_format=fmt)
+    return {'object_format': fmt, 'commit': commit,
+            'tree': git(authority, 'rev-parse', commit + '^{tree}').decode().strip()}
+
+
+class Roots:
+    """Resolve each link hop before touching its target, retaining logical names."""
+    def __init__(self, repo, stage):
+        self.alias = {Path(p).absolute(): Path(p).absolute().resolve(strict=True) for p in (repo, stage)}
+        self.repo, self.stage = (self.alias[Path(p).absolute()] for p in (repo, stage))
+        if self.repo.is_relative_to(self.stage) or self.stage.is_relative_to(self.repo):
+            raise ValueError('C1 repo and stage roots must be disjoint')
+        self.allowed = tuple(self.alias.values())
+        self.alias.update({p: p for p in self.allowed})
+        self.prefixes = {parent for root in self.allowed for parent in root.parents}
+
+    def path(self, path):
+        path = Path(path)
+        if not path.is_absolute():
+            raise ValueError(f'staged path must be absolute: {path}')
+        root = next((p for p in self.alias if path.is_relative_to(p)), None)
+        if root is None:
+            raise ValueError(f'staged path is outside R/S: {path}')
+        current = self.alias[root]
+        parts = list(path.relative_to(root).parts)
+        hops = 0
+        while parts:
+            part = parts.pop(0)
+            if part == '..':
+                current = current.parent
+                if current not in self.prefixes and not any(current.is_relative_to(p) for p in self.allowed):
+                    raise ValueError(f'staged link escapes R/S: {path}')
+                continue
+            target = current / part
+            scope = next((p for p in self.allowed if target.is_relative_to(p)), None)
+            if scope is None:
+                if target in self.prefixes and parts:
+                    current = target
+                    continue
+                raise ValueError(f'staged link escapes R/S: {path}')
+            key(target.relative_to(scope).as_posix()) if target != scope else None
+            mode = target.lstat().st_mode
+            if stat.S_ISLNK(mode):
+                hops += 1
+                if hops > 40:
+                    raise ValueError(f'staged link cycle: {path}')
+                link = Path(os.readlink(target))
+                if link.is_absolute():
+                    base = next((p for p in self.alias if link.is_relative_to(p)), None)
+                    if base is None:
+                        raise ValueError(f'staged link escapes R/S: {path}')
+                    current = self.alias[base]
+                    link = link.relative_to(base)
+                parts = list(link.parts) + parts
+            else:
+                if parts and not stat.S_ISDIR(mode):
+                    raise ValueError(f'staged path parent is not a directory: {path}')
+                current = target
+        if not any(current.is_relative_to(p) for p in self.allowed):
+            raise ValueError(f'staged path is outside R/S: {path}')
+        return current
+
+    def regular(self, path):
+        result = self.path(path)
+        if not stat.S_ISREG(result.lstat().st_mode):
+            raise ValueError(f'staged input is not a regular file: {path}')
+        return result
+
+    def walk(self, root, *, symlinks=()):
+        def descend(physical, prefix, ancestors):
+            if physical in ancestors:
+                raise ValueError(f'staged directory cycle: {prefix}')
+            parents = ancestors | {physical}
+            for entry in sorted(physical.iterdir()):
+                name = key(prefix + entry.name)
+                if name in symlinks:
+                    if not entry.is_symlink():
+                        raise ValueError(f'expected a Git symlink: {name}')
+                    target = self.path(entry)
+                    if not (target.is_file() or target.is_dir()):
+                        raise ValueError(f'unsupported Git symlink target: {name}')
+                    yield name, '120000', os.fsencode(os.readlink(entry))
+                    continue
+                target = self.path(entry)
+                mode = target.lstat().st_mode
+                if stat.S_ISDIR(mode):
+                    yield name, '040000', None
+                    yield from descend(target, name + '/', parents)
+                elif stat.S_ISREG(mode):
+                    yield name, '100755' if mode & stat.S_IXUSR else '100644', target
+                else:
+                    raise ValueError(f'unsupported staged entry: {name}')
+        root = self.path(root)
+        if not root.is_dir():
+            raise ValueError('C1 closure root must be a directory')
+        yield from descend(root, '', set())
+
+
+def blob_id(fmt, kind, raw):
+    digest = hashlib.new(fmt)
+    digest.update(f'{kind} {len(raw)}\0'.encode())
+    digest.update(raw)
+    return digest.hexdigest()
+
+
+def tree_entries(authority, commit):
+    entries = {}
+    for entry in git(authority, 'ls-tree', '-rzt', '--full-tree', commit).split(b'\0'):
+        if entry:
+            header, raw_name = entry.split(b'\t', 1)
+            mode, _, oid = header.decode().split()
+            name = key(raw_name.decode())
+            if mode not in {'040000', '100644', '100755', '120000'}:
+                raise ValueError(f'unsupported Git entry: {name}')
+            entries[name] = (mode, oid)
+    distinct(entries)
+    return entries
+
+
+def verify_repo(authority, roots, identity):
+    expected = tree_identity(authority, identity['commit'])
+    if identity != expected:
+        raise ValueError('C1 execution tree identity does not match the authority')
+    fmt = expected['object_format']
+    entries = tree_entries(authority, expected['commit'])
+    verified = {}
+    directories = {'': []}
+    for name, mode, path in roots.walk(roots.repo,
+                                      symlinks={p for p, (mode, _) in entries.items() if mode == '120000'}):
+        if entries.get(name, (None,))[0] != mode:
+            raise ValueError(f'unexpected repository path or mode: {name}')
+        parent, _, leaf = name.rpartition('/')
+        directories[parent].append((leaf, mode, name))
+        if mode == '040000':
+            directories[name] = []
+        else:
+            oid = blob_id(fmt, 'blob', path if mode == '120000' else path.read_bytes())
+            if oid != entries[name][1]:
+                raise ValueError(f'repository blob mismatch: {name}')
+            verified[name] = oid
+    if missing := entries.keys() - verified.keys() - directories.keys():
+        raise ValueError(f'missing repository path: {min(missing)}')
+    for name, children in reversed(directories.items()):
+        raw = b''.join((mode.lstrip('0') + ' ' + leaf + '\0').encode() + bytes.fromhex(verified[path])
+                       for leaf, mode, path in sorted(children, key=lambda item: item[0] + ('/' if item[1] == '040000' else '')))
+        verified[name] = blob_id(fmt, 'tree', raw)
+    if verified[''] != expected['tree']:
+        raise ValueError('observed repository tree ID differs')
+
+
+def stage_pins(pins):
+    if not isinstance(pins, dict) or PACKET in pins:
+        raise ValueError('invalid staged inventory or reserved packet collision')
+    distinct([*pins, PACKET])
+    if any(not isinstance(digest, str) or not PIN.fullmatch(digest) for digest in pins.values()):
+        raise ValueError('invalid staged SHA-256 pin')
+    return pins
+
+
+@dataclass(frozen=True)
+class VerifiedView:
+    roots: Roots
+    packet: dict
+    packet_sha256: str
+    stage_files: dict
+
+    def stage_read(self, relative):
+        name = key(Path(relative).as_posix())
+        if name not in self.stage_files:
+            raise ValueError(f'staged input is not pinned: {name}')
+        raw = self.roots.regular(self.roots.stage / name).read_bytes()
+        if digest(raw) != self.stage_files[name]:
+            raise ValueError(f'staged SHA-256 mismatch: {name}')
+        return raw
+
+
+def verify_view(authority, repo, stage, *, delivery_ref, delivery_commit, execution_commit=None):
+    """Authenticate the fixed packet, then compare both complete physical walks."""
+    if not isinstance(delivery_ref, str) or not delivery_ref.startswith('refs/'):
+        raise ValueError('C1 delivery needs a named ref')
+    commit = full_oid(authority, delivery_commit)
+    if git(authority, 'show-ref', '--verify', '--hash', delivery_ref).decode().strip() != commit:
+        raise ValueError('C1 delivery ref does not name the supplied commit')
+    row = git(authority, 'ls-tree', commit, '--', PACKET)
+    if row.split()[:2] not in ([b'100644', b'blob'], [b'100755', b'blob']):
+        raise ValueError('C1 delivery packet must be a committed regular blob')
+    raw = git(authority, 'show', f'{commit}:{PACKET}')
+    roots = Roots(repo, stage)
+    if roots.regular(roots.stage / PACKET).read_bytes() != raw:
+        raise ValueError('staged packet differs from the delivery blob')
+    packet = decode(raw)
+    closure = packet['c1_closure']
+    if closure['schema'] != SCHEMA or (execution_commit is not None and closure['repo']['commit'] != execution_commit):
+        raise ValueError('invalid C1 staged closure identity')
+    pins = {**stage_pins(closure['stage_files']), PACKET: digest(raw)}
+    verify_repo(authority, roots, closure['repo'])
+    seen = set()
+    for name, mode, path in roots.walk(roots.stage):
+        if mode == '040000':
+            continue
+        if name not in pins:
+            raise ValueError(f'unlisted staged file: {name}')
+        if digest(path.read_bytes()) != pins[name]:
+            raise ValueError(f'staged SHA-256 mismatch: {name}')
+        seen.add(name)
+    if missing := pins.keys() - seen:
+        raise ValueError(f'missing staged file: {min(missing)}')
+    return VerifiedView(roots, packet, digest(raw), pins)
+
+
+def declare_outputs(repo, stage, paths):
+    """Record known prepare outputs. This never enumerates staging."""
+    roots = Roots(repo, stage)
+    files = {}
+    for name in paths:
+        name = key(Path(name).as_posix())
+        if name in {OUTPUTS, PACKET} or name in files:
+            raise ValueError(f'duplicate or reserved prepared output: {name}')
+        files[name] = digest(roots.regular(roots.stage / name).read_bytes())
+    distinct(files)
+    descriptor = roots.stage / OUTPUTS
+    with descriptor.open('xb') as handle:
+        handle.write((json.dumps(files, sort_keys=True) + '\n').encode())
+    return descriptor
+
+
+def declared_pins(repo, stage):
+    roots = Roots(repo, stage)
+    raw = roots.regular(roots.stage / OUTPUTS).read_bytes()
+    pins = stage_pins(decode(raw))
+    if OUTPUTS in pins:
+        raise ValueError('prepare manifest contains itself')
+    for name, expected in pins.items():
+        if digest(roots.regular(roots.stage / name).read_bytes()) != expected:
+            raise ValueError(f'prepared output changed: {name}')
+    return {**pins, OUTPUTS: digest(raw)}
+
+LEDGER = 'runs/calibration_observation_ledger.jsonl'
+PACK = Path('configs/campaigns/align-v4-c1')
+# The C1 window's ID, from one source (lead J1, PR #896). A series window's
+# reservation reserves its series ID, never its pack ID.
+C1_WINDOW = 'C1'
+
+
+def window_identity(window_id, pack_id):
+    """The window identity that a series window's bracket reservation reserves.
+
+    This is the one source of the window ID (lead J1, PR #896):
+    - the materializer writes it as the plan tree's `window_identity` and as
+      the collection plan's `window_id`;
+    - the reservation's `--window-id` and `--evidence-root-id` are tree
+      pointers into it, so `verify_frozen_plan` compares the plan's window
+      with this same value;
+    - the C1 preflight (packet build, install and direct arm) and the
+      installer compare the C1 window with `C1_WINDOW`.
+    """
+    return {'window_id': window_id, 'evidence_root_id': 'evidence-' + pack_id}
+# Where the harvest reads a campaign stage's log (also the runner's default)
+# and the bound-derivation stage's bound, in this attempt's runs roots.
+CAMPAIGN_LOG = 'campaign_log.jsonl'
+NEG8_BOUND_NAME = 'neg8-drift-bound.json'
+# The pinned campaign runner probes at most six ancestors of a resolved
+# config directory. Keep its last probe inside S without editing the runner.
+C1_DISPATCH = Path('members/dispatch')
+
+
+def ledger_pin(roots, path, pins):
+    physical = roots.regular(path)
+    if not physical.is_relative_to(roots.stage):
+        raise ValueError('the starting ledger must reside in S')
+    name = physical.relative_to(roots.stage).as_posix()
+    if name not in pins:
+        raise ValueError('the starting ledger has no prepared inventory row')
+    return {'path': str(physical), 'sha256': pins[name]}
+
+
+def check_ledger(path, pin, *, starting=False):
+    """Check one physical ledger. Only reservation checks its starting bytes."""
+    named = Path(pin['path'])
+    path = Path(path).resolve(strict=True)
+    if path != named or not named.is_absolute() or not path.is_file():
+        raise ValueError('ledger does not resolve to the canonical C1 path')
+    if starting and digest(path.read_bytes()) != pin['sha256']:
+        raise ValueError('C1 starting ledger SHA-256 mismatch')
+    return path
+
+
+class LaunchView:
+    """The legacy command namespace is a projection of the two verified trees."""
+    def __init__(self, roots, view):
+        self.roots, self.root = roots, Path(view).absolute()
+
+    def locate(self, path, *, directory=False):
+        try:
+            return self._locate(path, directory=directory)
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(exc.errno, 'staged input is missing', str(path)) from exc
+
+    def _locate(self, path, *, directory):
+        path = Path(path)
+        if not path.is_absolute():
+            path = self.root / path
+        if path.is_relative_to(self.root):
+            name = path.relative_to(self.root)
+            if '..' in name.parts:
+                raise ValueError(f'path escapes the C1 launch view: {path}')
+            # Resolve the actual launch alias using the same fence as the walks.
+            current = self.root
+            for index, part in enumerate(name.parts):
+                key(part)
+                current /= part
+                mode = current.lstat().st_mode
+                if stat.S_ISLNK(mode):
+                    link = Path(os.readlink(current))
+                    target = link if link.is_absolute() else current.parent / link
+                    result = self.roots.path(target.joinpath(*name.parts[index + 1:]))
+                    break
+                if not stat.S_ISDIR(mode):
+                    raise ValueError(f'undeclared file in the launch view: {path}')
+            else:
+                if not directory:
+                    raise ValueError(f'staged input is not a file: {path}')
+                return current
+        else:
+            result = self.roots.path(path)
+        mode = result.lstat().st_mode
+        if not (stat.S_ISDIR(mode) if directory else stat.S_ISREG(mode)):
+            raise ValueError(f'invalid staged input type: {path}')
+        return result
+
+
+def launch_aliases(roots):
+    """Return the launch aliases. The pack remains one physical directory."""
+    leaves, folders = {}, set()
+    for root in (roots.repo, roots.stage):
+        for directory, dirs, names in os.walk(root, followlinks=False):
+            parent = Path(directory)
+            folders.add(parent.relative_to(root))
+            links = [name for name in dirs if (parent / name).is_symlink()]
+            if root == roots.stage and parent == root / PACK.parent and PACK.name in dirs:
+                links.append(PACK.name)
+                dirs.remove(PACK.name)
+            for name in [*names, *links]:
+                path = parent / name
+                relative = path.relative_to(root)
+                key(relative.as_posix())
+                if relative.as_posix() == PACKET:
+                    continue
+                if relative in leaves:
+                    raise ValueError(f'overlapping R/S logical entry: {relative}')
+                leaves[relative] = path
+    if leaves.keys() & folders:
+        raise ValueError('R/S launch namespace has a file/directory overlap')
+    return folders, leaves
+
+
+def link_launch_view(roots, view, *, runtime=None, git_link=None):
+    view = Path(view)
+    folders, leaves = launch_aliases(roots)
+    for relative in sorted(folders):
+        (view / relative).mkdir(parents=True, exist_ok=True)
+    for name, path in (('.venv', runtime), ('.git', git_link)):
+        if path is not None:
+            leaves[Path(name)] = Path(path)
+    for relative, path in sorted(leaves.items()):
+        alias = view / relative
+        if alias.is_symlink() and Path(os.readlink(alias)) == path:
+            continue
+        alias.symlink_to(path)
+    return LaunchView(roots, view)
+
+
+def verify_launch_view(roots, view, *, runtime=None, git_link=None):
+    view = Path(view)
+    if view.is_symlink() or not view.is_dir():
+        raise ValueError('the launch view must be a regular directory')
+    folders, leaves = launch_aliases(roots)
+    for name, path in (('.venv', runtime), ('.git', git_link)):
+        if path is not None:
+            leaves[Path(name)] = Path(path)
+    observed = set()
+    for directory, dirs, names in os.walk(view, followlinks=False):
+        parent = Path(directory)
+        relative = parent.relative_to(view)
+        if relative not in folders:
+            raise ValueError(f'unlisted launch directory: {relative}')
+        observed.add(relative)
+        for name in [*names, *(d for d in dirs if (parent / d).is_symlink())]:
+            path = parent / name
+            relative = path.relative_to(view)
+            if relative not in leaves or not path.is_symlink() or Path(os.readlink(path)) != leaves[relative]:
+                raise ValueError(f'wrong launch alias: {relative}')
+            observed.add(relative)
+    if missing := (leaves.keys() | folders) - observed:
+        raise ValueError(f'missing launch path: {min(missing)}')
+    return LaunchView(roots, view)
+
+
+def export_repo(authority, commit, dest):
+    """Export the execution commit with raw Git modes and no worktree fallbacks."""
+    entries = tree_entries(authority, commit)
+    dest = Path(dest)
+    dest.mkdir()
+    blobs = [oid for mode, oid in entries.values() if mode != '040000']
+    # Use one Git process. A batch record includes the exact object length.
+    env = {**os.environ, 'GIT_NO_LAZY_FETCH': '1', 'GIT_OPTIONAL_LOCKS': '0'}
+    for name in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE'):
+        env.pop(name, None)
+    result = subprocess.run(['git', '-C', str(authority), 'cat-file', '--batch'],
+                            input=('\n'.join(blobs) + '\n').encode(), env=env,
+                            check=True, capture_output=True)
+    from io import BytesIO
+    stream = BytesIO(result.stdout)
+    for name, (mode, oid) in entries.items():
+        path = dest / name
+        if mode == '040000':
+            path.mkdir()
+            continue
+        header = stream.readline().split()
+        if len(header) != 3 or header[:2] != [oid.encode(), b'blob']:
+            raise ValueError(f'cannot export Git blob: {name}')
+        raw = stream.read(int(header[2]))
+        if stream.read(1) != b'\n':
+            raise ValueError(f'truncated Git blob: {name}')
+        if mode == '120000':
+            path.symlink_to(os.fsdecode(raw))
+        else:
+            path.write_bytes(raw)
+            path.chmod(0o755 if mode == '100755' else 0o644)
+
+
+def load_prepared(view, read):
+    state = decode(read('session.json'))
+    if (state.get('v4_series') or {}).get('window_id') != C1_WINDOW:
+        raise ValueError('the C1 handoff requires a C1 prepared session')
+    if (Path(state['source_measurement_root']) != view.roots.repo
+            or Path(state['measurement_root']) != view.root):
+        raise ValueError('prepared launch view differs from the C1 handoff')
+    raw = published_night_plan(state)
+    if digest(raw) != state['plan_sha256']:
+        raise ValueError('prepared night plan digest differs')
+    night = decode(raw)
+    hazard = night['hazard_window']
+    for path in (night['chain_path'], night['chain_sha256_path'], hazard['window_env']['path']):
+        target = view.roots.regular(path)
+        if not target.is_relative_to(view.roots.stage):
+            raise ValueError('the prepared chain controls must reside in S')
+        read(target.relative_to(view.roots.stage))
+    for descriptor in (hazard['window_env'], hazard.get('registration')):
+        if descriptor is not None:
+            path = view.locate(descriptor['path'])
+            if digest(path.read_bytes()) != descriptor['sha256']:
+                raise ValueError(f'prepared control SHA-256 mismatch: {path}')
+    return state, night
+
+
+def published_night_plan(state):
+    """The night plan's bytes, read where it is published (CAP 10 I2).
+
+    The plan is not a staged input. It lives at night_plan_path(custody_root),
+    the one place the installer and the driver read it. Its bytes are bound by
+    plan_sha256 in the staged session.json, which the caller checks. The
+    custody root and everything below it must hold no link.
+    """
+    from joulewise import night_gate
+
+    custody_root = (state.get('inputs') or {}).get('custody_root')
+    if not isinstance(custody_root, str) or not os.path.isabs(custody_root):
+        raise ValueError(f'the prepared C1 session names no absolute custody root: {custody_root!r}')
+    published = night_gate.night_plan_path(custody_root)
+    if Path(state.get('plan_path') or '') != published:
+        raise ValueError(f"the prepared night plan must be published at {published}, not {state.get('plan_path')!r}")
+    check_no_links('custody_root', custody_root)
+    try:
+        descriptor = os.open(published, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError as exc:
+        raise ValueError(f'the published night plan is unreadable: {published}: {exc}') from exc
+    with os.fdopen(descriptor, 'rb') as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise ValueError(f'the published night plan is not a regular file: {published}')
+        return stream.read()
+
+
+def shade_dependency(spec):
+    """Run the SHADE consumer's own offline resolver in the chain environment."""
+    from joulewise.align.apple import pilot
+    from joulewise.align.shade.upstream import PinnedUpstream
+
+    kwargs = spec.get('task_kwargs') or {}
+    if not isinstance(kwargs, dict):
+        raise ValueError('SHADE task arguments must be a mapping')
+    if kwargs.get('cache_dir') is None and 'XDG_CACHE_HOME' not in os.environ:
+        # Otherwise the consumer would fall back to the launching user's home.
+        raise ValueError('SHADE dependency is absent from the staged view: no cache_home binds its cache')
+    try:
+        if spec.get('task_factory') == pilot.FACTORY:
+            # The align workload's own resolution of its configured factory.
+            module, name = pilot.FACTORY.split(':', 1)
+            upstream = getattr(importlib.import_module(module), name)(**kwargs).upstream
+        else:
+            upstream = PinnedUpstream(allow_fetch=False, **{
+                name: kwargs[name] for name in ('cache_dir', 'commit', 'file_sha256') if name in kwargs})
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f'SHADE task arguments are invalid: {exc}') from exc
+    if upstream.prepare() is None:
+        if 'upstream_manifest_mismatch' in upstream.flags:
+            raise ValueError('staged SHADE manifest differs from the configured pin: '
+                             + ', '.join(upstream.flags))
+        raise ValueError('SHADE dependency is absent from the staged view: ' + ', '.join(upstream.flags))
+
+
+def config_references(data, config, view, runner):
+    def resolve(reference, parent, *, base=view.root):
+        path = Path(reference)
+        if path.is_absolute():
+            return view.locate(path)
+        try:
+            return view.locate(base / path)
+        except FileNotFoundError:
+            return view.locate(parent / path)
+
+    suite = runner.suite_manifest_ref_from_config(data)
+    refs = (runner.generator_sidecar_ref_from_config(data), suite)
+    visited = set()
+    documents = [(data, config.parent)]
+    for ref in filter(None, refs):
+        path = resolve(ref, config.parent, base=view.roots.repo)
+        documents.append((decode(path.read_bytes()), path.parent))
+    if suite:
+        manifest = resolve(suite, config.parent, base=view.roots.repo)
+        annotated = manifest.with_name(f'{manifest.stem}_annotations.json')
+        try:
+            path = view.locate(annotated)
+        except FileNotFoundError:
+            pass
+        else:
+            documents.append((decode(path.read_bytes()), path.parent))
+    # Digest-bearing source descriptors can nest in config and sidecar
+    # documents. Generated bundle locators have a different field name.
+    while documents:
+        item, parent = documents.pop()
+        if isinstance(item, dict):
+            if isinstance(item.get('path'), str) and isinstance(item.get('sha256'), str):
+                path = resolve(item['path'], parent)
+                raw = path.read_bytes()
+                if digest(raw) != item['sha256']:
+                    raise ValueError(f'staged descriptor SHA-256 mismatch: {item["path"]}')
+                if path.suffix == '.json' and path not in visited:
+                    visited.add(path)
+                    documents.append((decode(raw), path.parent))
+            documents.extend((value, parent) for value in item.values())
+        elif isinstance(item, list):
+            documents.extend((value, parent) for value in item)
+
+    workload = data.get('workload_profile') or {}
+    spec = decode(workload.get('prompt_text') or '{}') if workload.get('name') == 'align_episode' else {}
+    factory = spec.get('task_factory')
+    if factory == 'joulewise.align.apple.pilot:offline_shade_task' or 'shade' in str(workload.get('name', '')).casefold():
+        shade_dependency(spec)
+
+
+@contextmanager
+def consumer_environment(environment, cwd):
+    """Run consumer checks with the chain's variables and working directory."""
+    from joulewise.b5 import chain
+
+    saved, previous = dict(os.environ), os.getcwd()
+    try:
+        os.environ.clear()
+        os.environ.update(chain.apply_c1_environment(environment, saved))
+        os.chdir(cwd)
+        yield
+    finally:
+        os.chdir(previous)
+        os.environ.clear()
+        os.environ.update(saved)
+
+
+def consumer_check(consumer, call):
+    """Report a consumer's own refusal as a C1 preflight refusal."""
+    from joulewise.calibration_exits import RefusalCode
+    from joulewise.calibration_ledger import CalibrationLedgerError
+
+    try:
+        result = call()
+    except CalibrationLedgerError as exc:
+        code = exc.code.value if exc.code else 'refused'
+        reason = (exc.context or {}).get('reason')
+        raise ValueError(f'C1 {consumer} refuses: {code}' + (f' ({reason})' if reason else '')) from exc
+    if isinstance(result, tuple) and result and isinstance(result[0], RefusalCode):
+        context = result[1] if len(result) > 1 and result[1] else None
+        detail = f' {json.dumps(context, sort_keys=True, default=str)}' if context else ''
+        raise ValueError(f'C1 {consumer} refuses: {result[0].value}{detail}')
+    return result
+
+
+def check_selections(view, tree, night, pin, *, c1_inputs, starting=True):
+    """Run the consumers' own parsers and pre-host checks on the rendered chain.
+
+    The checks run with the variables and working directory that the rendered
+    chain gives its consumers, never the caller's environment.
+    """
+    from joulewise.b5 import chain
+
+    hazard = night['hazard_window']
+    if hazard['pack']['pack_root'] != str(view.root / PACK):
+        raise ValueError('prepared pack is outside its C1 launch location')
+    bindings = hazard['bindings']
+    if Path(bindings['repo_root']) != view.root:
+        raise ValueError('prepared repo_root binding differs')
+    # O2a: a ledger pointer in the caller's shell must name the one live file.
+    # The chain replaces it, so this check only refuses; it selects nothing.
+    # The fence rejects an outside path before any byte of it is read.
+    if 'CALIBRATION_LEDGER' in os.environ:
+        if not (launch_ledger := os.environ['CALIBRATION_LEDGER']):
+            raise ValueError('CALIBRATION_LEDGER is empty; unset it or name the canonical C1 ledger')
+        check_ledger(view.locate(launch_ledger), pin, starting=starting)
+    stages = chain.stage_plan(tree, c1=True)
+    environment, launches = chain.c1_chain_environment(
+        stages=stages, bindings=bindings, tree=tree, measurement_root=view.root,
+        plan_id=night['plan_id'], c1_inputs=c1_inputs)
+    with consumer_environment(environment, view.root):
+        return _check_consumers(view, tree, stages, launches, bindings, pin, starting=starting)
+
+
+# The HAZARD reservation's identity vectors are measured on the host at launch.
+MEASURED_AT_LAUNCH = 'measured on the host at launch'
+
+
+def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
+    from joulewise import calibration_ledger as ledger
+    from joulewise.b5 import chain
+    from scripts import reserve_calibration_window_bracket as reservation, run_campaign as runner
+    from scripts import validate_powermetrics_fiducial as fiducial
+
+    default_ledger = view.root / LEDGER
+    # The name used by the chain writer and all reader spellings must select
+    # the same physical file, even if an alternate file has identical bytes.
+    for candidate in (default_ledger, bindings['ledger_path'], os.environ['CALIBRATION_LEDGER']):
+        check_ledger(view.locate(candidate), pin, starting=starting)
+    selections = {}
+    generated_bound = None
+
+    def this_attempt(consumer, option, value, expected):
+        # A stage writes only this attempt's locations, each where the harvest
+        # reads it. Compared as spelled from the launch view: another root, a
+        # previous attempt or a parent step refuses instead of being resolved.
+        if view.root / value != Path(expected):
+            raise ValueError(f"C1 {consumer} {option} must be this attempt's {expected}: {value}")
+
+    def same_head_pin(consumer, path):
+        # Every later reader judges the pin that the reservation's read-only
+        # pre-reserve check judged, as every reader uses the one live ledger.
+        if view.locate(path) != selections['head_pin']:
+            raise ValueError(f"C1 {consumer} head pin differs from the reservation's head pin: {path}")
+
+    def check_order(manifest_path, args):
+        directory = view.root / Path(manifest_path).parent
+        resolved = view.locate(directory, directory=True)
+        # Keep the bound-file decoder's duplicate-key check and use the
+        # campaign's own directory selection and manifest validation.
+        decode(view.locate(manifest_path).read_bytes())
+        order, _ = runner.load_order_entries(directory)
+        for entry in order:
+            if '/' in key(entry.config):
+                raise ValueError(f'invalid dispatched config name: {entry.config}')
+        analysis = directory / runner.ANALYSIS_MANIFEST_NAME
+        if analysis.is_file():
+            data = decode(view.locate(analysis).read_bytes())
+            if data.get('schema_version') == runner.AXI_MANIFEST_SCHEMA_VERSION:
+                raise ValueError('C1 dispatch must use its sealed order manifest')
+            config_references(data, analysis, view, runner)
+        manifest = runner.load_analysis_manifest(directory)
+        if manifest is not None and not manifest.valid:
+            raise ValueError('C1 campaign analysis manifest validation failed before execution')
+        configs = runner.apply_order_manifest(runner.discover_configs(directory), order)
+        # What the runner hands the launch binding for this stage.
+        selections.setdefault('dispatched_configs', []).extend(configs)
+        for config in configs:
+            raw = view.locate(config).read_bytes()
+            config_references(decode(raw), config, view, runner)
+        scope = next(root for root in view.roots.allowed if resolved.is_relative_to(root))
+        if len(resolved.relative_to(scope).parts) < runner.MAX_ANALYSIS_MANIFEST_V3_ANCESTOR_DEPTH:
+            raise ValueError('campaign ancestor lookup would leave the verified roots')
+        _, marker = runner._reachable_analysis_manifest_v3(directory)
+        if marker is not None:
+            config_references(decode(marker.read_bytes()), marker, view, runner)
+        runner.resolve_prospective_analysis_manifest_v3(directory)
+        # The runner's own pre-launch gates on the dispatched configs.
+        gate = runner.config_warning_gate(configs, acknowledge=args.ack_config_warnings, mode='campaign')
+        if gate['details']['errors'] or gate['status'] == 'fail':
+            raise ValueError(f"C1 campaign config gate refuses: {gate['summary']}")
+        items = runner.read_config_infos(configs, runner.order_entry_by_config(order))
+        if errors := [item.message for item in items if isinstance(item, runner.ConfigError)]:
+            raise ValueError(f'C1 campaign config refuses: {errors[0]}')
+        if (duplicate := runner.duplicate_run_id_error(items)) is not None:
+            raise ValueError(f'C1 campaign config refuses: {duplicate}')
+
+    for stage in stages:
+        if not stage.in_chain:
+            # Desk commands are not emitted on the measuring chain.
+            for command in stage.commands:
+                for arg in command.arguments:
+                    chain.bind_argument(arg, bindings, tree, view.root)
+            continue
+        launch = launches[stage.stage_id]
+        view.locate(launch.argv[1])
+        args = launch.args
+        if stage.kind == 'bracket_reservation':
+            if args.session_kind != 'bracket' or args.allow_uncommitted_pin_for_test or args.test_writer_crash_authorization:
+                raise ValueError('C1 reservation requires the ordinary bracket')
+            selections['ledger'] = check_ledger(view.locate(args.ledger), pin, starting=starting)
+            selections['head_pin'] = view.locate(args.head_pin)
+            selections['session_kind'] = args.session_kind
+            for path in (args.plan, args.identity_epoch_json, args.t1_bindings_json):
+                view.locate(path)
+            if view.locate(args.plan) != view.locate(view.root / PACK / 'collection_plan.json'):
+                raise ValueError('reservation selects a different C1 collection plan')
+            # The session records this window beside the frozen plan's ID.
+            frozen_window = decode(view.locate(args.plan).read_bytes()).get('window_id')
+            identity = tree.get('window_identity') or {}
+            if (args.window_id != C1_WINDOW or frozen_window != C1_WINDOW
+                    or identity.get('window_id') not in (None, C1_WINDOW)):
+                raise ValueError(f'C1 reservation must reserve the frozen C1 window: --window-id '
+                                 f'{args.window_id!r}, frozen plan window {frozen_window!r}, '
+                                 f'window identity {identity.get("window_id")!r}')
+            if identity.get('evidence_root_id') not in (None, args.evidence_root_id):
+                raise ValueError('C1 reservation evidence root differs from the frozen window identity')
+            this_attempt('reservation', '--runs-root', args.runs_root, bindings['claim_runs_root'])
+            if not args.execute or args.verify_only:
+                # Without --execute the reservation validates and exits 0 without
+                # reserving; the capture then finds no session.
+                raise ValueError('C1 reservation must append its session (--execute)')
+            # The reservation's own gates on its prepared inputs, before any host work.
+            consumer_check('reservation', lambda: runtime_ledger(args.ledger, starting=True))
+            deadline = consumer_check('reservation', lambda: ledger.CustodyDeadline(
+                args.custody_budget_s, args.custody_deadline_epoch_s, telemetry_stream=None))
+            consumer_check('reservation', lambda: reservation.verify_frozen_plan(
+                args.plan, plan_id=args.plan_id, plan_sha256=args.plan_sha256, window_id=args.window_id))
+            # The HAZARD reservation measures both identity vectors on the host
+            # at launch. Each field is a stand-in here; the validator judges
+            # every prepared input: session, runs root, slots and custody.
+            epoch = dict.fromkeys(ledger.IDENTITY_EPOCH_FIELDS, MEASURED_AT_LAUNCH)
+            t1 = dict.fromkeys(ledger.T1_FIELDS, MEASURED_AT_LAUNCH)
+            _, _, _, reserved_slots = consumer_check(
+                'reservation', lambda: reservation.reservation_inputs(args, epoch, t1))
+            reserved_session = args.session_id
+            # What the launch's lineage must name, as the chain reserves it.
+            selections['reservation'] = {'plan_id': args.plan_id, 'window_id': args.window_id,
+                                         'bracket_session_id': args.session_id,
+                                         'evidence_root_id': args.evidence_root_id}
+            # C1 launches under the HAZARD_PACK driver, so the reservation takes
+            # its HAZARD route: no committed-pin or custody pass, a lagging pin
+            # allowed, rollback refused. Read-only here: no lease, no append.
+            consumer_check('reservation', lambda: reservation.pre_reserve_readiness(
+                args, hazard=True, require_committed_pin=False, custody_deadline=deadline,
+                pre_reserve_strict=args.pre_reserve_strict, enforcing_under_lease=False,
+                probe_live_writer=False))
+            # What the reservation records for both captures to agree with.
+            reserved_policy = reservation.reserved_power_policy(
+                reservation._hazard_desk_object(args.identity_epoch_json)[0],
+                reservation._hazard_desk_object(args.t1_bindings_json)[0])
+            reserved_sampler = reservation.reserved_sampler()
+        elif stage.kind == 'calibration_capture':
+            if args.slot != stage.slot:
+                raise ValueError('C1 capture resolved to the wrong slot')
+            # Its custody directory and flag root (the output root's parent)
+            # both follow from this; the slot agreement below binds the attempt.
+            this_attempt('capture', '--output-root', args.output_root,
+                         Path(bindings['claim_runs_root']) / fiducial._CALIBRATION_OUTPUT_ROOT_BASENAME)
+            if args.rederive_from is not None or args.output is not None:
+                raise ValueError('C1 capture must be a live bracket capture')
+            if args.derivation_only:
+                raise ValueError('C1 capture is a bracket capture; --derivation-only needs a derivation session')
+            test_only = [name for name, present in (
+                ('--sampler-direct-for-test', args.sampler_direct_for_test),
+                ('--battery-probe-fixture-for-test', args.battery_probe_fixture_for_test is not None),
+                ('--battery-probe-duration-for-test', args.battery_probe_duration_for_test != 0),
+                ('--time-scale-for-test', args.time_scale_for_test != 1),
+                ('--projection-cell-budget-for-test', args.projection_cell_budget_for_test is not None),
+                ('--identity-epoch-json-for-test', args.identity_epoch_json_for_test is not None),
+                ('--test-writer-crash-authorization', args.test_writer_crash_authorization is not None)) if present]
+            if test_only:
+                raise ValueError('C1 capture carries a test-only capture option: ' + ', '.join(test_only))
+            if args.pulse_count != fiducial.PULSE_COUNT:
+                raise ValueError(f"C1 capture --pulse-count {args.pulse_count} differs from the frozen "
+                                 f"protocol's pulse count {fiducial.PULSE_COUNT}")
+            for option in ('sampler_ready_timeout_s', 'rollover_timeout_s'):
+                if not (math.isfinite(getattr(args, option)) and getattr(args, option) > 0):
+                    raise ValueError(f"C1 capture --{option.replace('_', '-')} must be finite and positive")
+            check_ledger(view.locate(args.ledger), pin, starting=starting)
+            same_head_pin('capture', args.head_pin)
+            for field in ('identity_epoch_json', 't1_bindings_json', 'plan',
+                          'identity_epoch_json_for_test', 'battery_probe_fixture_for_test',
+                          'test_writer_crash_authorization'):
+                if value := getattr(args, field, None):
+                    view.locate(value)
+            # The capture writer's own argument gates. Launch lineage, the
+            # reserved session and the host identity exist only after launch.
+            consumer_check('capture', lambda: runtime_ledger(args.ledger))
+            if (error := fiducial._capture_fixture_error(args)) is not None:
+                raise ValueError(f'C1 capture refuses: {error}')
+            consumer_check('capture', lambda: ledger.CustodyDeadline(
+                args.custody_budget_s, args.custody_deadline_epoch_s, telemetry_stream=None))
+            consumer_check('capture', lambda: fiducial._capture_mode_refusal(args))
+            consumer_check('capture', lambda: fiducial._live_capture_refusal(args))
+            consumer_check('capture', lambda: fiducial.reserved_slot_refusal(
+                args, session_id=reserved_session, slot_reservation=reserved_slots.get(args.slot),
+                power_policy=reserved_policy, sampler=reserved_sampler))
+        else:
+            check_ledger(view.locate(args.calibration_ledger), pin, starting=starting)
+            same_head_pin('campaign', args.head_pin)
+            _, runs_binding = chain.c1_dispatch_selection(stage, tree)
+            this_attempt('campaign', '--runs-dir', args.runs_dir, bindings[runs_binding])
+            if stage.kind == 'bound_derivation':
+                selections['derivation'] = view.locate(args.derive_neg8_drift_bound)
+                generated_bound = Path(bindings['bound_runs_root']) / NEG8_BOUND_NAME
+                this_attempt('campaign', '--neg8-drift-bound-output', args.neg8_drift_bound_output,
+                             generated_bound)
+                config_references(decode(selections['derivation'].read_bytes()),
+                                  selections['derivation'], view, runner)
+                # Corpus bundle names describe same-attempt products.
+                manifest = decode(selections['derivation'].read_bytes())
+                for member in manifest['members']:
+                    name = member['bundle_path']
+                    key(name)
+            else:
+                # A shakedown gate requires --backup, which C1 refuses, so the
+                # runner would refuse that stage before collection.
+                if (args.cli_cmd or args.backup is not None or args.check_prompt_hashes
+                        or args.whole_window_verdict or args.record_supersession
+                        or args.shakedown_gate is not None or args.dry_run):
+                    raise ValueError('unsupported C1 campaign mode')
+                if args.max_blocks is not None:
+                    if args.max_blocks < 1:
+                        # The runner's own first check gives its own message.
+                        runner.campaign_block_limit(args.max_blocks, None, (), ())
+                    # A C1 launch authorization has purpose HAZARD_PACK, for which
+                    # the runner refuses any block limit before the first member.
+                    raise ValueError('--max-blocks requires G2B_SHAKEDOWN authorization')
+                if args.instrument_power_policy not in (None, reserved_policy):
+                    raise ValueError(f'C1 campaign instrument power policy differs from the reserved policy: '
+                                     f'{args.instrument_power_policy!r} != {reserved_policy!r}')
+                selections['policy'] = view.locate(args.campaign_policy)
+                # The runner's own loaders on the exact bytes it will read.
+                runner.load_campaign_policy(args.campaign_policy)
+                if args.log is not None:
+                    this_attempt('campaign', '--log', args.log, Path(bindings[runs_binding]) / CAMPAIGN_LOG)
+                runner._require_external_campaign_log(
+                    Path(args.log) if args.log else Path(args.runs_dir) / CAMPAIGN_LOG)
+                for field in ('waivers', 'environment_override', 'salvage_closure',
+                              'window_membership_binding', 'bracket_session_binding'):
+                    if value := getattr(args, field, None):
+                        view.locate(value)
+                runner.load_waivers(args.waivers)
+                if args.neg8_drift_bound and view.root / args.neg8_drift_bound != generated_bound:
+                    view.locate(args.neg8_drift_bound)
+                    runner.load_neg8_drift_bound_artifact(args.neg8_drift_bound)
+                if args.instrument_calibration_dir:
+                    selected = view.root / args.instrument_calibration_dir
+                    if selected != Path(bindings['pre_calibration_dir']):
+                        view.locate(selected, directory=True)
+                check_order(Path(args.config_dir) / 'order_manifest.json', args)
+                for path in (stage.spare_sets or {}).values():
+                    check_order(path, args)
+    return selections
+
+
+EXECUTION_COMMIT_MISSING = 'execution_commit_missing'
+
+
+def execution_commit(handoff):
+    """The pinned execution commit of a C1 attempt, as a full object id.
+
+    This one function supplies the commit to the launch view (verify_view,
+    the prepared closure, the launch records) and to the installer
+    (bytes_h_session.install passes it as --execution-commit). The installer
+    never reads its identity with git in the directory its module resolves
+    to: for C1 that is the repo export, which has no .git (CAP 10 I1).
+    """
+    commit = handoff.get('execution_commit') if isinstance(handoff, dict) else None
+    if not isinstance(commit, str) or not re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', commit):
+        raise ValueError(f'{EXECUTION_COMMIT_MISSING}: the C1 attempt pins no full execution commit: {commit!r}')
+    return commit
+
+
+def execution_inputs(handoff, ledger):
+    names = ('git', 'repo', 'stage', 'view', 'execution_commit', 'cache_home')
+    return {**{name: handoff[name] for name in names if name in handoff}, 'ledger': ledger}
+
+
+def verify_chain(view, handoff, ledger, tree, tree_sha256, night):
+    """Compare the staged chain to the actual renderer and prepared bindings."""
+    from joulewise.b5 import chain
+
+    hazard = night['hazard_window']
+    runbook = view.locate(chain.RUNBOOK_RELATIVE).read_text(encoding='utf-8')
+    expected = chain.render_chain(
+        tree=tree, tree_sha256=tree_sha256, stages=chain.stage_plan(tree, c1=True),
+        bindings=hazard['bindings'], measurement_root=view.root, pack_root=view.root / PACK,
+        plan_id=night['plan_id'], runbook_text=runbook, settle_s=hazard['settle_s'],
+        c1_inputs=execution_inputs(handoff, ledger))
+    script = view.locate(night['chain_path'])
+    sidecar = view.locate(night['chain_sha256_path'])
+    if script.read_bytes() != expected or sidecar.read_bytes() != chain.sidecar_bytes(expected, script.name):
+        raise ValueError('prepared chain differs from the resolved C1 dispatch')
+
+
+# The digests a night plan carries, each recomputed from this attempt before
+# launch: the pack by window_lineage.admit_pack, the plan tree in
+# check_launch_records, and the window env and registration in load_prepared.
+# Any other digest field refuses rather than pass unchecked.
+NIGHT_DIGEST_FIELDS = frozenset({
+    ('hazard_window', 'pack', 'pack_sha256'), ('hazard_window', 'pack', 'plan_tree_sha256'),
+    ('hazard_window', 'window_env', 'sha256'), ('hazard_window', 'registration', 'sha256'),
+})
+# Every binding that names a place the chain or the launch writes.
+WRITE_ROOT_BINDINGS = ('claim_runs_root', 'bound_runs_root', 'operator_log_root', 'pre_calibration_dir',
+                       'post_calibration_dir', 'claim_backup_destination', 'bound_backup_destination',
+                       'ledger_path')
+# Roots prepare creates empty and nothing writes before the chain.
+FRESH_ROOT_BINDINGS = ('claim_runs_root', 'bound_runs_root', 'operator_log_root')
+
+
+def campaign_marker_refusal(measurement_root, tree):
+    """The campaign runner's launch-marker rule, judged at prepare instead of after arm.
+
+    run_campaign refuses a selection that mixes configs tagged
+    ``launch_lineage_required`` with legacy ones (``launch_binding_mismatch``).
+    It does so before measurement but after arm. Prepare applies the runner's
+    own per-config predicate to each in-chain collection stage's dispatched
+    selection, and to each of its spare sets, so such a pack never reaches arm.
+    """
+    from joulewise.b5 import chain
+    from scripts import run_campaign as runner
+
+    root = Path(measurement_root)
+    for stage in chain.stage_plan(tree, c1=True):
+        if stage.kind != 'campaign_collection' or not stage.in_chain:
+            continue
+        selected, _ = chain.c1_dispatch_selection(stage, tree)
+        for directory in (Path(selected), *(Path(path).parent for path in (stage.spare_sets or {}).values())):
+            order, _ = runner.load_order_entries(root / directory)
+            configs = runner.apply_order_manifest(runner.discover_configs(root / directory), order)
+            marked = [runner._config_requires_launch_lineage(config) for config in configs]
+            if any(marked) and not all(marked):
+                raise ValueError(f'C1 stage {stage.stage_id} mixes marker-bearing and legacy configs '
+                                 f'({sum(marked)} of {len(marked)} in {directory}); the campaign would refuse '
+                                 'launch_binding_mismatch after arm')
+
+
+def digest_fields(value, path=()):
+    """Every (path, value) whose key names a SHA-256 digest, anywhere in ``value``."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key == 'sha256' or key.endswith('_sha256'):
+                yield path + (key,), child
+            yield from digest_fields(child, path + (key,))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            yield from digest_fields(child, path + (index,))
+
+
+def check_launch_records(view, tree_raw, night, state, reserved, execution_commit):
+    """Bind the launch identity, digests and locations the driver takes from the night plan.
+
+    The driver publishes the window lineage and routes its records from the
+    night plan, not from the chain. Each value must be derived from this
+    attempt, never trusted as the plan carries it:
+    - the rendered reservation;
+    - the staged tree and pack bytes, recomputed here;
+    - the prepared session inputs;
+    - the execution commit;
+    - the launch view.
+    """
+    from joulewise.b5 import driver
+
+    def as_path(value):
+        return Path(value) if isinstance(value, str) and value else value
+
+    if reserved is None:
+        raise ValueError('the C1 chain renders no bracket reservation')
+    hazard = night['hazard_window']
+    pack, bindings = hazard.get('pack') or {}, hazard['bindings']
+    inputs = state.get('inputs') or {}
+    for field, _ in digest_fields(night):
+        if field not in NIGHT_DIGEST_FIELDS:
+            raise ValueError(f"C1 night plan carries an unverified digest field: {'.'.join(map(str, field))}")
+    try:
+        identity = driver.lineage_identity(hazard)  # what the lineage publisher writes
+    except (KeyError, TypeError) as exc:
+        raise ValueError(f'C1 night plan lacks its launch identity: {exc!r}') from exc
+    rows = (
+        ('hazard_window.pack.window_id', identity['window_id'], reserved['window_id']),
+        ('hazard_window.pack.pack_plan_id', identity['plan_id'], reserved['plan_id']),
+        ('hazard_window.bracket_session_id', identity['bracket_session_id'], reserved['bracket_session_id']),
+        ('hazard_window.pack.evidence_root_id', pack.get('evidence_root_id'), reserved['evidence_root_id']),
+        ('hazard_window.pack.pack_id', pack.get('pack_id'), PACK.name),
+        ('hazard_window.pack.plan_tree_sha256', pack.get('plan_tree_sha256'), digest(tree_raw)),
+        ('hazard_window.runs_roots', hazard.get('runs_roots'),
+         {'claim': bindings['claim_runs_root'], 'bound': bindings['bound_runs_root']}),
+        ('hazard_window.attempt', hazard.get('attempt'), inputs.get('attempt')),
+        ('plan_id', night.get('plan_id'), inputs.get('plan_id')),
+        ('repo_head', night.get('repo_head'), execution_commit),
+        ('measurement_head', night.get('measurement_head'), execution_commit),
+        ('custody_root', as_path(night.get('custody_root')), as_path(inputs.get('custody_root'))),
+        ('measurement_root', as_path(night.get('measurement_root')), view.root),
+    )
+    for field, observed, expected in rows:
+        if observed is None or expected is None or observed != expected:
+            raise ValueError(f"C1 night plan {field} is {observed!r}, not this attempt's {expected!r}")
+
+
+def check_write_roots(stage_root, night, state):
+    """Every root the launch writes is this attempt's own, and still fresh.
+
+    The attempt's own directory is the one that holds its verified staged
+    inputs (the session root in production). It is derived from the handoff,
+    never taken from the plan. Each write root must resolve (realpath)
+    inside it. The runs roots and the operator log root are created empty
+    by prepare and nothing writes to them before the chain, so each must
+    still be absent or an empty directory that is not a link. The custody
+    root may hold records, but no link at or below it.
+    """
+    attempt = Path(os.path.realpath(stage_root)).parent
+    bindings = night['hazard_window']['bindings']
+    roots = []
+    for name in WRITE_ROOT_BINDINGS:
+        if not isinstance(bindings.get(name), str) or not bindings[name]:
+            raise ValueError(f'C1 binding {name} is missing')
+        roots.append((name, bindings[name]))
+    roots += [('custody_root', night['custody_root']), ('session_root', state['session_root'])]
+    for name, value in roots:
+        if not Path(real := os.path.realpath(value)).is_relative_to(attempt):
+            raise ValueError(f"C1 {name} resolves outside this attempt's directory {attempt}: {value} -> {real}")
+    for name in FRESH_ROOT_BINDINGS:
+        check_fresh_root(name, bindings[name])
+    check_no_links('custody_root', night['custody_root'])
+
+
+def check_fresh_root(name, value):
+    """A root prepare created empty is still absent, or an empty directory that is not a link.
+
+    b5.plan creates both runs roots and the operator log root empty, and a
+    window never reuses one. An entry placed there since would take this
+    attempt's writes. That covers a link, a copied or hard-linked log, a
+    stale bound, bundle or lock, or a linked capture root.
+    """
+    root = Path(value)
+    if os.path.islink(root):
+        raise ValueError(f'C1 {name} is a link: {root} -> {os.readlink(root)}')
+    if not os.path.lexists(root):
+        return
+    if not root.is_dir():
+        raise ValueError(f'C1 {name} is not a directory: {root}')
+    if entries := sorted(os.listdir(root)):
+        raise ValueError(f'C1 {name} is not empty, so this attempt would write through '
+                         f'{entries[0]!r}: {root}')
+
+
+def check_no_links(name, root):
+    """A record root the launch writes into holds no link at or below it.
+
+    The custody root takes the lineage and night records. It may already
+    hold ordinary records, but a link there would send this attempt's writes
+    to another place.
+    """
+    root = Path(root)
+    if os.path.islink(root):
+        raise ValueError(f'C1 {name} is a link: {root} -> {os.readlink(root)}')
+    if not os.path.lexists(root):
+        return
+    if not root.is_dir():
+        raise ValueError(f'C1 {name} is not a directory: {root}')
+    for parent, directories, files in os.walk(root):  # never descends through a link
+        for entry in sorted((*directories, *files)):
+            if os.path.islink(path := os.path.join(parent, entry)):
+                raise ValueError(f'C1 {name} holds a link, so this attempt would write through it: {path}')
+
+
+def prepared_closure(authority, verified_roots, handoff, read):
+    """Derive the inventory from prepare's declaration and check required inputs."""
+    view = verify_launch_view(verified_roots, handoff['view'],
+                              runtime=handoff.get('runtime'), git_link=handoff.get('git_link'))
+    state, night = load_prepared(view, read)
+    pins = declared_pins(verified_roots.repo, verified_roots.stage)
+    ledger = ledger_pin(verified_roots, view.locate(view.root / LEDGER), pins)
+    tree_raw = read(PACK / 'plan_tree.json')
+    expected = f'{digest(tree_raw)}  plan_tree.json\n'.encode()
+    if read(PACK / 'plan_tree.sha256') != expected:
+        raise ValueError('staged plan tree sidecar differs')
+    tree = decode(tree_raw)
+    selections = check_selections(view, tree, night, ledger, c1_inputs=execution_inputs(handoff, ledger))
+    verify_chain(view, handoff, ledger, tree, digest(tree_raw), night)
+    # Last, so every earlier refusal keeps its own reason.
+    check_launch_records(view, tree_raw, night, state, selections.get('reservation'),
+                         execution_commit(handoff))
+    # The one pack predicate (window_lineage.admit_pack). The launch binding
+    # runs the same call on the lineage's copy of these values.
+    from joulewise import window_lineage
+
+    window_lineage.admit_pack(view.root / PACK, pack_sha256=(night['hazard_window'].get('pack') or {}).get('pack_sha256'),
+                              plan_tree_sha256=digest(tree_raw), config_paths=selections.get('dispatched_configs', ()))
+    check_write_roots(verified_roots.stage, night, state)
+    closure = {'schema': SCHEMA, 'repo': tree_identity(authority, execution_commit(handoff)),
+               'stage_files': pins, 'ledger': ledger}
+    return closure, state, night, tree, view, selections
+
+
+def finalize(authority, handoff):
+    """Read only declared outputs when finalizing an attempt's packet."""
+    roots = Roots(handoff['repo'], handoff['stage'])
+    verify_repo(authority, roots, tree_identity(authority, execution_commit(handoff)))
+    pins = declared_pins(roots.repo, roots.stage)
+    prepared = VerifiedView(roots, {}, '', pins)
+    return prepared_closure(authority, roots, handoff, prepared.stage_read)[0]
+
+
+def runtime_input_context():
+    """The prepared chain carries the already verified attempt context."""
+    return decode(raw) if (raw := os.environ.get('JOULEWISE_C1_INPUTS')) else None
+
+
+def runtime_ledger(path, *, starting=False):
+    context = runtime_input_context()
+    return check_ledger(path, context['ledger'], starting=starting) if context else Path(path)
+
+
 def artifact_set_digest_at(root, commit):
     """The same digest computed from the committed bytes of ``commit`` (the last desk-passed code state)."""
     blobs = _committed_bytes(root, commit, list(ARTIFACTS))
     return artifact_set_digest_from(lambda path: blobs.get(path))
+
+
+def artifact_hashes_at(root, commit):
+    """Expected staged artifact bytes, including required absences."""
+    return {path: digest(raw) if raw is not None else None
+            for path, raw in _committed_bytes(root, commit, list(ARTIFACTS)).items()}
 
 
 def _committed_bytes(root, commit, paths):

@@ -1389,6 +1389,142 @@
     ]
   },
   {
+    "commit": "3ae356e818e1b8bd9cec88597f9ba36d62bddd1a",
+    "number_bearing_paths": [
+      "joulewise/b5/chain.py",
+      "joulewise/calibration_ledger.py",
+      "scripts/run_campaign.py"
+    ],
+    "change": "Rebuild C1 closure from the execution tree and declared attempt outputs",
+    "executing_reviews": [
+      {
+        "reviewer": "Opus 5.5 cold executing review (non-author; separate session from the Opus 5.5 builder of 765c4a126), ADMIT-WITH-FIXES; fix-round delta 765c4a126..6355ffda5 ADMIT-WITH-FIXES",
+        "covered": "3ae356e818e1b8bd9cec88597f9ba36d62bddd1a: joulewise/b5/chain.py blob 03a2eaf3c2ac83c49fc2fa24dc430469945ac398; joulewise/calibration_ledger.py blob e1ef407f57da4613aa72ee0976878c3ebc0a144c; scripts/run_campaign.py blob 829c88cf33f350fe6963057dc11801ca8091e4d2; no HIGH; non-C1 render byte-identical in 90/90; run_campaign.py equals the base blob from 949298c7c; 7/7 chain.py and A3-site mutants killed; MED-1 (consumer input gates skipped) repaired in 6355ffda5; D-MED-1 open for the lead's structural rule; paper sha256 f4503b6fe72138e145e85f9e46ddfbda3549fb6fad6f5bea0d8c034fb0f2213a",
+        "paper": "docs/align/reviews/2026-11-22-c1-r11-opus-executing-review.md"
+      },
+      {
+        "reviewer": "Fable 5.2 cold executing review (non-author), replacing the Sol 6.1 seat whose command sandbox could not initialize on this machine, ADMIT-WITH-FIXES",
+        "covered": "3ae356e818e1b8bd9cec88597f9ba36d62bddd1a: joulewise/b5/chain.py blob 03a2eaf3c2ac83c49fc2fa24dc430469945ac398; joulewise/calibration_ledger.py blob e1ef407f57da4613aa72ee0976878c3ebc0a144c; scripts/run_campaign.py blob 829c88cf33f350fe6963057dc11801ca8091e4d2; no HIGH; non-C1 render byte-identical in 60/60; run_campaign.py equals the base blob from 949298c7c; 18 mutants; F1 repaired in 6355ffda5; F2 open for the lead's structural rule; paper sha256 b8c0620b655ad15d9bec24145d24f1a68696fda8f0916c92e68555d01c3815f7",
+        "paper": "docs/align/reviews/2026-11-22-c1-r11-fable-executing-review.md"
+      }
+    ]
+  },
+  {
+    "commit": "949298c7c1eb52f10223b6d7fe2237e30bf2d590",
+    "number_bearing_paths": [
+      "joulewise/b5/chain.py",
+      "scripts/run_campaign.py"
+    ],
+    "change": "Keep the pinned runner and bound C1 lookup through staged dispatch placement",
+    "executing_reviews": [
+      {
+        "reviewer": "Opus 5.5 cold executing review (non-author; separate session from the Opus 5.5 builder of 765c4a126), ADMIT-WITH-FIXES; fix-round delta 765c4a126..6355ffda5 ADMIT-WITH-FIXES",
+        "covered": "949298c7c1eb52f10223b6d7fe2237e30bf2d590: joulewise/b5/chain.py blob 5b7143ee3c18f47c5b4452046cab72ed18e866c1; scripts/run_campaign.py blob 2181546feaf0d0db659142533029918c5e9b747c; no HIGH; non-C1 render byte-identical in 90/90; run_campaign.py equals the base blob from 949298c7c; 7/7 chain.py and A3-site mutants killed; MED-1 (consumer input gates skipped) repaired in 6355ffda5; D-MED-1 open for the lead's structural rule; paper sha256 f4503b6fe72138e145e85f9e46ddfbda3549fb6fad6f5bea0d8c034fb0f2213a",
+        "paper": "docs/align/reviews/2026-11-22-c1-r11-opus-executing-review.md"
+      },
+      {
+        "reviewer": "Fable 5.2 cold executing review (non-author), replacing the Sol 6.1 seat whose command sandbox could not initialize on this machine, ADMIT-WITH-FIXES",
+        "covered": "949298c7c1eb52f10223b6d7fe2237e30bf2d590: joulewise/b5/chain.py blob 5b7143ee3c18f47c5b4452046cab72ed18e866c1; scripts/run_campaign.py blob 2181546feaf0d0db659142533029918c5e9b747c; no HIGH; non-C1 render byte-identical in 60/60; run_campaign.py equals the base blob from 949298c7c; 18 mutants; F1 repaired in 6355ffda5; F2 open for the lead's structural rule; paper sha256 b8c0620b655ad15d9bec24145d24f1a68696fda8f0916c92e68555d01c3815f7",
+        "paper": "docs/align/reviews/2026-11-22-c1-r11-fable-executing-review.md"
+      }
+    ]
+  },
+  {
+    "commit": "e6da6a0be00aec2fc7ad44948e8d925252defd26",
+    "number_bearing_paths": [
+      "joulewise/b5/chain.py"
+    ],
+    "change": "Match C1 preflight to campaign selection and reservation defaults",
+    "executing_reviews": [
+      {
+        "reviewer": "Opus 5.5 cold executing review (non-author; separate session from the Opus 5.5 builder of 765c4a126), ADMIT-WITH-FIXES; fix-round delta 765c4a126..6355ffda5 ADMIT-WITH-FIXES",
+        "covered": "e6da6a0be00aec2fc7ad44948e8d925252defd26: joulewise/b5/chain.py blob 5ab4e51f1a91e005499f414c7906650351db7306; no HIGH; non-C1 render byte-identical in 90/90; run_campaign.py equals the base blob from 949298c7c; 7/7 chain.py and A3-site mutants killed; MED-1 (consumer input gates skipped) repaired in 6355ffda5; D-MED-1 open for the lead's structural rule; paper sha256 f4503b6fe72138e145e85f9e46ddfbda3549fb6fad6f5bea0d8c034fb0f2213a",
+        "paper": "docs/align/reviews/2026-11-22-c1-r11-opus-executing-review.md"
+      },
+      {
+        "reviewer": "Fable 5.2 cold executing review (non-author), replacing the Sol 6.1 seat whose command sandbox could not initialize on this machine, ADMIT-WITH-FIXES",
+        "covered": "e6da6a0be00aec2fc7ad44948e8d925252defd26: joulewise/b5/chain.py blob 5ab4e51f1a91e005499f414c7906650351db7306; no HIGH; non-C1 render byte-identical in 60/60; run_campaign.py equals the base blob from 949298c7c; 18 mutants; F1 repaired in 6355ffda5; F2 open for the lead's structural rule; paper sha256 b8c0620b655ad15d9bec24145d24f1a68696fda8f0916c92e68555d01c3815f7",
+        "paper": "docs/align/reviews/2026-11-22-c1-r11-fable-executing-review.md"
+      }
+    ]
+  },
+  {
+    "commit": "88139ebffa4289eb79a87892df585a7accbad4c0",
+    "number_bearing_paths": [
+      "joulewise/b5/chain.py"
+    ],
+    "change": "Parse C1 launch commands through the consumers and refuse repeated options",
+    "executing_reviews": [
+      {
+        "reviewer": "Opus 5.5 cold executing review (non-author; separate session from the Opus 5.5 builder of 765c4a126), ADMIT-WITH-FIXES; fix-round delta 765c4a126..6355ffda5 ADMIT-WITH-FIXES",
+        "covered": "88139ebffa4289eb79a87892df585a7accbad4c0: joulewise/b5/chain.py blob 5fe788036f359f864c4decb2a862c1a2908a47c4; no HIGH; non-C1 render byte-identical in 90/90; run_campaign.py equals the base blob from 949298c7c; 7/7 chain.py and A3-site mutants killed; MED-1 (consumer input gates skipped) repaired in 6355ffda5; D-MED-1 open for the lead's structural rule; paper sha256 f4503b6fe72138e145e85f9e46ddfbda3549fb6fad6f5bea0d8c034fb0f2213a",
+        "paper": "docs/align/reviews/2026-11-22-c1-r11-opus-executing-review.md"
+      },
+      {
+        "reviewer": "Fable 5.2 cold executing review (non-author), replacing the Sol 6.1 seat whose command sandbox could not initialize on this machine, ADMIT-WITH-FIXES",
+        "covered": "88139ebffa4289eb79a87892df585a7accbad4c0: joulewise/b5/chain.py blob 5fe788036f359f864c4decb2a862c1a2908a47c4; no HIGH; non-C1 render byte-identical in 60/60; run_campaign.py equals the base blob from 949298c7c; 18 mutants; F1 repaired in 6355ffda5; F2 open for the lead's structural rule; paper sha256 b8c0620b655ad15d9bec24145d24f1a68696fda8f0916c92e68555d01c3815f7",
+        "paper": "docs/align/reviews/2026-11-22-c1-r11-fable-executing-review.md"
+      }
+    ]
+  },
+  {
+    "commit": "765c4a1262fbf701d29d860ff6defad81a723d4a",
+    "number_bearing_paths": [
+      "joulewise/b5/chain.py"
+    ],
+    "change": "Close the C1 chain environment and run each consumer's own pre-host checks",
+    "executing_reviews": [
+      {
+        "reviewer": "Opus 5.5 cold executing review (non-author; separate session from the Opus 5.5 builder of 765c4a126), ADMIT-WITH-FIXES; fix-round delta 765c4a126..6355ffda5 ADMIT-WITH-FIXES",
+        "covered": "765c4a1262fbf701d29d860ff6defad81a723d4a: joulewise/b5/chain.py blob a1ec520cc2c9d045a83d77c9a2c644170dcdea88; no HIGH; non-C1 render byte-identical in 90/90; run_campaign.py equals the base blob from 949298c7c; 7/7 chain.py and A3-site mutants killed; MED-1 (consumer input gates skipped) repaired in 6355ffda5; D-MED-1 open for the lead's structural rule; paper sha256 f4503b6fe72138e145e85f9e46ddfbda3549fb6fad6f5bea0d8c034fb0f2213a",
+        "paper": "docs/align/reviews/2026-11-22-c1-r11-opus-executing-review.md"
+      },
+      {
+        "reviewer": "Fable 5.2 cold executing review (non-author), replacing the Sol 6.1 seat whose command sandbox could not initialize on this machine, ADMIT-WITH-FIXES",
+        "covered": "765c4a1262fbf701d29d860ff6defad81a723d4a: joulewise/b5/chain.py blob a1ec520cc2c9d045a83d77c9a2c644170dcdea88; no HIGH; non-C1 render byte-identical in 60/60; run_campaign.py equals the base blob from 949298c7c; 18 mutants; F1 repaired in 6355ffda5; F2 open for the lead's structural rule; paper sha256 b8c0620b655ad15d9bec24145d24f1a68696fda8f0916c92e68555d01c3815f7",
+        "paper": "docs/align/reviews/2026-11-22-c1-r11-fable-executing-review.md"
+      }
+    ]
+  },
+  {
+    "commit": "bc224942e83b4833a860d0824f297709fa69c727",
+    "number_bearing_paths": [
+      "joulewise/calibration_ledger.py"
+    ],
+    "change": "Let a read-only caller skip the lease-taking live-writer probe",
+    "executing_reviews": [
+      {
+        "reviewer": "Opus 5.5 cold executing review (non-author; separate session from the Opus 5.5 builder), ADMIT-WITH-FIXES; fix-round delta 3daea0447..062698aff ADMIT",
+        "covered": "bc224942e83b4833a860d0824f297709fa69c727: joulewise/calibration_ledger.py blob 37fa093f0a2b8f7e62b94f770e43a3abb4effcb3; no HIGH; default and every existing caller unchanged, only the C1 preflight disables the probe; read-only versus lease-held pre-reserve decision agreed 28/28; MED-1 (session-status lease) and MED-2 (capture slot and pin agreement) repaired in fcfc0dee4 and 062698aff; LOW test gaps open; paper sha256 509fbffdb04c655ea435f35e2b44fccf92fda889ac85eb393235fe40f3a407f0",
+        "paper": "docs/align/reviews/2026-11-22-c1-r12-opus-executing-review.md"
+      },
+      {
+        "reviewer": "Fable 5.2 cold executing review (non-author), in the Sol 6.1 seat whose command sandbox cannot initialize on this machine, ADMIT-WITH-FIXES; fix-round delta 3daea0447..062698aff ADMIT",
+        "covered": "bc224942e83b4833a860d0824f297709fa69c727: joulewise/calibration_ledger.py blob 37fa093f0a2b8f7e62b94f770e43a3abb4effcb3; no HIGH; default and every existing caller unchanged, only the C1 preflight disables the probe; read-only versus lease-held decisions agreed 52/52 and 6/6 with the directory unchanged; F1 (later-consumer head pin) repaired in 062698aff; LOW test gaps open; paper sha256 da6a1502703a6dbfb163a896b8afbe7510e5e66e09e749dd64dce691bb9826e8",
+        "paper": "docs/align/reviews/2026-11-22-c1-r12-fable-executing-review.md"
+      }
+    ]
+  },
+  {
+    "commit": "fcfc0dee489e649d641ac34793eeed1a5000ddaa",
+    "number_bearing_paths": [
+      "joulewise/calibration_ledger.py"
+    ],
+    "change": "Let the read-only caller skip session status's lease-taking probe too",
+    "executing_reviews": [
+      {
+        "reviewer": "Opus 5.5 cold executing review (non-author; separate session from the Opus 5.5 builder), ADMIT-WITH-FIXES; fix-round delta 3daea0447..062698aff ADMIT",
+        "covered": "fcfc0dee489e649d641ac34793eeed1a5000ddaa: joulewise/calibration_ledger.py blob fcd1bbdcca032c86d8d889f7fa2e3790bffeb33b; no HIGH; default and every existing caller unchanged, only the C1 preflight disables the probe; read-only versus lease-held pre-reserve decision agreed 28/28; MED-1 (session-status lease) and MED-2 (capture slot and pin agreement) repaired in fcfc0dee4 and 062698aff; LOW test gaps open; paper sha256 509fbffdb04c655ea435f35e2b44fccf92fda889ac85eb393235fe40f3a407f0",
+        "paper": "docs/align/reviews/2026-11-22-c1-r12-opus-executing-review.md"
+      },
+      {
+        "reviewer": "Fable 5.2 cold executing review (non-author), in the Sol 6.1 seat whose command sandbox cannot initialize on this machine, ADMIT-WITH-FIXES; fix-round delta 3daea0447..062698aff ADMIT",
+        "covered": "fcfc0dee489e649d641ac34793eeed1a5000ddaa: joulewise/calibration_ledger.py blob fcd1bbdcca032c86d8d889f7fa2e3790bffeb33b; no HIGH; default and every existing caller unchanged, only the C1 preflight disables the probe; read-only versus lease-held decisions agreed 52/52 and 6/6 with the directory unchanged; F1 (later-consumer head pin) repaired in 062698aff; LOW test gaps open; paper sha256 da6a1502703a6dbfb163a896b8afbe7510e5e66e09e749dd64dce691bb9826e8",
+        "paper": "docs/align/reviews/2026-11-22-c1-r12-fable-executing-review.md"
+      }
+    ]
+  },
+  {
     "commit": "5bb152acc27b7c34aef7721a51dd959223ddd530",
     "number_bearing_paths": [
       "joulewise/b5/driver.py"
@@ -1413,6 +1549,18 @@
         "reviewer": "OpenAI GPT family, Astra 6.2 independent executing review, round 5, BLOCK",
         "covered": "PR #813 head 07ebee6c8a58eb9f4d444335bf79456217c45ddb; RL-182a check 1 accepted synthetic-prompt hashing in an annotated assignment on the first turn and work inserted on the cache-hit path. RL-182b superseded the check-1 AST rule at cd4d78684. Original report docs/research-audits/2026-11-10-fable/evidence/pr-reviews/pr813/audit-round-5.md sha256 3a35f6550d282dfa5d75b85a718115382469969a3813a755b3e897c1718d581d; paper sha256 78ba3a4b9ddb4ffaf3420472984983d23dbda086621eaaad80c3ed2fb675407e",
         "paper": "docs/align/reviews/2026-11-18-pr813-executing-review-citations.md"
+      }
+    ]
+  },
+  {
+    "commit": "909465f32ac9ca202f8c73f239f0252a87ea1fb6",
+    "number_bearing_paths": [],
+    "change": "merge of ops/2026-11-11-w1-presign (ecf718b4d, PRs #944, #960, #961) into PR #896 (f00464dcc) for shard 12, lead round 10 L4; an ordinary merge, not a force push",
+    "executing_reviews": [
+      {
+        "reviewer": "Fable 5.2 cold executing review of the merge (non-author), in the Sol 6.1 seat whose command sandbox cannot initialize on this machine, ADMIT",
+        "covered": "merge 909465f32 tree 30a0233a9 equals git merge-tree of f00464dcc and ecf718b4d (no conflicts); 44 PR-only and 35 base-only paths byte-identical to their side, 2 both-changed paths equal the 3-way merge; review-required paths chain.py and calibration_ledger.py equal the PR side, mlx_runtime.py equals the base side; ledger is the exact 80-row union with the first 15 rows intact; 102 tests in 6 base-side modules plus 1 PR-side spot check pass; paper sha256 5034e07294c87b20451880af23cd1cc182d185c7e3337fe382d6b9168c4d50e6",
+        "paper": "docs/align/reviews/2026-11-24-c1-r18-merge-fable-executing-review.md"
       }
     ]
   },

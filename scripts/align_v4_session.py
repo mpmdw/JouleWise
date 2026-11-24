@@ -31,7 +31,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from joulewise import timing_receipts
+from joulewise.align.apple.v4_registration import C1_WINDOW  # one window identity (J1)
 from scripts import align_pilot_session as pilot, align_v4_kit as kit
+
+
+# The ALIGN v4 session-ID prefix; prepare mints IDs with bytes_h_session.session_id_at.
+SESSION_PREFIX = 'align-v4-'
 
 
 def series_ac_powermode(measurement_root, kit_path=kit.KIT):
@@ -45,7 +50,7 @@ def series_ac_powermode(measurement_root, kit_path=kit.KIT):
 
 def prepare(measurement_root, session_root, *, power_runner=None, window_id=None, extra_sentinels=0,
             frequency_reader=None, frequency_runner=None, frequency_preflight=None, weight_identity_fn=None,
-            runtime_runner=None, runtime_reader=None, **kwargs):
+            runtime_runner=None, runtime_reader=None, c1_public_inputs=None, **kwargs):
     from joulewise.align.apple import powermode
     preflight = powermode.host_lock_preflight(role='v4-prepare-preflight')
     # Lead ruling R6-7: at every session start a host-level High Power marker
@@ -65,6 +70,8 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
         if selected['id'] != 'W1':
             series.generate(measurement_root, window_id, check=True, extra_sentinels=extra_sentinels)
             kwargs.update(kit=series.kit_path(selected['id']), pack_id=series.pack_id(selected['id']))
+            if selected['id'] == C1_WINDOW:
+                kwargs.update(attempt_c1=True, c1_public_inputs=c1_public_inputs)
         series_state = dict(window_id=selected['id'], role=selected['role'], extra_sentinels=extra_sentinels,
             manifest_sha256=kit.sha((Path(measurement_root) / series.MANIFEST).read_bytes()),
             admission_sha256=kit.sha((Path(measurement_root) / series.ADMISSION).read_bytes()))
@@ -73,7 +80,7 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
     kwargs.setdefault('ac_powermode', series_ac_powermode(measurement_root, kwargs.get('kit', kit.KIT)))
     kwargs.setdefault('kit', kit.KIT)
     kwargs.setdefault('pack_id', kit.PACK_ID)
-    kwargs.setdefault('session_prefix', 'align-v4-')
+    kwargs.setdefault('session_prefix', SESSION_PREFIX)
     try:
         state = pilot.prepare(measurement_root, session_root, **kwargs)
     except (pilot.h.PhysicalHazard, KeyError, OSError) as exc:
@@ -138,6 +145,15 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
     if series_state is not None:
         if state.get('preparation_status') != 'STAGED':
             raise ValueError('series prepare produced no armable plan; inspect session flags')
+    if c1_prepare := state.get('c1_prepare'):
+        from joulewise.align.apple import v4_registration as c1_closure
+
+        handoff = c1_prepare['handoff']
+        roots = c1_closure.Roots(handoff['repo'], handoff['stage'])
+        pilot.h.write(roots.stage / 'session.json', state)
+        c1_closure.declare_outputs(roots.repo, roots.stage, [*c1_prepare['outputs'], 'session.json'])
+        c1_closure.link_launch_view(roots, handoff['view'], runtime=handoff['runtime'], git_link=handoff['git_link'])
+        pilot.h.write(Path(session_root) / 'c1-prepared.json', handoff)
     if start['action'] != 'none':
         try:
             pilot.h.write(Path(session_root) / f'staging/v4-session-start-restore-{time.time_ns()}.json', start)
@@ -514,7 +530,9 @@ def watchdog_acceptance(*, phase, runner=None, plist_path=None, plan=None, plan_
               'plan_read_proven': False, 'stopped': False}
     try:
         path = Path(plist_path) if plist_path is not None else Path.home() / 'Library/LaunchAgents/com.joulewise.magistrate.plist'
-        document = plistlib.loads(path.read_bytes())
+        raw = path.read_bytes()
+        record['file_identity'] = {'path': str(path.absolute()), 'sha256': _sha256(raw)}
+        document = plistlib.loads(raw)
         argv = document['ProgramArguments']
         cwd = document['WorkingDirectory']
         environment = document['EnvironmentVariables']
@@ -1185,9 +1203,117 @@ ARM_RECORD_SCHEMA = 'joulewise.align_v4_arm.v1'
 ARM_DWELL_SCHEMA = 'joulewise.align_v4_arm_dwell.v1'   # the dwell stamp, written alone after it is taken
 
 
+class PacketKitMismatch(ValueError):
+    reason = 'packet_kit_mismatch'
+
+    def __init__(self, detail):
+        self.detail = detail
+        super().__init__(f'{self.reason}: {detail}')
+
+
 def _sha256(raw):
     import hashlib
     return hashlib.sha256(raw).hexdigest()
+
+
+def _read_packet(pointer):
+    if isinstance(pointer, (str, Path)):
+        try:
+            raw = Path(pointer).read_bytes()
+            return json.loads(raw), _sha256(raw)
+        except (OSError, ValueError):
+            return None, None
+    return pointer, None
+
+
+def _c1_external_controls(measurement_root, *controls):
+    """Live control files are session inputs, outside the immutable staged view."""
+    view = Path(os.path.abspath(measurement_root))
+    resolved_view = view.resolve()
+    for control in controls:
+        paths = (control,) if isinstance(control, (str, Path)) else control or ()
+        for path in paths:
+            candidate = Path(os.path.abspath(path))
+            if candidate.is_relative_to(view) or candidate.resolve().is_relative_to(resolved_view):
+                raise PacketKitMismatch('live control path is inside the staged view: ' + str(path))
+
+
+def _check_c1_packet_kit(view, read, packet, tree, night):
+    from joulewise.align.apple import v4_registration as c1_closure
+    from scripts import align_v4_series as series
+
+    def repo_read(path):
+        return view.roots.regular(view.roots.repo / path).read_bytes()
+
+    kit_dir = view.roots.repo / series.kit_path(C1_WINDOW)
+    entries = [kit_dir / name for name, mode, _ in view.roots.walk(kit_dir) if mode != '040000']
+    actual, plan = series.read_c1_kit(view.roots.repo, read=repo_read, entries=entries)
+    if actual != packet.get('c1_kit'):
+        raise ValueError('materialized kit digest, plan digest, member count or sentinel ordinals differ')
+    pack = c1_closure.PACK
+    tree_raw = read(pack / 'plan_tree.json')
+    hazard = night['hazard_window']
+    if (tree['plan']['path'] != series.C1_PLAN
+            or tree['plan']['actual_sha256'] != actual['plan_sha256']
+            or hazard['pack']['plan_tree_sha256'] != _sha256(tree_raw)
+            or read(pack / series.C1_PLAN) != repo_read(series.kit_path(C1_WINDOW) / series.C1_PLAN)
+            or [(row['run_id'], row['config_sha256']) for row in tree['science']] !=
+               [(row['run_id'], row['config_sha256']) for row in plan['members']]):
+        raise ValueError('staged launch plan differs from the materialized kit')
+    for projected, member in zip(tree['science'], plan['members'], strict=True):
+        config = pack / c1_closure.C1_DISPATCH / member['stage_id'] / Path(member['config_path']).name
+        if projected['config_path'] != config.as_posix():
+            raise ValueError('staged science row names a different config')
+    observed = series.c1_execution_identity(tree, plan, lambda path: view.locate(path).read_bytes(), staged=True)
+    if observed != actual['execution']:
+        raise ValueError('staged member config or order manifest differs from the committed dispatch')
+    return plan, {'ok': True, **actual, 'staged_launch_tree_sha256': _sha256(tree_raw)}
+
+
+def c1_arm_preflight(handoff, *, now_epoch_s, measurement_root=None, plan=None, packet_path=None):
+    from joulewise.align.apple import v4_registration as c1_closure, v4_registration
+    from scripts import align_v4_next_arm_packet as builder, align_v4_series as series
+
+    try:
+        if not isinstance(handoff, dict):
+            handoff = c1_closure.decode(Path(handoff).read_bytes())
+        if handoff['window'] != C1_WINDOW:
+            raise ValueError('the handoff does not select C1')
+        authority = Path(handoff['git'])
+        # The one pinned commit (CAP 10 I1): the launch view is verified
+        # against it, and the installer receives it from this context.
+        execution_commit = c1_closure.execution_commit(handoff)
+        verified = c1_closure.verify_view(authority, handoff['repo'], handoff['stage'],
+                                          delivery_ref=handoff['delivery_ref'],
+                                          delivery_commit=handoff['delivery_commit'],
+                                          execution_commit=execution_commit)
+        if packet_path is not None and Path(packet_path).absolute() != verified.roots.stage / c1_closure.PACKET:
+            raise ValueError('packet pointer differs from the fixed C1 staging path')
+        closure, state, night, tree, view, _ = c1_closure.prepared_closure(
+            authority, verified.roots, handoff, verified.stage_read)
+        if closure != verified.packet['c1_closure']:
+            raise ValueError('C1 closure differs from the authenticated prepare declaration or starting ledger')
+        if measurement_root is not None and Path(measurement_root).absolute() != view.root:
+            raise ValueError('the arm does not use the authenticated launch view')
+        current = v4_registration.artifact_set_digest_at(authority, closure['repo']['commit'])
+        built, matches = builder.rebuild_and_compare(authority, verified.packet, now_epoch_s=now_epoch_s,
+                                                     current_artifact_set_sha256=current, verified_closure=closure)
+        if not built['packet_preflight']['ready']:
+            raise ValueError('; '.join(built['packet_preflight']['reasons']))
+        if not matches:
+            raise ValueError('supplied packet differs from the arm rebuild')
+        if (not _record_bound(authority, built)
+                or not _record_bound(authority, built, revision=handoff['delivery_commit'])):
+            raise ValueError('packet does not bind the latest committed record')
+        source_plan, kit_result = _check_c1_packet_kit(view, verified.stage_read, verified.packet, tree, night)
+        if plan is not None and plan != source_plan:
+            raise ValueError('selected collection plan differs from the materialized C1 plan')
+        series.bind_packet(view.roots.repo, C1_WINDOW, built, authenticated_by_rebuild=True)
+        return {'authority': authority, 'state': state, 'night': night, 'plan': source_plan,
+                'view': view, 'packet': built, 'packet_sha256': verified.packet_sha256,
+                'current_digest': current, 'kit': kit_result, 'execution_commit': execution_commit}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, IndexError) as exc:
+        raise PacketKitMismatch(str(exc)) from exc
 
 
 def _commit_exists(root, commit):
@@ -1225,7 +1351,7 @@ def _probe_meter_live(root, *, runner=None, seconds=3):
                 **({} if live else {'reason': 'no aligned samples with a closing line'})}
 
 
-def _record_bound(root, packet):
+def _record_bound(root, packet, *, revision="HEAD"):
     """Whether the packet is bound to the LATEST committed window record (smoke G1, delta3).
 
     Three facts, all from committed Git objects: ``record_path`` at ``record_commit`` hashes to
@@ -1248,9 +1374,9 @@ def _record_bound(root, packet):
     try:
         blob = subprocess.run(['git', 'show', f'{commit}:{path}'], cwd=root, capture_output=True,
                               timeout=30, check=False)
-        latest = subprocess.run(['git', 'log', '-1', '--format=%H', '--', path], cwd=root,
+        latest = subprocess.run(['git', 'log', '-1', '--format=%H', revision, '--', path], cwd=root,
                                 capture_output=True, text=True, timeout=30, check=False)
-        ledger = subprocess.run(['git', 'show', f'HEAD:{series_path}'], cwd=root, capture_output=True,
+        ledger = subprocess.run(['git', 'show', f'{revision}:{series_path}'], cwd=root, capture_output=True,
                                 timeout=30, check=False)
         state = json.loads(ledger.stdout) if ledger.returncode == 0 else None
     except (OSError, subprocess.SubprocessError, ValueError):
@@ -1402,7 +1528,7 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
                now=None, next_arm_triage=None, commit_check=None, record_check=None,
                packet_builder=None, meter_probe=None, dwell_start=None, series_bind=None, pre_dwell=None,
                watchdog_plist=None, watchdog_check=None, watchdog_plan=None, watchdog_plan_path=None,
-               held_window_ruling=None):
+               held_window_ruling=None, c1_kit_root=None, c1_handoff=None):
     """W1/D arm evidence: ruling 7 AC powermode and ruling 20 volumes.
 
     R17 review F7: every Git check (record commit, record binding) and the frozen-series binding
@@ -1423,7 +1549,22 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     """
     from joulewise.align.apple import external_volume, powermode
     expected = (plan.get('runtime_requirements') or {}).get('ac_powermode')
-    marker = Path(measurement_root) / powermode.R1_HIGH_POWER_MARKER
+    context = None
+    evidence_root = measurement_root
+    now_s = (now or time.time)()
+    c1_prepared = Path(measurement_root).parent / 'c1-prepared.json'
+    if (c1_handoff is not None or c1_kit_root is not None or plan.get('window_id') == C1_WINDOW
+            or c1_prepared.is_file()):
+        try:
+            if c1_handoff is None:
+                raise PacketKitMismatch('an explicit committed C1 handoff is required')
+            context = c1_arm_preflight(c1_handoff, now_epoch_s=now_s, measurement_root=measurement_root,
+                                       plan=plan, packet_path=next_arm_triage)
+            evidence_root = context['authority']
+        except PacketKitMismatch as exc:
+            return {'admitted': False, 'reasons': [exc.reason],
+                    'packet_kit': {'ok': False, 'reason': exc.reason, 'detail': exc.detail}}
+    marker = Path(evidence_root) / powermode.R1_HIGH_POWER_MARKER
     power = powermode.admit_ac_powermode(expected, marker=marker, markers=(powermode.host_marker_path(),),
                                          runner=runner, lock=lock, owner=owner)
     reasons = [] if power['admitted'] else ['ac_powermode: ' + str(power['reason'])]
@@ -1443,7 +1584,6 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     # MED-3: top-up evidence is derived from the logged battery record (completed charge
     # within 1800 s, or continuous float since it); a hand-entered time is not admissible.
     from joulewise.align.apple import v4_topup
-    now_s = (now or time.time)()
     as_list = lambda value: [] if value is None else [value] if isinstance(value, (str, Path)) else list(value)
     logs, journals = as_list(battery_log), as_list(window_battery_journal)
     evidence = v4_topup.derive_from_sources(logs, journals, now_s) if logs or journals else None
@@ -1470,35 +1610,34 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     # judges its own build, and refuses a supplied packet that differs from it. Powermode, volume,
     # battery and the live meter are computed here from current hardware, never entered.
     from joulewise.align.apple import v4_cadence, v4_registration
-    supplied, packet_file_sha256 = next_arm_triage, None
-    if isinstance(supplied, (str, Path)):
-        try:
-            raw_packet = Path(supplied).read_bytes()
-            supplied, packet_file_sha256 = json.loads(raw_packet), _sha256(raw_packet)
-        except (OSError, ValueError):
-            supplied = None
-    current_digest = v4_registration.artifact_set_digest(measurement_root)
     built, matches, rebuild_error = None, False, None
+    supplied = packet_file_sha256 = None
     with timing_receipts.span("arm", "v4_packet_rebuild"):
+        identity = packet_kit = None
         try:
-            if packet_builder is not None:
-                built, matches = packet_builder(measurement_root, supplied, now_epoch_s=now_s,
-                                                current_artifact_set_sha256=current_digest)
+            if context is not None:
+                built, matches = context['packet'], True
+                packet_file_sha256 = context['packet_sha256']
+                current_digest, packet_kit = context['current_digest'], context['kit']
+                identity = {'artifact_set_sha256': current_digest,
+                            'record_commit_exists': True, 'record_bound': True}
             else:
-                from scripts import align_v4_next_arm_packet as builder
-                built, matches = builder.rebuild_and_compare(measurement_root, supplied, now_epoch_s=now_s,
-                                                             current_artifact_set_sha256=current_digest)
+                supplied, packet_file_sha256 = _read_packet(next_arm_triage)
+                current_digest = v4_registration.artifact_set_digest(measurement_root)
+                if packet_builder is None:
+                    from scripts import align_v4_next_arm_packet as builder
+                    packet_builder = builder.rebuild_and_compare
+                built, matches = packet_builder(evidence_root, supplied, now_epoch_s=now_s,
+                                                current_artifact_set_sha256=current_digest)
+                if built is not None:
+                    commit = built.get('record_commit')
+                    identity = {'artifact_set_sha256': current_digest,
+                                'record_commit_exists': (commit_check or _commit_exists)(evidence_root, commit),
+                                'record_bound': bool((record_check or _record_bound)(evidence_root, built))}
         except (ValueError, KeyError, TypeError, AttributeError, OSError) as exc:
             rebuild_error = f'{type(exc).__name__}: {exc}'
-        # R17 review F7: the Git subprocesses and the series binding finish here, before the probe and dwell.
-        identity = None
-        if built is not None:
-            commit = built.get('record_commit')
-            identity = {'artifact_set_sha256': current_digest,
-                        'record_commit_exists': (commit_check or _commit_exists)(measurement_root, commit),
-                        'record_bound': bool((record_check or _record_bound)(measurement_root, built))}
         series_binding = list(series_bind(built)) if series_bind is not None else None
-    held = held_window_check(measurement_root, built, ruling_path=held_window_ruling)
+    held = held_window_check(evidence_root, built, ruling_path=held_window_ruling)
     reasons += held['reasons']
     watchdog = (watchdog_check or watchdog_acceptance)(phase='pre_install', runner=runner,
         plist_path=watchdog_plist, plan=watchdog_plan, plan_path=watchdog_plan_path, now=now)
@@ -1510,7 +1649,7 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     with timing_receipts.span("arm", "v4_meter_probe"):
         probe_started_ns = time.monotonic_ns()
         try:
-            meter = dict((meter_probe or _probe_meter_live)(measurement_root))
+            meter = dict((meter_probe or _probe_meter_live)(context['view'].root if context else evidence_root))
         except Exception as exc:  # noqa: BLE001 - an unverifiable meter refuses; it never raises out of the arm
             meter = {'live': False, 'reason': f'{type(exc).__name__}: {exc}'}
     meter.setdefault('probe_started_ns', probe_started_ns)
@@ -1547,6 +1686,8 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
             'host_state_dir': powermode.host_state_dir()}
     if series_binding is not None:
         record['series_binding'] = series_binding
+    if packet_kit is not None:
+        record['packet_kit'] = packet_kit
     if pre_dwell is not None:
         pre_dwell(record)        # every remaining check, read, disk_usage and write (lead ruling, item 5)
     # The quiet dwell starts HERE, after every subprocess, file write and disk_usage of the arm.
@@ -1595,7 +1736,7 @@ def daytime_offload_receipt(config, *, now=None, gate=None, freshness_policy=Non
             'config_sha256': _disk_config_digest(config), 'offloads': rows, 'freshness_policy': freshness_policy}
 
 
-def w1_disk_check(config_path, *, gate=None, now=None):
+def w1_disk_check(config_path, *, gate=None, now=None, read_control=None):
     """Require current free disk plus a fresh bound daytime offload receipt.
 
     The arm never remounts or re-hashes an SSD. The by-day writer uses the
@@ -1607,7 +1748,8 @@ def w1_disk_check(config_path, *, gate=None, now=None):
                          'disk_path and offloads the W1 disk gate checks')
     from joulewise.align.r0_host import w1_disk_gate
     from joulewise.align.r0_runner import validate_config
-    raw_config = json.loads(Path(config_path).read_text())
+    read = read_control or (lambda path: Path(path).read_bytes())
+    raw_config = json.loads(Path(config_path).read_text() if read_control is None else read(config_path))
     offloads_owed = raw_config.pop('offloads_owed', None)
     daytime_path = raw_config.pop('daytime_offload_receipt', None)
     freshness = raw_config.pop('daytime_offload_freshness', None)
@@ -1618,7 +1760,7 @@ def w1_disk_check(config_path, *, gate=None, now=None):
         import shutil
         import math
         validate_offload_freshness(freshness)
-        saved = json.loads(Path(daytime_path).read_bytes())
+        saved = json.loads(read(daytime_path))
         if (saved.get('schema') != 'joulewise.align_v4.daytime_offloads.v1'
                 or saved.get('config_sha256') != _disk_config_digest(config)
                 or saved.get('freshness_policy') != freshness):
@@ -1726,14 +1868,35 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
             disk_gate=None, frequency_reader=None, frequency_runner=None, frequency_preflight=None,
             frequency_pre_t0=None, **kwargs):
     session = Path(session_root)
-    state = pilot.h.read(session / 'session.json')
-    measurement_root = state['measurement_root']
-    # Council ruling 7: the frozen series powermode comes from the measurement
-    # checkout's r1_slots, and arm refuses on a mismatch with the host.
-    source_root = state['source_measurement_root'] if state.get('v4_series') else measurement_root
-    kit.generate(source_root, check=True, source_root=source_root)
-    plan = (validate_series_state(state) if state.get('v4_series') else
-            json.loads((Path(measurement_root) / kit.KIT / 'collection_plan.json').read_bytes()))
+    c1_handoff = kwargs.get('c1_handoff')
+    is_c1 = c1_handoff is not None
+    if is_c1:
+        context = c1_arm_preflight(c1_handoff, now_epoch_s=(now or time.time)(),
+                                   packet_path=kwargs.get('next_arm_triage'))
+        state, plan = context['state'], context['plan']
+        if Path(state['session_root']).resolve() != session.resolve():
+            raise PacketKitMismatch('prepared C1 session root differs from the install target')
+        source_root, measurement_root = context['view'].roots.repo, context['view'].root
+        cached = pilot.h.read(session / 'session.json')
+        for name in ('install', 'install_attempts', 'v4_arm_records'):
+            if name in cached:
+                state[name] = cached[name]
+        if Path(state['source_measurement_root']) != source_root:
+            raise PacketKitMismatch('prepared execution export differs from the handoff')
+        # The installer checks the plan's heads against the commit the launch
+        # view was just verified against (bytes_h_session.install).
+        kwargs['execution_commit'] = context['execution_commit']
+    else:
+        if (session / 'c1-prepared.json').is_file():
+            raise PacketKitMismatch('an explicit committed C1 handoff is required')
+        state = pilot.h.read(session / 'session.json')
+        measurement_root = state['measurement_root']
+        if (state.get('v4_series') or {}).get('window_id') == C1_WINDOW:
+            raise PacketKitMismatch('an explicit committed C1 handoff is required')
+        source_root = state['source_measurement_root'] if state.get('v4_series') else measurement_root
+        kit.generate(source_root, check=True, source_root=source_root)
+        plan = (validate_series_state(state) if state.get('v4_series') else
+                json.loads((Path(measurement_root) / kit.KIT / 'collection_plan.json').read_bytes()))
     from joulewise.align.apple import powermode
     high = None
     # Lead ruling R6-7: the High Power marker is host-level, so every later
@@ -1769,7 +1932,7 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
             _require_night_job_absent(runner)
         # R6-7 session start: any marker this session does not own is a
         # restore owed (an R1 crash, an abandoned or killed W1 night).
-        start = session_start_restore(measurement_root, runner=runner, lock=lock,
+        start = session_start_restore(source_root if is_c1 else measurement_root, runner=runner, lock=lock,
                                       keep_owner={'custody_root': custody_root})
         if start['action'] != 'none':
             pilot.h.write(session / f'staging/v4-session-start-restore-{time.time_ns()}.json', start)
@@ -1914,7 +2077,8 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                      packet_builder=None, meter_probe=None, dwell_start=None,
                      frequency_preflight_record=None, frequency_pre_t0_check=None,
                      watchdog_plist=None, watchdog_check=None, watchdog_undo_closing=None,
-                     weight_digests_attested=None, runtime_stack_attested=None, held_window_ruling=None, **kwargs):
+                     weight_digests_attested=None, runtime_stack_attested=None, held_window_ruling=None,
+                     c1_handoff=None, **kwargs):
     # RUN_STATE 226 R15: every arm, W1 included, binds the frozen series. W1 binds an empty history after
     # R1; a C/T window the next frozen window. The packet bound is the arm's OWN rebuild (a supplied
     # packet is only a pointer), whose history is derived from the hash-chained, authenticated records.
@@ -1922,6 +2086,16 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
     from scripts import align_v4_series as series
     window_id = (state.get('v4_series') or {}).get('window_id', 'W1')
     binding_root = state.get('source_measurement_root') or measurement_root
+    attestation_state = state
+    staged_c1 = window_id == C1_WINDOW and Path(binding_root) != Path(measurement_root)
+    if staged_c1:
+        _c1_external_controls(measurement_root, w1_disk_config,
+                              weight_digests_attested, runtime_stack_attested)
+        attestation_state = {**state, 'registration_dir': Path(binding_root) / series.kit_path(C1_WINDOW) / 'registration'}
+
+    def read_control(path):
+        _c1_external_controls(measurement_root, path)
+        return Path(path).read_bytes()
 
     def series_bind(built):
         try:
@@ -1947,14 +2121,14 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
 
     def pre_dwell(record):
         # No arm-time rehash: carry prepare's time and digest evidence verbatim.
-        weights = (_attested_weight_digests(state, plan['members'], weight_digests_attested)
+        weights = (_attested_weight_digests(attestation_state, plan['members'], weight_digests_attested)
                    if weight_digests_attested is not None else
                    state.get('weight_digest_preflight', {'source': 'not_recorded_by_prepare'}))
         record['weight_digests'] = weights
         if weights.get('ok') is False:
             for reason in weights['reasons']:
                 refuse(record, reason)
-        runtime = (_attested_runtime_stack(state, runtime_stack_attested)
+        runtime = (_attested_runtime_stack(attestation_state, runtime_stack_attested)
                    if runtime_stack_attested is not None else
                    state.get('runtime_stack_preflight', {'source': 'not_recorded_by_prepare'}))
         record['runtime_stack'] = runtime
@@ -1977,8 +2151,15 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                 refuse(record, 'high_power_enter: ' + str(high['reason']))
         record['epoch_s'] = (now or time.time)()
         receipt = None
+        if staged_c1:
+            record['external_inputs'] = []
+            if watchdog_file := (record.get('watchdog_acceptance') or {}).get('file_identity'):
+                record['external_inputs'].append(watchdog_file)
         if frequency_preflight_record is not None:
             record['clock_frequency_preflight'] = frequency_preflight_record
+            if (helper := frequency_preflight_record.get('zero_helper')) and helper.get('sha256'):
+                record.setdefault('external_inputs', []).append(
+                    {'path': helper['path'], 'sha256': helper['sha256']})
             if not frequency_preflight_record['ok']:
                 refuse(record, f"{frequency_preflight_record['cause']}: {frequency_preflight_record['reason']}")
         if record['admitted']:
@@ -1989,8 +2170,12 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
         if record['admitted']:
             try:
                 with timing_receipts.span("arm", "v4_disk_gate"):
-                    receipt = w1_disk_check(w1_disk_config, gate=disk_gate)
+                    inputs = {'read_control': read_control} if staged_c1 else {}
+                    receipt = w1_disk_check(w1_disk_config, gate=disk_gate, **inputs)
                 record['w1_disk_gate'] = receipt
+            except PacketKitMismatch as exc:
+                record['packet_kit'] = {'ok': False, 'reason': exc.reason, 'detail': exc.detail}
+                refuse(record, exc.reason)
             except (OSError, ValueError) as exc:
                 refuse(record, f'w1_disk_gate: {exc}')
         record['clock_frequency_pre_t0'] = None
@@ -2021,13 +2206,18 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                         dwell_start=dwell_start, series_bind=series_bind, pre_dwell=pre_dwell,
                         watchdog_plist=watchdog_plist, watchdog_check=watchdog_check,
                         held_window_ruling=held_window_ruling,
+                        c1_handoff=c1_handoff,
                         watchdog_plan=pilot.h.read(state['plan_path']), watchdog_plan_path=state['plan_path'])
+    if not record['admitted'] and 'quiet_dwell' not in record:
+        raise PacketKitMismatch(record['packet_kit']['detail'])
     # After the stamp: the single in-memory dwell value, written once, then the handoff (or refusal).
     dwell = {'schema': ARM_DWELL_SCHEMA, 'arm_record': str(path), 'admitted': record['admitted'],
              'quiet_dwell': record['quiet_dwell'], 'timing_receipts': _take_receipts()}
     with dwell_path.open('x') as handle:
         handle.write(json.dumps(dwell, indent=2, sort_keys=True) + '\n')
     if not record['admitted']:
+        if PacketKitMismatch.reason in record['reasons']:
+            raise PacketKitMismatch(record['packet_kit']['detail'])
         raise ValueError('v4 arm refused: ' + '; '.join(record['reasons']))
     # R17: the powermode and W1 disk checks and their receipt write ran BEFORE the dwell (pre_dwell).
     # Lead ruling: also record when the installer's launchctl calls returned, on the dwell's monotonic
@@ -2035,7 +2225,7 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
     outcome = 'raised'
     try:
         with timing_receipts.span("arm", "v4_installer_handoff"):
-            installed = pilot.install(session, now=now or time.time, **kwargs)
+            installed = pilot.install(session, now=now or time.time, **({'state': state} if staged_c1 else {}), **kwargs)
         outcome = 'returned'
         dwell['quiet_dwell']['installer_end_ns'] = time.monotonic_ns()
         if isinstance(installed, dict) and installed.get('exit_code') == 0:
@@ -2053,13 +2243,20 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
 
 
 def main(argv=None):
+    def install_cli(session_root, *, c1_handoff=None, **kwargs):
+        if c1_handoff is not None:
+            kwargs['c1_handoff'] = c1_handoff
+        return install(session_root, **kwargs)
+
     return pilot.main(argv, kit=kit.KIT, pack_id=kit.PACK_ID, desk_schema=kit.DESK_SCHEMA,
-                      session_prefix='align-v4-', prepare_fn=prepare, install_fn=install,
-                      desk_fn=desk,
+                      session_prefix=SESSION_PREFIX, prepare_fn=prepare, install_fn=install_cli,
+                      desk_fn=desk, install_refusals=(PacketKitMismatch,),
                       prepare_options=(('--window-id', dict(help='frozen series window or D alias; requires series admission')),
                                        ('--extra-sentinels', dict(type=int, default=0, choices=(0, 2),
                                            help='R20: two supplemental escalation sentinels (ordinals 23, 24) '
-                                                'after a U4-inconclusive window; ceiling 62,400 s'))),
+                                                'after a U4-inconclusive window; ceiling 62,400 s')),
+                                       ('--c1-public-inputs', dict(type=Path,
+                                           help='authorized supplemental C1 source paths and digests'))),
                       desk_extra_checks=powermode_desk_check,
                       install_options=(('--w1-disk-config', dict(
                           type=Path, required=True,
@@ -2081,6 +2278,7 @@ def main(argv=None):
                                        ('--held-window-ruling', dict(type=Path, action='append',
                           help='committed signed held_window_release row; repeat for each held window; '
                                'text is a {path, sha256} source at the ruling commit')),
+                                       ('--c1-handoff', dict(type=Path, help='C1 prepared roots and committed attempt ref')),
                                        ('--next-arm-triage', dict(type=Path, required=True,
                           help='R12 B2 next-arm triage packet (JSON) built off the MBP from the committed record'))))
 

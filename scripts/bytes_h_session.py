@@ -26,6 +26,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+from joulewise import night_gate
 from joulewise.b5 import chain, plan
 from joulewise.b5.harvest import member_spans
 from joulewise.b6 import desk_identity, plan_inputs, registration
@@ -61,12 +62,15 @@ class PhysicalHazard(ValueError):
     """Missing model payload or insufficient physical storage for this window."""
 
 
+def encoded_json(value):
+    return (json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + '\n').encode()
+
+
 def write(path, value):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    raw = json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + '\n'
     temporary = path.with_name('.' + path.name + '.tmp')
-    temporary.write_text(raw)
+    temporary.write_bytes(encoded_json(value))
     temporary.replace(path)
 
 
@@ -110,6 +114,71 @@ def disk_bytes(root, *, excluded=(), seen=None):
     return total
 
 
+def c1_measurement_view(source, session, *, kit, public_inputs=None):
+    """Prepare the two immutable input namespaces and their launch aliases."""
+    from joulewise.align.apple import v4_registration as c1_closure
+    from scripts import align_v4_series
+
+    repo, stage, view = (session / name for name in ('repo-export', 'attempt-inputs', 'measurement'))
+    execution = c1_closure.git(source, 'rev-parse', 'HEAD').decode().strip()
+    c1_closure.export_repo(source, execution, repo)
+    stage.mkdir()
+    roots = c1_closure.Roots(repo, stage)
+
+    def source_file(relative):
+        return roots.regular(repo / relative).read_bytes()
+
+    def optional_file(relative):
+        try:
+            return source_file(relative)
+        except FileNotFoundError:
+            return None
+
+    files, _ = render_measurement_files(kit, c1_closure.PACK.name, source_file, optional_file,
+                                       dispatch_dir=c1_closure.C1_DISPATCH)
+    for name, mode, _ in roots.walk(repo / kit):
+        path = Path(name)
+        if mode != '040000' and align_v4_series.c1_kit_file(path) and path.name != 'plan_tree.json':
+            files[c1_closure.PACK / path] = source_file(kit / path)
+    if public_inputs is not None:
+        manifest = Path(public_inputs).absolute()
+        read_input = c1_closure.confined_reader(manifest.parent)
+        declared = c1_closure.decode(read_input(manifest.name))
+        for name, descriptor in declared.items():
+            name = Path(c1_closure.key(name))
+            if (name in files or name.as_posix() in {c1_closure.LEDGER, c1_closure.PACKET,
+                                                    c1_closure.OUTPUTS, 'session.json'}
+                    or name.parts[0] == 'inputs' or name in {Path('controls') / n for n in (
+                        plan.PLAN_BASENAME, plan.CHAIN_BASENAME, plan.CHAIN_BASENAME + '.sha256',
+                        plan.WINDOW_ENV_BASENAME)}):
+                raise ValueError(f'C1 public input overlaps a prepare output: {name}')
+            raw = read_input(c1_closure.key(descriptor['source']))
+            if c1_closure.digest(raw) != descriptor['sha256']:
+                raise ValueError(f'C1 public input digest differs: {name}')
+            files[name] = raw
+    for name, raw in files.items():
+        path = stage / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(raw)
+
+    # Keep the single existing ledger inode. No copied prefix and no ledger
+    # outside S can become an input under the prepared launch names.
+    live = source / c1_closure.LEDGER
+    ledger = stage / c1_closure.LEDGER
+    ledger.parent.mkdir(exist_ok=True)
+    os.link(live, ledger, follow_symlinks=False)
+    ledger = roots.regular(ledger)
+    (stage / c1_closure.PACKET).parent.mkdir(exist_ok=True)
+    runtime, git_link = source / '.venv', source / '.git'
+    c1_closure.link_launch_view(roots, view, runtime=runtime, git_link=git_link)
+    handoff = {'window': c1_closure.C1_WINDOW, 'git': str(source), 'repo': str(repo), 'stage': str(stage),
+               'view': str(view), 'execution_commit': execution, 'runtime': str(runtime), 'git_link': str(git_link),
+               'cache_home': str(stage / 'cache')}
+    runtime_inputs = c1_closure.execution_inputs(
+        handoff, {'path': str(ledger), 'sha256': c1_closure.digest(ledger.read_bytes())})
+    return view, view / c1_closure.PACK, handoff, runtime_inputs, [*files, Path(c1_closure.LEDGER)]
+
+
 def measurement_view(source, session, *, kit=KIT, pack_id=PACK_ID):
     """Disposable launch attachment over the measurement checkout.
 
@@ -144,8 +213,42 @@ def measurement_view(source, session, *, kit=KIT, pack_id=PACK_ID):
     for p in (source / kit).iterdir():
         if p.name != 'plan_tree.json':
             (pack / p.name).symlink_to(p, target_is_directory=p.is_dir())
-    tree = read(source / kit / 'plan_tree.json')
-    template = read(source / 'configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json')
+
+    def source_file(relative):
+        return (source / relative).read_bytes()
+
+    def optional_file(relative):
+        path = source / relative
+        return path.read_bytes() if path.is_file() else None
+
+    files, _ = render_measurement_files(kit, pack_id, source_file, optional_file)
+    for relative, raw in files.items():
+        target = view / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)
+    write(session / 'staging/measurement-view.json', {
+        'source_measurement_root': str(source), 'measurement_root': str(view),
+        'source_tree': locator(source / kit / 'plan_tree.json'), 'launch_template':
+            locator(source / 'configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json'),
+        'staged_tree': locator(pack / 'plan_tree.json'),
+        'changes': ['arm_attachments.launch: existing fourteen-binding interface; kit root leaves',
+                    'pack directory spelling: governed b6_layout.packs[0]',
+                    'dispatched configs: byte-identical pack-local copies; argv/manifests/science relocated together',
+                    'arm_attachments.identity_pin_projection: derived inventory; unprojected runtime pins',
+                    'external_inputs: canonical reference IDs/descriptors and dispatched file pins',
+                    'bracket reservation --plan: this pack collection_plan.json',
+                    'plan_tree.sha256: exact staged tree bytes'],
+        'ledger': "the checkout's own runs/ ledger, linked; head pin an identical copy; never fabricate a missing ledger",
+        'read_only_source': False})
+    return view, pack
+
+
+def render_measurement_files(kit, pack_id, read_file, optional_file, *, dispatch_dir=Path('members')):
+    """Render the exact relocated bytes from source readers, with no writes."""
+    pack = Path('configs/campaigns') / pack_id
+    files = {}
+    tree = json.loads(read_file(kit / 'plan_tree.json'))
+    template = json.loads(read_file(Path('configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json')))
     launch = template['arm_attachments']['launch']
     for row in launch.get('bindings', []):
         if row['name'] == 'claim_runs_root': row['leaf'] = tree['roots']['claim_root_leaf']
@@ -154,79 +257,109 @@ def measurement_view(source, session, *, kit=KIT, pack_id=PACK_ID):
     # Resolve the actual campaign argv, not an inferred roster. In particular,
     # the NEG-8 scaffold and test-7 references need inventory rows too.
     science = {r['run_id'] for r in tree['science']}
-    roster = read(source / 'configs/campaigns/bytes_v1/roster.json')['models']
+    roster = json.loads(read_file(Path('configs/campaigns/bytes_v1/roster.json')))['models']
     model_ids = {m['model']['source']: m['model_id'] for m in roster}
     # Acceptance assigns corpus/start/midpoint/end roles by these existing
     # input IDs. Stage IDs are not interchangeable with that interface.
     external_ids = {m['manifest']['path']: m['external_input_id']
                     for m in template['external_inputs']['manifests']}
     units, manifests, relocated = {}, [], {}
-    dispatches = {d.stage_id: d for d in plan.resolve_stage_dispatches(tree, source)}
+
+    def inventory(raw, run_id, target, digest):
+        """Record one dispatched config in its identity unit's config inventory.
+
+        The launch binding admits only an inventoried config, and a spare
+        retry dispatches its spare set's configs. So members and spares are
+        inventoried by this one rule.
+        """
+        typed = BenchmarkConfig.from_mapping(json.loads(raw)).to_dict()
+        model, hardware = typed['model'], typed['hardware_target']
+        unit_id = model_ids.get(model['source'], 'neg8_reference')
+        if typed['workload_profile']['name'] == ALIGN_EPISODE:
+            # ALIGN's D model is absent from the older BYTES model roster.
+            # Its existing frozen config tag owns this ID, just as in the
+            # kit's identity_pins; falling back to neg8_reference misbinds D.
+            tags = [t.removeprefix('align-model=') for t in typed['run_metadata']['tags']
+                    if t.startswith('align-model=')]
+            if len(tags) != 1 or not tags[0]:
+                raise ValueError('ALIGN config needs one model identity tag: ' + run_id)
+            unit_id = tags[0]
+            # Each episode spec is its own declared workload, so its own unit.
+            unit_id = align_unit_id(unit_id, run_id)
+        declared = {
+            'hardware_target': hardware['id'], 'runtime_backend': hardware['runtime_backend'],
+            'telemetry_backend': hardware['telemetry_backend'], 'model_name': model['name'],
+            'model_source': model['source'], 'model_revision': model.get('revision'),
+            'quantization': typed['quantization'], 'workload_profile': typed['workload_profile']}
+        unit = units.setdefault(unit_id, {
+            'identity_unit_id': unit_id,
+            'producer_plan_reference': {'plan_id': tree['plan']['plan_id'], 'path': tree['plan']['path']},
+            'consumer_bindings': [{'arm': unit_id, 'family': unit_id,
+                                   'measurement_arm': typed['workload_profile']['name']}],
+            'declared_identity': declared, 'config_inventory': [],
+            'model_runtime_config': dict.fromkeys(MODEL_RUNTIME_CONFIG_FIELDS)})
+        if unit['declared_identity'] != declared:
+            raise ValueError('dispatched configs disagree on declared identity: ' + unit_id)
+        unit['config_inventory'].append({'path': target.relative_to(pack).as_posix(), 'sha256': digest})
+
+    dispatches = {d.stage_id: d for d in plan.resolve_stage_dispatches(tree, '.', read_manifest=read_file)}
     for stage in tree['stage_graph']:
         if stage['kind'] != 'campaign_collection':
             continue
         dispatch = dispatches[stage['stage_id']]
         if dispatch.error:
             raise ValueError(dispatch.error)
-        manifest_path = source / dispatch.config_dir / 'order_manifest.json'
-        manifest = read(manifest_path)
+        manifest_path = Path(dispatch.config_dir) / 'order_manifest.json'
+        manifest = json.loads(read_file(manifest_path))
         if len(manifest['executed_order']) != stage['expected_count']:
             raise ValueError('collection count differs from dispatched manifest: ' + stage['stage_id'])
-        directory = pack / 'members' / stage['stage_id']
-        directory.mkdir(parents=True)
+        directory = pack / dispatch_dir / stage['stage_id']
+        if dispatch_dir != Path('members') and stage.get('spare_retry'):
+            from scripts.align_v4_series import c1_spare_path
+            for spare in stage['spare_retry']['spare_sets']:
+                descriptor = spare['order_manifest']
+                source = plan.canonical_repo_path(descriptor['path'])
+                raw = read_file(source)
+                if hashlib.sha256(raw).hexdigest() != descriptor['sha256']:
+                    raise ValueError(f'spare order manifest digest differs: {source}')
+                target = c1_spare_path(stage['stage_id'], spare['count'])
+                order = json.loads(raw)
+                for row in order['executed_order']:
+                    name = Path(row['config'])
+                    if name.parts != (row['config'],):
+                        raise ValueError(f'invalid spare config name: {name}')
+                    data = read_file(source.parent / name)
+                    path = target.parent / name
+                    files[path] = data
+                    plan.relocate_order_entry(row, path, hashlib.sha256(data).hexdigest())
+                    inventory(data, row['run_id'], path, hashlib.sha256(data).hexdigest())
+                files[target] = encoded_json(order)
+                descriptor.update(path=target.as_posix(), sha256=hashlib.sha256(files[target]).hexdigest())
+
         members = []
         for row in manifest['executed_order']:
             config = manifest_path.parent / row['config']
-            raw = config.read_bytes()
+            raw = read_file(config)
             target = directory / config.name
-            target.write_bytes(raw)
+            files[target] = raw
             digest = hashlib.sha256(raw).hexdigest()
-            relative = target.relative_to(view).as_posix()
-            relocated[config.relative_to(source).as_posix()] = relative
-            if 'config_path' in row:
-                row['config_path'] = relative
-            row['config'] = target.name
-            row['config_sha256'] = digest
-            typed = BenchmarkConfig.from_mapping(json.loads(raw)).to_dict()
-            model, hardware = typed['model'], typed['hardware_target']
-            unit_id = model_ids.get(model['source'], 'neg8_reference')
-            if typed['workload_profile']['name'] == ALIGN_EPISODE:
-                # ALIGN's D model is absent from the older BYTES model roster.
-                # Its existing frozen config tag owns this ID, just as in the
-                # kit's identity_pins; falling back to neg8_reference misbinds D.
-                tags = [t.removeprefix('align-model=') for t in typed['run_metadata']['tags']
-                        if t.startswith('align-model=')]
-                if len(tags) != 1 or not tags[0]:
-                    raise ValueError('ALIGN config needs one model identity tag: ' + row['run_id'])
-                unit_id = tags[0]
-                # Each episode spec is its own declared workload, so its own unit.
-                unit_id = align_unit_id(unit_id, row['run_id'])
-            declared = {
-                'hardware_target': hardware['id'], 'runtime_backend': hardware['runtime_backend'],
-                'telemetry_backend': hardware['telemetry_backend'], 'model_name': model['name'],
-                'model_source': model['source'], 'model_revision': model.get('revision'),
-                'quantization': typed['quantization'], 'workload_profile': typed['workload_profile']}
-            unit = units.setdefault(unit_id, {
-                'identity_unit_id': unit_id,
-                'producer_plan_reference': {'plan_id': tree['plan']['plan_id'], 'path': tree['plan']['path']},
-                'consumer_bindings': [{'arm': unit_id, 'family': unit_id,
-                                       'measurement_arm': typed['workload_profile']['name']}],
-                'declared_identity': declared, 'config_inventory': [],
-                'model_runtime_config': dict.fromkeys(MODEL_RUNTIME_CONFIG_FIELDS)})
-            if unit['declared_identity'] != declared:
-                raise ValueError('dispatched configs disagree on declared identity: ' + unit_id)
-            unit['config_inventory'].append({'path': target.relative_to(pack).as_posix(), 'sha256': digest})
+            relative = target.as_posix()
+            relocated[config.as_posix()] = relative
+            plan.relocate_order_entry(row, Path(relative), digest)
+            inventory(raw, row['run_id'], target, digest)
             if row['run_id'] not in science:
                 members.append({'run_id': row['run_id'], 'ordinal': row.get('index'),
                                 'path': relative, 'sha256': digest})
-        write(directory / 'order_manifest.json', manifest)
-        ref = {'kind': 'manifest', 'path': (directory / 'order_manifest.json').relative_to(view).as_posix(),
-               'manifest_id': manifest['manifest_id'], 'sha256': locator(directory / 'order_manifest.json')['sha256']}
+        order_path = directory / 'order_manifest.json'
+        files[order_path] = encoded_json(manifest)
+        ref = {'kind': 'manifest', 'path': order_path.as_posix(),
+               'manifest_id': manifest['manifest_id'],
+               'sha256': hashlib.sha256(files[order_path]).hexdigest()}
         stage['input'] = ref
         stage['launch']['commands'][0]['argv_template']['arguments'][0] = {
-            'kind': 'repo_path', 'value': directory.relative_to(view).as_posix()}
+            'kind': 'repo_path', 'value': directory.as_posix()}
         if members:
-            manifests.append({'external_input_id': external_ids[manifest_path.relative_to(source).as_posix()],
+            manifests.append({'external_input_id': external_ids[manifest_path.as_posix()],
                 # The controller compares this descriptor with stage.input
                 # exactly when recognizing auxiliary pre-slot members.
                 'manifest': dict(ref),
@@ -246,36 +379,26 @@ def measurement_view(source, session, *, kit=KIT, pack_id=PACK_ID):
     # the actual --plan bytes to this tree's plan hash and FROZEN_PLAN instead.
     reservation = next(s for s in tree['stage_graph'] if s['kind'] == 'bracket_reservation')
     arguments = reservation['launch']['commands'][0]['argv_template']['arguments']
-    plan_index = next(i for i, arg in enumerate(arguments) if arg['value'] == '--plan') + 1
-    arguments[plan_index] = {'kind': 'repo_path', 'value': (pack / tree['plan']['path']).relative_to(view).as_posix()}
-    # Harvest re-derives NEG-8 only from the pinned settled-corpus bytes named
-    # by the real derivation argv. Include other dispatched file inputs too.
-    artifacts = {}
+    plan_index = arguments.index({'kind': 'literal', 'value': '--plan'}) + 1
+    arguments[plan_index] = {'kind': 'repo_path', 'value': (pack / tree['plan']['path']).as_posix()}
+    # Harvest uses the derivation artifact to replay the bound calculation.
+    artifacts = []
     for stage in tree['stage_graph']:
-        for command in stage['launch']['commands']:
-            for argument in command['argv_template']['arguments']:
-                if argument['kind'] == 'repo_path':
-                    path = view / argument['value']
-                    if path.is_file():
-                        artifacts[argument['value']] = {'path': argument['value'], 'sha256': locator(path)['sha256']}
-    tree['external_inputs'] = {'manifests': manifests, 'artifacts': [artifacts[k] for k in sorted(artifacts)]}
-    write(pack / 'plan_tree.json', tree)
-    (pack / 'plan_tree.sha256').write_text(locator(pack / 'plan_tree.json')['sha256'] + '  plan_tree.json\n')
-    write(session / 'staging/measurement-view.json', {
-        'source_measurement_root': str(source), 'measurement_root': str(view),
-        'source_tree': locator(source / kit / 'plan_tree.json'), 'launch_template':
-            locator(source / 'configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json'),
-        'staged_tree': locator(pack / 'plan_tree.json'),
-        'changes': ['arm_attachments.launch: existing fourteen-binding interface; kit root leaves',
-                    'pack directory spelling: governed b6_layout.packs[0]',
-                    'dispatched configs: byte-identical pack-local copies; argv/manifests/science relocated together',
-                    'arm_attachments.identity_pin_projection: derived inventory; unprojected runtime pins',
-                    'external_inputs: canonical reference IDs/descriptors and dispatched file pins',
-                    'bracket reservation --plan: this pack collection_plan.json',
-                    'plan_tree.sha256: exact staged tree bytes'],
-        'ledger': "the checkout's own runs/ ledger, linked; head pin an identical copy; never fabricate a missing ledger",
-        'read_only_source': False})
-    return view, pack
+        if stage['kind'] != 'bound_derivation':
+            continue
+        arguments = stage['launch']['commands'][0]['argv_template']['arguments']
+        flag = {'kind': 'literal', 'value': '--derive-neg8-drift-bound'}
+        if flag in arguments:
+            operand = arguments[arguments.index(flag) + 1]
+            from joulewise.b5.chain import bind_argument
+            path = plan.canonical_repo_path(bind_argument(operand, {'repo_root': '.'}, tree, Path('.')))
+            if (raw := optional_file(path)) is not None:
+                artifacts.append({'path': path.as_posix(), 'sha256': hashlib.sha256(raw).hexdigest()})
+    tree['external_inputs'] = {'manifests': manifests, 'artifacts': artifacts}
+    tree_path = pack / 'plan_tree.json'
+    files[tree_path] = encoded_json(tree)
+    files[pack / 'plan_tree.sha256'] = (hashlib.sha256(files[tree_path]).hexdigest() + '  plan_tree.json\n').encode()
+    return files, tree
 
 
 def important_capacity(root, *, run=subprocess.run):
@@ -302,9 +425,15 @@ def disk_snapshot(root, *, statvfs=os.statvfs, capacity=important_capacity):
             'flags': [] if important is not None else ['disk.purgeable_unreadable']}
 
 
+def session_id_at(clock, prefix):
+    """The session ID prepare mints at ``clock`` (UTC, microseconds) under ``prefix``."""
+    return prefix + dt.datetime.fromtimestamp(clock, dt.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+
+
 def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time,
             statvfs=os.statvfs, capacity=important_capacity, kit=KIT, pack_id=PACK_ID,
-            session_prefix='bytes-h-', ac_powermode=None):
+            session_prefix='bytes-h-', ac_powermode=None, attempt_c1=False,
+            c1_public_inputs=None):
     measurement, session = Path(measurement_root).resolve(), Path(session_root).resolve()
     reg = measurement / kit / 'registration'
     sized = registration.load_sizing(reg)['packs'][pack_id]
@@ -318,7 +447,7 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
         raise ValueError('session root must be empty; preserve the existing session')
     session.mkdir(parents=True, exist_ok=True)
     clock = now()
-    session_id = session_prefix + dt.datetime.fromtimestamp(clock, dt.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+    session_id = session_id_at(clock, session_prefix)
     config = read(measurement / 'configs/b6/loop.json')
     lead = config.get('launch_lead_s', DEFAULT_LEAD_S)
     if not finite(lead) or lead < MIN_LEAD_S:
@@ -353,15 +482,21 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
         raise PhysicalHazard('not enough disk for the planned physical allocation P')
     for name in ('runs-parent', 'staging'):
         (session / name).mkdir()
-    identities, notes = desk_identity.collect(measurement, session / 'staging/inputs', run=run)
-    # Existing builder already exposes registration_dir. Only this caller's
-    # kit path, bytes and registration locator differ from DriverLane inputs.
+    c1 = attempt_c1
+    if c1:
+        view, pack, handoff, runtime_inputs, outputs = c1_measurement_view(measurement, session, kit=kit, public_inputs=c1_public_inputs)
+        stage = Path(handoff['stage'])
+        from joulewise.align.apple import v4_registration as c1_closure
+        # The campaign refuses a mixed launch-marker selection only after arm.
+        c1_closure.campaign_marker_refusal(view, json.loads((Path(pack) / 'plan_tree.json').read_bytes()))
+    identities, notes = desk_identity.collect(measurement, stage / 'inputs' if c1 else session / 'staging/inputs',
+                                               run=run)
     inputs = plan_inputs.build(measurement, reg, pack_id, session_id, identities,
         custody_root=session / 'custody', runs_parent=session / 'runs-parent',
         claim_backup=session / 'backup-claim', bound_backup=session / 'backup-bound', run=run)
-    view, pack = measurement_view(measurement, session, kit=kit, pack_id=pack_id)
-    inputs.update(measurement_root=str(view), pack_root=str(pack),
-                  bytes_per_member=per_member)
+    if not c1:
+        view, pack = measurement_view(measurement, session, kit=kit, pack_id=pack_id)
+    inputs.update(measurement_root=str(view), pack_root=str(pack), bytes_per_member=per_member)
     inputs['thresholds']['disk']['headroom_bytes'] = native_budget['headroom_bytes']
     inputs['t0_epoch_s'] = t0
     if ac_powermode is not None:
@@ -370,7 +505,17 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
         inputs['ac_powermode'] = ac_powermode
     record = None
     try:
-        record = plan.write_window_plan(inputs, now=now)
+        options = {}
+        if c1:
+            from joulewise.align.apple import v4_registration as c1_closure
+            from joulewise import window_lineage
+            # The C1 pack is staged, not a git checkout: record the digest of its
+            # own bytes, which every later stage recomputes (window_lineage.admit_pack).
+            # The chain controls go to S; the night plan is published at
+            # night_plan_path(custody_root), where the installer admits it (CAP 10 I2).
+            options = {'controls_root': stage / 'controls', 'c1_inputs': runtime_inputs,
+                       'pack_digest': window_lineage.pack_tree_digest}
+        record = plan.write_window_plan(inputs, now=now, **options)
     except plan.WindowPlanError as exc:
         # A missing/stale calibration ledger or another record condition is a
         # printed preparation flag, not a new physical collection refusal. The
@@ -378,6 +523,9 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
         notes.append({'kind': 'plan.not_written', 'detail': str(exc)})
     if record and record['window_max_s'] != expected_max:
         raise ValueError('prepared and written window_max_s disagree')
+    published = night_gate.night_plan_path(inputs['custody_root'])
+    if record and Path(record['plan']['path']) != published:
+        raise ValueError(f"the plan writer published the night plan at {record['plan']['path']}, not {published}")
     status = run(['git', '-C', str(measurement), 'status', '--porcelain'],
                  capture_output=True, text=True, check=False, timeout=30)
     if status.returncode or status.stdout.strip():
@@ -390,10 +538,17 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
         'session_id': session_id, 'source_measurement_root': str(measurement),
         'measurement_root': str(view), 'registration_dir': str(view / kit / 'registration'),
         'session_root': str(session), 'preparation_status': 'STAGED' if record else 'INPUTS_ONLY',
-        'plan_path': record['plan']['path'] if record else str(session / 'custody/night_plan.json'),
+        'plan_path': str(published),
         'plan_sha256': record['plan']['sha256'] if record else None, 'inputs': inputs, 'disk': disk, 'flags': notes,
         'runs_roots': record['runs_roots'] if record else {}, 't0_epoch_s': t0,
         'window_max_s': expected_max}
+    if c1 and record:
+        outputs.extend(Path(desc['path']).relative_to(stage) for desc in identities.values())
+        # The night plan is not a staged input: it is published in custody and
+        # bound by plan_sha256 in the staged session.json.
+        outputs.extend(Path(record[name]['path']).relative_to(stage) for name in ('chain', 'sidecar', 'window_env'))
+        state['source_measurement_root'] = handoff['repo']
+        state['c1_prepare'] = {'handoff': handoff, 'outputs': [path.as_posix() for path in outputs]}
     write(session / 'staging/plan-inputs.json', inputs)
     write(session / 'session.json', state)
     print('t0: ' + dt.datetime.fromtimestamp(state['t0_epoch_s'], dt.timezone.utc).isoformat())
@@ -403,9 +558,22 @@ def prepare(measurement_root, session_root, *, run=subprocess.run, now=time.time
     return state
 
 
-def install(session_root, *, run=subprocess.run, home=None, now=time.time):
+def install(session_root, *, run=subprocess.run, home=None, now=time.time, state=None, execution_commit=None):
+    """Call the night-job installer for a prepared session.
+
+    A C1 attempt runs from its repo export, which has no .git. Its caller
+    passes the pinned execution commit that the launch view verified
+    (v4_registration.execution_commit). The installer checks the plan's
+    heads against that commit, never against git (CAP 10 I1).
+    """
+    from joulewise.align.apple import v4_registration as c1_closure
+
     session = Path(session_root).resolve()
-    state = read(session / 'session.json')
+    state = read(session / 'session.json') if state is None else state
+    if (state.get('v4_series') or {}).get('window_id') == c1_closure.C1_WINDOW:
+        execution_commit = c1_closure.execution_commit({'execution_commit': execution_commit})
+    elif execution_commit is not None:
+        raise ValueError('only a C1 attempt installs from a pinned execution commit')
     installed = state.get('install', {})
     # Same durable idempotency key as DriverLane.launch. A terminal receipt
     # or a loaded calendar job also survives a crash before install recording.
@@ -433,6 +601,8 @@ def install(session_root, *, run=subprocess.run, home=None, now=time.time):
     argv = [str(measurement / 'scripts/install_night_agent.sh'), '--plan', str(plan_path),
             '--python', str(measurement / '.venv/bin/python'), '--courier-bin',
             str(measurement / 'scripts/b6_courier.sh'), '--launchctl-bin', 'launchctl']
+    if execution_commit is not None:
+        argv += ['--execution-commit', execution_commit]
     attempt = 1
     # Existing logs reserve their number even if a crash lost session.json.
     while any((session / f'staging/install-{attempt:03d}.{suffix}').exists() for suffix in ('stdout', 'stderr')):

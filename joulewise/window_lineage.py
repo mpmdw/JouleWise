@@ -526,6 +526,123 @@ def _check_config_members(
 
 
 # ---------------------------------------------------------------------------
+# Pack admission: the one predicate every C1 stage and the launch binding run
+
+PACK_INADMISSIBLE = "pack_inadmissible"
+
+
+class PackInadmissibleError(HazardLineageError):
+    """A pack no stage may launch. Its message always starts with ``pack_inadmissible``."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__("launch_binding_mismatch", f"{PACK_INADMISSIBLE}: {detail}")
+
+
+def _pack_files(pack_root: Path | str) -> tuple[Path, list[tuple[str, str, Path]]]:
+    """Return the pack's physical directory and its regular files, refusing any other entry.
+
+    The walk never follows a link. A link of any kind refuses: inside or
+    outside the verified roots, to a file or to a directory. So does every
+    entry that is neither a directory nor a regular file, such as a FIFO,
+    socket or device. Production prepare only copies, so a correct pack
+    holds none of these.
+    """
+
+    try:
+        root = Path(pack_root).resolve(strict=True)
+    except OSError as exc:
+        raise PackInadmissibleError(f"the pack is unavailable: {exc}") from exc
+    if not root.is_dir():
+        raise PackInadmissibleError(f"the pack is not a directory: {root}")
+    files: list[tuple[str, str, Path]] = []
+    for parent, directories, names in os.walk(root):  # never descends through a link
+        for name in sorted((*directories, *names)):
+            path = Path(parent) / name
+            relative = path.relative_to(root).as_posix()
+            mode = os.lstat(path).st_mode
+            if stat.S_ISLNK(mode):
+                raise PackInadmissibleError(f"{relative} is a symlink")
+            if stat.S_ISREG(mode):
+                files.append((relative, "100755" if mode & stat.S_IXUSR else "100644", path))
+            elif not stat.S_ISDIR(mode):
+                raise PackInadmissibleError(f"{relative} is neither a regular file nor a directory")
+    return root, sorted(files, key=lambda entry: entry[0].encode("utf-8"))
+
+
+def _framed_pack_digest(files: Sequence[tuple[str, str, Path]]) -> str:
+    from joulewise.arm_readiness import PACK_DIGEST_DOMAIN  # noqa: PLC0415
+
+    framed = bytearray(PACK_DIGEST_DOMAIN)
+    for relative, mode, path in files:
+        raw = path.read_bytes()
+        framed += (relative.encode("utf-8") + b"\0" + mode.encode("ascii") + b"\0"
+                   + str(len(raw)).encode("ascii") + b"\0" + sha256_bytes(raw).encode("ascii") + b"\n")
+    return sha256_bytes(bytes(framed))
+
+
+def pack_tree_digest(pack_root: Path | str) -> str:
+    """D-134's committed-pack framing over the pack's own bytes.
+
+    Each regular file is framed as its path, mode, length and SHA-256. A link
+    or a non-regular entry refuses (``_pack_files``). C1 prepare records this
+    as the plan's ``pack_sha256``, and ``admit_pack`` recomputes it.
+    """
+
+    return _framed_pack_digest(_pack_files(pack_root)[1])
+
+
+def admit_pack(
+    pack_root: Path | str,
+    *,
+    pack_sha256: object,
+    plan_tree_sha256: str,
+    config_paths: Sequence[Path | str] = (),
+) -> dict[str, str]:
+    """The one admission decision for a pack and the configs dispatched from it.
+
+    Every stage calls this: build, install and direct arm through the C1
+    preflight, and the launch binding (``authenticate_campaign``). The
+    earliest stage refuses, and the reason is always ``pack_inadmissible``.
+    It refuses:
+    - any link or non-regular entry in the pack;
+    - a pack whose file set, bytes or modes are not the recorded
+      ``pack_sha256``, that is, the pinned prepare-time pack. A stray, a
+      missing file, a byte change and a mode change all refuse;
+    - a plan tree that is not ``plan_tree_sha256``, or whose config
+      inventory is unusable;
+    - a dispatched config outside the pack, or whose bytes are not its
+      committed inventory row.
+
+    Returns the config inventory.
+    """
+
+    # Most specific first, so each refusal names what differs; the reason is the same.
+    root, files = _pack_files(pack_root)
+    try:
+        inventory = config_inventory(root, plan_tree_sha256)
+    except HazardLineageError as exc:
+        raise PackInadmissibleError(str(exc)) from exc
+    present = {relative: path for relative, _mode, path in files}
+    for config_path in config_paths:
+        try:
+            relative = Path(config_path).resolve(strict=True).relative_to(root).as_posix()
+        except (OSError, ValueError) as exc:
+            raise PackInadmissibleError(f"a dispatched config is outside the pack: {config_path}") from exc
+        if relative not in present:
+            raise PackInadmissibleError(f"a dispatched config is not a regular pack file: {relative}")
+        if inventory.get(relative) != sha256_bytes(present[relative].read_bytes()):
+            raise PackInadmissibleError(
+                f"a dispatched config's bytes are not in the pack's committed inventory: {relative}"
+            )
+    digest = _framed_pack_digest(files)
+    if not isinstance(pack_sha256, str) or digest != pack_sha256:
+        raise PackInadmissibleError(
+            f"the pack's files, bytes or modes are not the recorded pack: {digest} != {pack_sha256!r}"
+        )
+    return inventory
+
+
+# ---------------------------------------------------------------------------
 # Authentication (called through arm_readiness's schema dispatch)
 
 
@@ -755,8 +872,14 @@ def authenticate_campaign(
         raise HazardLineageError(
             "launch_binding_mismatch", f"window pack root is unavailable: {exc}"
         ) from exc
-    inventory = config_inventory(pack_root, lineage["plan_tree_sha256"])
-    _check_config_members(pack_root, inventory, config_paths)
+    if lineage.get("pack_sha256") is not None:
+        # The lineage records the pack digest that C1 preflight verified, so
+        # the launch binding runs the same predicate and no pack check of its own.
+        inventory = admit_pack(pack_root, pack_sha256=lineage["pack_sha256"],
+                               plan_tree_sha256=lineage["plan_tree_sha256"], config_paths=config_paths)
+    else:
+        inventory = config_inventory(pack_root, lineage["plan_tree_sha256"])
+        _check_config_members(pack_root, inventory, config_paths)
     return {
         "launch_lineage": copy.deepcopy(dict(lineage)),
         "pack_root": str(pack_root),

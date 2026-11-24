@@ -78,7 +78,9 @@ reason) under ``$NIGHT_DIR/transcript/``; the driver copies the locator into
 ``night/hazard_result.json`` (``neg8_corpus``).
 
 The rendered bytes carry every value as a literal. They read nothing from the
-driver's environment except ``NIGHT_DIR``, and they refuse both inspection
+driver's environment except ``NIGHT_DIR``. A C1 chain also exports or unsets
+every variable its consumers read before any stage (``C1_ENVIRONMENT_NAMES``),
+so no launch-shell value reaches them. The chains refuse both inspection
 modes (``NIGHT_VERIFY_ONLY``, ``NIGHT_RESERVATION_ARGV_ONLY``) without running
 anything, so no legacy probe or installer path can start a capture by running
 this file.
@@ -86,13 +88,16 @@ this file.
 
 from __future__ import annotations
 
+import argparse
 import dataclasses
+import fnmatch
 import hashlib
 import json
 import os
 import re
 import shlex
 from pathlib import Path, PurePosixPath
+from types import FunctionType, SimpleNamespace
 from typing import Any, Mapping, Sequence
 
 CHAIN_SCHEMA = "joulewise.b5_chain.v1"
@@ -342,7 +347,7 @@ def _relative(value: Any, where: str) -> str:
     return value
 
 
-def stage_plan(tree: Mapping[str, Any]) -> list[Stage]:
+def stage_plan(tree: Mapping[str, Any], *, c1: bool = False) -> list[Stage]:
     """Walk a v5 plan tree's stage graph in ordinal order and validate its shape.
 
     The graph must be one predecessor/successor chain whose first stage is the
@@ -400,10 +405,15 @@ def stage_plan(tree: Mapping[str, Any]) -> list[Stage]:
                 cwd_binding="repo_root", success_exit_codes=tuple(codes)))
         slot = None
         if kind == "calibration_capture":
-            values = [argument["value"] for argument in commands[0].arguments]
-            _require(len(commands) == 1 and values.count("--slot") == 1,
-                     f"{stage_id}: a calibration capture names exactly one --slot")
-            slot = values[values.index("--slot") + 1] if values.index("--slot") + 1 < len(values) else None
+            _require(len(commands) == 1, f"{stage_id}: a calibration capture has exactly one command")
+            if c1:
+                root = Path(".")
+                tokens = _symbolic_arguments(commands[0], tree, root)
+                slot = _c1_parse("fiducial_capture", ("", "", *tokens), root, "", "").args.slot
+            else:
+                values = [argument["value"] for argument in commands[0].arguments]
+                _require(values.count("--slot") == 1, f"{stage_id}: a calibration capture names exactly one --slot")
+                slot = values[values.index("--slot") + 1] if values.index("--slot") + 1 < len(values) else None
             _require(slot in {"pre", "post"}, f"{stage_id}: calibration slot must be pre or post")
         if kind in IN_CHAIN_KINDS:
             _require(len(commands) == 1, f"{stage_id}: an in-chain stage has exactly one command")
@@ -505,13 +515,20 @@ def bind_argument(argument: Mapping[str, Any], bindings: Mapping[str, str],
     return str(json_pointer(tree, value))
 
 
+def _bound_stage_argv(stage: Stage, bindings: Mapping[str, str], tree: Mapping[str, Any],
+                      root: Path) -> list[str]:
+    command = stage.commands[0]
+    tool = TOOLS[command.tool_id]
+    interpreter = str(root / ".venv/bin/python") if tool.runner == "python" else "/bin/zsh"
+    arguments = [bind_argument(argument, bindings, tree, root) for argument in command.arguments]
+    return [interpreter, str(root / tool.program), *arguments]
+
+
 def stage_argv(stage: Stage, bindings: Mapping[str, str], tree: Mapping[str, Any],
                measurement_root: Path) -> list[str]:
     """The exact argv the chain runs for one in-chain stage, deviations applied."""
 
-    command = stage.commands[0]
-    tool = TOOLS[command.tool_id]
-    arguments = [bind_argument(argument, bindings, tree, measurement_root) for argument in command.arguments]
+    interpreter, program, *arguments = _bound_stage_argv(stage, bindings, tree, Path(measurement_root))
     if stage.kind == "campaign_collection":
         positions = [i for i, item in enumerate(arguments) if item == "--max-failures"]
         _require(len(positions) <= 1, f"{stage.stage_id}: --max-failures appears more than once")
@@ -532,10 +549,7 @@ def stage_argv(stage: Stage, bindings: Mapping[str, str], tree: Mapping[str, Any
         for flag in ("--arm-countdown-s", "--sleep-display-before-capture"):
             _require(flag not in arguments, f"{stage.stage_id}: template already carries {flag}")
         arguments += list(calibration_runbook_flags(stage.slot))
-    root = Path(measurement_root)
-    if tool.runner == "python":
-        return [str(root / ".venv/bin/python"), str(root / tool.program), *arguments]
-    return ["/bin/zsh", str(root / tool.program), *arguments]
+    return [interpreter, program, *arguments]
 
 
 class Shell(str):
@@ -1056,10 +1070,226 @@ horizon_skip() {
 }"""
 
 
+class _IndexedToken(str):
+    def __new__(cls, value: str, index: int):
+        token = super().__new__(cls, value)
+        token.argv_index = index
+        return token
+
+
+@dataclasses.dataclass
+class C1Command:
+    """The selected namespace and argument locations reported by its consumer."""
+
+    argv: tuple[str, ...]
+    args: argparse.Namespace
+    options: dict[str, tuple[int, bool]]
+    positionals: dict[str, int]
+    parsers: tuple[argparse.ArgumentParser, ...]
+    reparse: Any
+
+    def replace_option(self, argv, flag, value):
+        if flag in self.options:
+            index, attached = self.options[flag]
+            argv[index:index + (1 if attached else 2)] = [flag, value]
+        else:
+            argv.extend((flag, value))
+
+
+def _c1_parse(tool, argv, root, ledger, head_pin):
+    """Observe the exact consumer parse with isolated parser and launch defaults."""
+    options, positionals, parsers, seen = {}, {}, [], set()
+
+    class RecordingParser(argparse.ArgumentParser):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            parsers.append(self)
+
+        def _parse_optional(self, token):
+            result = super()._parse_optional(token)
+            if result and len(result) == 1 and (action := result[0][0]) is not None:
+                flag = action.option_strings[-1]
+                if action in seen:
+                    raise ChainRenderError(f"duplicate option {flag}")
+                seen.add(action)
+                options[flag] = (token.argv_index, result[0][-1] is not None)
+            return result
+
+        def _get_values(self, action, tokens):
+            values = super()._get_values(action, tokens)
+            if not action.option_strings and tokens and hasattr(tokens[0], "argv_index"):
+                positionals[action.dest] = tokens[0].argv_index
+            return values
+
+    def consumer(function, **defaults):
+        # Use the pinned function's code and globals. A local view of argparse
+        # instruments this parse without changing other callers or any parser rules.
+        namespace = SimpleNamespace(**{**vars(argparse), "ArgumentParser": RecordingParser})
+        return FunctionType(function.__code__, {**function.__globals__, "argparse": namespace, **defaults})
+
+    tokens = [_IndexedToken(value, i) for i, value in enumerate(argv[2:], 2)]
+    try:
+        if tool == "campaign_runner":
+            from scripts import run_campaign
+
+            policy = root / run_campaign.DEFAULT_CAMPAIGN_POLICY.relative_to(run_campaign.ROOT)
+            env = {"CALIBRATION_LEDGER": str(ledger), "LEDGER_HEAD_PIN": str(head_pin)}
+            parse = consumer(run_campaign.parse_args, DEFAULT_CAMPAIGN_POLICY=policy,
+                             os=SimpleNamespace(environ=env))
+            args = parse(tokens)
+        elif tool == "bracket_reserver":
+            from scripts.reserve_calibration_window_bracket import _parser
+
+            args = consumer(_parser)(ledger_default=Path(ledger), head_pin_default=Path(head_pin)).parse_args(tokens)
+        elif tool == "fiducial_capture":
+            from scripts.validate_powermetrics_fiducial import _capture_parser
+
+            args = consumer(_capture_parser)(ledger_default=Path(ledger), head_pin_default=Path(head_pin)).parse_args(tokens)
+        elif tool == "session_status":
+            from scripts.recover_calibration_ledger import build_parser
+
+            args = consumer(build_parser)().parse_args(tokens)
+        elif tool == "window_verdict":
+            from scripts.b5_window_calibration_verdict import build_parser
+
+            args = consumer(build_parser)().parse_args(tokens)
+        else:
+            raise ChainRenderError(f"unsupported C1 rendered command: {tool}")
+    except SystemExit as exc:
+        raise ChainRenderError(f"invalid C1 {tool} command") from exc
+    return C1Command(tuple(argv), args, options, positionals, tuple(parsers),
+                     lambda updated: _c1_parse(tool, updated, root, ledger, head_pin))
+
+
+def _symbolic_binding(name):
+    return f"__c1_launch_binding__/{name}"
+
+
+def _symbolic_arguments(command, tree, root):
+    bindings = {arg["value"]: _symbolic_binding(arg["value"]) for arg in command.arguments
+                if arg["kind"] in ("binding", "binding_path")}
+    bindings["repo_root"] = str(root)
+    return [bind_argument(arg, bindings, tree, root) for arg in command.arguments]
+
+
+def c1_dispatch_selection(stage, tree):
+    """Identify the dispatch directory and the named runs binding via the runner."""
+    root = Path(".")
+    tokens = _symbolic_arguments(stage.commands[0], tree, root)
+    command = _c1_parse("campaign_runner", ("", "", *tokens), root, "", "")
+    for name in ("claim_runs_root", "bound_runs_root"):
+        if command.args.runs_dir == _symbolic_binding(name):
+            return command.args.config_dir, name
+    raise ChainRenderError(f"{stage.stage_id}: campaign runs directory must select its named binding")
+
+
+def c1_stage_command(stage, bindings, tree, root, *, ledger=None, head_pin=None):
+    """Bind and parse the stage's exact C1 launch, including renderer-owned flags."""
+    from joulewise.b5.plan import HEAD_PIN_RELATIVE
+
+    ledger = bindings.get("ledger_path", "") if ledger is None else ledger
+    head_pin = root / HEAD_PIN_RELATIVE if head_pin is None else head_pin
+    tool = stage.commands[0].tool_id
+    expected = {"bracket_reservation": "bracket_reserver", "calibration_capture": "fiducial_capture",
+                "campaign_collection": "campaign_runner", "bound_derivation": "campaign_runner"}
+    _require(tool == expected.get(stage.kind), f"{stage.stage_id}: invalid C1 stage consumer {tool}")
+    argv = _bound_stage_argv(stage, bindings, tree, root)
+    if stage.kind == "calibration_capture":
+        argv.extend(calibration_runbook_flags(stage.slot))
+    parsed = _c1_parse(tool, argv, root, ledger, head_pin)
+    if tool == "campaign_runner":
+        _require(not parsed.args.repair_campaign_provenance, f"{stage.stage_id}: unsupported C1 campaign mode")
+    if stage.kind == "campaign_collection":
+        overrides = {"--max-failures": str(stage.expected_count)}
+        if "--arm-countdown-s" in parsed.options or parsed.args.arm_quiet_mode:
+            overrides["--arm-countdown-s"] = str(COLLECTION_ARM_COUNTDOWN_S)
+        # Replace in reverse positional order so earlier parser locations hold.
+        for flag in sorted(overrides, key=lambda name: parsed.options.get(name, (len(argv), False))[0],
+                           reverse=True):
+            parsed.replace_option(argv, flag, overrides[flag])
+        parsed = parsed.reparse(argv)
+    return parsed
+
+
+def c1_stage_commands(stages, bindings, tree, root):
+    reservation = c1_stage_command(stages[0], bindings, tree, root)
+    commands = {stages[0].stage_id: reservation}
+    for stage in stages[1:]:
+        commands[stage.stage_id] = c1_stage_command(stage, bindings, tree, root,
+                                                    ledger=reservation.args.ledger,
+                                                    head_pin=reservation.args.head_pin)
+    return commands
+
+
+# The C1 chain's closed environment. Every variable that a consumer in the
+# chain reads through os.environ or os.getenv is named here or matches a
+# pattern. tests.align.test_c1_closure derives those reads from the chain's
+# modules and fails on an unlisted one. The chain exports the values it
+# validated and unsets every other listed name before any stage runs, so a
+# launch-shell value never reaches a consumer. The patterns also close the
+# interpreter's own switches. NIGHT_DIR is the driver's output directory and
+# the only launch variable the chain keeps.
+C1_ENVIRONMENT_PATTERNS = ("JOULEWISE_*", "PYTHON*")
+C1_ENVIRONMENT_NAMES = (
+    "CALIBRATION_LEDGER", "CUSTODY_BUDGET_S", "EVIDENCE_MANIFEST_SHA256", "EVIDENCE_NETWORK_TIME_RECORD",
+    "EVIDENCE_PLAN_PATH", "EVIDENCE_POWER_RECORDER_REPLAY", "EVIDENCE_POWER_RECORDER_REPLAY_LABEL_SHIFT",
+    "EVIDENCE_PROCESS_JOURNAL", "JW_FAKE_TIME_ORIGIN", "LEDGER_HEAD_PIN", "MAGISTRATE_SESSION_BIN",
+    "MAGISTRATE_WATCHDOG_CUSTODY_ROOT", "MAGISTRATE_WATCHDOG_STATUS_HOST", "MEASUREMENT_HEAD",
+    "MEASUREMENT_ROOT", "NIGHT_PLAN_ID", "NIGHT_RESERVATION_ARGV_ONLY", "NIGHT_VERIFY_ONLY",
+    "XDG_CACHE_HOME",
+)
+C1_LAUNCH_ENVIRONMENT = ("NIGHT_DIR",)
+
+
+def c1_environment(c1_inputs, *, ledger, head_pin, plan_id):
+    """Map each closed C1 variable to its exported value, or None to unset it."""
+    environment = dict.fromkeys(C1_ENVIRONMENT_NAMES)
+    environment.update({
+        "CALIBRATION_LEDGER": str(ledger),
+        "JOULEWISE_C1_INPUTS": json.dumps(c1_inputs, sort_keys=True),
+        "JOULEWISE_NIGHT_PLAN_ID": plan_id,
+        "LEDGER_HEAD_PIN": str(head_pin),
+        "XDG_CACHE_HOME": c1_inputs.get("cache_home") or None,
+    })
+    return dict(sorted(environment.items()))
+
+
+def c1_chain_environment(*, stages, bindings, tree, measurement_root, plan_id, c1_inputs):
+    """Return the chain's closed environment and parsed launches, as rendered."""
+    chain = [stage for stage in stages if stage.in_chain]
+    commands = c1_stage_commands(chain, bindings, tree, Path(measurement_root))
+    selected = commands[chain[0].stage_id].args
+    return c1_environment(c1_inputs, ledger=selected.ledger, head_pin=selected.head_pin,
+                          plan_id=plan_id), commands
+
+
+def apply_c1_environment(environment, base):
+    """Return the variables a chain consumer sees when launched from ``base``."""
+    def closed(name):
+        return name in environment or any(fnmatch.fnmatchcase(name, p) for p in C1_ENVIRONMENT_PATTERNS)
+
+    result = {name: value for name, value in base.items() if not closed(name)}
+    result.update({name: value for name, value in environment.items() if value is not None})
+    return result
+
+
+def c1_environment_lines(environment):
+    """The chain lines that apply ``environment`` before any stage runs."""
+    unset = [name for name, value in environment.items() if value is None]
+    return [
+        "# C1 closed environment: every variable a chain consumer reads is exported",
+        "# from the validated attempt or unset here; NIGHT_DIR is the driver's output.",
+        "unset -m " + " ".join(_literal(pattern) for pattern in C1_ENVIRONMENT_PATTERNS),
+        *(["unset " + " ".join(unset)] if unset else []),
+        *[f"export {name}={_literal(value)}" for name, value in environment.items() if value is not None],
+    ]
+
+
+
 def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[Stage],
                  bindings: Mapping[str, Any], measurement_root: Path, pack_root: Path,
                  plan_id: str, runbook_text: str, settle_s: int | float = SETTLE_S,
-                 horizon_s: int = CALIBRATION_HORIZON_S) -> bytes:
+                 horizon_s: int = CALIBRATION_HORIZON_S, c1_inputs=None) -> bytes:
     """Return the chain bytes. Every value is a literal; nothing is written.
 
     ``runbook_text`` is the measurement checkout's ``docs/phase_2/window_runbook.md``;
@@ -1095,23 +1325,47 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
     reservation = chain[0]
     pre = next(stage for stage in chain if stage.slot == "pre")
     post = next(stage for stage in chain if stage.slot == "post")
-    reservation_argv = stage_argv(reservation, bindings, tree, root)
+    c1_environment_block, c1_commands = [], None
+    if c1_inputs is not None:
+        environment, c1_commands = c1_chain_environment(stages=chain, bindings=bindings, tree=tree,
+                                                        measurement_root=root, plan_id=plan_id,
+                                                        c1_inputs=c1_inputs)
+        c1_environment_block = c1_environment_lines(environment)
+    reservation_argv = (list(c1_commands[reservation.stage_id].argv) if c1_commands else
+                        stage_argv(reservation, bindings, tree, root))
 
     def value_after(argv: Sequence[str], flag: str) -> str | None:
         return argv[argv.index(flag) + 1] if flag in argv and argv.index(flag) + 1 < len(argv) else None
 
-    frozen_plan = value_after(reservation_argv, "--plan")
-    head_pin = value_after(reservation_argv, "--head-pin")
+    ledger_path = bindings["ledger_path"]
+    bracket_session_id = bindings["bracket_session_id"]
+    if c1_inputs is None:
+        frozen_plan = value_after(reservation_argv, "--plan")
+        head_pin = value_after(reservation_argv, "--head-pin")
+    else:
+        selected = c1_commands[reservation.stage_id].args
+        frozen_plan = str(selected.plan) if selected.plan is not None else None
+        head_pin = str(selected.head_pin)
+        ledger_path = str(selected.ledger)
+        bracket_session_id = selected.session_id
     # The NEG-8 corpus stage (row 13): the last collection before the bound
     # derivation that collects into the derivation's --runs-dir.
     derivation = next((stage for stage in chain if stage.kind == "bound_derivation"), None)
-    derivation_argv = stage_argv(derivation, bindings, tree, root) if derivation is not None else []
-    corpus_manifest = value_after(derivation_argv, "--derive-neg8-drift-bound")
-    corpus_runs_dir = value_after(derivation_argv, "--runs-dir")
+    if c1_commands and derivation is not None:
+        resolved_derivation = c1_commands[derivation.stage_id].args
+        corpus_manifest = resolved_derivation.derive_neg8_drift_bound
+        corpus_runs_dir = resolved_derivation.runs_dir
+    else:
+        derivation_argv = stage_argv(derivation, bindings, tree, root) if derivation is not None else []
+        corpus_manifest = value_after(derivation_argv, "--derive-neg8-drift-bound")
+        corpus_runs_dir = value_after(derivation_argv, "--runs-dir")
     corpus_stage = None
     for stage in chain[:chain.index(derivation)] if derivation is not None else []:
-        if stage.kind == "campaign_collection" and corpus_runs_dir is not None \
-                and value_after(stage_argv(stage, bindings, tree, root), "--runs-dir") == corpus_runs_dir:
+        if stage.kind != "campaign_collection":
+            continue
+        runs_dir = (c1_commands[stage.stage_id].args.runs_dir if c1_commands else
+                    value_after(stage_argv(stage, bindings, tree, root), "--runs-dir"))
+        if corpus_runs_dir is not None and runs_dir == corpus_runs_dir:
             corpus_stage = stage
     prelude_gate_prune_2 = (_PRELUDE_GATE_PRUNE_2
                             .replace("@FLAG_BUDGET@", str(STAGE_WALL_BUDGET_S["flag_record"]))
@@ -1154,6 +1408,7 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
         f"  exit {EXIT_INSPECTION_REFUSED}",
         "fi",
         ': "${NIGHT_DIR:?the HAZARD_PACK driver exports NIGHT_DIR}"',
+        *c1_environment_block,
         f"export REPO={_literal(str(root))}",
         f"export PY={_literal(python)}",
         'export PYTHONPATH="$REPO"',
@@ -1210,7 +1465,8 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
     lines.append("# 2. Chain-owned settle before the pre slot (runbook section 5C).")
     lines.append("settle")
     for stage in chain[1:]:
-        argv = stage_argv(stage, bindings, tree, root)
+        command = c1_commands[stage.stage_id] if c1_commands else None
+        argv = list(command.argv) if command else stage_argv(stage, bindings, tree, root)
         if stage is pre:
             lines.append("# 3. The pre-calibration capture and its D-079 screen; either failure stops the chain.")
             lines.append("# The collection deadline (row 17) counts from the start of this capture.")
@@ -1231,9 +1487,12 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
             lines.append(f"(( $? == 0 )) || stop_chain pre_calibration_screen_failed {EXIT_PRE_SCREEN_FAILED}")
             lines.append("# 3b. The window calibration verdict (J1): one refit of the pre slot, synchronously,")
             lines.append("# before the first settle. Not a stop: without it every member refits, as before.")
+            verdict_argv = [python, str(root / WINDOW_CALIBRATION_VERDICT_PROGRAM),
+                            "--pre-calibration-dir", bindings["pre_calibration_dir"]]
+            if c1_commands:
+                _c1_parse("window_verdict", verdict_argv, root, ledger_path, head_pin)
             lines.append(run(stage, budgeted("window_calibration_verdict", [
-                python, "-B", str(root / WINDOW_CALIBRATION_VERDICT_PROGRAM),
-                "--pre-calibration-dir", bindings["pre_calibration_dir"]]),
+                python, "-B", *verdict_argv[1:]]),
                 label=stage.stage_id + ".window-calibration-verdict", kind="window_calibration_verdict",
                 suffix=".verdict"))
         elif stage is post:
@@ -1242,8 +1501,10 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
             lines.append(run(stage, argv))
             if frozen_plan is not None and head_pin is not None:
                 status_argv = [python, str(root / "scripts/recover_calibration_ledger.py"),
-                               "--ledger", bindings["ledger_path"], "--head-pin", head_pin, "session-status",
-                               "--session-id", bindings["bracket_session_id"], "--plan", frozen_plan]
+                               "--ledger", ledger_path, "--head-pin", head_pin, "session-status",
+                               "--session-id", bracket_session_id, "--plan", frozen_plan]
+                if c1_commands:
+                    _c1_parse("session_status", status_argv, root, ledger_path, head_pin)
                 lines.append(run(stage, budgeted("session_status_record", status_argv),
                                  label=stage.stage_id + ".session-status",
                                  kind="session_status_record", suffix=".session-status",
@@ -1257,13 +1518,19 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
                 lines += corpus_retry_lines(stage, argv, corpus_manifest, corpus_runs_dir, python,
                                             log_path, run, budgeted, collection_allowance(stage), remaining(stage))
             if stage.spare_sets and bindings.get("spare_retries", True):
-                lines += spare_retry_lines(stage, argv, root, python, log_path, run, budgeted, remaining(stage))
+                lines += spare_retry_lines(stage, argv, root, python, log_path, run, budgeted, remaining(stage),
+                                           command=command)
             lines.append(f"else horizon_skip {stage.stage_id}; fi")
         elif stage.kind == "bound_derivation":
-            manifest = value_after(argv, "--derive-neg8-drift-bound")
-            runs_dir = value_after(argv, "--runs-dir")
-            _require(argv.count("--derive-neg8-drift-bound") == 1 and manifest is not None and runs_dir is not None,
-                     f"{stage.stage_id}: bound derivation names one manifest and --runs-dir")
+            if command:
+                manifest = command.args.derive_neg8_drift_bound
+                runs_dir = command.args.runs_dir
+                _require(manifest is not None, f"{stage.stage_id}: bound derivation needs its corpus manifest")
+            else:
+                manifest = value_after(argv, "--derive-neg8-drift-bound")
+                runs_dir = value_after(argv, "--runs-dir")
+                _require(argv.count("--derive-neg8-drift-bound") == 1 and manifest is not None and runs_dir is not None,
+                         f"{stage.stage_id}: bound derivation names one manifest and --runs-dir")
             allowance = STAGE_WALL_BUDGET_S["neg8_corpus_collected"] + STAGE_WALL_BUDGET_S["bound_derivation"]
             lines.append("# 4b. The NEG-8 bound, from the collected corpus members that succeeded and that the")
             lines.append("# core's HAZARD mint does not drop. A pruned copy (10 or 11 of 12) derives; the")
@@ -1273,7 +1540,12 @@ def render_chain(*, tree: Mapping[str, Any], tree_sha256: str, stages: Sequence[
                 python, "-B", "-c", Shell('"$B5_PRUNE_PY"'), manifest, runs_dir, collected, collected_summary]),
                 label=stage.stage_id + ".corpus", kind="neg8_corpus_collected", suffix=".corpus"))
             derive = list(argv)
-            derive[derive.index("--derive-neg8-drift-bound") + 1] = collected
+            if command:
+                command.replace_option(derive, "--derive-neg8-drift-bound", collected)
+                # The runtime expansion supplies the same single path operand.
+                command.reparse(derive)
+            else:
+                derive[derive.index("--derive-neg8-drift-bound") + 1] = collected
             lines.append(run(stage, budgeted("bound_derivation", derive)))
             lines.append(f"else horizon_skip {stage.stage_id}; fi")
         elif stage.kind == "bracket_reservation":  # pragma: no cover - stage_plan admits exactly one
@@ -1313,19 +1585,25 @@ def corpus_retry_lines(stage: Stage, argv: Sequence[str], manifest: str, runs_di
     ]
 
 
-def spare_argv(stage: Stage, argv: Sequence[str], measurement_root: Path, count: int) -> list[str]:
+def spare_argv(stage: Stage, argv: Sequence[str], measurement_root: Path, count: int, *, command=None) -> list[str]:
     """The stage's own argv with its config directory replaced by the spare set of ``count`` (and that many failures)."""
 
     _require(bool(stage.spare_sets) and count in stage.spare_sets, f"{stage.stage_id}: no spare set of {count}")
     spare = list(argv)
-    spare[2] = str(Path(measurement_root) / PurePosixPath(stage.spare_sets[count]).parent)
-    position = spare.index("--max-failures")
-    spare[position + 1] = str(count)
+    directory = str(Path(measurement_root) / PurePosixPath(stage.spare_sets[count]).parent)
+    if command:
+        spare[command.positionals["config_dir"]] = directory
+        command.replace_option(spare, "--max-failures", str(count))
+        command.reparse(spare)
+    else:
+        spare[2] = directory
+        position = spare.index("--max-failures")
+        spare[position + 1] = str(count)
     return spare
 
 
 def spare_retry_lines(stage: Stage, argv: Sequence[str], measurement_root: Path, python: str, log_path: Any,
-                      run: Any, budgeted: Any, members_remaining: int) -> list[str]:
+                      run: Any, budgeted: Any, members_remaining: int, *, command=None) -> list[str]:
     """NEG-8 ruling 2026-10-07: one spare-slot retry after a window reference stage (registration 0.12).
 
     Runs the committed spare set of size (planned - succeeded) once, after a
@@ -1334,10 +1612,15 @@ def spare_retry_lines(stage: Stage, argv: Sequence[str], measurement_root: Path,
     never touched; nothing here reads an energy.
     """
 
-    _require(argv.count("--runs-dir") == 1 and argv.index("--runs-dir") + 1 < len(argv),
-             f"{stage.stage_id}: a spare retry needs the stage's --runs-dir")
-    runs_dir = argv[argv.index("--runs-dir") + 1]
-    stage_manifest = str(Path(argv[2]) / "order_manifest.json")
+    if command:
+        runs_dir = command.args.runs_dir
+        directory = command.args.config_dir
+    else:
+        _require(argv.count("--runs-dir") == 1 and argv.index("--runs-dir") + 1 < len(argv),
+                 f"{stage.stage_id}: a spare retry needs the stage's --runs-dir")
+        runs_dir = argv[argv.index("--runs-dir") + 1]
+        directory = argv[2]
+    stage_manifest = str(Path(directory) / "order_manifest.json")
     snapshot = Shell('"$TRANSCRIPT_ROOT/' + SPARE_RETRY_SNAPSHOT.format(stage_id=stage.stage_id) + '"')
     decision_log = log_path(stage, ".spares-decision")
     label = stage.stage_id + ".spares"
@@ -1364,7 +1647,7 @@ def spare_retry_lines(stage: Stage, argv: Sequence[str], measurement_root: Path,
             f"{spares})",
             f"if horizon_allows {label} {allowance} {members_remaining}; then",
             "settle",
-            run(stage, spare_argv(stage, argv, measurement_root, spares), label=label, suffix=".spares"),
+            run(stage, spare_argv(stage, argv, measurement_root, spares, command=command), label=label, suffix=".spares"),
             " ".join(_literal(item) for item in measured) + f" 2>> {decision_log} | while IFS= read -r NEG8_SPARE; do",
             f'  flag member.retried member "$NEG8_SPARE" "{observed}" {_literal(runs_dir)} '
             '"measured by the spare-slot retry of its reference stage after a member of that stage did not succeed"',
@@ -1469,4 +1752,6 @@ __all__ = [
     "CALIBRATION_HORIZON_S", "HORIZON_MEMBER_ALLOWANCE_S", "HORIZON_POST_RESERVE_S", "HORIZON_SKIPPED_RC",
     "COLLECTION_DEADLINE_RECORD", "NEG8_RETRY_MINIMUM", "NEG8_RETRY_SNAPSHOT", "CHAIN_FLAG_WRITER",
     "SPARE_RETRY_HELPER", "SPARE_RETRY_SCHEMA", "SPARE_RETRY_SNAPSHOT", "spare_argv", "spare_retry_lines",
+    "C1_ENVIRONMENT_PATTERNS", "C1_ENVIRONMENT_NAMES", "C1_LAUNCH_ENVIRONMENT", "c1_environment",
+    "c1_chain_environment", "apply_c1_environment", "c1_environment_lines",
 ]

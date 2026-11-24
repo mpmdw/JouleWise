@@ -23,6 +23,7 @@ import unittest
 from unittest import mock
 
 from joulewise.align import w1_prequal as wp, w1_smoke as smoke
+from scripts import align_v4_next_arm_packet as builder
 from tests.align import test_smoke_delta_sol1 as previous
 from tests.align import test_w1_prequal as pq_fixtures
 from tests.align import test_w1_smoke as fixtures
@@ -326,18 +327,21 @@ class PacketCoverage(previous.DeltaFixture):
                     with self.subTest(path=path, action=action):
                         self.assertIn(json.dumps(edited, sort_keys=True), mutations)
 
-    def test_production_packet_has_488_mutations_and_an_admitted_control(self):      # 358 before R22-2 .. R25; 362 before R17 harvest-off (final_record etc.); 440 before claim contract B items 19-21 (cc67ac11e)
+    def test_production_packet_has_490_mutations_and_an_admitted_control(self):
         ctx = wp.Context(previous.ROOT, self.tmp / 'packet-work', 'w1')
         ctx.work.mkdir()
         _root, _scenario, _now, _pointer, arm, packet = wp._rebuild(ctx, 'coverage')
         self.assertTrue(wp._triage_ok(arm), arm.get('reasons'))
         self.assertIsNotNone(packet)
+        self.assertIn(f"{packet['series_commit']}:{builder.MANIFEST_PATH}",
+                      packet['checks']['sentinel_roster']['sources'])
         mutations = list(wp._mutations(packet))
         attempt = wp._zero_capture_attempt(packet)
         _holed, removed = wp._omit_attempt(packet, attempt)
         self.assertEqual(attempt, 'C3')
         self.assertGreater(removed, 0)
-        self.assertEqual(len(mutations) + 1, 488)  # the omission is the final probe (358 before the R24/R25 packet fields, 362 before the R17 harvest-off fields, 440 before the frozen thermal series fields of claim contract B items 19-21, cc67ac11e, admitted in RL-28)
+        # R20 adds change and removal of the manifest source. The extra probe omits an attempt.
+        self.assertEqual(len(mutations) + 1, 490)
 
 
 if __name__ == '__main__':

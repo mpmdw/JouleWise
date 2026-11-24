@@ -34,6 +34,7 @@ class ClaimBPacketTests(Base):
             s.finish()
         if next_window is not None:
             s.next_plan.update(window=next_window, role='test' if next_window.startswith('T') else 'calibration')
+            s.retarget_next_members()
         if change_policy:
             s.next_plan['thermal_policy']['idle_s'] = 450
             s.series['escalations'] = [{'window': s.window, 'ruling_id': 'SYNTHETIC-LADDER',
