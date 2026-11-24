@@ -356,6 +356,10 @@ class Event:
     fields: str = ""
     identity: str = ""
 
+    @property
+    def key(self):
+        return "|".join((self.level, self.code, self.subject, self.identity))
+
     def line(self, now):
         stamp = dt.datetime.fromtimestamp(now, dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         return f"{stamp} {self.level} {self.code} {self.subject}" + (" " + self.fields if self.fields else "")
@@ -439,6 +443,8 @@ def load_state(path):
             raise ValueError()
     except (KeyError, TypeError, ValueError):
         raise WatchError("INVALID_STATE") from None
+    if "pending_notifications" in state:
+        pending_notifications(state)
     return state
 
 
@@ -456,6 +462,43 @@ def save_state(path, state):
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
+
+
+NOTIFY_BACKOFF_S = 60
+NOTIFY_MAX_BACKOFF_S = 3600
+
+
+def pending_notifications(state):
+    pending = state.setdefault("pending_notifications", {})
+    if not isinstance(pending, dict) or not all(
+            isinstance(row, dict) and isinstance(row.get("line"), str)
+            and number(row.get("due")) and type(row.get("delay")) is int
+            and NOTIFY_BACKOFF_S <= row["delay"] <= NOTIFY_MAX_BACKOFF_S
+            for row in pending.values()):
+        raise WatchError("INVALID_PENDING_NOTIFICATIONS")
+    return pending
+
+
+def queue_notification(state, key, line, now):
+    pending_notifications(state).setdefault(key, {"line": line, "due": now, "delay": NOTIFY_BACKOFF_S})
+
+
+def retry_notifications(path, state, now, notify, acknowledge):
+    pending = pending_notifications(state)
+    for key, row in list(pending.items()):
+        if row["due"] > now:
+            continue
+        try:
+            delivered = notify(row["line"])
+        except (OSError, subprocess.SubprocessError):
+            delivered = False
+        if delivered:
+            acknowledge(key)
+            del pending[key]
+        else:
+            row["due"] = now + row["delay"]
+            row["delay"] = min(row["delay"] * 2, NOTIFY_MAX_BACKOFF_S)
+        save_state(path, state)
 
 
 class Watcher:
@@ -523,10 +566,11 @@ class Watcher:
 
     def _new(self, events):
         raised = set(self.state["raised"])
+        pending = self.state.get("pending_notifications", {})
         output = []
         for event in events:
-            key = "|".join((event.level, event.code, event.subject, event.identity))
-            if event.code == "LS_REMOTE_FAILED" or key not in raised:
+            key = event.key
+            if event.code == "LS_REMOTE_FAILED" or (key not in raised and key not in pending):
                 output.append(event)
                 raised.add(key)
         self.state["raised"] = sorted(raised)
@@ -590,6 +634,8 @@ def main(argv=None):
     parser.add_argument("--current-from-origin", action="store_true",
                         help="fetch origin main into refs/air-watch/main and read CURRENT there; "
                              "fall back to --current with INFO CURRENT_STALE")
+    parser.add_argument("--retry-notifications", action="store_true",
+                        help="keep undelivered NOTICE/ALARM identities in the watcher state")
     parser.add_argument("--notify-cmd", nargs=argparse.REMAINDER, help="last option; argv, with event line appended")
     try:
         args = parser.parse_args(argv)
@@ -599,7 +645,7 @@ def main(argv=None):
                        (args.silence_minutes, args.interval, args.hours, args.git_timeout))
                 or args.failure_limit < 2
                 or (args.t0 is not None or args.latest_end is not None) and not args.plan_id
-                or args.notify_cmd == []):
+                or args.notify_cmd == [] or (args.retry_notifications and not args.notify_cmd)):
             parser.error("invalid timing, failure limit, plan or notification arguments")
         state = load_state(args.state)
         git = Git(args.repo, args.git_timeout)
@@ -611,6 +657,13 @@ def main(argv=None):
         stop = time.monotonic() + args.hours * 3600
         status = EXIT_CODES["quiet"]
         stale = False
+
+        def send(line):
+            subprocess.run([*args.notify_cmd, line], stdin=subprocess.DEVNULL,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=10, check=True)
+            return True
+
         while True:
             if args.current_from_origin:
                 current, now_stale = fresh_current(git, args.current)
@@ -627,13 +680,17 @@ def main(argv=None):
             for event in events:
                 line = event.line(now)
                 print(line, flush=True)
-                if args.notify_cmd:
-                    subprocess.run([*args.notify_cmd, line], stdin=subprocess.DEVNULL,
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                   timeout=10, check=True)
-            # Persist only after delivery. A crash may repeat a line; it must
-            # never permanently suppress an alarm that was not delivered.
+                if args.retry_notifications:
+                    if event.level in {"NOTICE", "ALARM"}:
+                        queue_notification(state, event.key, line, now)
+                        state["raised"].remove(event.key)
+                elif args.notify_cmd:
+                    send(line)
+            # Checkpoint the source observation and outbox together. Only a
+            # successful delivery moves a pending identity to raised.
             save_state(args.state, state)
+            if args.retry_notifications:
+                retry_notifications(args.state, state, now, send, state["raised"].append)
             status = max(status, event_exit(events))
             if args.once or event_exit(events) == EXIT_CODES["alarm"] and not args.keep_going:
                 return status

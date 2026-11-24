@@ -16,7 +16,10 @@ import time
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from scripts.air.night_results_watch import EXIT_CODES, Event, WatchError, parse_object, save_state  # noqa: E402
+from scripts.air.night_results_watch import (  # noqa: E402
+    EXIT_CODES, Event, WatchError, parse_object, pending_notifications,
+    queue_notification, retry_notifications, save_state,
+)
 
 DEFAULT_STATE = Path.home() / "Library/Application Support/JouleWise/air-watch/main-ci-state.json"
 FAILED = {"failure", "timed_out", "startup_failure", "cancelled"}
@@ -89,7 +92,8 @@ def check(state, *, gh="gh", repo=None, workflow="ci.yml", timeout=30, cwd=None)
         state["gh_unavailable"] = True
         return [Event("INFO", "GH_UNAVAILABLE", "main")]
     state["gh_unavailable"] = False
-    if run is None or not red or run["databaseId"] in state["raised"]:
+    if (run is None or not red or run["databaseId"] in state["raised"]
+            or str(run["databaseId"]) in pending_notifications(state)):
         return []
     state["raised"] = (state["raised"] + [run["databaseId"]])[-KEEP:]
     sha = run.get("headSha") if isinstance(run.get("headSha"), str) else ""
@@ -99,14 +103,21 @@ def check(state, *, gh="gh", repo=None, workflow="ci.yml", timeout=30, cwd=None)
 
 def run_once(state_path, notify=None, **kwargs):
     state = load(state_path)
+    raised = state["raised"][:]
     events = check(state, **kwargs)
     now = time.time()
     for event in events:
         line = event.line(now)
         print(line, flush=True)
-        if notify:
-            notify(line)
+        if notify is not None and event.level == "ALARM":
+            queue_notification(state, event.identity, line, now)
+            state["raised"] = raised
     save_state(state_path, state)
+    if notify is not None:
+        def acknowledge(key):
+            state["raised"] = (state["raised"] + [int(key)])[-KEEP:]
+
+        retry_notifications(state_path, state, now, notify, acknowledge)
     levels = {e.level for e in events}
     return EXIT_CODES["alarm"] if "ALARM" in levels else EXIT_CODES["quiet"]
 

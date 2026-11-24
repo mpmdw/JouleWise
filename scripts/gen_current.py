@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
@@ -41,6 +42,14 @@ MAX_EPOCH = 1893456000  # 2030-01-01T00:00:00+00:00
 HEADING = re.compile(r"^([1-9][0-9]*)([a-z]?)\.[ \t]+\*\*\S")
 DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 FENCE = re.compile(r"^[ \t]*(`{3,}|~{3,})(.*)$")
+# Exact heading bytes at the two commits that introduced item 387. Neither
+# carried a pointer. Keep the exception independent of Git history at runtime.
+HISTORICAL_387 = frozenset({
+    # 754cc672c3adf6b3e9051478aef071cc29ebdc91:RUN_STATE.md#387 (lead)
+    "2e277f6bbe51ad58f7e580c18c03d90e6eb289ab05e65a20f9915c02aaf73c24",
+    # d65f60d8b8908e24c9123db2468d1e54f73f75f1:RUN_STATE.md#387 (magistrate)
+    "f84c39ef5b2cb668a1a0388c82d52a5f98af77c03dfb5a5a5a5d0b029c98855d",
+})
 ISO_TIME = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]"
     r"(?:\.[0-9]+)?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])"
@@ -154,6 +163,8 @@ def render(run_state_text: str) -> bytes:
     if errors:
         raise PointerError("\n".join(map(str, errors)))
     blocks = []
+    headings = {}
+    pointer_items = set()
     item = heading = None
     eligible = seen = False
     other_fence = None
@@ -178,6 +189,7 @@ def render(run_state_text: str) -> bytes:
             continue
         if match := HEADING.match(line):
             item, heading = match[1] + match[2], line
+            headings.setdefault(item, []).append((number, line))
             eligible, seen = True, False
         elif line == "```pointer":
             if seen:
@@ -185,6 +197,7 @@ def render(run_state_text: str) -> bytes:
             if item is None or not eligible:
                 _fail(number, "MISPLACED_POINTER", "pointer fence must directly follow a numbered item heading (blank lines allowed)")
             start, body = number, []
+            pointer_items.add(item)
             eligible, seen = False, True
         elif match := FENCE.fullmatch(line):
             other_fence = match[1]
@@ -204,6 +217,18 @@ def render(run_state_text: str) -> bytes:
                                  historical_owners=remaining if rank < winner[0] else None)
             if block is winner:
                 pointer = candidate
+    for item, rows in headings.items():
+        if len(rows) < 2 or (item not in pointer_items and item != "387"):
+            continue
+        if item == "387" and item not in pointer_items:
+            historical = set()
+            for number, line in rows:
+                digest = sha256(line.encode("utf-8")).hexdigest()
+                if digest not in HISTORICAL_387 or digest in historical:
+                    _fail(number, "DUPLICATE_ITEM", f"item {item} is outside the historical pair")
+                historical.add(digest)
+            continue
+        _fail(rows[1][0], "DUPLICATE_ITEM", f"item {item} repeats heading at line {rows[0][0]}")
     pointer["open_items"] = run_state_items.open_items(parsed)
     return (json.dumps(pointer, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8")
 

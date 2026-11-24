@@ -1,0 +1,332 @@
+name: partc-frozen-differential
+
+# Part C's frozen v4 acceptance runs (PR #809, RL-215). The suite is copied unchanged under tests/frozen/partc-v4
+# (see its README) and every job first verifies it against tests/frozen/partc-v4/SUITE-v4.sha256. RL-215 replaces
+# the direct v3.2 job: v3.2 stays committed as the baseline of 532654cf0, but its clean control (1,801 load
+# samples beside two battery rows) is refused by exact battery counting, by design, so it is no gate here.
+#
+# Per shard i of sixteen, by each runner's own partition (sha256 of the case ID mod 16):
+#   - the 1,472 generated v4 cases (suite-v4/tests/align/test_partc_writer_v4.py) and the 25,300 inherited v3.2
+#     operands on the v4 control (suite-v4/legacy/normalized_v32.py), each as four sub-shards k = i + 16j of 64,
+#     whose union is shard i of 16, one per hosted vCPU;
+#   - the 78 named history cases (suite-v4/tests/align/partc_v4_history.py), one process.
+# One more job runs the writer clean proof (62, 62, 82, 62, 62 battery rows). RL-215 Q5 as RL-216 R1 amends it: a
+# must-refuse legacy ID that either path admits is settled by the frozen oracle on the v4 bytes
+# (tests/align/partc_legacy_settle.py, the suite's own Probe.oracle), never by the evaluator. Two closed lists, by ID:
+# "may pass (control changed)" (the oracle admits) and "archive_unattested" (the four max_position_embeddings/shift
+# IDs, each only under R1's three conditions). Any other admitted must-refuse ID, or one of the four missing a
+# condition, fails the settle job. The totals job is the gate. It pins every shard's counts and RL-216's totals:
+# v4 390 AGREES_PASS and 1,082 REFUSED with no FALSE_PASS, WRONG_VERDICT or HARNESS_ERROR; history 78; legacy 982
+# AGREES_PASS, 24,255 REFUSED, 10 PARITY_DIFFERENCE (printed, blocking nothing) and 13 printed FALSE_PASS, all settled
+# by the two lists; the six mandatory legacy positives; exactly the 40 operand-rulings.tsv IDs INAPPLICABLE (RL-215
+# Q3); no OPERAND_ERROR. A missing shard is not a zero. Each shard job records and uploads its runs and exit
+# statuses; the totals job judges them.
+#
+# tests/align and tests/frozen have no __init__.py, so the ordinary CI shards' unittest discovery never collects
+# these runners. Lead test budget of 2026-11-22: the full frozen runs are hosted CI's, not the shared Air's. The
+# suite reads only the two pinned public commits from the object database, so the checkout keeps the whole history.
+
+on:
+  pull_request:
+    paths:
+      - "scripts/align_r1_part_c.py"
+      - "scripts/align_r1_part_c_evidence.py"
+      - "tests/frozen/partc-v4/**"
+      - ".github/workflows/partc-frozen-differential.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: partc-frozen-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # RL-215 Q5, settled by the frozen oracle (runs 45402589689 and 45416296214): both paths admit and the oracle
+  # admits on the v4 bytes. "may pass (control changed)", by ID.
+  CONTROL_CHANGED: >-
+    ["capture-predecessor-30b/runtime_custody.json//every-shift",
+    "capture-predecessor-30b/runtime_custody.json/started_epoch_s/shift",
+    "d-bank-benign-s1/v3/branch/load_journal.json/census.0.processes.0.comm/set-synthetic-worker",
+    "d-bank-benign-s1/v3/branch/runtime_result.json/census.0.processes.0.comm/set-synthetic-worker",
+    "idle/v3/branch/load_journal.json/census.0.processes.0.comm/set-synthetic-worker",
+    "idle/v3/branch/runtime_result.json/census.0.processes.0.comm/set-synthetic-worker",
+    "idle/v3/branch/soak_row.json/result.census.0.processes.0.comm/set-synthetic-worker",
+    "x-g/v3/branch/load_journal.json/census.0.processes.0.comm/set-synthetic-worker",
+    "x-g/v3/branch/runtime_result.json/census.0.processes.0.comm/set-synthetic-worker"]
+  # RL-216 R1: the archive's ruled native_limit: unattested pass (RL-189 1.4), each under R1's three conditions.
+  JW_PARTC_ARCHIVE_UNATTESTED: >-
+    ["capture-predecessor-30b/runs/align-pilot-v3-episodes-a-e01/outputs/align_episode.json/hardware.context_limits.max_position_embeddings/shift",
+    "step-d/runs/align-v4-r1-step-d/outputs/align_episode.json/hardware.context_limits.max_position_embeddings/shift",
+    "d-bank-benign-s1/runs/align-v4-r1-d-bank-benign-s1/outputs/align_episode.json/hardware.context_limits.max_position_embeddings/shift",
+    "x-g/runs/align-v4-r1-x-g/outputs/align_episode.json/hardware.context_limits.max_position_embeddings/shift"]
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: The issued suite is byte-identical to SUITE-v4.sha256
+        working-directory: tests/frozen/partc-v4
+        run: sha256sum --check SUITE-v4.sha256
+      - name: Writer clean proof
+        env:
+          JW_V4_PROOF: "1"
+          JW_PARTC_REPO: ${{ github.workspace }}
+          PYTHONDONTWRITEBYTECODE: "1"
+        working-directory: tests/frozen/partc-v4
+        run: |
+          set -o pipefail
+          python -IB suite-v4/tests/align/test_partc_writer_v4.py 2>&1 | tee proof.log
+          python3 - <<'EOF'
+          import re
+          lines = [line.split()[1:] for line in open("proof.log") if re.match(r"PROOF (idle|capture|step|d-bank|x-g)", line)]
+          expected = [["idle", "1801", "62", "2"], ["capture-predecessor-30b", "1801", "62", "2"],
+                      ["step-d", "2401", "82", "2"], ["d-bank-benign-s1", "1801", "62", "2"], ["x-g", "1801", "62", "2"]]
+          assert lines == expected, lines
+          assert "PROOF frozen_checks, frozen driver, issued verdict, four bindings, native and archive: pass" in open("proof.log").read()
+          print("writer clean proof: 62, 62, 82, 62, 62 battery rows; native and archive pass")
+          EOF
+
+  shard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Swap for the frozen oracle's largest case
+        # Two inherited operands retype D_bank's recorded gate cap (hardware.thermal.policy.g0_cap_s/type and
+        # turn_cap_s/type). Frozen R1 code multiplies it by 10**9 before anything refuses it, so the oracle builds
+        # a 14 GB string and then raises TypeError, which the runner records as a refusal. A 16 GB runner without
+        # swap loses its VM. The suite and frozen code are not ours to change, so the runner gets swap on /mnt.
+        run: |
+          avail=$(df -BG --output=avail /mnt | tail -1 | tr -dc 0-9)
+          size=$(( avail > 44 ? 36 : avail - 8 ))
+          sudo fallocate -l "${size}G" /mnt/partc.swap
+          sudo chmod 600 /mnt/partc.swap
+          sudo mkswap /mnt/partc.swap >/dev/null
+          sudo swapon /mnt/partc.swap
+          free -m
+      - name: The R1 pin and the fixture commit are in the object database
+        run: |
+          git cat-file -e b2e01464d6d4fbf2901ff4d4154df9455104a12a^{commit}
+          git cat-file -e 2d02a6f0e42b7ac7a51ea5d5830867eea9ff2911^{commit}
+      - name: The issued suite is byte-identical to SUITE-v4.sha256
+        working-directory: tests/frozen/partc-v4
+        run: sha256sum --check SUITE-v4.sha256 | tee "$GITHUB_WORKSPACE/shard.log"
+      - name: v4 cases, named history and inherited operands, shard ${{ matrix.shard }} of 16
+        env:
+          SHARD: ${{ matrix.shard }}
+          JW_PARTC_REPO: ${{ github.workspace }}
+          PYTHONDONTWRITEBYTECODE: "1"
+        working-directory: tests/frozen/partc-v4
+        run: |
+          # The job log keeps the runner's memory every 30 s, so a shard that loses its runner still shows how far
+          # it got. Each run's own output goes to its log; every exit status is recorded.
+          ( while sleep 30; do echo "MEM $(date +%T) $(free -m | awk '/Mem:/{print $3 " MB used, " $7 " MB available"}')"; done ) &
+          trap "kill $! 2>/dev/null" EXIT
+          log="$GITHUB_WORKSPACE/shard.log"
+          run() {  # run <label> <script> <shard>; the step's errexit must not skip the EXIT record
+            if JW_PARTC_SHARD="$3" python -IB "$2" > "$1.out" 2>&1; then rc=0; else rc=$?; fi
+            echo "EXIT $1 $rc" >> "$1.out"
+          }
+          # Wait for these runs by PID: a bare wait would also wait for the memory logger, which never ends.
+          pids=()
+          for j in 0 1 2 3; do run "v4-$j" suite-v4/tests/align/test_partc_writer_v4.py "$((SHARD + 16 * j))/64" & pids+=($!); done
+          wait "${pids[@]}"
+          run history suite-v4/tests/align/partc_v4_history.py "$SHARD/16"
+          pids=()
+          for j in 0 1 2 3; do run "legacy-$j" suite-v4/legacy/normalized_v32.py "$((SHARD + 16 * j))/64" & pids+=($!); done
+          wait "${pids[@]}"
+          for part in v4-0 v4-1 v4-2 v4-3 history legacy-0 legacy-1 legacy-2 legacy-3; do
+            echo "=== $part" >> "$log"
+            cat "$part.out" >> "$log"
+          done
+          grep -E '^(EXIT|matrix) ' "$log" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: partc-shard-${{ matrix.shard }}
+          path: |
+            shard.log
+            tests/frozen/partc-v4/*.out
+
+  settle:
+    needs: shard
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: partc-shard-*
+          path: shards
+      - name: The issued suite is byte-identical to SUITE-v4.sha256
+        working-directory: tests/frozen/partc-v4
+        run: sha256sum --check SUITE-v4.sha256
+      - name: Settle each admitted must-refuse legacy ID by the frozen oracle (RL-215 Q5, RL-216 R1)
+        # The tool prints each ID's category with both paths, the archive's native_limit and the oracle's label,
+        # and exits 1 on any ID neither closed list settles.
+        env:
+          JW_PARTC_REPO: ${{ github.workspace }}
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -o pipefail
+          python3 - <<'EOF' > admitted.txt
+          import pathlib, re
+          ids = set()
+          for log in pathlib.Path("shards").glob("partc-shard-*/shard.log"):
+              ids.update(re.findall(r"(?m)^FALSE_PASS (.+?) must refuse$", log.read_text()))
+          print("\n".join(sorted(ids)))
+          EOF
+          python -IB tests/align/partc_legacy_settle.py admitted.txt | tee settle.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: partc-settle
+          path: settle.log
+
+  totals:
+    needs: [proof, shard, settle]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: partc-*
+          path: shards
+      - name: Pin every shard's counts
+        env:
+          # sha256(case ID)[:4] mod 16, computed from cases-v4.tsv and legacy/operands.jsonl.gz.
+          V4_SHARDS: "104 97 79 87 99 92 76 96 92 87 79 82 95 105 108 94"
+          V4_TOTAL: "1472"
+          HISTORY_SHARDS: "2 7 7 5 2 4 4 6 1 2 4 7 5 8 7 7"
+          HISTORY_TOTAL: "78"
+          LEGACY_SHARDS: "1555 1639 1586 1610 1529 1498 1534 1598 1551 1638 1610 1636 1593 1578 1561 1544"
+          LEGACY_TOTAL: "25260"
+          INAPPLICABLE_SHARDS: "5 2 2 2 1 1 3 4 2 2 2 3 2 4 1 4"
+          INAPPLICABLE_TOTAL: "40"
+          # RL-216's pins after the fix pass, by outcome.
+          V4_OUTCOMES: '{"AGREES_PASS": 390, "REFUSED": 1082}'
+          LEGACY_OUTCOMES: '{"AGREES_PASS": 982, "REFUSED": 24255, "PARITY_DIFFERENCE": 10, "FALSE_PASS": 13}'
+          PROOF_RESULT: ${{ needs.proof.result }}
+          SETTLE_RESULT: ${{ needs.settle.result }}
+        run: |
+          python3 - <<'EOF'
+          import ast, collections, json, os, pathlib, re, sys
+          def pinned(name):
+              values = list(map(int, os.environ[name + "_SHARDS"].split()))
+              assert len(values) == 16 and sum(values) == int(os.environ[name + "_TOTAL"]), name
+              return values
+          v4, history, legacy, inapplicable = (pinned(name) for name in ("V4", "HISTORY", "LEGACY", "INAPPLICABLE"))
+          POSITIVES = {
+              "capture-predecessor-30b/descriptor/consistent-40961", "step-d/descriptor/consistent-40961",
+              "d-bank-benign-s1/descriptor/consistent-40961", "x-g/descriptor/consistent-40961",
+              "capture-predecessor-30b/v3/raw/runs/align-pilot-v3-episodes-a-e01/power_trace.csv/file/d018-header",
+              "capture-predecessor-30b/v3/raw/runs/align-pilot-v3-episodes-a-e01/power_trace.csv/file/"
+              "d018-interval-header-zero-rows"}
+          totals = {"v4": collections.Counter(), "history": collections.Counter(), "legacy": collections.Counter()}
+          problems, positives, inapplicable_ids, admitted = [], {}, set(), set()
+          logs = {}
+          for index in range(16):
+              log = pathlib.Path("shards") / f"partc-shard-{index}" / "shard.log"
+              if not log.is_file():
+                  problems.append(f"shard {index}: no log")
+                  continue
+              text = logs[index] = log.read_text()
+              exits = dict(re.findall(r"(?m)^EXIT (\S+) (\d+)$", text))
+              parts = ["v4-0", "v4-1", "v4-2", "v4-3", "history", "legacy-0", "legacy-1", "legacy-2", "legacy-3"]
+              # A legacy part exits 1 for any printed FALSE_PASS, settled or not; its outcomes are judged by ID
+              # below and its count is pinned, so a part that stopped early still fails.
+              if sorted(exits) != sorted(parts) or any(exits[part] != "0" for part in parts[:5]):
+                  problems.append(f"shard {index}: exits {exits}")
+              matrices = re.findall(r"(?m)^matrix (\d+) (\{.*\})$", text)
+              statuses = collections.Counter()
+              for count, found in matrices:
+                  found = ast.literal_eval(found)
+                  if int(count) != sum(found.values()):
+                      problems.append(f"shard {index}: matrix {count} {found}")
+                  statuses.update(found)
+              if len(matrices) != 4 or sum(statuses.values()) != v4[index]:
+                  problems.append(f"shard {index}: v4 {len(matrices)} matrix lines, {sum(statuses.values())} cases, "
+                                  f"pinned {v4[index]}")
+              totals["v4"].update(statuses)
+              results = re.findall(r"(?m)^RESULT (\S+) ", text)
+              if len(results) != history[index]:
+                  problems.append(f"shard {index}: history {len(results)} results, pinned {history[index]}")
+              totals["history"]["RESULT"] += len(results)
+              counted = re.findall(r"(?m)^(AGREES_PASS|REFUSED|PARITY_DIFFERENCE|FALSE_PASS|WRONG_VERDICT|"
+                                   r"OPERAND_ERROR) (.+?) (must refuse|must pass|may pass|descriptor \S+)$", text)
+              skipped = re.findall(r"(?m)^INAPPLICABLE (\S+) ", text)
+              if len(counted) != legacy[index] or len(skipped) != inapplicable[index]:
+                  problems.append(f"shard {index}: legacy {len(counted)} counted, {len(skipped)} inapplicable, "
+                                  f"pinned {legacy[index]} and {inapplicable[index]}")
+              totals["legacy"].update(outcome for outcome, _name, _expected in counted)
+              positives.update({name: outcome for outcome, name, _expected in counted if name in POSITIVES})
+              inapplicable_ids.update(skipped)
+              admitted.update(name for outcome, name, expected in counted
+                              if outcome == "FALSE_PASS" and expected == "must refuse")
+          for name, counter in totals.items():
+              print(name, sum(counter.values()), sorted(counter.items()))
+          for line in re.findall(r"(?m)^(?:FALSE_PASS|WRONG_VERDICT|HARNESS_ERROR) v4/.+$", "\n".join(logs.values())):
+              print(line)
+          for run, key in (("v4", "V4_OUTCOMES"), ("legacy", "LEGACY_OUTCOMES")):
+              if dict(totals[run]) != json.loads(os.environ[key]):
+                  problems.append(f"{run} outcomes {dict(totals[run])}, pinned {os.environ[key]}")
+          if any(totals["v4"][key] for key in ("FALSE_PASS", "WRONG_VERDICT", "HARNESS_ERROR")):
+              problems.append("v4: a FALSE_PASS, WRONG_VERDICT or HARNESS_ERROR")
+          if totals["legacy"]["OPERAND_ERROR"] or totals["legacy"]["WRONG_VERDICT"]:
+              problems.append("legacy: an OPERAND_ERROR or a refused positive")
+          # RL-215 Q5 with RL-216 R1: every printed FALSE_PASS is settled by one of the two closed lists, by ID.
+          settle = pathlib.Path("shards") / "partc-settle" / "settle.log"
+          settled = collections.defaultdict(set)
+          for category, name, _record in re.findall(r"(?m)^SETTLE (\S+) (.+?) (\{.*\})$",
+                                                    settle.read_text() if settle.is_file() else ""):
+              settled[category].add(name)
+          seen = set().union(*settled.values()) if settled else set()
+          if os.environ["SETTLE_RESULT"] != "success" or seen != admitted:
+              problems.append(f"settlement: {os.environ['SETTLE_RESULT']}, {len(seen)} of {len(admitted)} settled")
+          for category, key in (("control_changed", "CONTROL_CHANGED"), ("archive_unattested", "JW_PARTC_ARCHIVE_UNATTESTED")):
+              print(f"{category} (settled, closed list):", len(settled[category]))
+              for name in sorted(settled[category]):
+                  print("  " + name)
+              if sorted(settled[category]) != sorted(json.loads(os.environ[key])):
+                  problems.append(f"the {category} IDs differ from the pinned list")
+          print("unsettled:", len(settled["false_pass"]))
+          for name in sorted(settled["false_pass"]):
+              print("FALSE_PASS (unsettled):", name)
+          if settled["false_pass"] or set(settled) - {"control_changed", "archive_unattested", "false_pass"}:
+              problems.append("unsettled admitted must-refuse IDs")
+          if positives != dict.fromkeys(POSITIVES, "AGREES_PASS"):
+              problems.append(f"mandatory legacy positives: {positives}")
+          if len(inapplicable_ids) != 40:
+              problems.append(f"{len(inapplicable_ids)} distinct INAPPLICABLE IDs")
+          if os.environ["PROOF_RESULT"] != "success":
+              problems.append("writer clean proof: " + os.environ["PROOF_RESULT"])
+          print("parity differences on legacy IDs (printed, blocking nothing; RL-215 Q5):",
+                totals["legacy"]["PARITY_DIFFERENCE"])
+          if problems:
+              print("::error::incomplete or failing frozen runs:", problems)
+              sys.exit(1)
+          print("all pins hold")
+          EOF
