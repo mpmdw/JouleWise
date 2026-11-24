@@ -43,6 +43,7 @@ _NAMED_ARTIFACTS = (
     'joulewise/align/apple/thermal_desk.py', 'joulewise/align/apple/thermal_gates.py',
     'joulewise/align/apple/endpoint.py', 'joulewise/align/apple/workload.py',
     'scripts/run_night.py', REGISTRATION+'inputs.json', REGISTRATION+'r1_slots.json',
+    REGISTRATION+'r1_planning_release.json',   # RL-211: the kit reads it and it decides the kit's word
     REGISTRATION+'identity_pins.json', REGISTRATION+'model_artifact_inventory.json',
     REGISTRATION+'local_file_verification.json',
     REGISTRATION+'w1_plan.json', REGISTRATION+'u3_bar.json', REGISTRATION+'wp19_receipt.json',
