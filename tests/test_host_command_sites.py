@@ -10,6 +10,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 ALLOWLIST = Path(__file__).with_name("host_command_sites.json")
+HISTORICAL = Path(__file__).with_name("host_command_sites_historical.json")
 HOST = {"sudo", "systemsetup", "pmset", "caffeinate", "shutdown", "nvram", "kill", "killall"}
 LAUNCH = {"bootstrap", "bootout", "load", "unload", "kickstart", "enable", "disable", "remove"}
 
@@ -141,6 +142,24 @@ class HostCommandSiteTests(unittest.TestCase):
         missing = [row for row in actual if row not in stripped]
         stale = [row for row in stripped if row not in actual]
         self.assertFalse(missing or stale, f"unlisted command sites: {missing}\nstale command sites: {stale}")
+
+    def test_historical_inventory_holds_only_sites_absent_from_the_scan(self):
+        # Lead decision 2026-11-22 02:49 (trial PR #958 L6): declarations with no site on this line
+        # live in the historical inventory, so the active inventory above equals the exact scan.
+        document = json.loads(HISTORICAL.read_text())
+        self.assertEqual(set(document), {"schema", "doc", "sites"})
+        self.assertEqual(document["schema"], "joulewise.host_command_sites_historical.v1")
+        historical = document["sites"]
+        for entry in historical:
+            self.assertEqual(set(entry), {"file", "locator", "command", "seam"})
+            self.assertTrue(entry["seam"].strip())
+        stripped = [{k: v for k, v in row.items() if k != "seam"} for row in historical]
+        self.assertEqual(len(stripped), len({json.dumps(r, sort_keys=True) for r in stripped}), "duplicate historical entries")
+        active = [{k: v for k, v in row.items() if k != "seam"} for row in json.loads(ALLOWLIST.read_text())]
+        self.assertFalse([row for row in stripped if row in active], "a row is both active and historical")
+        actual = scan()
+        live = [row for row in stripped if row in actual]
+        self.assertFalse(live, f"historical rows that are live again (move them to the active inventory): {live}")
 
     def test_scan_synthetic_python_and_shell_sites(self):
         source = "def close():\n run(['/usr/bin/sudo', '-n', 'true'])\n run([sys.executable, '-I', '-c', 'pass'])\n"
