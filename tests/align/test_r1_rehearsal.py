@@ -94,6 +94,23 @@ def completed(argv, code=0, out="", err=""):
     return subprocess.CompletedProcess(argv, code, out, err)
 
 
+# PR #886 committed the R1 hardware record as registration/r1_slots.json, the file that
+# r1_runtime.registered_s6() reads as the ruled S6 registration. Synthetic driver runs that
+# bind S6 pin their own registration in the pre-fill shape instead (S6 = 1.5 C adopted from
+# the S5 = 1.0 C floor, as the FakeWorld step-d slots carry), so they never read the record.
+SYNTHETIC_S6_REGISTRATION = {
+    "slots": {"S6": 1.5},
+    "s6_tuning": {"status": "adopted", "authority": "synthetic S6 registration (tests only)",
+                  "from_c": 1.0, "to_c": 1.5},
+}
+
+
+def synthetic_s6_registration():
+    """Patch r1_runtime.registered_s6 with SYNTHETIC_S6_REGISTRATION (a fresh copy per call)."""
+    return patch("joulewise.align.apple.r1_runtime.registered_s6",
+                 lambda: json.loads(json.dumps(SYNTHETIC_S6_REGISTRATION)))
+
+
 PMSET_TEMPLATE = (
     "System-wide power settings:\n"
     "Currently in use:\n"
@@ -1341,7 +1358,8 @@ class R1Tests(unittest.TestCase):
             "bound_files": {name: hashlib.sha256((r1.ROOT / name).read_bytes()).hexdigest()
                             for name in reg.R1_EXECUTED_SOURCES}}))
         with patch("joulewise.align.apple.v4_registration.verify_r1_executed_sources"), patch.object(
-                r1, "_run", FakeWorld(step_d_rate=40.0, gated_decode_tokens=28000, gated_admitted_turns=7)):
+                r1, "_run", FakeWorld(step_d_rate=40.0, gated_decode_tokens=28000, gated_admitted_turns=7)), \
+                synthetic_s6_registration():
             assert r1.run(R1Tests.args(None, td, synthetic=synthetic, prepare_packet=packet_path)) == 0
         raw = (Path(td) / "run/r1_result.json").read_bytes()
         slots = json.loads((Path(td) / "registration/r1_slots.json").read_text())
@@ -1461,7 +1479,7 @@ class Round5RulingTests(unittest.TestCase):
 
     def run_world(self, td, world, expected=0, **changes):
         args = R1Tests.args(self, td, **changes)
-        with patch.object(r1, "_run", world):
+        with patch.object(r1, "_run", world), synthetic_s6_registration():
             self.assertEqual(r1.run(args), expected)
         result = json.loads((Path(td) / "run/r1_result.json").read_text())
         path = Path(td) / "registration/r1_slots.json"

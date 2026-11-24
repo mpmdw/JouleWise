@@ -209,7 +209,8 @@ class KitTests(unittest.TestCase):
             self.assertIs(policy['heavy'], False)
             self.assertEqual(policy['per_turn'], m['role'].endswith('G'))
 
-    def test_d_has_required_base_controls_and_explicit_pending_slots(self):
+    def test_d_has_required_base_controls_and_explicit_r1_filled_slots(self):
+        r1 = kit.read_inputs(ROOT)['R1']
         for m in self.members:
             if m['role'] != 'D':
                 continue
@@ -227,9 +228,11 @@ class KitTests(unittest.TestCase):
             self.assertTrue(spec['task_kwargs']['give_hint'])
             self.assertEqual(config.sampling.idle_seconds, 300)
             self.assertNotIn('max_episode_seconds', spec)
-            for key in ('max_episode_decode_tokens', 'deadman_s'):
+            # PR #886 fills R1: each slot is explicit and carries exactly the inputs.R1 value.
+            for key, value in (('max_episode_decode_tokens', r1['B_D']), ('deadman_s', r1['T_dead'])):
                 self.assertIn(key, spec)
-                self.assertIsNone(spec[key])
+                self.assertIsNotNone(spec[key])
+                self.assertEqual(spec[key], value)
             self.assertEqual(spec['chat_template_kwargs'], {'reasoning_effort': 'medium'})   # R0 re-run 11
             self.assertIs(spec['thermal']['heavy'], True)
             self.assertIs(spec['thermal']['per_turn'], True)
@@ -332,24 +335,40 @@ class KitTests(unittest.TestCase):
         self.assertEqual(preview['planning_window_max_s'], 44640)
         self.assertEqual(preview['span_limit_s'] - preview['planning_span_s'], 13)
         self.assertTrue(self.tree['non_claim'])
-        self.assertEqual(self.tree['draft_status'], 'PROVISIONAL_SKELETON')
+        # PR #886 fills R1, the last placeholder owner: the committed skeleton is for lead review
+        # (still a non-claim, still without sizing_b5.json). A blanked R1 leaf makes it provisional again.
+        self.assertEqual(self.tree['draft_status'], 'FOR_LEAD_REVIEW')
+        self.assertEqual(self.plan['status'], 'FOR_LEAD_REVIEW')
+        pending = kit.read_inputs(ROOT)
+        pending['R1']['T_dead'] = None
+        with patch.object(kit, 'read_inputs', return_value=pending):
+            files = kit.build_files(ROOT)
+        self.assertEqual(json.loads(files[kit.KIT / 'plan_tree.json'])['draft_status'], 'PROVISIONAL_SKELETON')
+        self.assertEqual(json.loads(files[kit.KIT / 'collection_plan.json'])['pending_inputs'], ['R1.T_dead'])
 
     def test_placeholders_fail_check_and_cannot_be_hidden_by_status(self):
-        with self.assertRaisesRegex(ValueError, 'BLOCKED.*R1'):
+        # PR #886 fills R1: the committed --check still refuses, and its first reason is the
+        # R0 record binding (a separate owner), not an R1 placeholder.
+        with self.assertRaisesRegex(ValueError, r'^R0\.record_sha256 must bind thermal_policy\.sensors\.r0_sha256'):
             kit.generate(ROOT, check=True)
+        self.assertEqual(kit.pending_inputs(kit.read_inputs(ROOT)), [])   # R0 effort (re-run 11) and R1 filled
+        self.assertEqual(self.plan['pending_inputs'], [])
+        # A synthetic blanked R1 leaf still blocks, whatever status says.
         inputs = kit.read_inputs(ROOT)
         inputs['status'] = 'ready'
+        inputs['R1']['B_D'] = None
         with self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.B_D'):
             kit.require_ready(inputs)
-        self.assertNotIn('R0.reasoning_effort', kit.pending_inputs(kit.read_inputs(ROOT)))   # filled from R0 re-run 11
-        self.assertIn('R1.T_dead', self.plan['pending_inputs'])
         # WP18 is filled; an emptied WP18 leaf still blocks, whatever status says.
+        inputs = kit.read_inputs(ROOT)
+        inputs['status'] = 'ready'
         inputs['WP18']['X']['max_turns'] = None
         with self.assertRaisesRegex(ValueError, 'BLOCKED.*WP18.X.max_turns'):
             kit.require_ready(inputs)
         with redirect_stderr(io.StringIO()) as err:
             self.assertEqual(kit.main(['--check']), 1)
-        self.assertIn('BLOCKED by placeholders', err.getvalue())
+        self.assertIn('align_v4_kit: R0.record_sha256 must bind thermal_policy.sensors.r0_sha256', err.getvalue())
+        self.assertNotIn('BLOCKED by placeholders', err.getvalue())
 
     def test_each_missing_owner_is_independently_fail_closed(self):
         # Even if all other owners have supplied nonempty values, this owner
@@ -358,9 +377,10 @@ class KitTests(unittest.TestCase):
         # WP11 (W1-blockers lane) and WP15 (the R1 runtime argv) are supplied;
         # emptying either must still block on its own.
         # WP18 is filled from the committed fixtures; it is checked below with the supplied owners.
-        self.assertEqual(pending_owners, {'R1'})      # R0 is filled from re-run 11
+        # R1 is filled by PR #886 (R0 from re-run 11): no owner is pending, and emptying R1 still blocks.
+        self.assertEqual(pending_owners, set())
         for owner, fields in kit.read_inputs(ROOT).items():
-            if not isinstance(fields, dict) or owner not in pending_owners | {'WP11', 'WP15', 'WP18'}:
+            if not isinstance(fields, dict) or owner not in pending_owners | {'WP11', 'WP15', 'WP18', 'R1'}:
                 continue
             candidate = {k: {name: 'supplied' for name in v} for k, v in kit.read_inputs(ROOT).items()
                          if isinstance(v, dict)}
@@ -1211,9 +1231,17 @@ class SessionParameterTests(unittest.TestCase):
         self.assertEqual(pilot.SCHEMA, 'joulewise.align_pilot_desk.v3')
 
     def test_v4_prepare_refuses_before_shared_prepare_or_session_creation(self):
+        blanked = kit.read_inputs(ROOT)
+        blanked['R1']['B_D'] = None
         with tempfile.TemporaryDirectory() as tmp, patch.object(pilot, 'prepare') as prepare:
             target = Path(tmp) / 'new-session'
-            with self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.B_D'):
+            # PR #886 fills R1: the committed kit's first refusal is the R0 record binding.
+            with self.assertRaisesRegex(ValueError, r'R0\.record_sha256 must bind thermal_policy\.sensors\.r0_sha256'):
+                session.prepare(ROOT, target)
+            # A synthetic blanked R1 leaf still refuses before the shared prepare.
+            with patch.object(kit, 'read_inputs', return_value=blanked), \
+                    patch.object(kit, 'build_files', return_value={}), \
+                    self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.B_D'):
                 session.prepare(ROOT, target)
             prepare.assert_not_called()
             self.assertFalse(target.exists())
@@ -1232,8 +1260,16 @@ class SessionParameterTests(unittest.TestCase):
             self.assertFalse(target.exists())
 
     def test_v4_install_refuses_before_shared_installer(self):
+        blanked = kit.read_inputs(ROOT)
+        blanked['R1']['B_D'] = None
         with patch.object(pilot.h, 'read', return_value={'measurement_root': str(ROOT)}), patch.object(pilot, 'install') as install:
-            with self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.B_D'):
+            # PR #886 fills R1: the committed kit's first refusal is the R0 record binding.
+            with self.assertRaisesRegex(ValueError, r'R0\.record_sha256 must bind thermal_policy\.sensors\.r0_sha256'):
+                session.install('synthetic-session', w1_disk_config='/x.json')
+            # A synthetic blanked R1 leaf still refuses before the shared installer.
+            with patch.object(kit, 'read_inputs', return_value=blanked), \
+                    patch.object(kit, 'build_files', return_value={}), \
+                    self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.B_D'):
                 session.install('synthetic-session', w1_disk_config='/x.json')
             install.assert_not_called()
 
@@ -1485,7 +1521,12 @@ class PendingMessageTests(unittest.TestCase):
         self.assertNotIn('WP15', text)  # the R1 runtime argv is committed in inputs.json
         self.assertNotIn('WP18', text)  # filled from the committed X/Y token fixtures
         self.assertNotIn('R0.reasoning_effort', text)
-        self.assertIn('| R1: ' + kit.PENDING_REASONS['R1'], text)
+        # PR #886 fills R1: no placeholder owner remains, so the committed check names none; its
+        # first reason is the R0 record binding. A blanked R1 leaf still states R1's reason.
+        self.assertNotIn('BLOCKED by placeholders', text)
+        self.assertNotIn('| R1: ', text)
+        self.assertTrue(text.startswith('R0.record_sha256 must bind thermal_policy.sensors.r0_sha256'))
+        self.assertIn('| R1: ' + kit.PENDING_REASONS['R1'], self.message(R1=('B_D',)))
 
 
 class W1SizingTests(unittest.TestCase):
