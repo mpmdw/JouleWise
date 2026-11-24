@@ -729,8 +729,10 @@ class C1ClosureTests(unittest.TestCase):
             observed = (code, *self.consumer_outcomes(attempt))
             # Preflight judges the rendered environment, never the caller's.
             seen = []
+            # The stubbed consumers return no reservation, so skip the later launch-record check.
             with patch.object(closure, '_check_consumers', side_effect=lambda *a, **k: seen.append(
-                    os.environ.get('JOULEWISE_G2A_PRE_BRACKET_PLAN')) or {}):
+                    os.environ.get('JOULEWISE_G2A_PRE_BRACKET_PLAN')) or {}), \
+                    patch.object(closure, 'check_launch_records'):
                 attempt.context()
         self.assertEqual(observed, (0, 0, 'admit', 1, 1), attempt.cli_error)
         self.assertEqual(seen, [None])

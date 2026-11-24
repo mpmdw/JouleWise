@@ -1288,6 +1288,10 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
             _, _, _, reserved_slots = consumer_check(
                 'reservation', lambda: reservation.reservation_inputs(args, epoch, t1))
             reserved_session = args.session_id
+            # What the launch's lineage must name, as the chain reserves it.
+            selections['reservation'] = {'plan_id': args.plan_id, 'window_id': args.window_id,
+                                         'bracket_session_id': args.session_id,
+                                         'evidence_root_id': args.evidence_root_id}
             # C1 launches under the HAZARD_PACK driver, so the reservation takes
             # its HAZARD route: no committed-pin or custody pass, a lagging pin
             # allowed, rollback refused. Read-only here: no lease, no append.
@@ -1427,6 +1431,89 @@ def verify_chain(view, handoff, ledger, tree, tree_sha256, night):
         raise ValueError('prepared chain differs from the resolved C1 dispatch')
 
 
+def check_launch_records(view, tree_raw, night, state, reserved):
+    """Bind the launch identity and locations the driver takes from the night plan.
+
+    The driver publishes the window lineage and routes its records from the
+    night plan, not from the chain. Each field must be the value b5.plan
+    writes from this attempt's inputs. That means the rendered reservation,
+    the staged tree, the prepared session inputs and the launch view.
+    """
+    from joulewise.b5 import driver
+
+    def as_path(value):
+        return Path(value) if isinstance(value, str) and value else value
+
+    if reserved is None:
+        raise ValueError('the C1 chain renders no bracket reservation')
+    hazard = night['hazard_window']
+    pack, bindings = hazard.get('pack') or {}, hazard['bindings']
+    inputs = state.get('inputs') or {}
+    try:
+        identity = driver.lineage_identity(hazard)  # what the lineage publisher writes
+    except (KeyError, TypeError) as exc:
+        raise ValueError(f'C1 night plan lacks its launch identity: {exc!r}') from exc
+    rows = (
+        ('hazard_window.pack.window_id', identity['window_id'], reserved['window_id']),
+        ('hazard_window.pack.pack_plan_id', identity['plan_id'], reserved['plan_id']),
+        ('hazard_window.bracket_session_id', identity['bracket_session_id'], reserved['bracket_session_id']),
+        ('hazard_window.pack.evidence_root_id', pack.get('evidence_root_id'), reserved['evidence_root_id']),
+        ('hazard_window.pack.pack_id', pack.get('pack_id'), PACK.name),
+        ('hazard_window.pack.plan_tree_sha256', pack.get('plan_tree_sha256'), digest(tree_raw)),
+        ('hazard_window.runs_roots', hazard.get('runs_roots'),
+         {'claim': bindings['claim_runs_root'], 'bound': bindings['bound_runs_root']}),
+        ('hazard_window.attempt', hazard.get('attempt'), inputs.get('attempt')),
+        ('plan_id', night.get('plan_id'), inputs.get('plan_id')),
+        ('custody_root', as_path(night.get('custody_root')), as_path(inputs.get('custody_root'))),
+        ('measurement_root', as_path(night.get('measurement_root')), view.root),
+    )
+    for field, observed, expected in rows:
+        if observed is None or expected is None or observed != expected:
+            raise ValueError(f"C1 night plan {field} is {observed!r}, not this attempt's {expected!r}")
+
+
+def check_fresh_runs_roots(bindings):
+    """Each runs root is still absent, or the empty real directory prepare made.
+
+    b5.plan refuses an existing runs root and creates both empty, since a
+    window never reuses a runs root. Preflight re-asserts that before arm.
+    An entry placed there since would take this attempt's writes. That
+    covers a link, a copied or hard-linked log, a stale bound, bundle or
+    lock, or a linked capture root.
+    """
+    for name in ('claim_runs_root', 'bound_runs_root'):
+        root = Path(bindings[name])
+        if os.path.islink(root):
+            raise ValueError(f'C1 {name} is a link: {root} -> {os.readlink(root)}')
+        if not os.path.lexists(root):
+            continue
+        if not root.is_dir():
+            raise ValueError(f'C1 {name} is not a directory: {root}')
+        if entries := sorted(os.listdir(root)):
+            raise ValueError(f'C1 {name} is not empty, so this attempt would write through '
+                             f'{entries[0]!r}: {root}')
+
+
+def check_no_links(name, root):
+    """A record root the launch writes into holds no link at or below it.
+
+    The custody root takes the lineage and night records, and the operator
+    log root takes the chain's logs. Both may already hold ordinary records,
+    but a link there would send this attempt's writes to another place.
+    """
+    root = Path(root)
+    if os.path.islink(root):
+        raise ValueError(f'C1 {name} is a link: {root} -> {os.readlink(root)}')
+    if not os.path.lexists(root):
+        return
+    if not root.is_dir():
+        raise ValueError(f'C1 {name} is not a directory: {root}')
+    for parent, directories, files in os.walk(root):  # never descends through a link
+        for entry in sorted((*directories, *files)):
+            if os.path.islink(path := os.path.join(parent, entry)):
+                raise ValueError(f'C1 {name} holds a link, so this attempt would write through it: {path}')
+
+
 def prepared_closure(authority, verified_roots, handoff, read):
     """Derive the inventory from prepare's declaration and check required inputs."""
     view = verify_launch_view(verified_roots, handoff['view'],
@@ -1441,6 +1528,12 @@ def prepared_closure(authority, verified_roots, handoff, read):
     tree = decode(tree_raw)
     selections = check_selections(view, tree, night, ledger, c1_inputs=execution_inputs(handoff, ledger))
     verify_chain(view, handoff, ledger, tree, digest(tree_raw), night)
+    # Last, so every earlier refusal keeps its own reason.
+    check_launch_records(view, tree_raw, night, state, selections.get('reservation'))
+    check_fresh_runs_roots(night['hazard_window']['bindings'])
+    for name, root in (('custody_root', night['custody_root']),
+                       ('operator_log_root', night['hazard_window']['bindings']['operator_log_root'])):
+        check_no_links(name, root)
     closure = {'schema': SCHEMA, 'repo': tree_identity(authority, handoff['execution_commit']),
                'stage_files': pins, 'ledger': ledger}
     return closure, state, night, tree, view, selections
