@@ -1302,7 +1302,7 @@
   },
   "custody": {
     "runs_by": "analyst_seat",
-    "root": null,
+    "root": "/Volumes/JW-EXT/lm-interim-01-root",
     "seats": 1,
     "lead_checks_output_against_schema": true,
     "custody_copy": "One verified custody copy of the roster's spans by the existing offload tooling, made while the MBP is unarmed; the look runs on that copy, never on the MBP's measurement root. The copy lives under the one root this manifest registers (root): each span at <root>/<span id>, and the look's own files at fixed names in <root>/lm-interim-01. Campaign stages take no path. Under RL-217 E.1 the rules-3/4 rehearsal creates a private directory outside the repository and every registered root. Stage-1 rehearsal reads the verdict and writes its own outputs there.",
