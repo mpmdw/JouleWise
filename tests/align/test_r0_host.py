@@ -3774,6 +3774,199 @@ class R0FinalVerdictTest(unittest.TestCase):
                                                 "at least 1.530 CPU-s in one of 2 windows" in flag for flag in proven),
                                             model.guard.contention_flags)
 
+    def test_lead_s_admission_flip_an_extra_admission_never_publishes(self):
+        # Narrow check admission_flip.py at 08707573 (and 29fa454). A
+        # resident mdworker_shared uses 0.10, 0.60, 0.78 and 0.08 CPU-s from
+        # 30.4, 44.0, 59.0 and 60.1 s: 1.56 CPU-s within 29.78 s. The daemon
+        # samples every 15 s. A forced admission at 61 s judges the admitted
+        # L3 window (30, 61): 1.56 CPU-s / 31 s is above 0.05 CPU-s/s, so the
+        # run withholds. One more forced admission at 31 s moved that window
+        # to (31, 61), 1.46 CPU-s / 30 s, and both modes published; every
+        # daemon window stayed the same. Lead S1-S2: adding a reading only
+        # adds withhold evidence, and every judgement uses every pair, so
+        # the (30, 61) pair is still judged when a read at 31 s exists.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        bursts = ((30400, 30500), (44000, 44600), (59000, 59780), (60100, 60180))
+        self.assertEqual(sum(stop - begin for begin, stop in bursts), 1560)
+
+        def rows(seconds):
+            t = round(seconds * 1000)
+            used = sum(max(0, min(t, stop) - begin) for begin, stop in bursts)
+            yield fixture.PID, -100, (used + 5) // 10, fixture.WORKER, "/fixture/mdworker_shared"
+
+        for mode in ("host", "inventory"):
+            for extra in (False, True):
+                class Model(self.series_fixture((45, 60, 75), rows)):
+                    def move(self, end, extra=extra):
+                        target = (self.case.end if self.case.schedule == "inventory" and end == 45
+                                  and "inventory" in self.work_started else end)
+                        if target == self.case.end and not hasattr(self, "admissions"):
+                            self.admissions = []
+                            for when in ((31, 61) if extra else (61,)):
+                                super().move(when)
+                                self.guard.check(force=True)
+                                self.admissions.append(when)
+                        super().move(end)
+
+                with self.subTest(mode=mode, extra=extra):
+                    result, model = self.run_model(fixture.Case("same_curve", schedule=mode, end=75), Model)
+                    self.assertEqual(model.admissions, [31, 61] if extra else [61])
+                    self.assertEqual(self.verdict_windows(model.guard), [(0, 30), (15, 45), (30, 60), (45, 75)])
+                    self.assertEqual((result["rc"], result["published"]), (2, False), result)
+                    self.assertIn((30, 61, fixture.PID, fixture.TOKEN), result["flags"])
+
+    def test_lead_s_an_extra_reading_never_turns_a_withhold_into_a_publication(self):
+        # Lead S1-S3, the convergence check for monotonicity: adding a
+        # reading of a process, from any read, can only add withhold
+        # evidence. Each seeded case draws a true CPU curve for one
+        # mdworker_shared (a resident, a newcomer, or a transient that
+        # exits), a daemon schedule with gaps of 4 to 19 s, up to three
+        # forced foreground admissions, and 0 or 10 ms accounting reads.
+        # It runs twice: as drawn, and with one extra reading at a random
+        # instant, a forced admission (most cases) or a daemon tick.
+        # Whenever the first run withholds, the second must too, in host and
+        # inventory modes. No judged window exceeds 50 s, so the stall rule,
+        # a coverage refusal that a daemon read filling a gap lifts by
+        # design, never decides a case.
+        #
+        # Styles: "generic" draws 1.10 to 2.10 CPU-s in up to four bursts
+        # anywhere. "admission_edge" and "daemon_edge" are the narrow
+        # check's shape: two admissions, or two daemon ticks, 30.2 to 33 s
+        # apart with just over 0.05 CPU-s/s between them, a small burst
+        # just after the first, and most extra readings just after it, where
+        # the newest eligible opening would move.
+        import bisect
+        import random
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        rng = random.Random(20261125)
+        per_mode = 1100
+        flips, verdicts = [], {"withheld": 0, "published": 0}
+
+        def separate(at, taken):
+            return all(abs(at - other) >= 0.1 for other in taken)
+
+        def burst(begin, length, size):
+            return [round((begin + length * (k + 1) / size) * 1000) for k in range(size)]
+
+        for mode in ("host", "inventory"):
+            for number in range(per_mode):
+                style = rng.choices(("generic", "admission_edge", "daemon_edge"), (4, 4, 2))[0]
+                end = round(rng.uniform(75, 125), 3)
+                read_ms = rng.choice((0, 10))
+                while True:
+                    ticks, at = [], 30.0
+                    while (at := round(at + rng.uniform(4, 19), 3)) < end - 0.3:
+                        ticks.append(at)
+                    opening = closing = None
+                    if style != "generic":
+                        opening = round(rng.uniform(31, end - 36), 3)
+                        closing = round(opening + rng.uniform(30.2, 33), 3)
+                    if style == "daemon_edge":
+                        # The two ticks, and no tick that would open the
+                        # closing tick's window later than the first.
+                        ticks = sorted([t for t in ticks if not opening - 0.1 < t <= closing - 29.9
+                                        and abs(t - closing) >= 0.1] + [opening, closing])
+                    elif style == "admission_edge":
+                        ticks = [t for t in ticks if abs(t - opening) >= 0.1 and abs(t - closing) >= 0.1]
+                    if max(b - a for a, b in zip([30.0, *ticks], [*ticks, end])) <= 19.3:
+                        break
+                admissions = [] if style != "admission_edge" else [opening, closing]
+                for _ in range(rng.randint(0, 3 if style == "generic" else 1)):
+                    at = round(rng.uniform(30.5, end - 0.5), 3)
+                    if separate(at, ticks + admissions + [30.0, end]):
+                        admissions.append(at)
+                admissions.sort()
+                while True:
+                    if style != "generic" and rng.random() < 0.75:
+                        extra = round(rng.uniform(opening + 0.1, min(opening + 2.5, closing - 30)), 3)
+                    else:
+                        extra = round(rng.uniform(30.5, end - 0.5), 3)
+                    if separate(extra, ticks + admissions + [30.0, end]):
+                        break
+                extra_kind = ("daemon" if style == "daemon_edge" else "admission") if rng.random() < 0.8 else (
+                    "admission" if style == "daemon_edge" else "daemon")
+
+                kind = rng.choices(("resident", "newcomer", "transient"), (3, 2, 1) if style != "generic" else (1, 1, 1))[0]
+                birth = exit_ = None
+                if style == "generic":
+                    if kind == "resident":
+                        focus = rng.uniform(30, end - 25)
+                    elif kind == "newcomer":
+                        birth = rng.uniform(31, end - 8)
+                        focus = birth + rng.uniform(0, 8)
+                    else:
+                        birth = rng.uniform(31, end - 15)
+                        exit_ = min(birth + rng.uniform(4, 45), end - 1)
+                        focus = birth + rng.uniform(0, 4)
+                    total, span, parts = rng.randint(110, 210), rng.uniform(3, 40), rng.randint(1, 4)
+                    cuts = sorted(rng.randint(0, total) for _ in range(parts - 1))
+                    steps = []
+                    for size in (b - a for a, b in zip([0, *cuts], [*cuts, total])):
+                        steps += burst(focus + rng.uniform(0, span), rng.uniform(0.01, 3), size)
+                else:
+                    if kind != "resident":
+                        birth = opening + rng.uniform(0.02, 0.3)
+                    if kind == "transient":
+                        exit_ = closing - rng.uniform(0.05, 1)
+                    total = -(-round((closing - opening) * 1000) * 5 // 1000) + rng.randint(-2, 4)
+                    small = rng.randint(3, 20)
+                    steps = burst(opening + rng.uniform(0.32, 1.8), rng.uniform(0.01, 0.3), small)
+                    rest, parts = total - small, rng.randint(1, 3)
+                    cuts = sorted(rng.randint(0, rest) for _ in range(parts - 1))
+                    for size in (b - a for a, b in zip([0, *cuts], [*cuts, rest])):
+                        if size:
+                            steps += burst(rng.uniform(opening + 2, closing - 1.5), rng.uniform(0.01, 1.2), size)
+                birth_ms = None if birth is None else round(birth * 1000)
+                exit_ms = None if exit_ is None else round(exit_ * 1000)
+                steps = sorted(q for q in steps if (birth_ms is None or q >= birth_ms)
+                               and (exit_ms is None or q < exit_ms))
+                started = -100 if birth is None else birth_ms // 1000
+                floor_cs = 230 if birth is None else 0
+
+                def rows(now, steps=steps, birth_ms=birth_ms, exit_ms=exit_ms, started=started, floor_cs=floor_cs):
+                    t = round(now * 1000)
+                    if (birth_ms is None or t >= birth_ms) and (exit_ms is None or t < exit_ms):
+                        yield (fixture.PID, started, floor_cs + bisect.bisect_right(steps, t), fixture.WORKER,
+                               "/fixture/mdworker_shared")
+
+                label = dict(mode=mode, number=number, style=style, kind=kind, end=end, read_ms=read_ms, ticks=ticks,
+                             admissions=admissions, extra=(extra_kind, extra), birth=birth, exit=exit_)
+                outcomes = []
+                for extended in (False, True):
+                    series = sorted(ticks + [extra]) if extended and extra_kind == "daemon" else ticks
+                    forced = sorted(admissions + [extra]) if extended and extra_kind == "admission" else admissions
+
+                    class Model(self.series_fixture(series, rows, read_ms=read_ms)):
+                        def __init__(self, case, root, forced=forced):
+                            super().__init__(case, root)
+                            self.forced = list(forced)
+
+                        def move(self, end):
+                            target = (self.case.end if self.case.schedule == "inventory" and end == 45
+                                      and "inventory" in self.work_started else end)
+                            while self.forced and self.forced[0] <= target and self.guard._sampler is not None:
+                                super().move(self.forced.pop(0))
+                                self.guard.check(force=True)
+                            super().move(end)
+
+                        def wall_ns(self):
+                            return fixture.EPOCH * 10**9 + round(self.now * 10**9)
+
+                    result, model = self.run_model(fixture.Case(f"monotone_{number}", schedule=mode, end=end), Model)
+                    self.assertEqual(model.forced, [], label)
+                    self.assertIn(result["rc"], (0, 2), (label, result))
+                    outcomes.append((result["rc"], result["published"]) == (2, False))
+                verdicts["withheld" if outcomes[0] else "published"] += 1
+                if outcomes[0] and not outcomes[1]:
+                    flips.append(label)
+        self.assertEqual(sum(verdicts.values()), 2 * per_mode)
+        # Both outcomes occur often enough for the check to mean something.
+        self.assertGreater(verdicts["withheld"], 400, verdicts)
+        self.assertGreater(verdicts["published"], 400, verdicts)
+        self.assertEqual(flips, [], f"{len(flips)} of {2 * per_mode} cases published after an extra reading")
+
     def test_publication_matches_an_independent_workload_model(self):
         # Lead r4 S4(c), rewritten for lead P2. Each worker has a true birth
         # and a true CPU curve; its printed start second is the simulated
