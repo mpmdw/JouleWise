@@ -1,16 +1,16 @@
 {
   "armed": null,
-  "next_observable": "magistrate RUN_STATE item with the restore verdict (per-archive file counts and manifest-check results, free space before/peak/after), then item 576's own reporting (the two name files' membership verdict, the driver exit, the two cmp results)",
+  "next_observable": "a magistrate RUN_STATE item with item 588's restore verdict and item 576's results (name-file membership, driver exit and verdict, two cmp results), then the next f2-stab span issued from the ladder (pin-B gap 10:50:01-13:14:59 takes kit 16 L001 onward; from 13:15:00 pin A with kit 09 L007 onward).",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 588,
+      "item": 589,
       "owner": "magistrate",
       "status": "ISSUED"
     },
     {
       "expires_epoch_s": null,
-      "item": 587,
+      "item": 588,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -269,11 +269,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "588",
+  "source_item": "589",
   "source_item_heading_date": "2026-11-25",
   "wait": {
-    "deadline_epoch_s": 1795809600,
+    "deadline_epoch_s": 1795665600,
     "observable": "none",
-    "on_early_or_refused": "a restored file that fails its receipt's per-file sha256, free space under 80 GiB at any point, or an extraction that would write any path outside the three named trees stops the restore; delete what this item restored, send the lead the names and exit codes, and continue the ladder"
+    "on_early_or_refused": "If activation 6031f6e8 is gone before a later item records item 576's result: nothing is fenced and no span is launched. The next activation reads restore588-6031f6e8/ (stage1.tsv, the hashlist/verify scripts, any loop-bytes/sessions TSVs and verify outputs) and the state of /Users/edr/night-b6, /Users/edr/night-archive/bytes-stage1-20261111 and /Users/edr/code/jw-wt/bytes-refit-1; resumes item 588 from the first unverified tree (a partly extracted tree is deleted and re-extracted); if $S1/refit-1 exists without a finished log, keeps it and uses refit-2 per the runbook. Then item 576, then the ladder. Item 588's stops apply (a failed per-file check, free space under 80 GiB, a path outside the three trees)."
   }
 }
