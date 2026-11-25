@@ -607,7 +607,8 @@ has no phase exit-checklist row.
 
 P1 Phase Gate [AGENT], assigned by the lead for the RL-180 B.2 packet.
 The [run report](docs/run_reports/2026-11-24-look-stage1-rehearsal.md)
-records the draft implementation and verification. The magistrate
+records the draft implementation, destination fix after Astra's audit
+and verification. The magistrate
 rehearsal requires the lead's input commitments on the shared branch.
 
 ## Intake Batch Owed To The Kernel (2026-07-30/31)

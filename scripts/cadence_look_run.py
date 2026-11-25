@@ -30,8 +30,8 @@ input_level_r.json and input_level_e.json from the look's directory.
     python3 -I -B scripts/cadence_look_run.py stage1 --rehearsal NEW_DIRECTORY
 
 The RL-180 B.2 rehearsal uses the manifest's dry-run blocks and keeps its two private outputs in a new
-directory outside the registered roots and the repository. It uses an already fetched checkout of the
-shared records and prints the stage-1 public fields for the lead.
+directory disjoint from the roots on the shared branch and origin/main. It refreshes origin/main and
+prints the stage-1 public fields for the lead.
 
 Stage 1 reads time fields and sample counters only from energy-bearing files. In custody mode it opens, per span: `runner_receipt.json`,
 `soak/soak_reference.json`, and per leg `leg_record.json`; per accepted attempt's bundle: `events.jsonl`
@@ -1326,40 +1326,71 @@ REHEARSAL_BRANCH = "align/2026-11-14-look-manifest"
 
 
 def rehearsal_ref():
-    """Use the rehearsal's shared merge branch before main contains HEAD. Check both authorities without fetching
-    into the repository, since the rehearsal may write only to its output directory."""
+    """Use the fetched main when it contains HEAD, or verify the rehearsal's shared merge branch is current."""
     main_ref = M.PUBLIC_RUN_STATE_REF
     on_main, _, _ = M._git(ROOT, "merge-base", "--is-ancestor", "HEAD", main_ref)
-    branch = "main" if on_main == 0 else REHEARSAL_BRANCH
-    branches = sorted({"main", branch})
-    heads = [f"refs/heads/{name}" for name in branches]
-    rc, raw, _ = M._git(ROOT, "ls-remote", "--exit-code", "origin", *heads)
-    remote = {ref: sha for sha, ref in (line.split() for line in raw.decode().splitlines())}
-    for name in branches:
-        rc_local, sha, _ = M._git(ROOT, "rev-parse", "--verify", f"refs/remotes/origin/{name}")
-        if rc or rc_local or sha.decode().strip() != remote.get(f"refs/heads/{name}"):
-            raise F.LookInputError("rehearsal requires a fresh checkout of the shared branch and origin/main")
-    return f"refs/remotes/origin/{branch}"
+    if on_main == 0:
+        return main_ref
+    remote_head = f"refs/heads/{REHEARSAL_BRANCH}"
+    local_ref = f"refs/remotes/origin/{REHEARSAL_BRANCH}"
+    rc, raw, _ = M._git(ROOT, "ls-remote", "--exit-code", "origin", remote_head)
+    _, sha = M.shared_ref(ROOT, local_ref)
+    if rc or raw.split() != [sha.encode(), remote_head.encode()]:
+        raise F.LookInputError("rehearsal requires a fresh checkout of the shared branch")
+    return local_ref
 
 
-def rehearsal_output(value, layout, ledger):
-    """Create a private destination exclusively, beside the registered roots and the checkout."""
+def rehearsal_output(value, layout, ledger_ref):
+    """Exclusively create a private destination disjoint from the repository and both refs' registered roots."""
     try:
-        path = release.no_symlink_components(os.path.abspath(value), "rehearsal directory")
+        path = release.no_symlink_components(value, "rehearsal directory")
     except ValueError as error:
         raise F.LookInputError(str(error)) from None
-    if os.path.lexists(path) or M.name_collision(path.parent, path.name):
-        raise F.LookInputError("rehearsal directory already exists")
     if not path.parent.is_dir() or not os.access(path.parent, os.W_OK | os.X_OK):
         raise F.LookInputError("rehearsal directory needs an existing writable parent")
-    # Public roots are repository-relative by the ledger contract. Check every registered custody root,
-    # including ones for another look and ones not yet materialized on this host.
-    roots = {layout.repo, layout.root, *(Path(row["custody_root"]).resolve()
-                                         for row in ledger["looks"] if row.get("custody_root"))}
-    for root in roots:
-        if (path.is_relative_to(root) or root.is_relative_to(path)
-                or (root.is_dir() and release.physically_within(path.parent, root))):
-            raise F.LookInputError("rehearsal directory must be outside the repository and every registered root")
+    roots = [layout.repo, layout.root]
+    for ref in dict.fromkeys((M.PUBLIC_RUN_STATE_REF, ledger_ref)):
+        _, commit = M.shared_ref(layout.repo, ref)
+        rc, raw, _ = M._git(layout.repo, "show", f"{commit}:{M.LOOK_LEDGER_PATH}")
+        if rc:
+            raise F.LookInputError(f"rehearsal cannot read the registered roots from {ref}'s ledger")
+        ledger = M.validate_look_ledger(M.strict_json(raw))
+        manifests = set()
+        for row in ledger["looks"]:
+            if row.get("custody_root"):
+                roots.append(Path(row["custody_root"]))
+            if row.get("public_root"):
+                roots.append(layout.repo / row["public_root"])
+            manifests.add((row["manifest_path"], row["sha256"]))
+        if not any(name == M.INTERIM_MANIFEST_PATH for name, _ in manifests):
+            rc, entry, _ = M._git(layout.repo, "ls-tree", commit, "--", M.INTERIM_MANIFEST_PATH)
+            if rc:
+                raise F.LookInputError(f"rehearsal cannot inspect {ref} for the interim manifest")
+            if entry:
+                manifests.add((M.INTERIM_MANIFEST_PATH, None))
+        for name, expected in sorted(manifests):
+            rc, raw, _ = M._git(layout.repo, "show", f"{commit}:{name}")
+            if rc or (expected is not None and hashlib.sha256(raw).hexdigest() != expected):
+                raise F.LookInputError(f"rehearsal cannot verify {ref}'s registered manifest {name}")
+            root = M.strict_json(raw).get("custody", {}).get("root")
+            if root is not None:
+                if M.root_problems(root, final=True):
+                    raise F.LookInputError(f"rehearsal cannot resolve the registered custody root in {ref}:{name}")
+                roots.append(Path(root))
+
+    resolved_path = path.resolve()
+    folded_path = Path(str(resolved_path).casefold())
+    # The campaign's output directories and span roots descend from the registered custody roots. Keep both
+    # spelling and physical identity checks for aliases, case variants, and roots that do not exist yet.
+    for registered in dict.fromkeys(roots):
+        root = registered.resolve()
+        folded_root = Path(str(root).casefold())
+        if (folded_path.is_relative_to(folded_root) or folded_root.is_relative_to(folded_path)
+                or (root.exists() and release.physically_within(resolved_path.parent, root))
+                or (path.exists() and root.exists() and release.physically_within(root, resolved_path))):
+            raise F.LookInputError(f"rehearsal directory must be outside and disjoint from registered root {root}")
+    if os.path.lexists(path) or M.name_collision(path.parent, path.name):
+        raise F.LookInputError("rehearsal directory already exists")
     try:
         path.mkdir(mode=0o700)
     except FileExistsError:
@@ -1399,8 +1430,6 @@ def _stage1(a, stack):
         for key in ("stage1", "level_r"):             # created once, never replaced
             if layout.exists(key):
                 raise F.LookInputError(f"{M.LOOK_FILES[key]} already exists in the look's directory")
-    else:
-        _, _, ledger = M.committed_ledger(ROOT, ledger_ref=a.ledger_ref)
     if a.level_r:
         raw = layout.read("input_level_r")
         look_input = json.loads(raw)
@@ -1437,7 +1466,7 @@ def _stage1(a, stack):
             selected = {span["span_id"] for span in roster}
         loaded = load_pins(a, ids, selected=selected)
         if rehearsal is not None:
-            a.rehearsal_dir = rehearsal_output(rehearsal, layout, ledger)
+            a.rehearsal_dir = rehearsal_output(rehearsal, layout, a.ledger_ref)
             ids = [span["span_id"] for span in roster]
         staging, staged = stage_custody(a, roster, loaded[0], layout, stack)
 
@@ -1913,12 +1942,12 @@ def main(argv=None, *, keep_redirected=False):
                 raise F.LookInputError("post-no: both private maxima must be evaluable")
             sys.stdout.buffer.write(release.dump(maxima))
             return 0
-        # The campaign fetches public records. The rehearsal checks the fetched refs without writing to Git.
+        # Campaign and rehearsal share the fetch of public main. The rehearsal checks its branch separately.
         a.ledger_ref = None if a.allow_draft else "origin/main"
+        if not a.allow_draft:
+            M.fetch_public(ROOT)
         if rehearsal:
             a.ledger_ref = rehearsal_ref()
-        elif not a.allow_draft:
-            M.fetch_public(ROOT)
         # FIRST, before any input is opened: the running code must be the pinned code (Mythos cold seat 3; Sol 9)
         a.manifest = str(manifest_path())
         doc = M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING, ledger_ref=a.ledger_ref,

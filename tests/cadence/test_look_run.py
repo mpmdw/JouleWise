@@ -816,6 +816,9 @@ class Stage1Rehearsal(unittest.TestCase):
         self.scratch = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="look-rehearsal-test-"))).resolve()
         self.other_custody = self.scratch / "other-custody"
         self.other_custody.mkdir()
+        other_alias = self.scratch / "other-custody-alias"
+        other_alias.symlink_to(self.other_custody, target_is_directory=True)
+        self.planned_custody = self.scratch / "ancestor" / "planned-custody"
         self.rehearsal = self.scratch / "rehearsal"
         self.public = self.repo / M.LOOK_PUBLIC_ROOT
         self.public.mkdir()
@@ -839,9 +842,13 @@ class Stage1Rehearsal(unittest.TestCase):
                    roster_sha256=R.sha256_file(self.look / M.LOOK_FILES["roster"]),
                    verdicts_sha256=R.sha256_file(self.look / M.LOOK_FILES["rules_3_4"]),
                    custody_root=str(self.custody), public_root=M.LOOK_PUBLIC_ROOT)
-        # A separate, valid draft look supplies a second registered root.
+        # A second draft names a root via an alias in its ledger row and a future root in its manifest.
+        other_manifest = self.manifest.with_name("lm-interim-02.json")
+        other_manifest.write_bytes(R.release.dump(
+            {**doc, "look_id": "lm-interim-02", "status": "draft", "custody": {"root": str(self.planned_custody)}}))
         ledger["looks"].append(dict(row, look_id="lm-interim-02", status="draft",
-                                    custody_root=str(self.other_custody)))
+                                    manifest_path=other_manifest.relative_to(self.repo).as_posix(),
+                                    sha256=R.sha256_file(other_manifest), custody_root=str(other_alias)))
         self.ledger.write_bytes(R.release.dump(ledger))
         MR.git_commit(self.repo, "Register the synthetic rehearsal inputs", publish=False)
         self.git(self.repo, "push", "-q", "origin", "HEAD:refs/heads/main")
@@ -858,7 +865,8 @@ class Stage1Rehearsal(unittest.TestCase):
     def snapshot(self):
         return {path: R.sha256_file(path) if path.is_file() else None
                 for root in (self.custody, self.other_custody, self.public, self.repo / ".git")
-                for path in root.rglob("*")} | {self.ledger: R.sha256_file(self.ledger)}
+                for path in root.rglob("*") if path != self.repo / ".git/FETCH_HEAD"} | {
+                    self.ledger: R.sha256_file(self.ledger)}
 
     def outputs(self, directory):
         return {name: (directory / M.LOOK_FILES[name]).read_bytes() for name in ("level_r", "stage1")}
@@ -918,9 +926,13 @@ class Stage1Rehearsal(unittest.TestCase):
         link = self.scratch / "alias"
         link.symlink_to(self.custody, target_is_directory=True)
         before = self.snapshot()
-        for path, reason in ((existing, "already exists"), (self.custody / "new", "outside"),
-                             (self.other_custody / "new", "outside"), (self.repo / "new", "outside"),
-                             (self.public / "new", "outside"), (link / "new", "symlink")):
+        relative = os.path.relpath(self.rehearsal, self.repo)
+        for path, reason in ((existing, "already exists"), (self.custody / "new", str(self.custody)),
+                             (self.custody, str(self.custody)), (self.other_custody / "new", str(self.other_custody)),
+                             (self.repo / "new", str(self.repo)), (self.public / "new", str(self.repo)),
+                             (self.planned_custody.parent, str(self.planned_custody)),
+                             (self.scratch / "ANCESTOR", str(self.planned_custody)), (link / "new", "symlink"),
+                             (relative, "not an absolute"), ("~/rehearsal", "not an absolute")):
             with self.subTest(path=path):
                 done, observed = self.invoke(path)
                 self.assertEqual(done.returncode, 2, done.stderr)
@@ -928,7 +940,59 @@ class Stage1Rehearsal(unittest.TestCase):
                 self.assertIn(reason, done.stderr)
                 self.assertEqual(observed["served"], [])
         self.assertEqual(self.snapshot(), before)
+        self.assertFalse(self.rehearsal.exists())
+        self.assertFalse(self.planned_custody.parent.exists())
         self.assertEqual((existing / "keep").read_bytes(), b"synthetic sentinel")
+
+    def test_fetched_main_span_is_disjoint_from_branch_rehearsal(self):
+        from tests.cadence import look_minirepo as MR
+
+        main = self.git(self.repo, "rev-parse", "HEAD").stdout.strip()
+        campaign, _ = self.invoke()
+        self.assertEqual(campaign.returncode, 0, campaign.stderr)
+        control = self.outputs(self.look)
+        for key in control:
+            (self.look / M.LOOK_FILES[key]).unlink()
+        branch_root = self.scratch / "branch-custody"
+        shutil.copytree(self.custody, branch_root)
+        doc = rj(self.manifest)
+        doc["status"] = "draft"
+        doc["custody"]["root"] = str(branch_root)
+        self.manifest.write_bytes(R.release.dump(doc))
+        ledger = rj(self.ledger)
+        ledger["looks"] = [row for row in ledger["looks"] if row["look_id"] != "lm-interim-02"]
+        ledger["looks"][0].update(status="draft", sha256=R.sha256_file(self.manifest), custody_root=str(branch_root))
+        self.ledger.write_bytes(R.release.dump(ledger))
+        MR.git_commit(self.repo, "Register distinct branch rehearsal custody", publish=False)
+        self.git(self.repo, "push", "-q", "origin", f"HEAD:refs/heads/{R.REHEARSAL_BRANCH}")
+        self.git(self.repo, "checkout", "--detach", "-q")
+        self.git(self.repo, "update-ref", M.PUBLIC_RUN_STATE_REF, f"{main}^")
+
+        for parent, root in ((self.custody / "dev-01-s01", self.custody), (self.other_custody, self.other_custody)):
+            attempted = parent / "rehearsal-check"
+            refused, observed = self.invoke(attempted)
+            self.assertEqual(refused.returncode, 2, refused.stderr)
+            self.assertIn(f"registered root {root}", refused.stderr)
+            self.assertEqual(refused.stdout, "")
+            self.assertFalse(attempted.exists())
+            self.assertEqual(observed["served"], [])
+
+        self.assertEqual(self.git(self.repo, "rev-parse", M.PUBLIC_RUN_STATE_REF).stdout.strip(), main)
+        external, _ = self.invoke(self.rehearsal)
+        self.assertEqual(external.returncode, 0, external.stderr)
+        self.git(self.repo, "checkout", "--detach", "-q", main)
+        after, _ = self.invoke()
+        self.assertEqual(after.returncode, 0, after.stderr)
+        self.assertEqual(self.outputs(self.look), control)
+
+    def test_failed_main_fetch_refuses_rehearsal(self):
+        self.git(self.repo, "remote", "set-url", "origin", str(self.scratch / "absent-origin"))
+        refused, observed = self.invoke(self.rehearsal)
+        self.assertEqual(refused.returncode, 2, refused.stderr)
+        self.assertIn("origin/main cannot be fetched", refused.stderr)
+        self.assertEqual(refused.stdout, "")
+        self.assertFalse(self.rehearsal.exists())
+        self.assertEqual(observed["served"], [])
 
     def test_prepass_draft_on_shared_merge_branch_and_manifest_range(self):
         from tests.cadence import look_minirepo as MR

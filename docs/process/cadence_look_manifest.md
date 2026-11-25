@@ -300,7 +300,9 @@ Run `python3 -I -B scripts/cadence_look_run.py stage1 --rehearsal NEW_DIRECTORY`
 from a fresh detached checkout of the lead's input-bound commit. Before
 the commit reaches main, the rehearsal reads the committed draft row
 from `origin/align/2026-11-14-look-manifest` and the offload Check items
-from `origin/main`. Both refs must match origin. The draft row must
+from `origin/main`. It fetches main like campaign stage 1 and refuses
+if the fetch fails. It also checks that the rehearsal branch matches
+origin. The draft row must
 bind the manifest, roster and rules 3/4 verdict hashes. The manifest
 registers the custody root and carries the pin list for the full roster.
 
@@ -310,8 +312,11 @@ readers and fit. The hash-only verifier reads the selected pinned files as
 opaque bytes. The stage decodes no energy values. The command takes the
 registered raw custody copy.
 
-The destination has an existing parent and lies outside the checkout and
-every registered root. Stage 1 creates it exclusively with private
+Use an absolute destination with an existing parent and symlink-free
+components. It must be disjoint from the checkout and from the physical
+roots registered in either the rehearsal branch or fetched main.
+Those roots cover the campaign output and span directories. Stage 1
+creates the destination exclusively with private
 permissions and writes `level_r.json` and `stage1.json` there. The
 stage-1 artifact carries a rehearsal marker that the campaign schema
 refuses. Successful stdout gives the lead the selected block names, the
