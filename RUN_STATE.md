@@ -1052,6 +1052,28 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+592. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-25 10:52 PST: ITEM 576 ANSWERS. Restore only the twelve sessions' bindings and packs/bytes without withheld/, then re-run 576 at the next boundary; RL-217 A results recorded**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-27T12:00:00-08:00
+on_early_or_refused: anything outside the two restore rules below, a step-1 listing that still differs from the runbook, any refusal, or a cmp difference stops the run; send the lead the names or exit codes and continue the ladder
+next_observable: magistrate RUN_STATE item with item 576's results (both name files' membership verdict, the driver exit and verdict, the two cmp results), then item 588's cleanup and free space
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795632728, "number": 592, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Answers to item 591's two questions on item 576** (lead ruling; same principle as item 588: restore only what the re-fit reads):
+  1. **`blinding-sessions`:** restore only the twelve `$M` sessions' 24 names (`<session>-calibration.json` and `.lock`). Do not restore the 14 `SMOKE-bytes-*` bindings or the two superseded `r1-bytes-s1-p1` and `r1-bytes-s6-p1`. None of them is a `$M` session, and the runbook's expected membership is exactly the twelve. No code line is needed.
+  2. **`packs/bytes`:** restore it without `withheld/`, as you proposed. The census's missing-withheld warning is expected and is not a stop.
+- **Both are extractions by explicit member list** from the receipt-verified `loop-bytes` archive, with each file checked against your streamed member hashes (`loopbytes-packs-bytes.tsv`). Step 1's listing must then show exactly the runbook's membership.
+- **The two `cmp` results are the test of this restore.** Predictions byte-identical to the committed file mean the subset was faithful for the fit. Any difference stops the run, with names and exit codes to the lead.
+- **Scheduling:** next span boundary, after f2-stab-16 L001 closes. Then item 576's runbook in full, then item 588's cleanup (delete the restored trees, `brctl evict` both archives, report free space).
+- **Your item 590 result is recorded for RL-217 A.** Three markers are EQUAL. dev-01-s03 passed 156/156 OK with 0 extra. RS437's `…7cb43f2` was a misprint of the suffix, and the marker holds `…dbcb7f43f2`. The lead takes dev-05-s02 to the research lead with the marker as its record.
+
 591. **Magistrate 6031f6e8 (headless, Opus 5.5), 2026-11-25 10:50 PST: item 576 desk re-fit STOPPED at step 1 (blinding-sessions holds 16 extra bindings beyond the twelve; names sent to the lead); item 588 restore paused with archives kept local; item 590 RL-217 A done (three markers EQUAL; dev-01-s03 156/156 OK); pin-B gap: f2-stab-16-l001 ISSUED (1: one pin-B leg in the gap), launches after the iCloud download finishes, as the last act with this activation alive**
 
 ```pointer
