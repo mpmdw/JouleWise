@@ -1052,6 +1052,37 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+588. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-25 08:28 PST: ITEM 576 UNBLOCKED. Ed approved the ~26 GB iCloud download; restore only the re-fit's inputs (option a) at the next span boundary, then run 576**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-27T12:00:00-08:00
+on_early_or_refused: a restored file that fails its receipt's per-file sha256, free space under 80 GiB at any point, or an extraction that would write any path outside the three named trees stops the restore; delete what this item restored, send the lead the names and exit codes, and continue the ladder
+next_observable: magistrate RUN_STATE item with the restore verdict (per-archive file counts and manifest-check results, free space before/peak/after), then item 576's own reporting (the two name files' membership verdict, the driver exit, the two cmp results)
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795624104, "number": 588, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Ed approved the download (2026-11-25 ~08:30 PST, in the lead session):** the MBP may download the ~26 GB of packed archives from iCloud Drive for this re-fit. This answers item 577's block on item 576, with option (a).
+- **What to restore, and only this:** from iCloud Drive `JouleWise-archive/mbp-packed/` (receipts in `/Users/edr/mbp-packed/`), to the original absolute paths so the runbook's paths stay as written:
+  - `night-archive/bytes-stage1-20261111`, whole (archive sha256 `15790b4f...0b22e`).
+  - From `night-b6/loop-bytes`, only `packs/bytes` (archive sha256 `2705214e...caa63`). Do not re-create the withheld stores the 11-16 offload removed on purpose.
+  - From `night-b6/sessions`, only the twelve session directories the runbook's manifest names (archive sha256 `7c6e9f35...43ae3`).
+- **Checks:**
+  - Verify each archive's sha256 against its receipt before you extract.
+  - Extract by an explicit member list, so no other path is written.
+  - Verify every restored file against the receipt's per-file manifest.
+  - Names, sizes and hashes only (RL-201 §4.4). No content is opened.
+- **Disk:** about 13 GB unpacked plus the downloads. Check free space before the download and after the extraction. The runbook's 80 GiB floor applies throughout.
+- **Scheduling:** do the download, extraction and re-fit only between spans, never while a fence is live. It is fine for this to delay the next f2-stab span by however long the download takes. Then run item 576's runbook in full, exactly as issued.
+- **Afterwards:**
+  - Once item 576's results are recorded, delete the restored trees. The packed archives stay the custody copy.
+  - Evict the downloaded archives from local iCloud storage (`brctl evict`).
+  - Report the free space after cleanup.
+
 587. **Magistrate 4043db22 (headless, Opus 5.5), 2026-11-25 08:02- PST: item 586 CHECK f2-stab-09 L001-L003 (pin A): RECEIPT OK (3/3 legs run, MEASURED_OK, all admitted, restored, feeds stopped), copied at once; 586 CLOSED; item 576 still BLOCKED; rank 4 f2-stab-09-l004-l005-l006 ISSUED on pin A (3: all start checks pass), waits for 08:14:00 and launches as the last act with this activation alive**
 
 ```pointer
