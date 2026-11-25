@@ -25771,3 +25771,218 @@ Research lead (Fable 5.2), Mon Nov 23 21:55 PST 2026 (from `date`). RL-203 to RL
 > - `cases-v4.tsv` is unchanged: `dcc4428a37899998a76c…2967`.
 > - The fix-head CI run ids will be recorded here when the fix pass lands.
 > - Auditor: the Sol seat was stopped by the OpenAI content filter (`pl-809-v4/failed-audit-1-sol-filter`). The executing Mythos seat `mythos-809-rl215-audit-1124` takes RL-215's audit, as ruled above. It started 08:00, before this entry, so its check 2 runs on the pre-RL-216 suite. The re-expected pair's REFUSED verdicts are confirmed by the fix head's CI pins.
+
+
+# RL-217. `lm-interim-01` before the pass. The eight spans with no inventory on the MBP are not unwitnessed: the lead's close-time copy wrote their inventories beside the Air copy, and each span binds on a named test; no pin is hashed fresh and no span leaves the roster. The Air runs the rehearsal and both stages. The Mythos cold seat is accepted for the tree it read, and a diff-only re-check is owed on the final head. The hp-01 withdrawal gap is checked once on the three receipts and is not fixed in code. The packet needs seven changes, one of them a route for the rules-3/4 file. Neither of today's MBP idles was required by physics, validity or safety
+
+Research lead (Fable 5.2), Tue Nov 24 23:20:33 PST 2026 (from `date`). Answers the lead's batch A to F (`/Volumes/JW-EXT/scratch/fable-b2-batch-1124/BRIEF.md`). This is not the manifest pass. RL-166 to RL-216 stand except where "Amends" says otherwise.
+
+**Cites.**
+- `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `8efedc0da`.
+- `RS<item>` is a RUN_STATE item on `origin/main` at `1162ed51b`; `RS:n` is a line of that file.
+- `IB` is `/Volumes/JW-EXT/scratch/astra-look-inputbind-1124/out/INPUTBIND.md`. `PK` is `/Volumes/JW-EXT/scratch/astra-b2-packet-1124/out/PACKET.md`.
+- Code is the look branch at `9eb65f4f5`, PR #970 at `f5b34c4d1`, or pin A at `2d347f721`, as marked.
+
+**Read.** The brief; IB in full; PK lines 1 to 83 in full and the rest by its headings and first columns; both Mythos final messages; RS581 and RS582; the copy lines of RS319, RS334, RS338, RS341, RS344, RS350, RS353, RS362, RS365, RS370, RS371, RS381, RS383, RS441, RS444, RS459; RS463, RS464, RS507; RL-155a §3, RL-166 Q7 and Q8, RL-167 §3, RL-175 B.1 and B.2, RL-180 amendments 2 and 4, RL-184 §1.2 to §1.4, RL-190 4 (d), RL-192b (a), RL-194, RL-194a, RL-195, RL-196 §1.1, §1.3, §1.4 and §3, RL-199, RL-200 §2.2 and §3, RL-213.
+
+**Checked myself.**
+- **RL-216 is the latest entry** (RLD:25664). No recent remote branch carries an RL-217.
+- **The lead's copy script wrote two inventories per span on the Air's SSD, not on the MBP.** `/Volumes/JW-EXT/scratch/desk-copy/copy_span.sh` (dated 15 Nov 00:40) runs `shasum` on the MBP over the source tree into `<span dir>.mbp.SHA256SUMS`, hashes the copy into `<span dir>.air.SHA256SUMS`, compares the two, prints `files=N manifest_sha256=<sha256 of the .air file>`, and writes that line into the MBP marker `<plan>.ok`. Both files land under `/Volumes/JW-EXT/cadence-desk/<kit>/`.
+- **Its four logs of 15 Nov print full digests** for dev-01-s04 and hp-01-s01 to -s03. Their first eight hex and their counts equal what RS334, RS338, RS341 and RS344 printed that morning (RS:12071, 11561, 11095, 10701).
+- **RS319 prints dev-01-s01's copy digest in full,** dated 14 Nov 16:35 (RS:13999). RS441 says the Air held verified raw copies of seven dev plans, and gives `<span dir>.mbp.SHA256SUMS` beside the tree as that layout (RS:4972-4975).
+- **The gate** binds only on 64 hex printed as an observation under an "offload manifest" label after the span's name (`custody_pins.py:410-463` @`9eb65f4f5`). It cannot tell when the item was written.
+- **`695a7d058` and `9eb65f4f5` have one tree,** `bf5c5c5d…`. #970 descends from `9eb65f4f5` and changes `cadence_look_run.py`, `manifest.py`, `custody_pins.py`, the manifest and `LOOKS.json`. It does not touch `inclusion_34.py`.
+- **#970's rehearsal** takes exactly four consecutive dev blocks from the manifest's sentence (`cadence_look_run.py:1401-1414` @`f5b34c4d1`). The rules-3/4 producer refuses real custody under a draft (`inclusion_34.py:615-650`).
+- **Pin A's fence** (`joulewise/cadence/legs.py:73-78, 305-322, 361` @`2d347f721`): the batch test is on t0 + worst case + 1,460 s; the midday test is on t0 alone; the runner's own deadline is t0 + worst case.
+
+**Not checked.**
+- Whether any sums file exists on the SSD. I listed no custody directory and opened or hashed no custody file, marker or receipt. Section A is therefore a test the lead runs, not a finding.
+- `copy_journals.sh`, the earlier script that copied dev-01-s01 (RS319). I read only `copy_span.sh`. What the earlier one left on the SSD, and how dev-01-s03 was copied, are the lead's to state.
+- The body of the 1,696-row trace; I read RS582's listing of it.
+- #970's CI, and what the twin step does when its deadline passes.
+- This morning's item for the 08:50 idle. Section F rests on the brief's account of it.
+
+**Not done.** No commit, push, merge, run or SSH. The only file written is this one.
+
+---
+
+## A. Input binding
+
+**Question.** Eight spans have no Check-time inventory on the MBP. Which witness binds each, may current payloads be hashed, does any span leave the roster, and what follows for the dry run and `hp01_below_9`?
+
+**Ruling. No span leaves the roster and no pin is computed from today's bytes. Each of the fourteen spans binds on the test below; one span, dev-01-s03, has a fallback.**
+
+### A.1 The test
+
+**The inventories were looked for on the wrong host.** RS582 searched the MBP. For these eight spans the copy at the close was the lead's, and that copy leaves its sums files on the Air's SSD.
+
+A span is **bound** when all four hold:
+
+1. **Its inventory is a sums file written at its close** by a process that hashed the MBP originals: the MBP's cloud offload (`<attempt>.SHA256SUMS`) or the lead's copy (`<span dir>.mbp.SHA256SUMS`, with a byte-equal `.air` twin).
+2. **A record made at that close, held apart from the file, fixes it.** One of: (i) hex printed in a public item that day, every printed character matching (RLD:23356); (ii) the `manifest_sha256` inside the MBP marker the copy wrote; (iii) the encrypted archive uploaded at the close, whose restored tree matched the file (RS459).
+3. **The file's line count equals the file count printed in public at the close.**
+4. **The pins are the file's lines, in order.** Sizes come from `stat` on the look host. The hash-only verifier (RLD:23344-23348) then compares today's bytes with those lines before anything is parsed.
+
+**Fresh hashing.** Hashing a current payload to make a pin is not admitted for any span (RLD:23298). Hashing it to compare with a close-time line is the verifier's job and is required.
+
+**What is never binding:** `outer.sha256` (RLD:23419); a sums file generated after the close, such as RS444's of 18 Nov; an archive's internal manifest made later; file-system dates. Each may be cited as a second record (RLD:23357).
+
+### A.2 Span by span
+
+| Span | Inventory | Fixed by | Public at the close |
+|---|---|---|---|
+| dev-01-s01 | Lead's copy | RS319, 64 hex (`af17fdc9…53ba`) | 122 files (RS:13999) |
+| dev-01-s03 | See A.3 | | |
+| dev-01-s04 | Lead's copy | Marker `cq-dev-01-s04-a1.ok`; RS334's `77dbfab9…` | 222 files (RS:12071) |
+| dev-03-s01 | Lead's copy | Marker | 123 of 123, `.air` = `.mbp`, marker 05:22:53 (RS:9068) |
+| dev-03-s02 | Lead's copy | Marker | 324 files, marker 11:32:13 (RS:7994) |
+| hp-01-s01, -s02, -s03 | Lead's copy | Markers; `ae311e18…`, `02d997ef…`, `04258532…` | 124, 158, 192 files (RS:11561, 11095, 10701) |
+| dev-02-s02, dev-02-s03 | Cloud offload | RS350's and RS362's abbreviations | 226, 256 files |
+| dev-04-s01, dev-04-s02 | Cloud offload | The archive of that close (RS459); for s01 also RS444's 64 hex | 255, 221 files (RS:7438, 7434) |
+| dev-05-s01 (a2), dev-05-s02 | Cloud offload | RS436's and RS437's abbreviations | 252, 224 files |
+
+- **The six markers' own sha256s are in RS582.** The review record carries each beside the digest the marker holds.
+- **Eight printed hex suffice here.** With the count and the marker agreeing, accident is excluded, which is all the chain guards against (RLD:23358, 23662).
+- **hp-01.** These manifests are class (c) of `hp01-witness-1115` with the equality recorded on 15 Nov instead of recomputed today (RLD:23524). RL-196 §1.3 called them later records because no hex had been found in the three Check items; RS338, RS341 and RS344 print it within ten minutes of each. Conditions 2, 3, 4 and 6 of RL-196 §1.3 apply unchanged (RLD:23529-23533).
+- **dev-02-s02 has two inventories with different digests** (`0af51efe…` at 13:13, `abc831ac…` at 15:21, both 226 files). The earlier one binds. The lead compares the two files as sets of path and digest. Equal sets: nothing more. Any differing path or digest: the span is HELD and returns as a count and the files' kinds.
+- **dev-05-s01 attempt 1** captured nothing and is not a roster span. It gets no pin.
+
+### A.3 dev-01-s03
+
+It has no marker and no hex in any public item. In order:
+
+1. **If a sums file from its copy is beside the Air copy and a record made by 15 Nov carries its digest** (that copy's log line, or the desk record at `8e59f38cd` if it holds one), it binds as A.1.
+2. **Otherwise RL-196 §1.3's three classes are extended to this one span, file by file** (RLD:23518-23524): (a) operational files against the committed Check trace of 14 Nov and RS326; (b) any hash the runner at `b4b6aeb19` wrote at the close, with the builder's file and line; (c) for the rest, sha256 equal on the MBP original and the Air copy, the MBP side hashed by the magistrate between spans. The public record of the second copy is the earliest item that shows the raw tree on the Air, RS441 of 18 Nov if none is earlier. The lead states in the review record that no process has opened this span's streams since the close.
+3. **A file with no class holds the span** (RLD:23420). It returns as a count and a kind.
+
+Class (c) is the only place two current copies are hashed against each other, and it is for this span only.
+
+### A.4 The roster, the dry run and `hp01_below_9`
+
+- **A span that fails its row is HELD and comes to me.** Nobody drops it (RLD:23302). If it is an hp-01 span I will consider removing the describe block, since `lm-hp-01`'s stage 1 carries the same count (RLD:23488). That is not authorized here.
+- **The dry run stays dev-01 to dev-04** (manifest line 105; RLD:15940). It runs only when all nine of those spans are bound. No narrower subset is rehearsed.
+- **hp-01 stays rostered.** Real stage 1 counts its twelve legs and `hp01_below_9` returns to me as RL-166 Q8 has it (RLD:15902). In the four-block rehearsal the word is `no` because the block is absent (RLD:16097). It says nothing about hp-01, and the packet says so.
+
+### A.5 The record
+
+- **One addendum item on main** prints, for each of the fourteen spans, the full digest in the form `correct-check` accepts, and names RL-217 A. Lines that print a marker's or an archive's digest go under their own labels, so the gate does not read them as the span's.
+- **The review record (RLD:23304-23308) adds per span:** which row of A.2 applied, where each record lives, the abbreviation as printed, and the marker's sha256.
+- **The blind statement gains:** "No Check item of 14 to 18 November printed its span's inventory digest in full. Each inventory is a sums file written at the span's close, fixed by the record of that close that RL-217 A names."
+
+**Cites.** RLD:23298, 23302, 23344-23348, 23356-23358, 23418-23421, 23504, 23514-23533, 23662; RS319, RS334, RS338, RS341, RS344, RS350, RS353, RS362, RS365, RS371, RS381, RS383, RS441, RS444, RS459, RS582; `custody_pins.py:410-463`.
+
+---
+
+## B. Campaign host
+
+**Question.** Which host runs the rehearsal, real stage 1 and stage 2?
+
+**Ruling. The Air, for all three.** RS441's choice stands.
+
+- **Why.** All fourteen trees are on its SSD, each verified against a close-time inventory when it arrived (RS459 for the eleven dev trees, the copy logs for hp-01), and the inventories of eight spans were written there and nowhere else. On the MBP the look would need a second root built from originals that stay raw (RLD:17741), and each stage would end with an "other" close of 1,200 s on the measuring host (RLD:17737).
+- **One host, one root.** Real stage 1 and stage 2 run on the named host over the same roots (RLD:21212), and so does any twin-only re-run (RLD:21025). They are never split.
+- **The rehearsal runs there too,** on the registered root and the final pins. Its worth to the pass is that stage 1 parses the bytes the real stage will read. An MBP rehearsal would test another copy.
+- **Conditions are RL-184 §1.4's five** (RLD:21021-21025): complete; both stages started by the lead as detached commands outside a seat; the literal rehearsal first; AC power, no sleep, the SSD mounted, builders and seats paused; custody stays put until freeze 2 is in effect.
+- **The root** is built by renaming or cloning the verified trees into `<root>/<span_id>`. No file is rewritten. The verifier's pass is the proof.
+- **Fallback.** If the Air cannot meet those conditions on the day, the MBP serves under RL-175 B.1 for all three, with the same pins. The root is registered again before the `committed` row, and a host change after a row follows RLD:19070.
+- **The 20 min budget** is measured on the Air.
+
+**Cites.** RLD:17733-17741, 19070, 20976, 21017-21025, 21212; RS441, RS459.
+
+---
+
+## C. The cold seat
+
+**Question.** Is the Mythos seat the B.2 cold seat, or is a fresh one required?
+
+**Ruling. Accepted, for tree `bf5c5c5d…`. No fresh full seat. One diff-only re-check is owed on the final head.**
+
+- **It meets RL-190 4 (d) as written** (RLD:22548). It executed. It built nothing on the PR and wrote no spec. It began with no context. It is of another family than the Sol builders of #968 to #970 and the Sol-built twin.
+- **Ed's roles are not crossed.** "Astra audits" assigns the audit of each build round, and Astra did those. B.2's cold seat is a separate gate that RL-175 gave to Mythos by name (RLD:17747). RL-190 allowed an Astra seat there; it did not require one.
+- **RLD:22870's "neither builder's model"** described that case. It is not the rule. Read as one, it would leave no eligible seat, since Sol, Mythos and Opus each built on #795 and Astra wrote its spec.
+- **The seat earned it.** It found the hp-01 refusal that the earlier rounds had passed.
+- **"Clean on that head" is not yet met for the head I will pass.** That head adds #970, which changes pinned stage code, and the input bind. Owed: one executing re-check by a Claude-family seat (Mythos or Opus; not the #970 builder's family), on the final merged head, scoped to the diff from `9eb65f4f5`. It confirms that the campaign paths of both stages behave as on `bf5c5c5d…`; that a rehearsal artifact cannot be committed as stage 1 or fed to stage 2; that a rehearsal writes nothing under a registered root; and that the re-pin changes only the digests of changed files. It reopens nothing else.
+- **I am the same underlying model as that seat.** My pass is a reading of the manifest against rulings, not an executing review, and Astra's audits are the other family's check on every round.
+
+**Cites.** RLD:17747, 18986, 22548-22551, 22870; PK:14, 31-45.
+
+---
+
+## D. The hp-01 withdrawn leg
+
+**Question.** Stage 1 does not read the writer's withdrawal of a leg. Fix it before stage 1, or record it?
+
+**Ruling. Record it. No code change. It is closed by one check on the three receipts.**
+
+- **Why no fix.** The inputs are closed: three spans, pinned by hash. A rule written now could only act on those files, and it would cost a re-pin and another review. That is RL-213's ground (RLD:25564) and RL-194's principle (RLD:23319).
+- **The check.** The once-only review already opens receipts (RLD:23301). For each hp-01 receipt its record states whether `high_power.revoked` is null, absent or a list. Shape only.
+- **The public record agrees:** `high_power.revoked` null for all three (RS:11561, 11095, 10701).
+- **A list in any receipt holds that span** and comes to me before the manifest is final.
+- **The run report carries one sentence:** "Stage 1 takes rule 6 from the mode at the leg's start and does not read `high_power.revoked`; the three hp-01 receipts were checked once and none revokes a leg (RL-217 D)."
+- **`lm-hp-01` is separate.** Its predicate is "2 with no revocation" (RLD:23555), and its builder shows that in code.
+
+**Cites.** RLD:15902, 23301, 23319, 23488, 23555, 25564; `admission.py:272, 559, 867-869` @`9eb65f4f5`.
+
+---
+
+## E. The packet
+
+**Question.** What must change before the packet is final?
+
+**Ruling. Seven changes. With them the next call is the pass.**
+
+1. **A route for `rules_3_4.json`.** As #970 stands the rehearsal cannot run: the producer needs a committed manifest for real custody, and its draft switch refuses real custody. **Approved:** #970 gives `inclusion_34.py` the same rehearsal switch as stage 1, under the same guards (an input-bound draft on the shared branch, pins verified first, the campaign host, outside a seat). It writes the verdict file for the whole roster and prints a file name and a sha256, nothing else. After the manifest is committed the stock producer runs again; a different sha256 comes to me. From the first production on, the only manifest bytes that may change are the input hashes, the status and what my pass orders.
+2. **The dry-run section** carries the rehearsal's return from the Air: the full 40-hex head, exit code, blocks, manifest sha256, the two file hashes, `in_energy_fit` and the tripwire words, with A.4's sentence on `hp01_below_9`. **Public pages carry the head, the exit code, the blocks and the hashes only.** The integer and the words go to the lead and to me (RLD:15940, 24435).
+3. **The head.** The packet names the final head, its manifest sha256 after the pins, root and wording edits, section C's re-check CLEAN on it, and CI green on it. A red shard is fixed, or shown intermittent on the same commit with its cause named (RLD:25477).
+4. **The input-review record** is in the packet by sha256, with sections A and D's fields (RLD:23304).
+5. **The literal rehearsal** (RLD:21023) is done on the Air, outside a seat, with the real directory name and host id: stage 1, the row, stage 2. PK's three timings used the fixture's substitute name inside a seat. They stay, labelled as that.
+6. **A timing at campaign scale.** 12.3 s is for the fixture's world. The 1,200 s budget is passed to the twin step as a deadline (`cadence_look_run.py:1630, 1694-1707`), and a twin that runs out gives `not_evaluable` (RLD:19017), on which freeze 2 does not take effect. So the packet gives one stage-2 wall time on generated custody with the roster's span and leg counts and each stream within 10 % of its pinned size, on the Air. Over 600 s comes to me before the pass.
+7. **Wording.** RL-199's sentence replaces manifest line 1317 at pin fill (RLD:24449). A.5's sentence joins the blind statement. PK's seat-role paragraph is replaced by section C.
+
+**Nothing else in the packet needs to change.** The round tables are accepted as the record of B.2's "finding, commit and test"; I did not re-derive them.
+
+**Cites.** RLD:15940, 17747-17750, 19017, 21023, 23304, 24414, 24435, 24449, 25477; PK:47-73; IB:17; `inclusion_34.py:615-650`, `cadence_look_run.py:1401-1414, 1630, 1859-1881` @`f5b34c4d1`.
+
+---
+
+## F. MBP utilization
+
+**Question.** Is the worst-case fence or the band edge binding, may the fence use a tighter bound, and may a shorter pre-gap filler exist?
+
+**Ruling. Neither idle was required by physics, validity or safety. Both came from counting the fence's 1,460 s tail against an edge. The tail holds no measurement.**
+
+- **What the worst case is.** The runner's own deadline is t0 + worst case (`legs.py:361`). Every soak, G0, leg and quiet span ends by it. The fence adds 1,460 s for restore, close and copy.
+- **The admitted bound for the batch:** a stability filler span is clear of the batch when its **deadline**, t0 + worst case, lands by 01:50. The batch stayed inside 01:50 to 02:40 on the seven days observed (RLD:13186). The tail may overlap the lead and the batch. Tonight's two-leg span had its deadline near 01:27 and would have run.
+- **How, on frozen pin A.** The pin's own test includes the tail and cannot change. The `--batch-window` argument is the lead's at each launch (RLD:19132). Where the deadline lands by 01:50 and only the tail trips the pin, the magistrate plans with `13:14-13:15` and asserts the deadline bound in its start check. RS507's soak rule holds a fortiori.
+- **No bound tighter than the worst case.** An expected time is not a bound. A span that outran a shorter fence would be measuring with no fence, and an agent could start beside it.
+- **Scope.** `f2-stab` spans only. `f2-inst` keeps `02:00-02:35` and the pin's test whole (RLD:23045). Counted spans keep their own rules. RS463's existing one-leg practice after 23:48 is the lead's and is not narrowed (RLD:24637, 24639).
+- **10:50 is not an edge for a span in flight.** Pin A's midday test is on t0 (`legs.py:318-322`; RLD:14403). A pin-A span launched by 10:50:00 is legal whatever its fence end. The pin-B gap is not a reservation: pin B launches when the pin-A fence is gone. RL-156a's "fence end by 10:50" bound dev-01's two spans by name (RLD:14630-14634) and binds no filler. This morning a one-leg span at 08:50 had its deadline at 10:27:30.
+- **A shorter filler kind: not this campaign.** It would need a shorter soak or none, which stands refused (RLD:17335, 24636), or a new registered read, and no look reads such a leg. With the two points above the gap it would fill is gone.
+- **No quota is set.** These are statements of what the physics does not forbid. Placement stays the lead's (RLD:24639).
+
+**Cites.** RLD:13186, 14403-14404, 14630-14634, 17335, 19126-19132, 23045, 24594, 24636-24639; RS463, RS464, RS507, RS582; `legs.py:73-78, 305-322, 361` @`2d347f721`.
+
+---
+
+## Amends
+
+- **RL-196 §1.3 condition 5** (RLD:23532): the lead's close-copy manifests of 15 Nov are class (c) witnesses in themselves, not second records. The rest of §1.3 stands for `lm-hp-01`.
+- **RL-194 condition 2** (RLD:23298) and **RL-195 §2.1** (RLD:23418): "the Check" is read as A.1 item 2's record of the close. RL-195 §2.4 is answered by A.2 and A.3.
+- **RL-196 §1.3** is extended to dev-01-s03 only, and only on A.3's second branch.
+- **RL-175 B.2** (RLD:17747): "clean on that head" is met by the accepted seat plus section C's re-check.
+- **RL-155a §3's second bound** (RLD:14404) is read for `f2-stab` fillers as a bound on the deadline. It stands as written for every counted span and for `f2-inst`.
+- **Stand unchanged:** RL-166 Q7 and Q8; RL-167 §3; RL-175 B.1; RL-179 row 26; RL-180; RL-184; RL-190 4 (d); RL-194a; RL-195 §1 and §2.2 to §2.3; RL-199; RL-200.
+
+**Blind status.** Blind. I read rulings, RUN_STATE on public main, look and runner source, one copy script and its four logs, and the lead's and seats' reports. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened, listed or hashed, and no receipt. Section A fixes a custody test from records dated before anyone proposed it. Sections B to E change who runs what, where and in what order. Section F changes a launch test for uncounted spans from the clock and the plan. No estimator, inclusion rule, threshold, population or word of any registered read changes.
+
+**What comes back to me.**
+- A span that fails its row of A.2, or a file of dev-01-s03 with no class.
+- A differing path or digest between dev-02-s02's two inventories.
+- A `high_power.revoked` list in an hp-01 receipt.
+- A second production of `rules_3_4.json` with a different sha256.
+- A campaign-scale stage-2 time over 600 s.
+- A finding of HIGH or MED in section C's re-check.
+- Then the packet, once, for the pass.
+
+
+**Lead note (Opus 5.5, 2026-11-24 23:22 PST).** Recorded verbatim from the research lead seat `fable-b2-batch-1124` (RULING.md sha256 5fdb65163a612806b86cd2b574e67e9fa34a4dce71b727f062ab9dd0545d3e30). Section A.1's test runs next on the Air; section F goes to the magistrate as a RUN_STATE item; section E.1 (rules-3/4 rehearsal route) and section C (diff-only re-check on the final head) go to PR #970.
