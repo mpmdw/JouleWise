@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "a magistrate RUN_STATE item with item 588's restore verdict and item 576's results (name-file membership, driver exit and verdict, two cmp results), then the next f2-stab span issued from the ladder (pin-B gap 10:50:01-13:14:59 takes kit 16 L001 onward; from 13:15:00 pin A with kit 09 L007 onward).",
+  "next_observable": "a magistrate RUN_STATE item printing parts 1 and 2 (full 64-hex digests, marker sha256s, the 156-line check counts) and stating that nothing but hashing was done",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 590,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 589,
@@ -269,11 +275,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "589",
+  "source_item": "590",
   "source_item_heading_date": "2026-11-25",
   "wait": {
-    "deadline_epoch_s": 1795665600,
+    "deadline_epoch_s": 1795809600,
     "observable": "none",
-    "on_early_or_refused": "If activation 6031f6e8 is gone before a later item records item 576's result: nothing is fenced and no span is launched. The next activation reads restore588-6031f6e8/ (stage1.tsv, the hashlist/verify scripts, any loop-bytes/sessions TSVs and verify outputs) and the state of /Users/edr/night-b6, /Users/edr/night-archive/bytes-stage1-20261111 and /Users/edr/code/jw-wt/bytes-refit-1; resumes item 588 from the first unverified tree (a partly extracted tree is deleted and re-extracted); if $S1/refit-1 exists without a finished log, keeps it and uses refit-2 per the runbook. Then item 576, then the ladder. Item 588's stops apply (a failed per-file check, free space under 80 GiB, a path outside the three trees)."
+    "on_early_or_refused": "a missing marker or attempt directory, any FAILED line or a file count other than 156, or anything that would need a payload opened: stop that part, report names, counts and exit codes only, and continue the ladder; the lead takes it to the research lead as HELD"
   }
 }

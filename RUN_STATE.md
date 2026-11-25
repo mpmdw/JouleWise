@@ -1052,6 +1052,44 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+590. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-25 10:47 PST: RL-217 A on the MBP. Print three markers' held digests (dev-03-s01, dev-03-s02, dev-05-s02) and run class (c) for dev-01-s03 (156-line sums check), names and hashes only, between spans after item 576**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-27T12:00:00-08:00
+on_early_or_refused: a missing marker or attempt directory, any FAILED line or a file count other than 156, or anything that would need a payload opened: stop that part, report names, counts and exit codes only, and continue the ladder; the lead takes it to the research lead as HELD
+next_observable: a magistrate RUN_STATE item printing parts 1 and 2 (full 64-hex digests, marker sha256s, the 156-line check counts) and stating that nothing but hashing was done
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795632476, "number": 590, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Why:** RL-217 A (audit branch `0a1433996`) binds each lm-interim-01 roster span's inventory, the sums file written at its close. Two pieces need the MBP. Names and hashes only: no payload, stream or record content is opened, and nothing is parsed (RL-201 §4.4 style).
+- **Scheduling:** run this between spans, after item 576 and item 588's cleanup. It reads markers and hashes one attempt's files, a few minutes of I/O. Never run it during a fence.
+
+**Part 1: digests held inside the MBP markers** (RL-217 A.1 2(ii)). For each marker below, print the marker file's own sha256 and the value of its `manifest_sha256` field in full, 64 hex. Reading that single field is allowed; print no other field.
+
+| Marker under `/Users/Shared/JouleWise/desk-copy/` | Marker sha256 from RS582 or earlier | Lead's sums sha256 to compare |
+|---|---|---|
+| `cq-dev-03-s01-a1.ok` | `48daaffd…a52d` | `0489daf073bc8b6906e4e06d664517bd9158c9925f3529fb365f9cfa2cc441eb` |
+| `cq-dev-03-s02-a1.ok` | `120db723…bc54` | `284f653143daeef63571517054ba0bab9dee091f43f02a5364d719fe7d708b30` |
+| `cq-dev-05-s02-a1.ok` | `90efc14a…3714` | `c6ab586e5146d739046f29ff2da16b830e2d5c718c0050c8790341dbcb7f43f2` |
+
+- For each row, print EQUAL or DIFFERENT for the marker's `manifest_sha256` against the third column, and confirm the marker's own sha256 against the second column's prefix and suffix.
+- **The dev-05-s02 row is new.** RS437 printed that manifest as `c6ab586e…7cb43f2`, which does not match the digest's last characters (`…dbcb7f43f2`). Under A.1 that fails the span's row, so the lead is taking it to the research lead as HELD, with the marker as the alternative record of the close.
+
+**Part 2: dev-01-s03, class (c) of RL-217 A.3 branch 2.** No record of its close carries its digest, so each file is classed by comparing the MBP original with the Air copy.
+- **Inventory:** the Air copy's sums file is committed with this item as `docs/process/cadence/looks/rl217/cq-dev-01-s03-a1.air-copy.mbp.SHA256SUMS`: 156 lines, sha256 `4e4093e452793aabc088dc158e6e9b56984ccd451302bbdfe630567b8ade878b`, with paths relative to the attempt directory (`./…`). The lead's copy wrote it at the close on 15 Nov by hashing the MBP originals. The `.air` twin is byte-equal.
+- **Steps:**
+  1. Locate the MBP original attempt directory `cq-dev-01-s03-a1` (campaign-out, or wherever the 15 Nov close left it). If it was packed off on 11-16 and no longer exists, print that with the receipt's name and stop this part; do not restore it.
+  2. From inside that directory, run `shasum -a 256 -c <committed sums file>`. Print only the count of OK lines, the count of FAILED lines, and the count of missing files.
+  3. Separately, print the count of files present on disk that the sums file does not list. Print paths only for FAILED, missing or extra files.
+- **Pass:** 156 OK, 0 FAILED, 0 missing, 0 extra. On a pass, every file of dev-01-s03 has class (c). The MBP side was hashed by the magistrate between spans, as A.3 requires.
+
+**Report:** exit codes, counts, full digests and marker hashes. Name the attempt directory you used and give its file count.
+
 589. **Magistrate 6031f6e8 (headless, Opus 5.5), 2026-11-25 10:02- PST: item 587 CHECK f2-stab-09 L004-L006 (pin A): RECEIPT OK (3/3 legs run, MEASURED_OK, all admitted, restored, feeds stopped), copied at once; 587 CLOSED; item 588 restore under way at this span boundary (stage-1 tree restored and verified; big archives downloading); item 576 steps 1-3 pass so far; no span issued until 576 finishes**
 
 ```pointer
