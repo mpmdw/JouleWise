@@ -611,14 +611,6 @@ records the draft implementation, destination fix after Astra's audit
 and verification. The magistrate
 rehearsal requires the lead's input commitments on the shared branch.
 
-### 2026-11-25 interim look RL-217 handoff
-
-P1 Phase Gate [AGENT], assigned by the lead for the manifest-pass packet.
-[The run report](docs/run_reports/2026-11-25-look-rules34-rehearsal.md)
-records the rules-3/4 rehearsal, the stock receipt and fix-2 input-pin
-and ledger rechecks, and provisional stage-2 timing. The lead owns the
-input binding, literal rehearsal and stock hash comparison on the Air.
-
 ## Intake Batch Owed To The Kernel (2026-07-30/31)
 
 **PARTIALLY FOLDED 2026-07-30.** Six rows —
