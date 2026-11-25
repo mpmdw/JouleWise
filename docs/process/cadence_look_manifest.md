@@ -294,7 +294,37 @@ operations use public records only. See the six private names in the
   - Level O, per channel: `fold_coefficients` (P-1); `day_detail.{days.{legs_with_hot_block, hot_blocks, se_with_heat, se_no_heat}, s_with_heat, s_no_heat}` (P-2); `onset_offset_residuals.{offsets."-2".."5".{n, mean_with_heat, rms_with_heat, mean_no_heat, rms_no_heat}, rms_offsets_m2_to_p3.{with_heat, no_heat}}` (P-3). `columns` may hold as few as 5 entries.
   - The analyst seat emits these names, or the interface page renames them and the schemas follow.
 
-## 7. Remaining authorization
+## 7. Stage-1 rehearsal for the manifest pass
+
+Run `python3 -I -B scripts/cadence_look_run.py stage1 --rehearsal NEW_DIRECTORY`
+from a fresh detached checkout of the lead's input-bound commit. Before
+the commit reaches main, the rehearsal reads the committed draft row
+from `origin/align/2026-11-14-look-manifest` and the offload Check items
+from `origin/main`. It fetches main like campaign stage 1 and refuses
+if the fetch fails. It also checks that the rehearsal branch matches
+origin. The draft row must
+bind the manifest, roster and rules 3/4 verdict hashes. The manifest
+registers the custody root and carries the pin list for the full roster.
+
+Stage 1 selects the range in `stages.stage1.dry_run`, verifies the
+selected spans against the pins and uses the campaign's stage-1 time
+readers and fit. The hash-only verifier reads the selected pinned files as
+opaque bytes. The stage decodes no energy values. The command takes the
+registered raw custody copy.
+
+Use an absolute destination with an existing parent and symlink-free
+components. It must be disjoint from the checkout and from the physical
+roots registered in either the rehearsal branch or fetched main.
+Those roots cover the campaign output and span directories. Stage 1
+creates the destination exclusively with private
+permissions and writes `level_r.json` and `stage1.json` there. The
+stage-1 artifact carries a rehearsal marker that the campaign schema
+refuses. Successful stdout gives the lead the selected block names, the
+manifest and file hashes, the five public tripwire words and
+`in_energy_fit`. The tripwires describe the rehearsal population,
+including the absence of hp-01. Send the summary only to the lead.
+
+## 8. Remaining authorization
 
 The manifest remains draft. The research lead confirms the host binding at
 the cold pass. The pinned reader accepts a one-component bundle locator and

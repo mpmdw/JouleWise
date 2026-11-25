@@ -800,6 +800,240 @@ def _cli_subprocess(argv, trap=False, mock_stage2=False, repo=None, extra=None):
     return r.returncode, r.stdout, r.stderr
 
 
+class Stage1Rehearsal(unittest.TestCase):
+    def setUp(self):
+        from tests.cadence import custody_pin_fixture as PF, look_minirepo as MR
+
+        self.git = MR.git
+        self.repo = MR.mini_repo(self)
+        self.manifest = self.repo / MR.MANIFEST
+        self.ledger = self.repo / M.LOOK_LEDGER_PATH
+        doc = rj(self.manifest)
+        doc.update(status="committed")
+        doc["fit"]["twin"] = rj(MANIFEST)["fit"]["twin"]
+        self.custody = Path(doc["custody"]["root"])
+        self.look = self.custody / F.LOOK_ID
+        self.scratch = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="look-rehearsal-test-"))).resolve()
+        self.other_custody = self.scratch / "other-custody"
+        self.other_custody.mkdir()
+        other_alias = self.scratch / "other-custody-alias"
+        other_alias.symlink_to(self.other_custody, target_is_directory=True)
+        self.planned_custody = self.scratch / "ancestor" / "planned-custody"
+        self.rehearsal = self.scratch / "rehearsal"
+        self.public = self.repo / M.LOOK_PUBLIC_ROOT
+        self.public.mkdir()
+        tokens = {}
+        level, energy, _ = synth.build("exact", tokens=tokens)
+        # Keep one span and both rate-supplying leg types where available in each block.
+        span_ids = {span["span_id"] for span in level["spans"] if span["span_id"].endswith("-s01")}
+        level["spans"] = [span for span in level["spans"] if span["span_id"] in span_ids]
+        level["legs"] = [leg for leg in level["legs"] if leg["span_id"] in span_ids]
+        locators = synth.write_custody(self.custody, level, energy, tokens)
+        for key in ("roster", "rules_3_4"):
+            name = M.LOOK_FILES[key]
+            shutil.move(locators[name], self.look / name)
+        pins = PF.synthetic_pins({sid: self.custody / sid for sid in span_ids})
+        doc["inputs"]["pins"] = pins
+        self.manifest.write_bytes(R.release.dump(doc))
+        (self.repo / "RUN_STATE.md").write_text(PF.run_state(pins))
+        ledger = rj(self.ledger)
+        row = ledger["looks"][0]
+        row.update(status="committed", sha256=R.sha256_file(self.manifest),
+                   roster_sha256=R.sha256_file(self.look / M.LOOK_FILES["roster"]),
+                   verdicts_sha256=R.sha256_file(self.look / M.LOOK_FILES["rules_3_4"]),
+                   custody_root=str(self.custody), public_root=M.LOOK_PUBLIC_ROOT)
+        # A second draft names a root via an alias in its ledger row and a future root in its manifest.
+        other_manifest = self.manifest.with_name("lm-interim-02.json")
+        other_manifest.write_bytes(R.release.dump(
+            {**doc, "look_id": "lm-interim-02", "status": "draft", "custody": {"root": str(self.planned_custody)}}))
+        ledger["looks"].append(dict(row, look_id="lm-interim-02", status="draft",
+                                    manifest_path=other_manifest.relative_to(self.repo).as_posix(),
+                                    sha256=R.sha256_file(other_manifest), custody_root=str(other_alias)))
+        self.ledger.write_bytes(R.release.dump(ledger))
+        MR.git_commit(self.repo, "Register the synthetic rehearsal inputs", publish=False)
+        self.git(self.repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+
+    def invoke(self, directory=None):
+        _pin_dir()
+        report = self.scratch / "observed.json"
+        opts = dict(repo=str(self.repo), spy=True, trap=True, report=str(report), exports={})
+        argv = ["stage1"] if directory is None else ["stage1", "--rehearsal", str(directory)]
+        done = subprocess.run([sys.executable, "-I", "-B", _HARNESS, json.dumps(opts), *argv],
+                              cwd=self.repo, capture_output=True, text=True, timeout=180)
+        return done, rj(report)
+
+    def snapshot(self):
+        return {path: R.sha256_file(path) if path.is_file() else None
+                for root in (self.custody, self.other_custody, self.public, self.repo / ".git")
+                for path in root.rglob("*") if path != self.repo / ".git/FETCH_HEAD"} | {
+                    self.ledger: R.sha256_file(self.ledger)}
+
+    def outputs(self, directory):
+        return {name: (directory / M.LOOK_FILES[name]).read_bytes() for name in ("level_r", "stage1")}
+
+    def test_rehearsal_uses_campaign_reads_and_leaves_later_campaign_byte_identical(self):
+        campaign, campaign_observed = self.invoke()
+        self.assertEqual(campaign.returncode, 0, campaign.stderr)
+        control = self.outputs(self.look)
+        for name in control:
+            (self.look / M.LOOK_FILES[name]).unlink()
+        before = self.snapshot()
+
+        rehearsal, rehearsal_observed = self.invoke(self.rehearsal)
+        self.assertEqual(rehearsal.returncode, 0, rehearsal.stderr)
+        self.assertEqual(rehearsal.stderr, "")
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(self.rehearsal.stat().st_mode & 0o777, 0o700)
+        self.assertEqual({path.name: path.stat().st_mode & 0o777 for path in self.rehearsal.iterdir()},
+                         {"level_r.json": 0o600, "stage1.json": 0o600})
+        blocks = [f"dev-{index:02d}" for index in range(1, 5)]
+        pinned_roster = rj(self.look / M.LOOK_FILES["roster"])
+        expected_ids = {row["span_id"] for row in pinned_roster if row["block_id"] in blocks}
+        summary = json.loads(rehearsal.stdout)
+        private = self.outputs(self.rehearsal)
+        stage1 = json.loads(private["stage1"])
+        self.assertEqual({row["span_id"] for row in stage1["roster"]["spans"]}, expected_ids)
+        self.assertEqual({row["span_id"] for row in json.loads(private["level_r"])["spans"]}, expected_ids)
+        self.assertEqual(summary, {
+            "exit_status": 0, "look_id": F.LOOK_ID, "blocks": blocks,
+            "manifest_sha256": R.sha256_file(self.manifest), "in_energy_fit": stage1["counts"]["in_energy_fit"],
+            **{key: "yes" if stage1["tripwires"][key]["trips"] else "no" for key in R.release.TRIPWIRES},
+            "sha256": {M.LOOK_FILES[key]: hashlib.sha256(raw).hexdigest() for key, raw in private.items()},
+        })
+        self.assertTrue(stage1["rehearsal"])
+        self.assertTrue(M.stage1_problems(self.repo, rj(self.manifest), stage1, summary["manifest_sha256"],
+                                         allow_draft=False))
+
+        def span_reads(observed):
+            return {(str(relative), reader) for filename, reader in observed["frames"]
+                    if (path := Path(filename)).is_absolute() and path.is_relative_to(self.custody)
+                    and (relative := path.relative_to(self.custody)).parts[0] != F.LOOK_ID}
+
+        reads = span_reads(rehearsal_observed)
+        self.assertEqual(reads, {(relative, reader) for relative, reader in span_reads(campaign_observed)
+                                 if relative.split("/", 1)[0] in expected_ids})
+        self.assertEqual({relative.split("/", 1)[0] for relative, _ in reads}, expected_ids)
+        self.assertTrue(any(reader == "joulewise/cadence_looks/time_fields.py" for _, reader in reads))
+
+        campaign_after, _ = self.invoke()
+        self.assertEqual(campaign_after.returncode, 0, campaign_after.stderr)
+        self.assertEqual(self.outputs(self.look), control)
+
+    def test_refuses_taken_paths_and_registered_roots(self):
+        existing = self.scratch / "existing"
+        existing.mkdir()
+        (existing / "keep").write_bytes(b"synthetic sentinel")
+        link = self.scratch / "alias"
+        link.symlink_to(self.custody, target_is_directory=True)
+        before = self.snapshot()
+        relative = os.path.relpath(self.rehearsal, self.repo)
+        for path, reason in ((existing, "already exists"), (self.custody / "new", str(self.custody)),
+                             (self.custody, str(self.custody)), (self.other_custody / "new", str(self.other_custody)),
+                             (self.repo / "new", str(self.repo)), (self.public / "new", str(self.repo)),
+                             (self.planned_custody.parent, str(self.planned_custody)),
+                             (self.scratch / "ANCESTOR", str(self.planned_custody)), (link / "new", "symlink"),
+                             (relative, "not an absolute"), ("~/rehearsal", "not an absolute")):
+            with self.subTest(path=path):
+                done, observed = self.invoke(path)
+                self.assertEqual(done.returncode, 2, done.stderr)
+                self.assertEqual(done.stdout, "")
+                self.assertIn(reason, done.stderr)
+                self.assertEqual(observed["served"], [])
+        self.assertEqual(self.snapshot(), before)
+        self.assertFalse(self.rehearsal.exists())
+        self.assertFalse(self.planned_custody.parent.exists())
+        self.assertEqual((existing / "keep").read_bytes(), b"synthetic sentinel")
+
+    def test_fetched_main_span_is_disjoint_from_branch_rehearsal(self):
+        from tests.cadence import look_minirepo as MR
+
+        main = self.git(self.repo, "rev-parse", "HEAD").stdout.strip()
+        campaign, _ = self.invoke()
+        self.assertEqual(campaign.returncode, 0, campaign.stderr)
+        control = self.outputs(self.look)
+        for key in control:
+            (self.look / M.LOOK_FILES[key]).unlink()
+        branch_root = self.scratch / "branch-custody"
+        shutil.copytree(self.custody, branch_root)
+        doc = rj(self.manifest)
+        doc["status"] = "draft"
+        doc["custody"]["root"] = str(branch_root)
+        self.manifest.write_bytes(R.release.dump(doc))
+        ledger = rj(self.ledger)
+        ledger["looks"] = [row for row in ledger["looks"] if row["look_id"] != "lm-interim-02"]
+        ledger["looks"][0].update(status="draft", sha256=R.sha256_file(self.manifest), custody_root=str(branch_root))
+        self.ledger.write_bytes(R.release.dump(ledger))
+        MR.git_commit(self.repo, "Register distinct branch rehearsal custody", publish=False)
+        self.git(self.repo, "push", "-q", "origin", f"HEAD:refs/heads/{R.REHEARSAL_BRANCH}")
+        self.git(self.repo, "checkout", "--detach", "-q")
+        self.git(self.repo, "update-ref", M.PUBLIC_RUN_STATE_REF, f"{main}^")
+
+        for parent, root in ((self.custody / "dev-01-s01", self.custody), (self.other_custody, self.other_custody)):
+            attempted = parent / "rehearsal-check"
+            refused, observed = self.invoke(attempted)
+            self.assertEqual(refused.returncode, 2, refused.stderr)
+            self.assertIn(f"registered root {root}", refused.stderr)
+            self.assertEqual(refused.stdout, "")
+            self.assertFalse(attempted.exists())
+            self.assertEqual(observed["served"], [])
+
+        self.assertEqual(self.git(self.repo, "rev-parse", M.PUBLIC_RUN_STATE_REF).stdout.strip(), main)
+        external, _ = self.invoke(self.rehearsal)
+        self.assertEqual(external.returncode, 0, external.stderr)
+        self.git(self.repo, "checkout", "--detach", "-q", main)
+        after, _ = self.invoke()
+        self.assertEqual(after.returncode, 0, after.stderr)
+        self.assertEqual(self.outputs(self.look), control)
+
+    def test_failed_main_fetch_refuses_rehearsal(self):
+        self.git(self.repo, "remote", "set-url", "origin", str(self.scratch / "absent-origin"))
+        refused, observed = self.invoke(self.rehearsal)
+        self.assertEqual(refused.returncode, 2, refused.stderr)
+        self.assertIn("origin/main cannot be fetched", refused.stderr)
+        self.assertEqual(refused.stdout, "")
+        self.assertFalse(self.rehearsal.exists())
+        self.assertEqual(observed["served"], [])
+
+    def test_prepass_draft_on_shared_merge_branch_and_manifest_range(self):
+        from tests.cadence import look_minirepo as MR
+
+        doc = rj(self.manifest)
+        doc["status"] = "draft"
+        dry_run = doc["stages"]["stage1"]["dry_run"]
+        doc["stages"]["stage1"]["dry_run"] = dry_run.replace("dev-01 to dev-04", "dev-02 to dev-05")
+        self.manifest.write_bytes(R.release.dump(doc))
+        ledger = rj(self.ledger)
+        ledger["looks"][0].update(status="draft", sha256=R.sha256_file(self.manifest))
+        self.ledger.write_bytes(R.release.dump(ledger))
+        MR.git_commit(self.repo, "Pin the pre-pass synthetic draft", publish=False)
+        self.git(self.repo, "push", "-q", "origin", f"HEAD:refs/heads/{R.REHEARSAL_BRANCH}")
+        self.git(self.repo, "checkout", "--detach", "-q")
+        # Deliberately corrupt a generated file outside the new selection. The verifier must skip that whole span.
+        outside = self.custody / "dev-01-s01" / "runner_receipt.json"
+        outside.write_bytes(outside.read_bytes() + b" ")
+        other_tmp = self.scratch / "other-tmp"
+        other_tmp.mkdir()
+        before = self.snapshot()
+        done = subprocess.run(
+            [sys.executable, "-I", "-B", "scripts/cadence_look_run.py", "stage1", "--rehearsal", str(self.rehearsal)],
+            cwd=self.repo, env={**os.environ, "TMPDIR": str(other_tmp)}, capture_output=True, text=True, timeout=180,
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(list(other_tmp.iterdir()), [])
+        stage1 = json.loads(self.outputs(self.rehearsal)["stage1"])
+        self.assertEqual({row["block_id"] for row in stage1["roster"]["spans"]},
+                         {f"dev-{index:02d}" for index in range(2, 6)})
+        self.assertEqual(self.snapshot(), before)
+        inside = self.custody / "dev-02-s01" / "runner_receipt.json"
+        inside.write_bytes(inside.read_bytes() + b" ")
+        refused, observed = self.invoke(self.scratch / "pin-mismatch")
+        self.assertEqual(refused.returncode, 2, refused.stderr)
+        self.assertIn("custody pins:", refused.stderr)
+        self.assertEqual(refused.stdout, "")
+        self.assertEqual(observed["served"], [])
+        self.assertEqual(list((self.scratch / "pin-mismatch").iterdir()), [])
+
+
 class Stage1Custody(unittest.TestCase):
 
     @classmethod

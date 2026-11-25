@@ -460,12 +460,14 @@ def check_binding(span, run_state_text, span_ids=()):
     return out                          # agreeing digests under other labels identify nothing
 
 
-def check_chain_problems(doc, run_state_text):
+def check_chain_problems(doc, run_state_text, *, span_ids=None):
     """Problems chaining each span's offload manifest to its public Check item. A span whose Check prints no
     manifest digest for it, or prints one with a character that does not match, is held and returns to the
-    research lead."""
+    research lead. A rehearsal checks its selected spans with the complete set of span names in scope."""
     problems, ids = [], [span["span_id"] for span in doc["spans"]]
     for span in doc["spans"]:
+        if span_ids is not None and span["span_id"] not in span_ids:
+            continue
         if run_state_item(run_state_text, span["check_item"]) is None:
             problems.append(f"{span['span_id']}: RUN_STATE has no single item {span['check_item']}")
             continue

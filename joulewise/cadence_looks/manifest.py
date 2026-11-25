@@ -1981,11 +1981,11 @@ def require_stage1_committed(repo, look_id, stage1_sha256, *, stage1_doc, ledger
 
 
 def require_inputs_committed(repo, look_id, manifest_sha256, *, roster_sha256, verdicts_sha256, ledger_ref=None,
-                             ruled_exclusions=None):
+                             ruled_exclusions=None, draft_rehearsal=False):
     """Stage 1's gate on its two inputs (Mythos round-3 N8): the committed LOOKS.json row for this look names this
     manifest at status committed or later, and the roster (``validate --roster-out``) and the rules-3-4 verdict file
     (``inclusion_34.py``) stage 1 was given, by sha256. The lead commits both hashes in the row before stage 1
-    runs. Returns the row."""
+    runs. A pre-pass rehearsal accepts the same hash commitments on the checked-in draft row. Returns the row."""
     head, _, ledger = committed_ledger(repo, ledger_ref=ledger_ref)
     row = _look_row(ledger, look_id)
     problems = []
@@ -2028,7 +2028,8 @@ def require_inputs_committed(repo, look_id, manifest_sha256, *, roster_sha256, v
         problems.append("ruled exclusions apply only to a stage 1 run once more after a committed one")
     if row.get("sha256") != manifest_sha256:
         problems.append("LOOKS.json does not name this manifest's sha256")
-    if row.get("status") not in COMMITTED_STATUSES:
+    statuses = ("draft",) if draft_rehearsal else COMMITTED_STATUSES
+    if row.get("status") not in statuses:
         problems.append(f"LOOKS.json lists this look as {row.get('status')!r}, not committed")
     for field, given, what in (("roster_sha256", roster_sha256, "roster"),
                                ("verdicts_sha256", verdicts_sha256, "rules-3-4 verdict file")):
@@ -2323,12 +2324,13 @@ def unpinned_loaded_modules(doc, repo):
                   for p, sha in loaded_repo_files(repo).items() if pins.get(p) != sha)
 
 
-def verify_pins(manifest_path, repo, *, allow_draft=False, running=(), ledger_ref=None):
+def verify_pins(manifest_path, repo, *, allow_draft=False, running=(), ledger_ref=None, rehearsal=False):
     """The run path's pin check (Mythos cold seat 3; Sol 9). Before any custody file is opened, refuse unless:
     the manifest validates (as committed unless ``allow_draft``); the committed LOOKS.json (``committed_ledger``)
     names its sha256 at status committed or later (unless ``allow_draft``); every file in fit.code, fit.dependencies, the step 3 pins, the inclusion code
     and the two schemas exists and hashes to its pin; and every path in ``running`` (the caller's own files) is
-    one of them. Opens the manifest, LOOKS.json and repository files only. Returns the manifest."""
+    one of them. A rehearsal may use a tracked draft manifest and its draft ledger row while retaining the full
+    code pins and the committed-ledger check. Opens the manifest, LOOKS.json and repository files only."""
     repo = Path(repo).resolve()
     manifest_path = Path(os.path.abspath(manifest_path))
     # the manifest is read where it is, never through a link, and a committed one inside the repository (audit 3)
@@ -2340,9 +2342,10 @@ def verify_pins(manifest_path, repo, *, allow_draft=False, running=(), ledger_re
         raise ManifestError(["the look manifest: a regular file in the repository"])
     raw = manifest_path.read_bytes()
     doc = json.loads(raw)
+    draft_rehearsal = rehearsal and isinstance(doc, dict) and doc.get("status") == "draft"
     problems = []
     try:
-        validate_manifest(doc, final=not allow_draft)
+        validate_manifest(doc, final=not (allow_draft or draft_rehearsal))
     except ManifestError as error:
         problems += error.problems
     if not allow_draft:
@@ -2352,9 +2355,14 @@ def verify_pins(manifest_path, repo, *, allow_draft=False, running=(), ledger_re
             require_successor_ruling(doc, ledger)
             if row.get("sha256") != hashlib.sha256(raw).hexdigest():
                 problems.append("LOOKS.json does not name this manifest's sha256")
+            if draft_rehearsal:
+                rel = manifest_path.relative_to(repo).as_posix()
+                rc, tracked, _ = _git(repo, "show", f"HEAD:{rel}")
+                if rc or tracked != raw or row["manifest_path"] != rel:
+                    problems.append("the rehearsal manifest must match the draft committed at HEAD")
             if row.get("status") in ("failed", "interrupted"):
                 problems.append(f"this manifest id is already spent ({row['status']})")
-            elif row.get("status") not in COMMITTED_STATUSES:                # Mythos N5
+            elif row.get("status") not in (("draft",) if draft_rehearsal else COMMITTED_STATUSES):
                 problems.append(f"LOOKS.json lists this look as {row.get('status')!r}, not committed")
         except (OSError, ValueError, ManifestError) as error:
             problems += [f"LOOKS.json: {p}" for p in getattr(error, "problems", [type(error).__name__])]

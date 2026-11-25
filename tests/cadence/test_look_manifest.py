@@ -819,8 +819,8 @@ class StaleBytecode(Base):
     """Mythos round-4 N4, Sol round-4 NEW-2: inclusion, standalone step 3 and assemble never run a stale cache entry."""
 
     STALE_PINS = staticmethod(lambda text: text.replace(
-        "def verify_pins(manifest_path, repo, *, allow_draft=False, running=(), ledger_ref=None):\n",
-        "def verify_pins(manifest_path, repo, *, allow_draft=False, running=(), ledger_ref=None):\n"
+        "def verify_pins(manifest_path, repo, *, allow_draft=False, running=(), ledger_ref=None, rehearsal=False):\n",
+        "def verify_pins(manifest_path, repo, *, allow_draft=False, running=(), ledger_ref=None, rehearsal=False):\n"
         "    return json.loads(Path(manifest_path).read_bytes())\n", 1))
 
     def test_a_stale_manifest_cache_entry_never_runs(self):
