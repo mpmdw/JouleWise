@@ -646,14 +646,33 @@ if opts.get("trap"):
 from scripts import cadence_look_run as R
 if opts.get("advance_main"):
     target, source = opts["advance_main"]
-    original = getattr(R, target)
-    def after_fetch(*args, **kwargs):
+    # "name" fetches before every call of R.name; "before:name:N" / "after:name:N" fetch once, just before the Nth
+    # call starts or just after it returns; "M.name" names the manifest module's function as R calls it
+    when, nth = None, 0
+    if target.startswith(("before:", "after:")):
+        when, target, nth = target.split(":")
+        nth = int(nth)
+    owner = R.M if target.startswith("M.") else R
+    target = target.removeprefix("M.")
+    original = getattr(owner, target)
+    advanced = [0]
+    def advance():
         bare = Path(opts["repo"]).with_name(Path(opts["repo"]).name + "-origin.git")
         rc, _, err = R.M._git(bare, "fetch", "--quiet", source, "HEAD:refs/heads/main")
         assert rc == 0, err
         R.M.fetch_public(R.ROOT)
-        return original(*args, **kwargs)
-    setattr(R, target, after_fetch)
+    def after_fetch(*args, **kwargs):
+        if when is None:
+            advance()
+            return original(*args, **kwargs)
+        advanced[0] += 1
+        if when == "before" and advanced[0] == nth:
+            advance()
+        out = original(*args, **kwargs)
+        if when == "after" and advanced[0] == nth:
+            advance()
+        return out
+    setattr(owner, target, after_fetch)
 if opts.get("manifest"):                     # the test's manifest stands in for the repository's fixed one
     R.manifest_path = lambda: Path(opts["manifest"])
 if opts.get("run_state") is not None:          # the harness's fixture RUN_STATE (no CLI option takes one): a
@@ -969,6 +988,12 @@ class Stage1Rehearsal(unittest.TestCase):
 
     def test_campaign_refuses_a_verdict_hash_fetched_before_publication(self):
         self.refuse_fetched_verdict("finish_stage1")
+
+    def test_campaign_refuses_a_verdict_hash_fetched_while_the_last_receipt_is_validated(self):
+        # PR #971 round 5 (Astra final_receipt_fetch): admission, preflight exit, then the before-write check; a
+        # fetch landing after the third derivation read the ledger, while its receipt is validated, must still
+        # refuse and write nothing
+        self.refuse_fetched_verdict("before:M.require_rules34_receipt:3")
 
     def refuse_fetched_verdict(self, checkpoint):
         from tests.cadence import look_minirepo as MR
@@ -1514,7 +1539,7 @@ class Pr971Convergence(unittest.TestCase):
         "finish_stage1 | if not a.allow_draft | call stage1_exit_authority",
         "finish_rehearsal | - | call stage1_exit_authority",
         "stage1_authority | if rehearsal is not None | call rehearsal_fence",
-        "stage1_authority | else rehearsal is not None | call layout.read",
+        "stage1_authority | if rehearsal is None | call layout.read",
         "stage1_authority | else rehearsal is not None | call M.require_rules34_receipt",
     )
     HEAD_FUNCTIONS = FUNCTIONS + ("stage1_authority", "stage1_exit_authority")
