@@ -42,9 +42,30 @@ a stream is missing or outside 10 percent of its target.
 
 The seat refused the literal stage-2 reservation basename in a generated
 temporary directory. The helper's opt-in synthetic reservation name uses
-the existing fixture seam. Timing through this seam is provisional for
-E.6. The literal run needs an execution context that can create the
-registered basename and the lead's public per-stream size table.
+the existing fixture seam. The Air (`Mac16,13`, Python 3.14.6, NumPy 2.2.6)
+ran three sequential committed-path stage-2 invocations at utility priority
+using one numerical library thread. The generated fixture had 436 streams
+totalling 406,093,168 bytes. Wall time includes fetch, pin verification,
+preflight, fit, Step 3, the independent twin and publication. Fixture
+generation, stage 1 and the synthetic commits ran before the clock started.
+
+```sh
+env OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 \
+  taskpolicy -c utility python3 -B -m tests.cadence.look_campaign_timing --fixture-reservation
+```
+
+| Trial | Stage 2 wall time | Twin agreement |
+| --- | ---: | --- |
+| 1 | 39.787 s | yes |
+| 2 | 40.316 s | yes |
+| 3 | 41.034 s | yes |
+
+The longest invocation took 3.4% of the twin's 1,200 s deadline and was
+below the 600 s escalation threshold. These timings are provisional for
+E.6. The literal timing needs the public byte-size inventory, a fixture
+within 10% for every stream and an Air execution context that can create
+the registered reservation basename.
+[RL-217 E.6](https://github.com/mpmdw/JouleWise/blob/0a1433996176d204ebcf4d4c7359803388821721/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L25939)
 
 The lead's next step for E.1 is to bind the manifest, whole roster, input
 pins and Air host in the shared draft, then follow the

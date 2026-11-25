@@ -102,7 +102,7 @@
         "sha256": "8930c6f4929838e675315323f72d3200382b6d8caadee291b5e1c1da20353ace"
       },
       "committed_before_stage2": true,
-      "dry_run": "Once the manifest is committed, stage 1 runs as a dry run on the custody copy of dev-01 to dev-04; it opens no energy and its counts go to the lead only (RL-166 §2 item 12).",
+      "dry_run": "Before the manifest pass, stage 1 rehearses on the input-bound custody copy of dev-01 to dev-04 with the draft ledger's rehearsal verdict. It opens no energy values and sends its counts to the lead only (RL-166 §2 item 12; RL-217 A.4 and E.1).",
       "cite": [
         "RL-166 Q15",
         "RL-166 Q8",

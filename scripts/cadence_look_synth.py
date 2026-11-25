@@ -473,7 +473,6 @@ def _first_off(p, ts, t_last, journal, native):
 
 
 # ------------------------------------------------------------------------------------------- custody layout
-METER_STEP_S = 0.5            # KM003C rate_idx 0
 METER_POLL_S = 1.0
 METER_LATENCY_NS = 400_000
 DC_IDLE_W = 5.0
