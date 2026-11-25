@@ -568,3 +568,25 @@ Local checks used Python 3.13 under `taskpolicy -c utility`, `TZ=UTC` and synthe
 - `tests.align.test_r0_checks` and `tests.hazards.test_contention`: 86 tests passed with three live skips.
 
 Frozen v3 and the census fault matrix run in hosted CI. Frozen v3 is byte-identical at SHA-256 `afd360c29d390f7d39400e1363a25add5c13ace71bca55c80d11ec0ceb4e5009`. `RUN_STATE.md` and `TASK_QUEUE.md` retain their PR-base blobs.
+
+## 2026-11-25 admission readings as withhold evidence for PR #824 (lead R1–R3)
+
+The lead ruled on the round-Q NEEDS_SPEC. In the narrow check's `mixed_read.py` there is no daemon read at 94 s. A foreground admission read at 94 s, paired with the 46 s daemon read, proves at least 1.530 CPU-s in one 30 s window. At `0aa5565d6050359822730e8ff3a8f06708c4fb13` both read durations published, as the replay showed again before this change.
+
+**R1, withhold-only.** Every CPU reading R0 takes of a process is now P1 evidence for that (pid, start) history. That covers daemon, foreground admission, inventory-tick and final reads. `_remember_cpu_snapshot` records each reading in the per-identity history whether or not the read belongs to the series. Both P1 passes use it: the per-read check and the final full-history check.
+
+The evidence can only add a withhold. Admission reads still never open or extend a judged window, so the round-5 rule stands. The sliding windows, the exact check, the birth bound, the stall rule and the K1 clock range all still use the series alone. The midpoint of each recorded reading is now computed from its read's start and finish, which is the same value a snapshot's `midpoint_ns` gives.
+
+**R2, tests.**
+
+- `test_lead_r1_admission_reading_is_withhold_evidence` runs in host and inventory mode, with instant and 10 ms reads. With only an admission read at 94 s, the 3.07 CPU-s worker withholds with "3.06 CPU-s after rounding from 46.000 s to 94.0x0 s: at least 1.530 CPU-s in one of 2 windows". With a daemon read at 94 s it withholds as before. The 1.49 CPU-s control, read the same way with the admission at 94 s, publishes with no flags exactly as before. On `0aa5565d`'s `r0_host.py` the four admission-only busy cases fail.
+- The independent sweep, now 7,080 CLI runs, adds an admission-only middle read for every kind and load at 2, 15 and 16 s cadences. The daemon read nearest the busy period is replaced by a forced foreground admission at the same instant. The expectation, from the true CPU curve and the scheduled read times, counts the admission reading as P1 evidence. The exact rule and the stall use the daemon reads alone. On `0aa5565d`'s code the sweep fails exactly one case: the resident split worker at 16 s, which is `mixed_read`'s shape.
+
+**R3, unchanged.** K1–K5, P1 and Q1–Q3 behave as before, and every 1.49 stable control publishes. KNOWN LIMITATION R0-CLOCK and R0-RATE stand as recorded.
+
+Local checks used Python 3.13 under `taskpolicy -c utility`, `TZ=UTC` and synthetic inputs:
+
+- `tests.align.test_r0_host`: 159 tests passed with one native-capture skip, including the sweep. The census fault matrix test was skipped locally.
+- `tests.align.test_r0_checks` and `tests.hazards.test_contention`: 86 tests passed with three live skips.
+
+Frozen v3 and the census fault matrix run in hosted CI. Frozen v3 is byte-identical at SHA-256 `afd360c29d390f7d39400e1363a25add5c13ace71bca55c80d11ec0ceb4e5009`. `RUN_STATE.md` and `TASK_QUEUE.md` retain their PR-base blobs.

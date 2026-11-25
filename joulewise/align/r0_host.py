@@ -22,7 +22,9 @@ the limit times 30 s: one of those windows held at least that much. Scope
 is sticky (lead Q1). A (pid, start) that any read identified is in scope for
 its whole retained history. At the final verdict, every such process is
 judged over all pairs of its points, whichever read ends a pair. Readings
-of a process are kept whether or not the read identified it. Admission windows reproduce the
+of a process are kept whether or not the read identified it. They come from
+every read R0 takes, admission reads included (lead R1). That evidence can
+only add a withhold. Admission reads still never open or extend a window. Admission windows reproduce the
 admitted L3 guard's flags; they can add a flag, never supply an opening to
 the verdict.
 
@@ -612,7 +614,8 @@ class QuietGuard:
         # lowest and highest wall - monotonic offset of every series read.
         self._series_args = None
         self._wall_offsets = None
-        # (pid, start) -> every series reading of it, oldest first, as
+        # (pid, start) -> every reading of it R0 took, series or admission
+        # (lead R1), oldest first, as
         # (started ns, finished ns, midpoint ns, lower-bound cs, printed cs).
         # Of a run of unchanged readings only the first and last are kept:
         # no other can give a larger proven bound (lead P1).
@@ -740,6 +743,21 @@ class QuietGuard:
             row["contaminant_matches"] = sorted(matches)
             row["contaminant"] = bool(matches)
             holders[start] = (cpu, matches)
+        # Lead R1: every reading R0 takes of a process, by the daemon, a
+        # foreground admission, an inventory tick or the final read, is P1
+        # evidence for that (pid, start). It can only add a withhold:
+        # admission reads still never open or extend a judged window.
+        started_ns, finished_ns = snapshot.started.monotonic_ns, snapshot.finished.monotonic_ns
+        for identity, row in rows.items():
+            entry = (started_ns, finished_ns, (started_ns + finished_ns) // 2,
+                     round(row.get("peak_cpu_seconds", row["cumulative_cpu_seconds"]) * 100),
+                     round(row["cumulative_cpu_seconds"] * 100))
+            history = self._readings.setdefault(identity, [])
+            if len(history) >= 2 and history[-2][3:] == history[-1][3:] == entry[3:]:
+                history[-1] = entry
+            else:
+                history.append(entry)
+            self._commands[identity] = row["command"]
         if not admission:
             backwards = snapshot.finished.wall_ns < snapshot.started.wall_ns
             if self._snapshots:
@@ -763,16 +781,6 @@ class QuietGuard:
             if self._wall_offsets is not None:
                 offsets += self._wall_offsets
             self._wall_offsets = (min(offsets), max(offsets))
-            for identity, row in rows.items():
-                entry = (snapshot.started.monotonic_ns, snapshot.finished.monotonic_ns, snapshot.midpoint_ns,
-                         round(row.get("peak_cpu_seconds", row["cumulative_cpu_seconds"]) * 100),
-                         round(row["cumulative_cpu_seconds"] * 100))
-                history = self._readings.setdefault(identity, [])
-                if len(history) >= 2 and history[-2][3:] == history[-1][3:] == entry[3:]:
-                    history[-1] = entry
-                else:
-                    history.append(entry)
-                self._commands[identity] = row["command"]
             self._pending["wall_clock_backwards"] |= backwards
             self._snapshots.append(snapshot)
             if census_summary is not None:

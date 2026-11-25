@@ -3706,6 +3706,74 @@ class R0FinalVerdictTest(unittest.TestCase):
                     self.assertTrue(any("3.06 CPU-s after rounding from 46.000 s to 94.010 s: at least 1.530 CPU-s "
                                         "in one of 2 windows" in flag for flag in proven), model.guard.contention_flags)
 
+    def test_lead_r1_admission_reading_is_withhold_evidence(self):
+        # Narrow check mixed_read.py, lead ruling R1. A resident
+        # mdworker_shared uses 1.48, 0.11 and 1.48 CPU-s from 59, 69 and
+        # 79 s. The daemon reads it at 46, 62, 78, 110 and 126 s, with no
+        # read at 94 s. A foreground admission at 94 s reads 3.07 CPU-s:
+        # with the 46 s reading (0.00) that proves at least 1.530 CPU-s in
+        # one of two 30 s windows. On 0aa5565d6 both modes published. Every
+        # reading R0 takes is now P1 evidence for withholding. Admission
+        # reads still never open or extend a judged window. With a daemon
+        # read at 94 s it withholds as before. The 1.49 CPU-s control, read
+        # the same way, publishes exactly as before.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        ns = 10**9
+        loads = {"split": ((59 * ns, 60_480_000_000), (69 * ns, 69_110_000_000), (79 * ns, 80_480_000_000)),
+                 "quiet": ((59 * ns, 60_480_000_000), (69 * ns, 69_010_000_000))}
+        for mode in ("host", "inventory"):
+            for load, bursts in loads.items():
+                for tick94 in (False, True):
+                    for read_ms in (0, 10):
+                        ticks = (46, 62, 78) + ((94,) if tick94 else ()) + (110, 126)
+
+                        def rows(now, bursts=bursts):
+                            used = sum(max(0, min(round(now * ns), stop) - begin) for begin, stop in bursts)
+                            yield (fixture.PID, -100, (used + 5_000_000) // 10_000_000, fixture.WORKER,
+                                   "/fixture/mdworker_shared")
+
+                        class Worker(self.series_fixture(ticks, rows)):
+                            def move(self, end, tick94=tick94):
+                                # A forced foreground admission at 94 s, on the
+                                # way to ``end`` in either entry point (inventory
+                                # moves to the case's end through 45 s).
+                                target = (self.case.end if self.case.schedule == "inventory" and end == 45
+                                          and "inventory" in self.work_started else end)
+                                if (not tick94 and not getattr(self, "admitted", False) and target >= 94
+                                        and self.guard._sampler is not None):
+                                    super().move(94)
+                                    self.admitted = True
+                                    self.guard.check(force=True)
+                                super().move(end)
+
+                            def run(self, argv, read_ms=read_ms, **kwargs):
+                                started = self.now
+                                result = super().run(argv, **kwargs)
+                                if tuple(argv) == tuple(contention.PS_ARGV) and started in (46, 62, 78, 94, 110):
+                                    self.now += read_ms / 1000
+                                return result
+
+                            def wall_ns(self):
+                                return fixture.EPOCH * ns + round(self.now * ns)
+
+                        label = dict(mode=mode, load=load, tick94=tick94, read_ms=read_ms)
+                        with self.subTest(**label):
+                            result, model = self.run_model(fixture.Case(f"mixed_{load}", schedule=mode, end=126),
+                                                           Worker)
+                            if not tick94:
+                                self.assertTrue(model.admitted)
+                                self.assertNotIn(94 * ns, [s.started.monotonic_ns for s in model.guard._snapshots])
+                            if load == "quiet":
+                                self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []),
+                                                 result)
+                                continue
+                            self.assertEqual((result["rc"], result["published"]), (2, False), result)
+                            proven = [f["flag"] for f in model.guard.contention_flags if f.get("kind") == "proven_30s"]
+                            self.assertTrue(any(f"3.06 CPU-s after rounding from 46.000 s to {94 + read_ms / 1000:.3f} s: "
+                                                "at least 1.530 CPU-s in one of 2 windows" in flag for flag in proven),
+                                            model.guard.contention_flags)
+
     def test_publication_matches_an_independent_workload_model(self):
         # Lead r4 S4(c), rewritten for lead P2. Each worker has a true birth
         # and a true CPU curve; its printed start second is the simulated
@@ -3736,6 +3804,11 @@ class R0FinalVerdictTest(unittest.TestCase):
         # a "python3" process named by its arguments only from the last tick
         # ("late"), only at one interior tick ("middle"), or never ("never").
         # Any read that names it puts its whole history in scope (lead Q1).
+        # Admission ("admission", 2, 15 and 16 s cadences): the daemon read
+        # nearest the busy period is replaced by a forced foreground
+        # admission at the same instant. Its reading is P1 evidence (lead
+        # R1, withhold-only); it opens no window, so the exact rule and the
+        # stall use the daemon reads alone.
         #
         # Expectation, from the test's own reads alone, never from the guard:
         # - A judged window longer than 50 s withholds as a stalled sampler
@@ -3787,21 +3860,25 @@ class R0FinalVerdictTest(unittest.TestCase):
                     ticks = [t for t in grid if t <= anchor + max(100, 2 * cadence)]
                 else:
                     ticks = sorted({t for t in grid if t <= close + max(cadence, 3) + 1} | {close})
-                # (start, end) of every series read; a sparse tick's read and
-                # its arguments read take 10 ms each, and the publication
-                # read follows the last.
-                spans = [(ns(t), ns(t)) for t in (0, 15, 30)]
-                spans += [(ns(t), ns(t) + (10_000_000 if sparse else 0)) for t in ticks]
-                spans.append((spans[-1][1] + (10_000_000 if sparse else 0),) * 2)
+                def series(tick_list, sparse=sparse):
+                    # (start, end) of every series read; a sparse tick's read
+                    # and its arguments read take 10 ms each, and the
+                    # publication read follows the last. A judged window opens
+                    # at the newest read whose midpoint is at least 30 s
+                    # before its closing read's; longer than 50 s it withholds
+                    # as a stalled sampler. With 50 s cadence the publication
+                    # read, 20 ms after the last tick's, makes it 50.015 s.
+                    reads = [(ns(t), ns(t)) for t in (0, 15, 30)]
+                    reads += [(ns(t), ns(t) + (10_000_000 if sparse else 0)) for t in tick_list]
+                    reads.append((reads[-1][1] + (10_000_000 if sparse else 0),) * 2)
+                    mids = [(s + e) // 2 for s, e in reads]
+                    stall = any(mids[j] - mids[i] > 50 * 10**9 for j in range(1, len(mids))
+                                for i in [next((i for i in range(j - 1, -1, -1) if mids[j] - mids[i] >= window), None)]
+                                if i is not None)
+                    return reads, stall
+
+                spans, stalled = series(ticks)
                 run_end = spans[-1][1]
-                # A judged window opens at the newest read whose midpoint is at
-                # least 30 s before its closing read's; longer than 50 s it
-                # withholds as a stalled sampler. With 50 s cadence the
-                # publication read, 20 ms after the last tick's, makes it 50.015 s.
-                mids = [(s + e) // 2 for s, e in spans]
-                stalled = any(mids[j] - mids[i] > 50 * 10**9 for j in range(1, len(mids))
-                              for i in [next((i for i in range(j - 1, -1, -1) if mids[j] - mids[i] >= window), None)]
-                              if i is not None)
                 jump = close - 0.05
                 if not sparse:
                     self.assertFalse([t for t in ticks if jump <= t < close])
@@ -3834,12 +3911,28 @@ class R0FinalVerdictTest(unittest.TestCase):
                             return None
                         return (230 if birth is None else 0) + sum(c for q, c in steps if q <= t_ns)
 
-                    counts = [counter(s) for s, _ in spans]  # ps captures each table as its read starts
-                    clocks = sparse_clocks if sparse else dense_clocks
+                    clocks = sparse_clocks if sparse else dense_clocks  # ps captures each table as its read starts
                     variants = [("always", clock) for clock in clocks]
                     if cadence in (2, 30, 16, 35):
                         variants += [(identity, None) for identity in ("late", "middle", "never")]
+                    if cadence in (2, 15, 16):
+                        variants.append(("admission", None))
                     for identity, clock in variants:
+                        # Admission-only middle read (lead R1): the daemon read
+                        # nearest the busy period is replaced by a forced
+                        # foreground admission at the same instant.
+                        v_ticks, v_spans, v_stalled, admission, gap = ticks, spans, stalled, None, None
+                        if identity == "admission":
+                            gap = min((t for t in ticks[1:-1] if t != close), key=lambda t: abs(t - (base / 1e9 + 35)))
+                            v_ticks = [t for t in ticks if t != gap]
+                            v_spans, v_stalled = series(v_ticks)
+                            admission = (ns(gap), ns(gap) + (10_000_000 if sparse else 0))
+                        v_counts = [counter(s) for s, _ in v_spans]
+                        # Every reading R0 takes, series or admission, is P1
+                        # evidence (withhold-only); only series reads open windows.
+                        evidence = list(zip(v_spans, v_counts))
+                        if admission is not None:
+                            evidence = sorted(evidence + [(admission, counter(admission[0]))])
                         if clock is None:
                             def offset(seconds):
                                 return 0
@@ -3862,7 +3955,7 @@ class R0FinalVerdictTest(unittest.TestCase):
                         diverged = clock is not None and abs(clock[1]) > 500_000_000
 
                         # P1 from the test's own reads.
-                        points = [(s, c) for (s, _), c in zip(spans, counts) if c is not None]
+                        points = [(s, c) for (s, _), c in zip(v_spans, v_counts) if c is not None]
                         lifetime_floor = exact_zero = None
                         if birth is not None:
                             # The arguments table read with the absence sample
@@ -3881,10 +3974,10 @@ class R0FinalVerdictTest(unittest.TestCase):
                             exact_zero = (converted if absence_point < converted < sum(sighted) // 2
                                           else absence_point)
                         proven = False
-                        for (b_start, b_end), b in zip(spans, counts):
+                        for (b_start, b_end), b in evidence:
                             if b is None:
                                 continue
-                            earlier = [(s, c) for (s, _), c in zip(spans, counts) if c is not None and s < b_start]
+                            earlier = [(s, c) for (s, _), c in evidence if c is not None and s < b_start]
                             if lifetime_floor is not None:
                                 earlier.append((lifetime_floor, 0))
                             for a_start, a in earlier:
@@ -3893,12 +3986,12 @@ class R0FinalVerdictTest(unittest.TestCase):
                                 if span > 0 and b - a - 1 >= 150 * windows:
                                     proven = True
                         # Where the admitted R0-L3 rate rule can fire.
-                        listed = [(s, e, c) for (s, e), c in zip(spans, counts) if c is not None]
+                        listed = [(s, e, c) for (s, e), c in evidence if c is not None]
                         l3_rate = any((sb + eb) // 2 - (sa + ea) // 2 >= window
                                       and (cb - ca) * 10**9 > 5 * ((sb + eb) // 2 - (sa + ea) // 2)
                                       for i, (sa, ea, ca) in enumerate(listed) for sb, eb, cb in listed[i + 1:])
                         if lifetime_floor is not None:
-                            absences = [(s + e) // 2 for (s, e), c in zip(spans, counts) if c is None]
+                            absences = [(s + e) // 2 for (s, e), c in evidence if c is None]
                             l3_rate = l3_rate or any(any((sb + eb) // 2 - a >= window for a in absences)
                                                      and cb * 10**9 > 5 * (eb - lifetime_floor)
                                                      for sb, eb, cb in listed)
@@ -3930,7 +4023,7 @@ class R0FinalVerdictTest(unittest.TestCase):
                                 return middle <= now < middle + 0.03
                         else:
                             def named(now, identity=identity):
-                                return identity == "always"
+                                return identity in ("always", "admission")
                         self.assertTrue(birth is None or middle > birth)
                         in_scope = identity != "never"
 
@@ -3938,7 +4031,7 @@ class R0FinalVerdictTest(unittest.TestCase):
                             cpu = counter(ns(now))
                             if cpu is not None:
                                 started = -100 if printed is None else printed
-                                if identity == "always":
+                                if identity in ("always", "admission"):
                                     yield fixture.PID, started, cpu, fixture.WORKER, "/fixture/mdworker_shared"
                                 else:
                                     yield (fixture.PID, started, cpu, "python3",
@@ -3946,7 +4039,17 @@ class R0FinalVerdictTest(unittest.TestCase):
                             elif kind == "reused":
                                 yield fixture.PID, -100, 7, "ordinary", "/fixture/ordinary"
 
-                        class Clocked(self.series_fixture(ticks, rows)):
+                        class Clocked(self.series_fixture(v_ticks, rows)):
+                            def move(self, end, gap=gap):
+                                # The forced admission at the removed tick, on the
+                                # way to ``end``.
+                                if (gap is not None and not getattr(self, "admitted", False) and end >= gap
+                                        and self.guard._sampler is not None):
+                                    super().move(gap)
+                                    self.admitted = True
+                                    self.guard.check(force=True)
+                                super().move(end)
+
                             def wall_ns(self, offset=offset):
                                 return fixture.EPOCH * 10**9 + ns(self.now) + offset(self.now)
 
@@ -3963,7 +4066,9 @@ class R0FinalVerdictTest(unittest.TestCase):
                         with self.subTest(**label):
                             result, model = self.run_model(fixture.Case(f"{kind}_{load}", end=ticks[-1]), Clocked)
                             withheld = (result["rc"], result["published"]) == (2, False)
-                            if stalled:
+                            if gap is not None:
+                                self.assertTrue(model.admitted)
+                            if v_stalled:
                                 # When the stall shows only in the publication read's
                                 # window, an unstable clock withholds first, at finish().
                                 self.assertTrue(withheld, result)
@@ -3974,7 +4079,7 @@ class R0FinalVerdictTest(unittest.TestCase):
                                 self.assertIn("clock_unstable", result["reason"])
                                 self.assertEqual(bool([f for f in model.guard.contention_flags
                                                        if f.get("kind") == "wall_clock"]), diverged, result)
-                            elif in_scope and (proven or (exact and identity == "always")):
+                            elif in_scope and (proven or (exact and identity in ("always", "admission"))):
                                 self.assertTrue(withheld, result)
                             elif not (in_scope and (truth or l3_rate)):
                                 # R0-RATE, the admitted rate rule, is the only
