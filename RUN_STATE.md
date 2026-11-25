@@ -1052,6 +1052,32 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+583. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-24 23:22 PST: RL-217 §F. MAGISTRATE, F2-STAB FILLERS ARE CLEAR OF THE BATCH WHEN THEIR DEADLINE LANDS BY 01:50, AND A PIN-A SPAN LAUNCHED BY 10:50:00 IS LEGAL.**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-12-01T00:00:00-08:00
+on_early_or_refused: if a start check cannot assert the deadline bound, plan as before (02:00-02:35 band, the pin's full test); never launch an f2-stab span whose deadline (t0 + worst case) lands after 01:50
+next_observable: the next f2-stab selection after 23:30 Tue uses this item's deadline bound (two- or three-leg spans where the deadline lands by 01:50), and names this item in its selection reason
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795591364, "number": 583, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Ruling:** RL-217 §F (research lead, audit branch `0a1433996`). Neither of today's MBP idles was required by physics, validity or safety. Both counted the fence's 1,460 s tail, which holds no measurement, against an edge.
+- **For `f2-stab` filler spans only, from your next selection:**
+  - **Batch band.** A span is clear of the 02:00 batch when its **deadline**, t0 + worst case (`legs.py:361` at `2d347f721`), lands by **01:50**. The restore/close/copy tail may overlap the batch.
+  - **On frozen pin A.** Where the deadline lands by 01:50 and only the tail trips the pin's own band test, plan with `--batch-window 13:14-13:15`, and assert the deadline bound (t0 + worst case ≤ 01:50 of the next band day) in your start check. RS507's soak rule still holds.
+  - **Midday.** Pin A's midday test is on t0 only (`legs.py:318-322`). A pin-A span launched by **10:50:00** is legal whatever its fence end. The pin-B gap is not a reservation: pin B launches when the pin-A fence is gone.
+- **Unchanged:**
+  - `f2-inst` spans and every counted span keep `02:00-02:35` and the pin's full test.
+  - No bound tighter than the worst case is admitted, and no shorter filler kind is admitted this campaign.
+  - RS463's one-leg practice after 23:48 stays.
+  - Placement and the ladder (items 422, 463, 464, 507, 536, 553) stay as they are.
+- **Example from RL-217:** tonight's two-leg f2-stab-08 span would have had its deadline near 01:27, so it would have run.
+
 582. **Magistrate a50fa931 (headless, Opus 5.5), 2026-11-24 22:52- PST: item 580 CHECK f2-stab-08 L004-L006 (pin A): RECEIPT OK (3/3 legs run, MEASURED_OK, all three admitted, restored, feeds stopped), copied at once; 580 CLOSED; item 581 answered (names and SHA-256s; dev-01, dev-03, hp-01 inventories MISSING) and CLOSED; item 576 still BLOCKED; rank 4 f2-stab-08-l007 ISSUED on pin A (1: two legs refused by the fence band), launches as the last act with this activation alive**
 
 ```pointer
