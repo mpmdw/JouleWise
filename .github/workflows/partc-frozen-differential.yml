@@ -31,6 +31,7 @@ on:
     paths:
       - "scripts/align_r1_part_c.py"
       - "scripts/align_r1_part_c_evidence.py"
+      - "tests/align/*rl145*.py"
       - "tests/frozen/partc-v4/**"
       - ".github/workflows/partc-frozen-differential.yml"
 

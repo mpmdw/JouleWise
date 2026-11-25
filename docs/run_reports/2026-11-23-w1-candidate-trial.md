@@ -115,6 +115,16 @@ The frozen C1 suite and production checks keep their exact bytes. The
 local packet module passed all 72 tests, and the J1–J3 and CAP10 modules
 passed all seven tests after the adapter change.
 
+The conflict modules and F-2 passed a second local run of 92 tests,
+including the full 506-probe packet rejection check.
+
+**Trial-only frozen CI trigger.** After #959 landed on the W1 base, the
+refreshed PR diff contained none of the frozen workflow's watched paths.
+Ordinary CI queued on `65f53f389`, while frozen CI was filtered out. The
+trial adds the F-2 test paths to the existing pull-request filter to
+validate the combined tree and track future F-2 changes. The workflow
+jobs, pins, and test inputs match #959's.
+
 **Current findings for step 1 and signing**
 
 - **F-4a and F-4b.** #824 is still open. Step 1 needs the lead-authorized
