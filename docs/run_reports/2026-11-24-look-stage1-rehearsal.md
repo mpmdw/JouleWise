@@ -40,8 +40,10 @@ main-only ledger root, a root registered through an alias, a destination
 that would contain a future root, relative paths, a symlinked parent and
 a failed main fetch. [PR #970](https://github.com/mpmdw/JouleWise/pull/970)
 
-Eight rehearsal and post-open allowlist checks passed at utility
+Seventeen focused tests and all 21 layout tests passed at utility
 priority. The draft manifest and generated state checks also passed.
+The CLI option test recognizes the rehearsal destination and still
+checks every former path option.
 
 ## Draft re-pin
 

@@ -607,11 +607,11 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         return set(re.findall(r"(?<![\w-])--[a-z0-9-]+", done.stdout)), done.stdout
 
-    def test_no_command_takes_a_path(self):
-        """Audit 2, lead ruling: the CLI accepts no path option. Every former one is unrecognized, and the options
-        each command still takes carry a flag, a sha256 or a leg key. Audit 3, rule P3: nor a git ref (a committed
-        run reads public records from origin/main after a fetch)."""
-        expected = {"stage1": {"--help", "--level-r", "--stage-archives", "--ruled-exclusion", "--allow-draft"},
+    def test_the_only_path_option_is_the_rehearsal_destination(self):
+        """The campaign options carry flags, a sha256 or a leg key. The rehearsal accepts an output path.
+        The CLI takes its public records from the shared refs."""
+        expected = {"stage1": {"--help", "--level-r", "--stage-archives", "--ruled-exclusion", "--allow-draft",
+                               "--rehearsal"},
                     "stage2": {"--help", "--stage1-sha256", "--level-e", "--allow-draft"},
                     "post-no-maxima": {"--help"}, "host-id": {"--help"}}
         for command, options in expected.items():
