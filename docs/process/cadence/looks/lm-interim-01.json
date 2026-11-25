@@ -102,7 +102,7 @@
         "sha256": "8930c6f4929838e675315323f72d3200382b6d8caadee291b5e1c1da20353ace"
       },
       "committed_before_stage2": true,
-      "dry_run": "Once the manifest is committed, stage 1 runs as a dry run on the custody copy of dev-01 to dev-04; it opens no energy and its counts go to the lead only (RL-166 §2 item 12).",
+      "dry_run": "Before the manifest pass, stage 1 rehearses on the input-bound custody copy of dev-01 to dev-04 with the draft ledger's rehearsal verdict. It opens no energy values and sends its counts to the lead only (RL-166 §2 item 12; RL-217 A.4 and E.1).",
       "cite": [
         "RL-166 Q15",
         "RL-166 Q8",
@@ -516,7 +516,7 @@
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
-        "sha256": "90be8b1aba10efd24db5ccb167b6b1527901dc0be9db7b7835732ff5c04dd285"
+        "sha256": "cdb5d87dc7434ebd3356e773a7fa035a8679cddca7c3078d9f83dd0722547eb7"
       },
       {
         "path": "joulewise/cadence_looks/time_fields.py",
@@ -532,7 +532,7 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "78f7efb65b5ec1eb2f2625141923154771d9e0b9b9b9d8240848e17dbfa07f74"
+        "sha256": "0e4f51b3fefec142dd0b25b29abe0757884c7f455b88ac3897389c14c373e3c7"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
@@ -883,7 +883,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "097c2a8a89ede0bd1b720b11e3d614eeb608a755b3ac0e0c230548525859894c"
+        "sha256": "dae166d1e0f7196e19d7500b7cd4b065515a303eba7b13c5e03ec02c16299e7a"
       },
       {
         "path": "joulewise/desk_compress.py",
@@ -969,7 +969,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "90be8b1aba10efd24db5ccb167b6b1527901dc0be9db7b7835732ff5c04dd285"
+          "sha256": "cdb5d87dc7434ebd3356e773a7fa035a8679cddca7c3078d9f83dd0722547eb7"
         },
         "cite": [
           "RL-149 §2.4",
@@ -985,7 +985,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "90be8b1aba10efd24db5ccb167b6b1527901dc0be9db7b7835732ff5c04dd285"
+          "sha256": "cdb5d87dc7434ebd3356e773a7fa035a8679cddca7c3078d9f83dd0722547eb7"
         },
         "cite": [
           "RL-149 §2.4",
@@ -1305,8 +1305,8 @@
     "root": null,
     "seats": 1,
     "lead_checks_output_against_schema": true,
-    "custody_copy": "One verified custody copy of the roster's spans by the existing offload tooling, made while the MBP is unarmed; the look runs on that copy, never on the MBP's measurement root. The copy lives under the one root this manifest registers (root): each span at <root>/<span id>, and the look's own files at fixed names in <root>/lm-interim-01. Campaign stages take no path. The stage-1 rehearsal takes only a new output directory outside the repository and every registered root.",
-    "host": "Under RL-184 the lead records the admitted commit's host-id token from the named machine in the stage1_committed LOOKS.json row on main. Stage 2 recomputes it before reservation. A host change requires a new ledger row and confirmation that the first host has no reservation.",
+    "custody_copy": "One verified custody copy of the roster's spans by the existing offload tooling, made while the MBP is unarmed; the look runs on that copy, never on the MBP's measurement root. The copy lives under the one root this manifest registers (root): each span at <root>/<span id>, and the look's own files at fixed names in <root>/lm-interim-01. Campaign stages take no path. Under RL-217 E.1 the rules-3/4 rehearsal creates a private directory outside the repository and every registered root. Stage-1 rehearsal reads the verdict and writes its own outputs there.",
+    "host": "Under RL-217 E.1 the draft LOOKS.json row registers the campaign host and both rehearsal commands check its host-id token. Under RL-184 the lead records the admitted commit's token in the stage1_committed row on main. Stage 2 recomputes it before reservation. A host change requires a new ledger row and confirmation that the first host has no reservation.",
     "no_import_by": [
       "scripts/cadence_legs_runner.py",
       "scripts/cadence_leg_runtime.py",
@@ -1329,7 +1329,7 @@
       "RL-195 §1",
       "RL-180 §1"
     ],
-    "pin_check": "Stage 1 and stage 2 verify the repository pins, stage-1 roster and verdict commitments, and the committed LOOKS.json row. Stage 2 checks its host, both registered roots, the hold rulings, prior execution history and the twin pins before reserving RESTRICTED/ by exclusive mkdir. Stage 2 redirects stdout and stderr into RESTRICTED/ before opening a response file. An interrupted reservation spends the id and is recorded as interrupted with error_type none_recorded (RL-183). The parent captures both streams from the pinned isolated twin and adjudicates the stdout frame after writing the coefficient file (RL-181). A delivered RL-180 failure notice is recorded as failed with its closed type."
+    "pin_check": "Stage 1 and stage 2 verify the repository pins, stage-1 roster and verdict commitments, and the committed LOOKS.json row. Under RL-217 E.1 the stock rules-3/4 producer verifies the registered spans against the committed pins. Campaign stage 1 checks the stock receipt against the committed row, verdict bytes and input names and hashes. Every stage 1 that is not a draft run, campaign or rehearsal, derives its admission again at the end of preflight and immediately before its writes and refuses any change: the ledger gate and the committed row, then the stock receipt for a campaign run, or the registered host and the destination fence for a rehearsal. Stage 2 checks its host, both registered roots, the hold rulings, prior execution history and the twin pins before reserving RESTRICTED/ by exclusive mkdir. Stage 2 redirects stdout and stderr into RESTRICTED/ before opening a response file. An interrupted reservation spends the id and is recorded as interrupted with error_type none_recorded (RL-183). The parent captures both streams from the pinned isolated twin and adjudicates the stdout frame after writing the coefficient file (RL-181). A delivered RL-180 failure notice is recorded as failed with its closed type."
   },
   "review": {
     "cold_seat": "Mythos 5.2: the design attack on RL-166 Q1 to Q4 (Sun 10:00), then a fresh Mythos seat's cold review of the manifest, rules 3 and 4, the step 3 adapter and the fit code against RL-149 §2.6 and §2.7 as amended, with Q6's and Q11's checks (Mon 14:00). Neither wrote any of the code.",

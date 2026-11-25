@@ -1,5 +1,11 @@
 [
   {
+    "file": "joulewise/cadence_looks/inclusion_34.py",
+    "locator": "<module>:b63af1b5f3b1c0e9",
+    "command": "python-isolated",
+    "seam": "Usage line for the RL-217 E.1 verdict rehearsal. The lead invokes it with an isolated interpreter and bytecode writes disabled. The docstring runs no command at import."
+  },
+  {
     "file": "joulewise/cadence_looks/interim_twin.py",
     "locator": "run:b7caa1f02e90b3d4",
     "command": "python-isolated",
@@ -19,9 +25,9 @@
   },
   {
     "file": "scripts/cadence_look_run.py",
-    "locator": "<module>:44c8da2be87da73a",
+    "locator": "<module>:abc70f74c9339337",
     "command": "python-isolated",
-    "seam": "Usage line for the stage-1 rehearsal in the runner's module docstring. The magistrate invokes it with an isolated interpreter and bytecode writes disabled."
+    "seam": "Usage line for stage 1 to consume the producer's private rehearsal directory. The lead invokes it with an isolated interpreter and bytecode writes disabled. The docstring runs no command at import."
   },
   {
     "file": "scripts/cadence_look_run.py",

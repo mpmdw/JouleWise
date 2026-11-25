@@ -592,10 +592,10 @@ def run_cli(argv, trap=False, mock_stage2=False, extra=None):
 # and a stage-2 stub for the tests that need them, then calls the CLI's main().
 _HARNESS = os.path.join(_PIN_DIR, "cli_harness.py")
 _HARNESS_SRC = r'''
-import json, os, re, sys, tempfile
+import json, os, re, sys, tempfile, uuid
 from pathlib import Path
 sys.dont_write_bytecode = True
-sys.pycache_prefix = tempfile.mkdtemp(prefix="jw-harness-pyc-")   # as the CLI does: no cached bytecode is read
+sys.pycache_prefix = os.path.join(tempfile.gettempdir(), f"jw-harness-pyc-{uuid.uuid4().hex}")
 opts = json.loads(sys.argv[1]); argv = sys.argv[2:]
 sys.path.insert(0, opts["repo"])
 opened = []
@@ -644,6 +644,35 @@ if opts.get("trap"):
         raise AssertionError("plist parsed")
     plistlib.loads = plistlib.load = _no_plist
 from scripts import cadence_look_run as R
+if opts.get("advance_main"):
+    target, source = opts["advance_main"]
+    # "name" fetches before every call of R.name; "before:name:N" / "after:name:N" fetch once, just before the Nth
+    # call starts or just after it returns; "M.name" names the manifest module's function as R calls it
+    when, nth = None, 0
+    if target.startswith(("before:", "after:")):
+        when, target, nth = target.split(":")
+        nth = int(nth)
+    owner = R.M if target.startswith("M.") else R
+    target = target.removeprefix("M.")
+    original = getattr(owner, target)
+    advanced = [0]
+    def advance():
+        bare = Path(opts["repo"]).with_name(Path(opts["repo"]).name + "-origin.git")
+        rc, _, err = R.M._git(bare, "fetch", "--quiet", source, "HEAD:refs/heads/main")
+        assert rc == 0, err
+        R.M.fetch_public(R.ROOT)
+    def after_fetch(*args, **kwargs):
+        if when is None:
+            advance()
+            return original(*args, **kwargs)
+        advanced[0] += 1
+        if when == "before" and advanced[0] == nth:
+            advance()
+        out = original(*args, **kwargs)
+        if when == "after" and advanced[0] == nth:
+            advance()
+        return out
+    setattr(owner, target, after_fetch)
 if opts.get("manifest"):                     # the test's manifest stands in for the repository's fixed one
     R.manifest_path = lambda: Path(opts["manifest"])
 if opts.get("run_state") is not None:          # the harness's fixture RUN_STATE (no CLI option takes one): a
@@ -719,6 +748,8 @@ try:
     if opts.get("entry") == "manifest":
         from scripts import cadence_look_manifest as manifest_cli
         rc = manifest_cli.main(argv)
+    elif opts.get("entry") == "rules":
+        rc = R.I34.main(argv)
     else:
         rc = R.main(argv)
 finally:
@@ -780,6 +811,8 @@ def _cli_subprocess(argv, trap=False, mock_stage2=False, repo=None, extra=None):
         placed = look_minirepo.place_in(repo, argv, pin=pin)
         if placed.ledger:                   # a draft copy's scratch ledger, in place of the copy's LOOKS.json
             layout_opts = {"ledger": placed.ledger}
+        if placed.argv[0] == "stage1" and "--allow-draft" not in placed.argv:
+            look_minirepo.seed_rules34_receipt(repo, placed.root / F.LOOK_ID)
     else:
         placed = layout_fixture.place(argv, repo=REPO)
         if placed.placed:
@@ -841,7 +874,8 @@ class Stage1Rehearsal(unittest.TestCase):
         row.update(status="committed", sha256=R.sha256_file(self.manifest),
                    roster_sha256=R.sha256_file(self.look / M.LOOK_FILES["roster"]),
                    verdicts_sha256=R.sha256_file(self.look / M.LOOK_FILES["rules_3_4"]),
-                   custody_root=str(self.custody), public_root=M.LOOK_PUBLIC_ROOT)
+                   custody_root=str(self.custody), public_root=M.LOOK_PUBLIC_ROOT, execution_host="hw1:" + "a" * 64)
+        self.rules_raw = (self.look / M.LOOK_FILES["rules_3_4"]).read_bytes()
         # A second draft names a root via an alias in its ledger row and a future root in its manifest.
         other_manifest = self.manifest.with_name("lm-interim-02.json")
         other_manifest.write_bytes(R.release.dump(
@@ -853,14 +887,25 @@ class Stage1Rehearsal(unittest.TestCase):
         MR.git_commit(self.repo, "Register the synthetic rehearsal inputs", publish=False)
         self.git(self.repo, "push", "-q", "origin", "HEAD:refs/heads/main")
 
-    def invoke(self, directory=None):
+    def invoke(self, directory=None, *, producer=False, tmpdir=None, advance_main=None):
         _pin_dir()
         report = self.scratch / "observed.json"
-        opts = dict(repo=str(self.repo), spy=True, trap=True, report=str(report), exports={})
+        opts = dict(repo=str(self.repo), spy=True, trap=True, report=str(report), exports={}, advance_main=advance_main)
         argv = ["stage1"] if directory is None else ["stage1", "--rehearsal", str(directory)]
+        if producer:
+            opts["entry"] = "rules"
+            argv = argv[1:]
         done = subprocess.run([sys.executable, "-I", "-B", _HARNESS, json.dumps(opts), *argv],
-                              cwd=self.repo, capture_output=True, text=True, timeout=180)
+                              cwd=self.repo, capture_output=True, text=True, timeout=180,
+                              env=None if tmpdir is None else {**os.environ, "TMPDIR": str(tmpdir)})
         return done, rj(report)
+
+    def seed_rules(self, directory):
+        directory.mkdir(mode=0o700)
+        rules = directory / M.LOOK_FILES["rules_3_4"]
+        rules.write_bytes(self.rules_raw)
+        rules.chmod(0o600)
+        return rules
 
     def snapshot(self):
         return {path: R.sha256_file(path) if path.is_file() else None
@@ -871,7 +916,108 @@ class Stage1Rehearsal(unittest.TestCase):
     def outputs(self, directory):
         return {name: (directory / M.LOOK_FILES[name]).read_bytes() for name in ("level_r", "stage1")}
 
+    def campaign_producer(self, *extra):
+        from tests.cadence import look_minirepo as MR
+
+        return MR.py(self.repo, M.RULES34_PRODUCER, "--manifest", self.manifest,
+                     "--roster", self.look / M.LOOK_FILES["roster"], "--custody", self.custody,
+                     "--out", self.look / M.LOOK_FILES["rules_3_4"], *extra)
+
+    def stock_commitment(self):
+        from tests.cadence import look_minirepo as MR
+
+        generated = self.scratch / "draft_verdicts.json"
+        made = self.campaign_producer("--allow-draft", "--out", generated)
+        self.assertEqual(made.returncode, 0, made.stdout + made.stderr)
+        rows = rj(self.ledger)
+        rows["looks"][0]["verdicts_sha256"] = M.sha256_file(generated)
+        self.ledger.write_bytes(R.release.dump(rows))
+        MR.git_commit(self.repo, "Bind the generated verdicts on main", publish=False)
+        self.git(self.repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+        return rows
+
+    def test_stock_rejects_stale_span_override_and_copy_at_registered_path(self):
+        from tests.cadence import look_minirepo as MR
+
+        rows = self.stock_commitment()
+        old = rj(self.scratch / "draft_verdicts.json")
+        sid, leg = next(key.split("/") for key, verdict in old.items()
+                        if key.startswith("dev-") and verdict["sidecar_coverage"])
+        span = self.custody / sid
+        stale = self.scratch / sid
+        shutil.copytree(span, stale)
+        bundle = M.runtime_bundle(span, leg, rj(span / "legs" / leg / "leg_record.json"))
+        changed = bundle / "rich_telemetry.jsonl"
+        old_bytes = changed.read_bytes()
+        lines = old_bytes.splitlines(keepends=True)
+        self.assertGreater(len(lines), 10)
+        current = lines[0] + lines[-1]
+        changed.write_bytes(current)
+        doc = rj(self.manifest)
+        doc["inputs"]["pins"] = MR.write_pins(self.repo, {
+            entry["span_id"]: self.custody / entry["span_id"] for entry in rj(self.look / "roster.json")})
+        self.manifest.write_bytes(R.release.dump(doc))
+        rows["looks"][0]["sha256"] = M.sha256_file(self.manifest)
+        self.ledger.write_bytes(R.release.dump(rows))
+        MR.git_commit(self.repo, "Commit the updated generated span", publish=False)
+        self.git(self.repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+        campaign_rules = self.look / M.LOOK_FILES["rules_3_4"]
+        receipt = self.look / M.LOOK_FILES["rules_3_4_receipt"]
+        campaign_rules.unlink()
+        for override in (True, False):
+            with self.subTest(override=override):
+                args = ("--span-dir", f"{sid}={stale}") if override else ()
+                if not override:
+                    changed.write_bytes(old_bytes)
+                try:
+                    result = self.campaign_producer(*args)
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    message = result.stdout + result.stderr
+                    self.assertIn("--span-dir" if override else "custody pins:", message)
+                    if not override:
+                        self.assertIn(str(changed.relative_to(self.custody)), message)
+                    self.assertFalse(campaign_rules.exists())
+                    self.assertFalse(receipt.exists())
+                finally:
+                    changed.write_bytes(current)
+                    campaign_rules.unlink(missing_ok=True)
+                    receipt.unlink(missing_ok=True)
+
+    def test_campaign_refuses_a_verdict_hash_fetched_during_preflight(self):
+        self.refuse_fetched_verdict("run_verifier")
+
+    def test_campaign_refuses_a_verdict_hash_fetched_before_publication(self):
+        self.refuse_fetched_verdict("finish_stage1")
+
+    def test_campaign_refuses_a_verdict_hash_fetched_while_the_last_receipt_is_validated(self):
+        # PR #971 round 5 (Astra final_receipt_fetch): admission, preflight exit, then the before-write check; a
+        # fetch landing after the third derivation read the ledger, while its receipt is validated, must still
+        # refuse and write nothing
+        self.refuse_fetched_verdict("before:M.require_rules34_receipt:3")
+
+    def refuse_fetched_verdict(self, checkpoint):
+        from tests.cadence import look_minirepo as MR
+
+        rows = self.stock_commitment()
+        stock = self.campaign_producer()
+        self.assertEqual(stock.returncode, 0, stock.stdout + stock.stderr)
+        other = self.scratch / "second-checkout"
+        self.git(self.scratch, "clone", "--quiet", "--no-hardlinks", str(self.repo), str(other))
+        rows["looks"][0]["verdicts_sha256"] = "e" * 64
+        (other / M.LOOK_LEDGER_PATH).write_bytes(R.release.dump(rows))
+        MR.git_commit(other, "Advance the paper verdict hash", publish=False)
+        result, _ = self.invoke(advance_main=(checkpoint, str(other)))
+        self.assertEqual(self.git(self.repo, "rev-parse", M.PUBLIC_RUN_STATE_REF).stdout,
+                         self.git(other, "rev-parse", "HEAD").stdout)
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn("not the one on", result.stderr)
+        self.assertFalse((self.look / M.LOOK_FILES["stage1"]).exists())
+        self.assertFalse((self.look / M.LOOK_FILES["level_r"]).exists())
+
     def test_rehearsal_uses_campaign_reads_and_leaves_later_campaign_byte_identical(self):
+        from tests.cadence import look_minirepo as MR
+
+        MR.seed_rules34_receipt(self.repo, self.look)
         campaign, campaign_observed = self.invoke()
         self.assertEqual(campaign.returncode, 0, campaign.stderr)
         control = self.outputs(self.look)
@@ -879,13 +1025,15 @@ class Stage1Rehearsal(unittest.TestCase):
             (self.look / M.LOOK_FILES[name]).unlink()
         before = self.snapshot()
 
+        self.seed_rules(self.rehearsal)
         rehearsal, rehearsal_observed = self.invoke(self.rehearsal)
         self.assertEqual(rehearsal.returncode, 0, rehearsal.stderr)
         self.assertEqual(rehearsal.stderr, "")
         self.assertEqual(self.snapshot(), before)
         self.assertEqual(self.rehearsal.stat().st_mode & 0o777, 0o700)
         self.assertEqual({path.name: path.stat().st_mode & 0o777 for path in self.rehearsal.iterdir()},
-                         {"level_r.json": 0o600, "stage1.json": 0o600})
+                         {"rules_3_4.json": 0o600, "level_r.json": 0o600, "stage1.json": 0o600})
+        self.assertNotIn(str(self.look / M.LOOK_FILES["rules_3_4"]), rehearsal_observed["opened"])
         blocks = [f"dev-{index:02d}" for index in range(1, 5)]
         pinned_roster = rj(self.look / M.LOOK_FILES["roster"])
         expected_ids = {row["span_id"] for row in pinned_roster if row["block_id"] in blocks}
@@ -927,7 +1075,7 @@ class Stage1Rehearsal(unittest.TestCase):
         link.symlink_to(self.custody, target_is_directory=True)
         before = self.snapshot()
         relative = os.path.relpath(self.rehearsal, self.repo)
-        for path, reason in ((existing, "already exists"), (self.custody / "new", str(self.custody)),
+        for path, reason in ((existing, "containing only rules_3_4.json"), (self.custody / "new", str(self.custody)),
                              (self.custody, str(self.custody)), (self.other_custody / "new", str(self.other_custody)),
                              (self.repo / "new", str(self.repo)), (self.public / "new", str(self.repo)),
                              (self.planned_custody.parent, str(self.planned_custody)),
@@ -948,6 +1096,7 @@ class Stage1Rehearsal(unittest.TestCase):
         from tests.cadence import look_minirepo as MR
 
         main = self.git(self.repo, "rev-parse", "HEAD").stdout.strip()
+        MR.seed_rules34_receipt(self.repo, self.look)
         campaign, _ = self.invoke()
         self.assertEqual(campaign.returncode, 0, campaign.stderr)
         control = self.outputs(self.look)
@@ -964,7 +1113,7 @@ class Stage1Rehearsal(unittest.TestCase):
         ledger["looks"][0].update(status="draft", sha256=R.sha256_file(self.manifest), custody_root=str(branch_root))
         self.ledger.write_bytes(R.release.dump(ledger))
         MR.git_commit(self.repo, "Register distinct branch rehearsal custody", publish=False)
-        self.git(self.repo, "push", "-q", "origin", f"HEAD:refs/heads/{R.REHEARSAL_BRANCH}")
+        self.git(self.repo, "push", "-q", "origin", f"HEAD:refs/heads/{M.REHEARSAL_BRANCH}")
         self.git(self.repo, "checkout", "--detach", "-q")
         self.git(self.repo, "update-ref", M.PUBLIC_RUN_STATE_REF, f"{main}^")
 
@@ -978,6 +1127,7 @@ class Stage1Rehearsal(unittest.TestCase):
             self.assertEqual(observed["served"], [])
 
         self.assertEqual(self.git(self.repo, "rev-parse", M.PUBLIC_RUN_STATE_REF).stdout.strip(), main)
+        self.seed_rules(self.rehearsal)
         external, _ = self.invoke(self.rehearsal)
         self.assertEqual(external.returncode, 0, external.stderr)
         self.git(self.repo, "checkout", "--detach", "-q", main)
@@ -994,6 +1144,27 @@ class Stage1Rehearsal(unittest.TestCase):
         self.assertFalse(self.rehearsal.exists())
         self.assertEqual(observed["served"], [])
 
+    def test_stage1_requires_the_private_ledger_bound_verdict(self):
+        rules = self.seed_rules(self.rehearsal)
+        for replacement in ("changed", "symlink", "hardlink"):
+            with self.subTest(replacement=replacement):
+                if replacement == "changed":
+                    rules.write_bytes(self.rules_raw + b"\n")
+                else:
+                    rules.unlink()
+                    target = self.look / M.LOOK_FILES["rules_3_4"]
+                    if replacement == "symlink":
+                        rules.symlink_to(target)
+                    else:
+                        os.link(target, rules)
+                refused, observed = self.invoke(self.rehearsal)
+                self.assertEqual(refused.returncode, 2, refused.stderr)
+                self.assertEqual(refused.stdout, "")
+                self.assertIn("not the one LOOKS.json" if replacement == "changed" else "private regular",
+                              refused.stderr)
+                self.assertEqual(observed["served"], [])
+                self.assertEqual(list(self.rehearsal.iterdir()), [rules])
+
     def test_prepass_draft_on_shared_merge_branch_and_manifest_range(self):
         from tests.cadence import look_minirepo as MR
 
@@ -1006,7 +1177,7 @@ class Stage1Rehearsal(unittest.TestCase):
         ledger["looks"][0].update(status="draft", sha256=R.sha256_file(self.manifest))
         self.ledger.write_bytes(R.release.dump(ledger))
         MR.git_commit(self.repo, "Pin the pre-pass synthetic draft", publish=False)
-        self.git(self.repo, "push", "-q", "origin", f"HEAD:refs/heads/{R.REHEARSAL_BRANCH}")
+        self.git(self.repo, "push", "-q", "origin", f"HEAD:refs/heads/{M.REHEARSAL_BRANCH}")
         self.git(self.repo, "checkout", "--detach", "-q")
         # Deliberately corrupt a generated file outside the new selection. The verifier must skip that whole span.
         outside = self.custody / "dev-01-s01" / "runner_receipt.json"
@@ -1014,10 +1185,8 @@ class Stage1Rehearsal(unittest.TestCase):
         other_tmp = self.scratch / "other-tmp"
         other_tmp.mkdir()
         before = self.snapshot()
-        done = subprocess.run(
-            [sys.executable, "-I", "-B", "scripts/cadence_look_run.py", "stage1", "--rehearsal", str(self.rehearsal)],
-            cwd=self.repo, env={**os.environ, "TMPDIR": str(other_tmp)}, capture_output=True, text=True, timeout=180,
-        )
+        self.seed_rules(self.rehearsal)
+        done, _ = self.invoke(self.rehearsal, tmpdir=other_tmp)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(list(other_tmp.iterdir()), [])
         stage1 = json.loads(self.outputs(self.rehearsal)["stage1"])
@@ -1026,12 +1195,489 @@ class Stage1Rehearsal(unittest.TestCase):
         self.assertEqual(self.snapshot(), before)
         inside = self.custody / "dev-02-s01" / "runner_receipt.json"
         inside.write_bytes(inside.read_bytes() + b" ")
-        refused, observed = self.invoke(self.scratch / "pin-mismatch")
+        mismatch = self.scratch / "pin-mismatch"
+        rules = self.seed_rules(mismatch)
+        refused, observed = self.invoke(mismatch)
         self.assertEqual(refused.returncode, 2, refused.stderr)
         self.assertIn("custody pins:", refused.stderr)
         self.assertEqual(refused.stdout, "")
         self.assertEqual(observed["served"], [])
-        self.assertEqual(list((self.scratch / "pin-mismatch").iterdir()), [])
+        self.assertEqual(list(mismatch.iterdir()), [rules])
+
+    def test_rules_rehearsal_matches_stock_bytes_after_commit(self):
+        from tests.cadence import look_minirepo as MR
+
+        doc, ledger = rj(self.manifest), rj(self.ledger)
+        doc["status"] = "draft"
+        self.manifest.write_bytes(R.release.dump(doc))
+        row = ledger["looks"][0]
+        row.update(status="draft", sha256=R.sha256_file(self.manifest))
+        row.pop("verdicts_sha256")
+        self.ledger.write_bytes(R.release.dump(ledger))
+        MR.git_commit(self.repo, "Bind synthetic draft inputs", publish=False)
+        branch = f"HEAD:refs/heads/{M.REHEARSAL_BRANCH}"
+        self.git(self.repo, "push", "-q", "origin", branch)
+        self.git(self.repo, "checkout", "--detach", "-q")
+        before = self.snapshot()
+
+        existing = self.scratch / "taken"
+        existing.mkdir()
+        occupied_receipt = existing / M.LOOK_FILES["rules_3_4_receipt"]
+        occupied_receipt.write_bytes(b"generated sentinel")
+        alias = self.scratch / "alias"
+        alias.symlink_to(self.custody, target_is_directory=True)
+        for path, reason in ((existing, "already exists"), (self.custody / "new", str(self.custody)),
+                             (self.repo / "new", str(self.repo)), (self.other_custody / "new", str(self.other_custody)),
+                             (self.planned_custody.parent, str(self.planned_custody)), (alias / "new", "symlink"),
+                             ("relative", "not an absolute")):
+            with self.subTest(path=path):
+                refused, observed = self.invoke(path, producer=True)
+                self.assertEqual(refused.returncode, 1, refused.stderr)
+                self.assertIn(reason, refused.stderr)
+                self.assertEqual(refused.stdout, "")
+                self.assertEqual(observed["served"], [])
+        self.assertEqual(occupied_receipt.read_bytes(), b"generated sentinel")
+
+        rehearsal, _ = self.invoke(self.rehearsal, producer=True)
+        self.assertEqual(rehearsal.returncode, 0, rehearsal.stderr)
+        self.assertEqual(self.snapshot(), before)
+        rules = self.rehearsal / "rules_3_4.json"
+        digest = M.sha256_file(rules)
+        self.assertEqual(rehearsal.stdout, f"rules_3_4.json sha256={digest}\n")
+        self.assertEqual({p.name for p in self.rehearsal.iterdir()}, {rules.name})
+        self.assertEqual(self.rehearsal.stat().st_mode & 0o777, 0o700)
+        self.assertEqual(rules.stat().st_mode & 0o777, 0o600)
+        self.assertTrue(any(key.startswith("hp-01-") for key in rj(rules)))
+
+        row["verdicts_sha256"] = digest
+        self.ledger.write_bytes(R.release.dump(ledger))
+        MR.git_commit(self.repo, "Bind the rehearsal verdict hash", publish=False)
+        self.git(self.repo, "push", "-q", "origin", branch)
+        campaign_rules = self.look / M.LOOK_FILES["rules_3_4"]
+        campaign_rules.unlink()
+        stage1, observed = self.invoke(self.rehearsal)
+        self.assertEqual(stage1.returncode, 0, stage1.stderr)
+        self.assertNotIn(str(campaign_rules), observed["opened"])
+        self.assertEqual(json.loads(stage1.stdout)["hp01_below_9"], "no")
+
+        doc["status"] = "committed"
+        self.manifest.write_bytes(R.release.dump(doc))
+        row.update(status="committed", sha256=R.sha256_file(self.manifest))
+        row.pop("verdicts_sha256")
+        self.ledger.write_bytes(R.release.dump(ledger))
+        MR.git_commit(self.repo, "Commit the synthetic look", publish=False)
+        self.git(self.repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+        row_cli = MR.py(self.repo, "scripts/cadence_look_manifest.py", "row", "--repo", self.repo,
+                        "--manifest", self.manifest, "--roster", self.look / "roster.json",
+                        "--verdicts", rules, "--write")
+        self.assertEqual(row_cli.returncode, 0, row_cli.stdout + row_cli.stderr)
+        MR.git_commit(self.repo, "Bind inputs through the stock row CLI", publish=False)
+        self.git(self.repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+        inode = rules.stat().st_ino
+        rules.rename(campaign_rules)
+        self.assertEqual(campaign_rules.stat().st_ino, inode)
+        refused, observed = self.invoke()
+        self.assertEqual(refused.returncode, 2, refused.stderr)
+        self.assertIn("rules_3_4.receipt.json: absent", refused.stderr)
+        self.assertEqual(observed["served"], [])
+        self.assertFalse((self.look / "stage1.json").exists())
+        campaign_rules.rename(rules)
+
+        stock_args = ("joulewise/cadence_looks/inclusion_34.py", "--roster", self.look / "roster.json",
+                      "--custody", self.custody, "--manifest", self.manifest, "--out", campaign_rules)
+        stock = MR.py(self.repo, *stock_args)
+        self.assertEqual(stock.returncode, 0, stock.stdout + stock.stderr)
+        self.assertEqual(M.sha256_file(campaign_rules), digest)
+        self.assertEqual(campaign_rules.read_bytes(), rules.read_bytes())
+        self.assertEqual(campaign_rules.read_text(), json.dumps(rj(rules), indent=1, sort_keys=True) + "\n")
+        receipt = self.look / M.LOOK_FILES["rules_3_4_receipt"]
+        recorded = rj(receipt)
+        commit = self.git(self.repo, "rev-parse", "HEAD").stdout.strip()
+        self.assertEqual(recorded["ledger_commit"], commit)
+        self.assertEqual(recorded["producer_commit"], commit)
+        self.assertEqual(recorded["verdicts_sha256"], digest)
+        expected_pins = {f"{span['span_id']}/{entry['path']}": entry["sha256"]
+                         for span in doc["inputs"]["pins"]["spans"] for entry in span["files"]}
+        self.assertEqual(recorded["input_pins"], expected_pins)
+        self.assertEqual(receipt.stat().st_mode & 0o777, 0o600)
+        for update, reason in (({"verdicts_sha256": "0" * 64}, "verdict sha256 differs"),
+                               ({"input_pins": {}}, "input pins differ"),
+                               ({"unexpected": True}, "invalid closed schema"),
+                               ({"wall_time_ns": 0}, "post-commit run"),
+                               ({"monotonic_ns": True}, "invalid closed schema")):
+            with self.subTest(update=update):
+                receipt.write_bytes(R.release.dump({**recorded, **update}))
+                refused, observed = self.invoke()
+                self.assertEqual(refused.returncode, 2, refused.stderr)
+                self.assertIn(reason, refused.stderr)
+                self.assertEqual(observed["served"], [])
+        receipt.write_bytes(R.release.dump(recorded))
+
+        MR.git_commit(self.repo, "Unrelated change after the receipt", publish=False)
+        self.git(self.repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+        accepted, _ = self.invoke()
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        for name in ("stage1", "level_r"):
+            (self.look / M.LOOK_FILES[name]).unlink()
+
+        ledger = rj(self.ledger)
+        ledger["looks"][0]["execution_host"] = "hw1:" + "b" * 64
+        self.ledger.write_bytes(R.release.dump(ledger))
+        MR.git_commit(self.repo, "Change this look's row without changing its input hashes", publish=False)
+        self.git(self.repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+        refused, observed = self.invoke()
+        self.assertEqual(refused.returncode, 2, refused.stderr)
+        self.assertIn("producer commit must contain the ledger row on main", refused.stderr)
+        self.assertEqual(observed["served"], [])
+        stock = MR.py(self.repo, *stock_args)
+        self.assertEqual(stock.returncode, 0, stock.stdout + stock.stderr)
+        accepted, _ = self.invoke()
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+
+
+def refusal_sites(source, functions):
+    """Every refusal path of the named module functions, as ``(site, line)`` in source order. A site is a raise
+    statement or a call of a module function or of an ``M.``, ``F.``, ``release.``, ``PINS.``, ``layout.`` or
+    ``a.`` attribute, written ``function | guards | raise <exception>`` or ``function | guards | call <callee>``.
+    The guards are the conditions that reach it: each enclosing ``if X`` or ``else X`` (also of a conditional
+    expression), loop, ``except`` clause and preceding short-circuit operand, and ``unless X`` / ``after X`` for an
+    earlier ``if`` in the same block whose branch returns, continues or breaks. An earlier branch that raises adds no
+    guard: a new refusal before a check strengthens the path to it, while a new early return skips it. A nested
+    function is listed as ``outer.inner``. An absent function contributes nothing."""
+    import ast
+    tree = ast.parse(source)
+    defs = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+    roots = {"M", "F", "release", "PINS", "layout", "a"}
+    out = []
+
+    def callee(func):
+        root = func
+        while isinstance(root, ast.Attribute):
+            root = root.value
+        if isinstance(func, ast.Name) and func.id in defs:
+            return func.id
+        if isinstance(func, ast.Attribute) and isinstance(root, ast.Name) and root.id in roots:
+            return ast.unparse(func)
+        return None
+
+    def add(name, guards, what, node):
+        out.append((f"{name} | {' / '.join(guards) or '-'} | {what}", node.lineno))
+
+    def expr(name, node, guards):
+        if isinstance(node, ast.IfExp):
+            test = ast.unparse(node.test)
+            expr(name, node.test, guards)
+            expr(name, node.body, guards + (f"if {test}",))
+            expr(name, node.orelse, guards + (f"else {test}",))
+            return
+        if isinstance(node, ast.BoolOp):
+            op, earlier = ("and" if isinstance(node.op, ast.And) else "or"), ()
+            for value in node.values:
+                expr(name, value, guards + earlier)
+                earlier += (f"{op} {ast.unparse(value)}",)
+            return
+        if isinstance(node, ast.Lambda):
+            return
+        if isinstance(node, ast.Call) and (target := callee(node.func)) is not None:
+            add(name, guards, f"call {target}", node)
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.expr):
+                expr(name, child, guards)
+            elif isinstance(child, (ast.keyword, ast.comprehension)):
+                for sub in ast.iter_child_nodes(child):
+                    if isinstance(sub, ast.expr):
+                        expr(name, sub, guards)
+
+    def skips(body):
+        return bool(body) and isinstance(body[-1], (ast.Return, ast.Continue, ast.Break))
+
+    def block(name, body, guards):
+        for node in body:
+            statement(name, node, guards)
+            if isinstance(node, ast.If):
+                if skips(node.body):
+                    guards = guards + (f"unless {ast.unparse(node.test)}",)
+                elif skips(node.orelse):
+                    guards = guards + (f"after {ast.unparse(node.test)}",)
+
+    def statement(name, node, guards):
+        if isinstance(node, ast.If):
+            test = ast.unparse(node.test)
+            expr(name, node.test, guards)
+            block(name, node.body, guards + (f"if {test}",))
+            block(name, node.orelse, guards + (f"else {test}",))
+        elif isinstance(node, ast.For):
+            expr(name, node.iter, guards)
+            block(name, node.body, guards + (f"for {ast.unparse(node.target)} in {ast.unparse(node.iter)}",))
+            block(name, node.orelse, guards)
+        elif isinstance(node, ast.While):
+            expr(name, node.test, guards)
+            block(name, node.body, guards + (f"while {ast.unparse(node.test)}",))
+        elif isinstance(node, ast.Try):
+            block(name, node.body, guards)
+            for handler in node.handlers:
+                caught = ast.unparse(handler.type) if handler.type is not None else ""
+                block(name, handler.body, guards + (f"except {caught}",))
+            block(name, node.orelse, guards)
+            block(name, node.finalbody, guards)
+        elif isinstance(node, ast.With):
+            for item in node.items:
+                expr(name, item.context_expr, guards)
+            block(name, node.body, guards)
+        elif isinstance(node, ast.FunctionDef):
+            block(f"{name}.{node.name}", node.body, ())
+        elif isinstance(node, ast.Raise):
+            exc = node.exc
+            for part in (exc.args + [k.value for k in exc.keywords]) if isinstance(exc, ast.Call) else [exc]:
+                if part is not None:
+                    expr(name, part, guards)
+            add(name, guards, f"raise {ast.unparse(exc) if exc is not None else ''}", node)
+        else:
+            for child in ast.iter_child_nodes(node):
+                if isinstance(child, ast.expr):
+                    expr(name, child, guards)
+
+    for name in functions:
+        if name in defs:
+            block(name, defs[name].body, ())
+    return out
+
+
+class Pr971Convergence(unittest.TestCase):
+    """PR #971 round 4, lead spec S2: the convergence check against the pre-fix parent 75ce4bf5c. Each of three audit
+    rounds closed its finding and dropped a guard the parent had. Here every audit reproducer is replayed on generated
+    custody (``look_parity_cases.py``) against both this checkout and the parent's own files, extracted from git; and
+    every refusal path of the parent's stage-1 entry points must survive here or name its replacement."""
+
+    maxDiff = None
+    PARENT = "75ce4bf5c3c4fae2c43c467dd2878f0e9b814dff"
+    # the parent's fixture, runner, producer and the files the fixture copies (look_minirepo.fixture_sources)
+    PARENT_FILES = ("joulewise", "scripts", "tests/__init__.py", "tests/git_fixture.py", "tests/host_command_guard.py",
+                    "tests/cadence", "docs/process", "configs/align/v4/r1_runtime.json",
+                    "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/looks/lm-qual-01.manifest.json")
+    # case: (the parent's outcome, a text each refusal here prints). The audits observed the parent for provenance
+    # (round 1: exit 0, both files), preflight_fetch (round 2) and rehearsal_fetch (round 3) (exit 2, no file); the
+    # replay asserts the parent's outcome for every case, so the replays are the audits' reproductions.
+    CASES = {
+        "provenance": ("accepted", ("rules_3_4.receipt.json: absent",)),
+        "span_override_flag": ("accepted", ("refuses --span-dir", "rules_3_4.json: absent")),
+        "span_override_copy": ("accepted", ("custody pins:", "rules_3_4.json: absent")),
+        "preflight_fetch": ("refused_no_write", ("not the one on",)),
+        "preflight_fetch_publication": ("accepted", ("preflight breach", "not the one on")),
+        "rehearsal_fetch": ("refused_no_write", ("not the one on",)),
+        "rehearsal_fetch_publication": ("accepted", ("preflight breach",)),
+        "rehearsal_fence_branch": ("accepted", ("registered root",)),
+    }
+    FUNCTIONS = ("_stage1", "finish_stage1", "finish_rehearsal")
+    # refusal_sites(the parent's scripts/cadence_look_run.py, FUNCTIONS); checked against git when the parent is there
+    PARENT_SITES = (
+        "_stage1 | if a.level_r and (not a.allow_draft) | raise F.LookInputError('--level-r runs only with --allow-draft; a committed look reads custody')",
+        "_stage1 | - | call layout_of",
+        "_stage1 | if rehearsal is None / for key in ('stage1', 'level_r') | call layout.exists",
+        "_stage1 | if rehearsal is None / for key in ('stage1', 'level_r') / if layout.exists(key) | raise F.LookInputError(f\"{M.LOOK_FILES[key]} already exists in the look's directory\")",
+        "_stage1 | if a.level_r | call layout.read",
+        "_stage1 | else a.level_r | call ruled_exclusions",
+        "_stage1 | else a.level_r / if rehearsal is not None | call rehearsal_output",
+        "_stage1 | else a.level_r / if rehearsal is not None | call read_rehearsal_rules",
+        "_stage1 | else a.level_r / if rehearsal is not None | call layout.read",
+        "_stage1 | else a.level_r / else rehearsal is not None | call layout.read",
+        "_stage1 | else a.level_r / else rehearsal is not None | call layout.read",
+        "_stage1 | else a.level_r / except M.ManifestError | raise F.LookInputError('; '.join(error.problems))",
+        "_stage1 | else a.level_r / if not a.allow_draft | call M.require_inputs_committed",
+        "_stage1 | else a.level_r / if not a.allow_draft | call sha256_file",
+        "_stage1 | else a.level_r / if not a.allow_draft / if rehearsal is not None | call rehearsal_host",
+        "_stage1 | else a.level_r | call M.strict_json",
+        "_stage1 | else a.level_r / if not isinstance(roster, list) or not all((isinstance(s, dict) and isinstance(s.get('span_id'), str) for s in roster)) | raise F.LookInputError('roster: not a list of spans')",
+        "_stage1 | else a.level_r / if rehearsal is not None | call rehearsal_roster",
+        "_stage1 | else a.level_r | call load_pins",
+        "_stage1 | else a.level_r | call stage_custody",
+        "_stage1.sdir_of | unless sid in staged | call layout.span",
+        "_stage1.sdir_of | unless sid in staged / except M.ManifestError | raise F.LookInputError('layout: ' + '; '.join(error.problems))",
+        "_stage1 | else a.level_r | call admit_custody",
+        "_stage1 | else a.level_r | call M.strict_json",
+        "_stage1 | else a.level_r / if ruled and (not a.allow_draft) | call superseded_source",
+        "_stage1 | else a.level_r / else rehearsal is not None | call layout.file",
+        "_stage1 | else a.level_r | call stage1_preflight",
+        "_stage1 | else a.level_r | call _guard_loaded",
+        "_stage1 | else a.level_r / else a.allow_draft | call M.ledger_gate",
+        "_stage1 | else a.level_r | call stage1_protected",
+        "_stage1 | after a.level_r / if a.allow_draft and look_input.get('synthetic') is not True | raise F.LookInputError('--allow-draft runs on synthetic input only (Mythos N2)')",
+        "_stage1 | after a.level_r | call F.stage1",
+        "_stage1 | after a.level_r | call code_hashes",
+        "_stage1 | after a.level_r | call _stamp",
+        "finish_stage1 | - | call M.stage1_problems",
+        "finish_stage1 | - | call sha256_file",
+        "finish_stage1 | if probs | raise owned_refusal(\"stage 1's own output: \" + '; '.join(probs))",
+        "finish_stage1 | if getattr(a, 'look_input_bytes', None) is not None | call a.layout.create",
+        "finish_stage1 | - | call a.layout.create",
+        "finish_stage1 | - | call F.dump",
+        "finish_rehearsal | - | call M.stage1_problems",
+        "finish_rehearsal | - | call sha256_file",
+        "finish_rehearsal | if problems | raise owned_refusal(\"rehearsal stage 1's own output: \" + '; '.join(problems))",
+        "finish_rehearsal | - | call F.dump",
+        "finish_rehearsal | for (key, data) in files.items() | call write_rehearsal_file",
+        "finish_rehearsal | - | call release.sync_directory",
+        "finish_rehearsal | - | call release.dump",
+    )
+    # a parent site that is gone, and the sites here that replace it: the call at the same guards, and inside the
+    # called function the parent's check itself, at the guards listed (for a shared check: none, in every mode)
+    REPLACED = {
+        "_stage1 | else a.level_r / if not a.allow_draft | call M.require_inputs_committed": (
+            "_stage1 | else a.level_r / if not a.allow_draft | call stage1_authority",
+            "stage1_authority | - | call M.require_inputs_committed"),
+        "_stage1 | else a.level_r / if not a.allow_draft / if rehearsal is not None | call rehearsal_host": (
+            "_stage1 | else a.level_r / if not a.allow_draft | call stage1_authority",
+            "stage1_authority | if rehearsal is not None | call rehearsal_host"),
+        "_stage1 | else a.level_r / else a.allow_draft | call M.ledger_gate": (
+            "_stage1 | else a.level_r / else a.allow_draft | call stage1_exit_authority",
+            "stage1_exit_authority | - | call stage1_authority",
+            "stage1_authority | - | call M.ledger_gate"),
+    }
+    # spec S1: the one exit authority runs before both stages' writes in every non-draft mode, and also re-runs the
+    # rehearsal destination fence, or the campaign's receipt check, under the ledger as fetched then
+    REQUIRED = (
+        "finish_stage1 | if not a.allow_draft | call stage1_exit_authority",
+        "finish_rehearsal | - | call stage1_exit_authority",
+        "stage1_authority | if rehearsal is not None | call rehearsal_fence",
+        "stage1_authority | else rehearsal is not None | call layout.read",
+        "stage1_authority | else rehearsal is not None | call M.require_rules34_receipt",
+    )
+    HEAD_FUNCTIONS = FUNCTIONS + ("stage1_authority", "stage1_exit_authority")
+
+    def parent_available(self):
+        done = subprocess.run(["git", "-C", str(REPO), "cat-file", "-e", f"{self.PARENT}^{{commit}}"],
+                              capture_output=True)
+        if done.returncode == 0:
+            return True
+        if os.environ.get("CI"):
+            self.fail(f"the parity check needs the parent {self.PARENT[:9]} (a full-history checkout)")
+        return False
+
+    def parent_tree(self):
+        import tarfile
+        tree = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="pr971-parent-"))).resolve()
+        archive = subprocess.run(["git", "-C", str(REPO), "archive", "--format=tar", self.PARENT, "--",
+                                  *self.PARENT_FILES], capture_output=True, check=True).stdout
+        with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+            tar.extractall(tree, filter="data")
+        return tree
+
+    def replay(self, tree, case, report):
+        done = subprocess.run([sys.executable, "-I", "-B", str(REPO / "tests/cadence/look_parity_cases.py"),
+                               str(tree), case, str(report)], capture_output=True, text=True, timeout=900)
+        if done.returncode or not report.exists():
+            return {"error": f"replay exit {done.returncode}: {done.stderr.strip()[-800:]}"}
+        found = rj(report)
+        act = found["act"]
+        if act["exit"][-1] != 0 and not act["written"]:
+            found["outcome"] = "refused_no_write"
+        elif act["exit"][-1] == 0 and act["written"]:
+            found["outcome"] = "accepted"
+        else:
+            found["outcome"] = "mixed"
+        return found
+
+    def test_every_audit_reproducer_refuses_without_writing_where_the_parent_did(self):
+        """(a) Here every replay refuses for its reason and writes nothing; (b) every replay the parent refused
+        without a write is refused without a write here. Each control run succeeds on both trees."""
+        from concurrent.futures import ThreadPoolExecutor
+
+        trees = {"head": REPO}
+        if self.parent_available():
+            trees["parent"] = self.parent_tree()
+        reports = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="pr971-reports-")))
+        jobs = [(label, tree, case) for case in self.CASES for label, tree in trees.items()]
+        with ThreadPoolExecutor(max_workers=2) as pool:      # two generated looks at a time
+            results = dict(zip([(label, case) for label, _, case in jobs], pool.map(
+                lambda job: self.replay(job[1], job[2], reports / f"{job[0]}-{job[2]}.json"), jobs)))
+        table = {case: {label: results[(label, case)].get("outcome", "error") for label in trees}
+                 for case in self.CASES}
+        if os.environ.get("JW_PR971_PARITY_TABLE"):
+            Path(os.environ["JW_PR971_PARITY_TABLE"]).write_text(json.dumps(
+                {"table": table, "results": {f"{label}:{case}": value for (label, case), value in results.items()}},
+                indent=1, sort_keys=True) + "\n")
+        for case, (parent_outcome, reasons) in self.CASES.items():
+            with self.subTest(case=case):
+                head = results[("head", case)]
+                self.assertNotIn("error", head, head.get("error"))
+                for control in head["controls"]:
+                    self.assertTrue(all(code == 0 for code in control["exit"]), control)
+                self.assertEqual(head["outcome"], "refused_no_write", head["act"])                       # (a)
+                self.assertEqual(head["act"]["written"], [])
+                for reason in reasons:
+                    self.assertIn(reason, "\n".join(head["act"]["output"]))
+                if "parent" in trees:
+                    parent = results[("parent", case)]
+                    self.assertNotIn("error", parent, parent.get("error"))
+                    for control in parent["controls"]:
+                        self.assertTrue(all(code == 0 for code in control["exit"]), control)
+                    self.assertEqual(parent["outcome"], parent_outcome, parent["act"])
+                    if parent["outcome"] == "refused_no_write":
+                        self.assertEqual(head["outcome"], "refused_no_write", head["act"])               # (b)
+
+    def test_every_parent_refusal_site_survives_or_names_its_replacement(self):
+        """Every raise site and refusing call of the parent's _stage1, finish_stage1 and finish_rehearsal is still
+        here at the same guards, or is listed in REPLACED with the sites that replace it; no entry is stale; and the
+        exit authority runs at the preflight's exit and before every write."""
+        from collections import Counter
+
+        if self.parent_available():
+            source = subprocess.run(["git", "-C", str(REPO), "show", f"{self.PARENT}:scripts/cadence_look_run.py"],
+                                    capture_output=True, check=True).stdout.decode("utf-8")
+            self.assertEqual(tuple(site for site, _ in refusal_sites(source, self.FUNCTIONS)), self.PARENT_SITES)
+        found = refusal_sites(Path(R.__file__).read_text(encoding="utf-8"), self.HEAD_FUNCTIONS)
+        here = Counter(site for site, _ in found)
+        wanted = Counter(self.PARENT_SITES)
+        problems = [f"dropped with no named replacement: {site}" for site, count in wanted.items()
+                    if here[site] < count and site not in self.REPLACED]
+        for site, replacements in self.REPLACED.items():
+            if site not in wanted:
+                problems.append(f"REPLACED names a site the parent does not have: {site}")
+            if here[site]:
+                problems.append(f"stale REPLACED entry, the parent site is still here: {site}")
+            problems += [f"replacement missing: {r}" for r in replacements if r not in here]
+        problems += [f"required site missing: {site}" for site in self.REQUIRED if site not in here]
+        line = {}
+        for site, number in found:
+            line.setdefault(site, []).append(number)
+        exit_call = "_stage1 | else a.level_r / else a.allow_draft | call stage1_exit_authority"
+        order = [("_stage1 | else a.level_r | call stage1_preflight", exit_call),
+                 (exit_call, "_stage1 | else a.level_r | call stage1_protected"),
+                 ("finish_stage1 | if not a.allow_draft | call stage1_exit_authority",
+                  "finish_stage1 | if getattr(a, 'look_input_bytes', None) is not None | call a.layout.create"),
+                 ("finish_stage1 | if not a.allow_draft | call stage1_exit_authority",
+                  "finish_stage1 | - | call a.layout.create"),
+                 ("finish_rehearsal | - | call stage1_exit_authority",
+                  "finish_rehearsal | for (key, data) in files.items() | call write_rehearsal_file")]
+        for first, then in order:
+            if first in line and then in line and not max(line[first]) < min(line[then]):
+                problems.append(f"out of order: {first} must precede {then}")
+        self.assertEqual(problems, [])
+
+    def test_the_exit_authority_refuses_any_change_of_the_admitted_state(self):
+        """``stage1_exit_authority`` compares every key ``stage1_authority`` derives with the admitted state: a
+        change refuses (a breach after the first protected read); an identical state returns the fresh gate."""
+        import types
+
+        admitted = {"head": "1" * 40, "ref": "refs/remotes/origin/main", "manifest_sha256": "2" * 64,
+                    "row": {"look_id": F.LOOK_ID, "status": "committed", "verdicts_sha256": "3" * 64},
+                    "receipt_sha256": "4" * 64}
+        gate = {"commit": "1" * 40, "ref": "refs/remotes/origin/main", "ref_commit": "5" * 40}
+        run = types.SimpleNamespace(stage1_admitted=admitted)
+        with unittest.mock.patch.object(R, "stage1_authority", return_value=(dict(admitted), gate)):
+            self.assertIs(R.stage1_exit_authority(run, None, None), gate)
+        changes = {"head": "6" * 40, "manifest_sha256": "7" * 64, "row": {**admitted["row"], "status": "spent"},
+                   "receipt_sha256": "8" * 64, "destination": "/generated/elsewhere"}
+        for key, value in changes.items():
+            for protected in (False, True):
+                with self.subTest(key=key, protected=protected), \
+                        unittest.mock.patch.object(R, "stage1_authority",
+                                                   return_value=({**admitted, key: value}, gate)), \
+                        unittest.mock.patch.dict(R._PHASE, {"protected": protected}):
+                    with self.assertRaises(F.LookInputError) as raised:
+                        R.stage1_exit_authority(run, None, None)
+                    self.assertIn(key, str(raised.exception))
+                    self.assertIs(type(raised.exception) is R.PreflightBreach, protected)
 
 
 class Stage1Custody(unittest.TestCase):

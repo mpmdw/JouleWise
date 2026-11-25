@@ -38,6 +38,7 @@ import re
 import stat
 import subprocess
 import sys
+import time
 from datetime import date
 
 from joulewise.cadence_looks import custody_pins, interim_release as release, schema_check
@@ -1185,6 +1186,7 @@ def inputs_final_problems(repo, doc, run_state_text, roster_ids=None):
 LOOK_FILES = {
     "roster": "roster.json",                        # validate --span-ledger --roster-out
     "rules_3_4": "rules_3_4.json",                  # inclusion_34.py's verdict file
+    "rules_3_4_receipt": "rules_3_4.receipt.json",  # the post-commit stock producer's receipt (RL-217 E.1)
     "stage1": "stage1.json",                        # stage 1's output; stage 2's input
     "level_r": "level_r.json",                      # stage 1's level-R input, written beside its output
     "superseded_stage1": "superseded_stage1.json",  # a ruled rerun's kept stage-1 file (RL-173 E.1 item 4)
@@ -1282,7 +1284,7 @@ class LookLayout:
         """A fixed input's bytes: a regular file, opened without following a link."""
         path = self.file(key)
         try:
-            descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))
         except FileNotFoundError:
             raise ManifestError([f"{LOOK_FILES[key]}: absent from the look's directory"]) from None
         except OSError:
@@ -1692,6 +1694,25 @@ def shared_ref(repo, ledger_ref=None):
     return full, sha.decode().strip()
 
 
+REHEARSAL_BRANCH = "align/2026-11-14-look-manifest"
+
+
+def rehearsal_refs(repo):
+    """Return the ledger ref followed by any other ref whose registered roots fence the rehearsal."""
+    main = PUBLIC_RUN_STATE_REF
+    on_main, _, _ = _git(repo, "merge-base", "--is-ancestor", "HEAD", main)
+    remote = f"refs/heads/{REHEARSAL_BRANCH}"
+    tracking = f"refs/remotes/origin/{REHEARSAL_BRANCH}"
+    rc, raw, _ = _git(repo, "ls-remote", "--exit-code", "origin", remote)
+    if rc == 2 and on_main == 0:
+        return (main,)
+    if not rc:
+        _, sha = shared_ref(repo, tracking)
+        if raw.split() == [sha.encode(), remote.encode()]:
+            return (main, tracking) if on_main == 0 else (tracking, main)
+    raise ManifestError(["rehearsal requires a fresh checkout of the shared branch"])
+
+
 def ledger_gate(repo, ledger_ref=None):
     """What satisfied the committed-ledger gate, for a stage's output: {commit, ref, ref_commit}."""
     head, ref, _ = committed_ledger(repo, ledger_ref=ledger_ref)
@@ -1924,6 +1945,73 @@ def stage1_history(repo, look_id, head):
     return seen
 
 
+RULES34_PRODUCER = "joulewise/cadence_looks/inclusion_34.py"
+RULES34_RECEIPT_SCHEMA = "joulewise.cadence_looks.rules_3_4_receipt.v2"
+
+
+def rules34_input_digests(pins):
+    """The verified inventory's names and digests, without sizes or any source values."""
+    return {f"{span['span_id']}/{entry['path']}": entry["sha256"]
+            for span in pins["spans"] for entry in span["files"]}
+
+
+def _rules34_receipt_binding(repo, gate, row, producer_commit):
+    """The commit that installed this exact row on main, even when unrelated main commits follow it."""
+    main = gate["ref_commit"]
+    rc, history, _ = _git(repo, "log", "--first-parent", "--format=%H %ct", main, "--", LOOK_LEDGER_PATH)
+    ledger_commit = None
+    if rc == 0:
+        for line in history.decode("ascii").splitlines():
+            commit, timestamp = line.split()
+            status, raw, _ = _git(repo, "show", f"{commit}:{LOOK_LEDGER_PATH}")
+            if status or row not in strict_json(raw)["looks"]:
+                break
+            ledger_commit, wall_floor_ns = commit, int(timestamp) * 1_000_000_000
+    if ledger_commit is None:
+        raise ManifestError(["rules-3-4 receipt: cannot identify this LOOKS.json row's main commit"])
+    if (not isinstance(producer_commit, str) or not re.fullmatch(r"[0-9a-f]{40}", producer_commit)
+            or _git(repo, "merge-base", "--is-ancestor", ledger_commit, producer_commit)[0]
+            or _git(repo, "merge-base", "--is-ancestor", producer_commit, main)[0]):
+        raise ManifestError(["rules-3-4 receipt: producer commit must contain the ledger row on main"])
+    rc, raw, _ = _git(repo, "show", f"{producer_commit}:{RULES34_PRODUCER}")
+    if rc or hashlib.sha256(raw).hexdigest() != sha256_file(Path(repo) / RULES34_PRODUCER):
+        raise ManifestError(["rules-3-4 receipt: producer code differs from the pinned producer at its commit"])
+    return {"schema": RULES34_RECEIPT_SCHEMA, "look_id": row["look_id"], "producer_commit": producer_commit,
+            "ledger_commit": ledger_commit, "manifest_sha256": row["sha256"], "roster_sha256": row["roster_sha256"],
+            "verdicts_sha256": row["verdicts_sha256"]}, wall_floor_ns
+
+
+def rules34_receipt(repo, gate, row, verdicts_sha256, pins):
+    """Stamp the stock result after verifying the campaign row and computing the verdict from scratch."""
+    if verdicts_sha256 != row["verdicts_sha256"]:
+        raise ManifestError(["stock rules-3-4 verdict sha256 differs from the committed rehearsal hash"])
+    binding, wall_floor_ns = _rules34_receipt_binding(repo, gate, row, gate["commit"])
+    wall_time_ns, monotonic_ns = time.time_ns(), time.monotonic_ns()
+    if wall_time_ns <= wall_floor_ns or monotonic_ns <= 0:
+        raise ManifestError(["rules-3-4 receipt: producer clocks do not establish a post-commit run"])
+    return {**binding, "wall_time_ns": wall_time_ns, "monotonic_ns": monotonic_ns,
+            "input_pins": rules34_input_digests(pins)}
+
+
+def require_rules34_receipt(repo, gate, row, verdicts_sha256, pins, raw):
+    """Admit only a closed stock receipt for the exact campaign row and the verdict bytes already read."""
+    receipt = strict_json(raw)
+    clocks = {"wall_time_ns", "monotonic_ns"}
+    keys = {"schema", "look_id", "producer_commit", "ledger_commit", "manifest_sha256",
+            "roster_sha256", "verdicts_sha256", "input_pins"} | clocks
+    if type(receipt) is not dict or receipt.keys() != keys or any(type(receipt[key]) is not int for key in clocks):
+        raise ManifestError(["rules-3-4 receipt: invalid closed schema"])
+    if receipt["verdicts_sha256"] != verdicts_sha256:
+        raise ManifestError(["rules-3-4 receipt: verdict sha256 differs from rules_3_4.json"])
+    if receipt["input_pins"] != rules34_input_digests(pins):
+        raise ManifestError(["rules-3-4 receipt: input pins differ from the committed manifest"])
+    binding, wall_floor_ns = _rules34_receipt_binding(repo, gate, row, receipt["producer_commit"])
+    if any(receipt[key] != value for key, value in binding.items()):
+        raise ManifestError(["rules-3-4 receipt: does not name the current committed LOOKS.json row"])
+    if receipt["wall_time_ns"] <= wall_floor_ns or receipt["monotonic_ns"] <= 0:
+        raise ManifestError(["rules-3-4 receipt: producer clocks do not establish a post-commit run"])
+
+
 def require_stage1_committed(repo, look_id, stage1_sha256, *, stage1_doc, ledger_ref=None, for_execution=False):
     """Refuse unless the committed LOOKS.json (``committed_ledger``) names, for this look: the manifest as committed
     at HEAD, at status stage1_committed or later; this stage-1 file's sha256; and as roster_sha256 the roster hash
@@ -1980,12 +2068,15 @@ def require_stage1_committed(repo, look_id, stage1_sha256, *, stage1_doc, ledger
     return (head, row) if for_execution else row
 
 
-def require_inputs_committed(repo, look_id, manifest_sha256, *, roster_sha256, verdicts_sha256, ledger_ref=None,
+def require_inputs_committed(repo, look_id, manifest_sha256, *, roster_sha256, verdicts_sha256=None, ledger_ref=None,
                              ruled_exclusions=None, draft_rehearsal=False):
     """Stage 1's gate on its two inputs (Mythos round-3 N8): the committed LOOKS.json row for this look names this
     manifest at status committed or later, and the roster (``validate --roster-out``) and the rules-3-4 verdict file
     (``inclusion_34.py``) stage 1 was given, by sha256. The lead commits both hashes in the row before stage 1
-    runs. A pre-pass rehearsal accepts the same hash commitments on the checked-in draft row. Returns the row."""
+    runs. A pre-pass rehearsal accepts the same hash commitments on the checked-in draft row. The draft verdict
+    producer checks the roster before it has a verdict hash to check. Returns the row."""
+    if verdicts_sha256 is None and not draft_rehearsal:
+        raise ManifestError(["the rules-3-4 verdict sha256 is required"])
     head, _, ledger = committed_ledger(repo, ledger_ref=ledger_ref)
     row = _look_row(ledger, look_id)
     problems = []
@@ -2033,6 +2124,8 @@ def require_inputs_committed(repo, look_id, manifest_sha256, *, roster_sha256, v
         problems.append(f"LOOKS.json lists this look as {row.get('status')!r}, not committed")
     for field, given, what in (("roster_sha256", roster_sha256, "roster"),
                                ("verdicts_sha256", verdicts_sha256, "rules-3-4 verdict file")):
+        if field == "verdicts_sha256" and given is None:
+            continue
         if row.get(field) is None:
             problems.append(f"LOOKS.json {look_id} has no {field}: commit the {what}'s sha256 before stage 1")
         elif row.get(field) != given:

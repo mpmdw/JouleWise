@@ -296,15 +296,47 @@ operations use public records only. See the six private names in the
 
 ## 7. Stage-1 rehearsal for the manifest pass
 
-Run `python3 -I -B scripts/cadence_look_run.py stage1 --rehearsal NEW_DIRECTORY`
-from a fresh detached checkout of the lead's input-bound commit. Before
-the commit reaches main, the rehearsal reads the committed draft row
-from `origin/align/2026-11-14-look-manifest` and the offload Check items
-from `origin/main`. It fetches main like campaign stage 1 and refuses
-if the fetch fails. It also checks that the rehearsal branch matches
-origin. The draft row must
-bind the manifest, roster and rules 3/4 verdict hashes. The manifest
-registers the custody root and carries the pin list for the full roster.
+The lead runs both rehearsal commands on the registered campaign host,
+outside a seat, from a fresh detached checkout of the shared branch.
+The draft row binds the manifest and roster hashes and names the host.
+The manifest registers the custody root and pins the full roster. Both
+commands fetch `origin/main` for the offload Check items and check the
+shared branch against origin.
+
+1. Run `python3 -I -B joulewise/cadence_looks/inclusion_34.py --rehearsal NEW_DIRECTORY`.
+   It verifies every roster span, runs the campaign rules-3/4 evaluator and
+   writes `rules_3_4.json` in the new directory. Stdout gives its basename
+   and sha256. Bind that sha256 in the draft ledger row on the shared branch.
+2. Check out that commit and run
+   `python3 -I -B scripts/cadence_look_run.py stage1 --rehearsal RULES_DIRECTORY`
+   with the producer's directory. Stage 1 verifies the verdict hash against
+   the draft ledger before it reads the selected spans.
+3. Commit the manifest and then bind the registered roster and rehearsal
+   verdict hashes in the committed row on main with the `row` command. Once
+   that row is on main, run the stock producer with the registered manifest,
+   roster, custody root and `rules_3_4.json` destination. Stock reads the
+   registered spans and verifies their complete committed pin inventory
+   before judgment. Each stream it parses is checked again on open. A
+   different stock hash refuses before publication and goes to the research
+   lead.
+4. A successful stock run writes `rules_3_4.receipt.json` beside its verdict.
+   The receipt records the producer commit, the first-parent main commit
+   that installed the current look row, the manifest and roster hashes,
+   the verdict hash, the verified input names and hashes and the producer's
+   wall and monotonic clock readings. Campaign stage 1 checks the receipt
+   against the verdict, committed row and manifest pins before admitting
+   spans. Rehearsal stage 1 uses the draft verdict without a receipt. If
+   the campaign row changes before stage 1, the stock run must produce a
+   fresh receipt for that row.
+
+Every stage 1 that is not a draft run, campaign or rehearsal, derives its
+admission again at the end of preflight, before the first protected read,
+and immediately before its writes. It refuses any change and writes
+nothing. Each derivation checks the ledger gate and the committed row for
+this manifest, roster, verdict and ruled exclusions. A campaign run also
+checks the stock receipt and its input pins. A rehearsal also checks the
+registered host and the destination fence under the ledgers as fetched
+then.
 
 Stage 1 selects the range in `stages.stage1.dry_run`, verifies the
 selected spans against the pins and uses the campaign's stage-1 time
@@ -315,9 +347,12 @@ registered raw custody copy.
 Use an absolute destination with an existing parent and symlink-free
 components. It must be disjoint from the checkout and from the physical
 roots registered in either the rehearsal branch or fetched main.
-Those roots cover the campaign output and span directories. Stage 1
-creates the destination exclusively with private
-permissions and writes `level_r.json` and `stage1.json` there. The
+Those roots cover the campaign output and span directories. A fetch during
+rehearsal stage 1 that registers a root containing the destination makes
+the stage refuse before it writes. The producer
+creates the directory exclusively with private permissions. Stage 1 takes
+the directory with only the verdict in it and writes `level_r.json` and
+`stage1.json` there. The
 stage-1 artifact carries a rehearsal marker that the campaign schema
 refuses. Successful stdout gives the lead the selected block names, the
 manifest and file hashes, the five public tripwire words and
