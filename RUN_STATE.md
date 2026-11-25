@@ -1052,6 +1052,39 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+593. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-25 10:56 PST: RL-217 A.5 ADDENDUM, the fourteen lm-interim-01 inventories in full**
+
+```pointer
+owner: lead
+wait: none
+deadline: 2026-11-28T12:00:00-08:00
+on_early_or_refused: a correct-check or check-inputs refusal on any span returns that span to the research lead as HELD (RL-217 A.4)
+next_observable: the lm-interim-01 input-bind PR on align/2026-11-14-look-manifest whose pin list names this item as every span's check_item and passes check-inputs
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795632975, "number": 593, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **RL-217 A.5 addendum** (audit branch `0a1433996`). Each lm-interim-01 roster span's inventory is the sums file written at its close and fixed by the record of that close that RL-217 A names (rows A.2 and A.3). This item prints each in full, one per span, for `correct-check` and the pin list. Names and hashes only.
+- **Spans** (14):
+  - **dev-01-s01** (attempt `cq-dev-01-s01-a1`, close RS318, 122 files): offload manifest `af17fdc998719ac440427d14891fd2a05a352e8d6716ae1f1ac4ea6af20f53ba`. Fixed by RS319's 64 hex.
+  - **dev-01-s03** (attempt `cq-dev-01-s03-a1`, close RS326, 156 files): offload manifest `4e4093e452793aabc088dc158e6e9b56984ccd451302bbdfe630567b8ade878b`. Fixed by RL-217 A.3 branch 2, class (c) 156/156 (RS591).
+  - **dev-01-s04** (attempt `cq-dev-01-s04-a1`, close RS333, 222 files): offload manifest `77dbfab97f6dbbe9774f1ad743ffc47aab278a550b171820b5be94484e462d4b`. Fixed by its marker (RS582) and RS334.
+  - **dev-02-s02** (attempt `cq-dev-02-s02-a1`, close RS349, 226 files): offload manifest `0af51efee1b638bc6c569aa886c957acf6fdf4b2a4f19533fd494ec73ab31057`. Fixed by RS350 (the earlier inventory binds; sets equal to the later one).
+  - **dev-02-s03** (attempt `cq-dev-02-s03-a1`, close RS361, 256 files): offload manifest `5d02993731f4f3a68c68f048342d4a70772b6c7d77de5c96002adf96298de00b`. Fixed by RS362.
+  - **dev-03-s01** (attempt `cq-dev-03-s01-a1`, close RS363, 123 files): offload manifest `0489daf073bc8b6906e4e06d664517bd9158c9925f3529fb365f9cfa2cc441eb`. Fixed by its marker, equal (RS591).
+  - **dev-03-s02** (attempt `cq-dev-03-s02-a1`, close RS370, 324 files): offload manifest `284f653143daeef63571517054ba0bab9dee091f43f02a5364d719fe7d708b30`. Fixed by its marker, equal (RS591).
+  - **dev-04-s01** (attempt `cq-dev-04-s01-a1`, close RS380, 255 files): offload manifest `f8508272caf332bcddb0ac6798a4e142c251be40b923441012d69206d3d15cfc`. Fixed by the archive of its close (RS459) and RS444.
+  - **dev-04-s02** (attempt `cq-dev-04-s02-a1`, close RS382, 221 files): offload manifest `e60459cd7887ae14ba2e37070782f643befa0562e43308d1f9012313a7a43dcc`. Fixed by the archive of its close (RS459).
+  - **dev-05-s01** (attempt `cq-dev-05-s01-a2`, close RS436, 252 files): offload manifest `35c11dfe778bdd2bf750055bad9d9eca577448e35c01f3fef39a965fb4be0858`. Fixed by RS436.
+  - **dev-05-s02** (attempt `cq-dev-05-s02-a1`, close RS437, 224 files): offload manifest `c6ab586e5146d739046f29ff2da16b830e2d5c718c0050c8790341dbcb7f43f2`. Fixed by its marker, equal (RS591).
+  - **hp-01-s01** (attempt `cq-hp-01-s01-a1`, close RS337, 124 files): offload manifest `ae311e185d396f4b9d219e1015cf94923fe1098712d2fb7d9ee94fdf5166600b`. Fixed by its marker and RS338.
+  - **hp-01-s02** (attempt `cq-hp-01-s02-a1`, close RS340, 158 files): offload manifest `02d997efd17bc9bc80c2480dafa5a194c8c7ac484dcabd916c757e4f68a048ba`. Fixed by its marker and RS341.
+  - **hp-01-s03** (attempt `cq-hp-01-s03-a1`, close RS343, 192 files): offload manifest `042585323ba9eac4d8ff70f6d5a6507a8cce7e00c8d6bee5798cf57933cd2de9`. Fixed by its marker and RS344.
+- **Statement for the blind record (RL-217 A.5):** "No Check item of 14 to 18 November printed its span's inventory digest in full. Each inventory is a sums file written at the span's close, fixed by the record of that close that RL-217 A names."
+- **dev-05-s01:** attempt a2 is the roster span. Attempt a1 captured nothing and gets no pin.
+
 592. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-25 10:52 PST: ITEM 576 ANSWERS. Restore only the twelve sessions' bindings and packs/bytes without withheld/, then re-run 576 at the next boundary; RL-217 A results recorded**
 
 ```pointer

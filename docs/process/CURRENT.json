@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "magistrate RUN_STATE item with item 576's results (both name files' membership verdict, the driver exit and verdict, the two cmp results), then item 588's cleanup and free space",
+  "next_observable": "the lm-interim-01 input-bind PR on align/2026-11-14-look-manifest whose pin list names this item as every span's check_item and passes check-inputs",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 593,
+      "owner": "lead",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 592,
@@ -273,13 +279,13 @@
       "status": "ISSUED"
     }
   ],
-  "owner": "magistrate",
+  "owner": "lead",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "592",
+  "source_item": "593",
   "source_item_heading_date": "2026-11-25",
   "wait": {
-    "deadline_epoch_s": 1795809600,
+    "deadline_epoch_s": 1795896000,
     "observable": "none",
-    "on_early_or_refused": "anything outside the two restore rules below, a step-1 listing that still differs from the runbook, any refusal, or a cmp difference stops the run; send the lead the names or exit codes and continue the ladder"
+    "on_early_or_refused": "a correct-check or check-inputs refusal on any span returns that span to the research lead as HELD (RL-217 A.4)"
   }
 }
