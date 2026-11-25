@@ -1340,9 +1340,11 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
     def test_window_flags_proven_cpu_from_worker_seen_only_at_an_interior_snapshot(self):
         from datetime import datetime, timezone
 
-        # The 30 s table proves absence for both printed birth times.
-        for birth, cpu, flagged in ((35, "0:01.80", [45, 60]),
-                                    (20, "0:01.80", [45, 60]),
+        # The 30 s table proves absence for both printed birth times. Lead
+        # S2: each closing also judges the pair from 15 s earlier, which
+        # holds the same lifetime, so each closing flags twice.
+        for birth, cpu, flagged in ((35, "0:01.80", [45, 45, 60, 60]),
+                                    (20, "0:01.80", [45, 45, 60, 60]),
                                     (35, "0:00.50", [])):
             with self.subTest(birth=birth, cpu=cpu), tempfile.TemporaryDirectory() as tmp:
                 guard, clock, advance, _ = self.admission()
@@ -3636,13 +3638,19 @@ class R0FinalVerdictTest(unittest.TestCase):
                             continue
                         self.assertEqual((result["rc"], result["published"]), (2, False), result)
                         if load == "split":
-                            proven = [f for f in model.guard.contention_flags if f.get("kind") == "proven_30s"]
-                            self.assertTrue(proven, model.guard.contention_flags)
-                            self.assertIn("3.06 CPU-s after rounding from 46.000 s to "
-                                          f"{94.01 if timed else 94.0:.3f} s: at least 1.530 CPU-s in one of "
-                                          "2 windows of at most 30 s", proven[0]["flag"])
-                            if mode == "host":
-                                self.assertIn("at least 1.530 CPU-s in one of 2 windows", result["reason"])
+                            # Lead S2: the 48 s series pair (46, 94) is judged too.
+                            # Its rate rule, 3.07 CPU-s / 48 s, flags at 94 s first,
+                            # so P1 skips the process there. P1 still proves it.
+                            mid = 0.005 if timed else 0
+                            pairs = [(round(f["interval"]["start_monotonic_s"], 6),
+                                      round(f["interval"]["end_monotonic_s"], 6)) for f in model.guard.contention_flags]
+                            self.assertIn((46 + mid, 94 + mid), pairs, model.guard.contention_flags)
+                            from joulewise.align import r0_host
+                            history, = [h for (pid, _), h in model.guard._readings.items() if pid == fixture.PID]
+                            closing, = [r for r in history if r[0] == 94 * ns]
+                            proof = r0_host._proven_pair([(s, m, lower) for s, _, m, lower, _ in history if m < closing[2]],
+                                                         closing[1], closing[4])
+                            self.assertEqual((proof[0], proof[2], proof[3]), (46 * ns, 306, 2), history)
 
     def test_narrow_p1_intermittent_identity_is_judged_over_the_whole_history(self):
         # Narrow check of 29fa45432 (series_replay.py). A "python3" process
@@ -3702,6 +3710,13 @@ class R0FinalVerdictTest(unittest.TestCase):
                         self.assertIn(110 * ns, model.named_at)
                         self.assertFalse([t for t in model.named_at if 33 * ns <= t < 110 * ns])
                     self.assertEqual((result["rc"], result["published"]), (2, False), result)
+                    if always:
+                        # Lead S2: the always-named control's 48 s series pair
+                        # (46, 94) is judged too, and its rate rule flags first.
+                        pairs = [(round(f["interval"]["start_monotonic_s"], 6),
+                                  round(f["interval"]["end_monotonic_s"], 6)) for f in model.guard.contention_flags]
+                        self.assertIn((46.005, 94.005), pairs, model.guard.contention_flags)
+                        continue
                     proven = [f["flag"] for f in model.guard.contention_flags if f.get("kind") == "proven_30s"]
                     self.assertTrue(any("3.06 CPU-s after rounding from 46.000 s to 94.010 s: at least 1.530 CPU-s "
                                         "in one of 2 windows" in flag for flag in proven), model.guard.contention_flags)
@@ -3769,6 +3784,14 @@ class R0FinalVerdictTest(unittest.TestCase):
                                                  result)
                                 continue
                             self.assertEqual((result["rc"], result["published"]), (2, False), result)
+                            if tick94:
+                                # Lead S2: the 48 s series pair (46, 94) is judged
+                                # too, and its rate rule flags first, so P1 skips it.
+                                pairs = [(round(f["interval"]["start_monotonic_s"], 6),
+                                          round(f["interval"]["end_monotonic_s"], 6))
+                                         for f in model.guard.contention_flags]
+                                self.assertIn((round(46 + read_ms / 2000, 6), round(94 + read_ms / 2000, 6)), pairs)
+                                continue
                             proven = [f["flag"] for f in model.guard.contention_flags if f.get("kind") == "proven_30s"]
                             self.assertTrue(any(f"3.06 CPU-s after rounding from 46.000 s to {94 + read_ms / 1000:.3f} s: "
                                                 "at least 1.530 CPU-s in one of 2 windows" in flag for flag in proven),
@@ -4300,9 +4323,11 @@ class R0AccountingTimezoneTest(unittest.TestCase):
         return json.loads(output)
 
     def test_repeated_hour_report_and_inventory_match_utc(self):
-        expected = {"quiet": [0, True, 0], "worker_180": [2, False, 3], "worker_225": [2, False, 3],
-                    "resident_180": [2, False, 3], "terminal_180": [2, False, 1],
-                    "second_live": [2, False, 3], "local-hour": [2, False, 3]}
+        # Lead S2: each closing also judges the pair from the opening before
+        # its newest one, so every contended case has twice the flags.
+        expected = {"quiet": [0, True, 0], "worker_180": [2, False, 6], "worker_225": [2, False, 6],
+                    "resident_180": [2, False, 6], "terminal_180": [2, False, 2],
+                    "second_live": [2, False, 6], "local-hour": [2, False, 6]}
         for zone, utc in (("America/Los_Angeles", "2026-11-01T09:15:00+00:00"),
                           ("America/New_York", "2026-11-01T06:15:00+00:00"),
                           ("Australia/Lord_Howe", "2026-04-04T15:15:00+00:00")):
@@ -4515,7 +4540,9 @@ class R0ProcessIdentityTest(unittest.TestCase):
                 self.assertIn("0:01.80 python3", model.log[1][2])
                 self.assert_withheld(result)
                 windows = [(start, end) for start, end, pid, _ in result["flags"] if pid == fixture.PID]
-                self.assertEqual(windows, [(15.0, 45.015), (30.0, 60.0), (30.0, 65.0)], result)
+                # Lead S2: each closing also judges the pair from 15 s earlier.
+                self.assertEqual(windows, [(15.0, 45.015), (0.0, 45.015), (30.0, 60.0), (15.0, 60.0),
+                                           (30.0, 65.0), (15.0, 65.0)], result)
                 self.assertEqual(len({birth for *_, birth in result["flags"]}), 1)
                 self.assertIn((15.0, 45.015), result["report_intervals"])
                 results[name] = result
@@ -5083,8 +5110,9 @@ class R0QuietIntervalTest(unittest.TestCase):
         # TIME quanta), not 30: the window slides one snapshot at a time.
         opening = guard.receipts[-1]["cpu_interval"]["start_monotonic_s"]
         self.assertEqual(opening, 30.1)
-        # History before the newest opening is pruned; the guard keeps 3.
-        self.assertEqual(len(guard._snapshots), 3)
+        # History more than 30 s before the newest opening is pruned. Lead
+        # S2 keeps the openings a later pair can need: the guard keeps 5.
+        self.assertEqual(len(guard._snapshots), 5)
         self.assertEqual(len(calls), 6)  # 3 admission + 3 daemon
 
     def test_reused_pid_counts_new_identity_from_zero(self):
@@ -5181,7 +5209,7 @@ class R0QuietIntervalTest(unittest.TestCase):
         evidence, = interval["exited_over_limit"]
         self.assertIn("opening counter", evidence["basis"])
         self.assertAlmostEqual(evidence["cpu_s_per_s"], 0.07)
-        self.assertEqual(guard.contention_flags[-1]["busy"], [evidence])
+        self.assertIn([evidence], [flag["busy"] for flag in guard.contention_flags])
 
     def test_lower_opening_counter_cannot_recount_cpu_in_a_later_window(self):
         snapshots = [cpu_table((42, OLD_START, cpu, "mdworker_shared"))
@@ -5312,7 +5340,7 @@ class R0QuietIntervalTest(unittest.TestCase):
         guard.check(force=True)
         self.assertIsNone(guard.failure)
         rule = [f["flag"] for f in guard.contention_flags if f.get("kind") is None]
-        self.assertIn("42 mdworker_shared 0.1 CPU-s/s", rule[-1], rule)
+        self.assertTrue(any("42 mdworker_shared 0.1 CPU-s/s" in flag for flag in rule), rule)
         self.assertRegex(guard.receipts[-1]["contention_flag"], "42 mdworker_shared 0.1 CPU-s/s")
         # Lead P1 also proves the burst at the 330 s read: 11.99 CPU-s after
         # rounding since the 120 s read, so one of seven 30 s windows held

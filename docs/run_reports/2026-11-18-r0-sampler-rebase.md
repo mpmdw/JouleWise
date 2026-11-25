@@ -590,3 +590,58 @@ Local checks used Python 3.13 under `taskpolicy -c utility`, `TZ=UTC` and synthe
 - `tests.align.test_r0_checks` and `tests.hazards.test_contention`: 86 tests passed with three live skips.
 
 Frozen v3 and the census fault matrix run in hosted CI. Frozen v3 is byte-identical at SHA-256 `afd360c29d390f7d39400e1363a25add5c13ace71bca55c80d11ec0ceb4e5009`. `RUN_STATE.md` and `TASK_QUEUE.md` retain their PR-base blobs.
+
+## 2026-11-25 monotone verdict for PR #824 (lead S1–S4)
+
+Astra's narrow check at `0870757358e117bbf4fcf0268e61880d6d9cb441` was BLOCK. In `admission_flip.py`, a resident worker uses 1.56 CPU-s within 29.78 s. A forced admission at 61 s judges the admitted L3 window (30, 61) at 0.0503 CPU-s/s, and both modes withhold. One more forced admission at 31 s moves that window to (31, 61) at 1.46 CPU-s / 30 s, and both modes publish. Every daemon window stays the same. I replayed it on this clone at `08707573` and on a worktree at `29fa45432`, importing each checkout's own modules: both modes publish with the extra read at both heads.
+
+**S1–S2, every judgement uses every pair.** The flip came from the window choice: each closing read judged only the newest opening at least 30 s back.
+
+- **The pairs judged.** Every daemon or admission read that closes a window is now also paired with every earlier opening less than 30 s before that window's own (`QuietGuard._judge_pairs`). Each pair goes through the same rule as the window: `_judge_cpu_interval`, with admitted endpoints for admission pairs. Together with the window, those are the pairs that no read splits into two parts of at least 30 s.
+- **Why that covers every pair.** A longer pair contains such a read, and a rate above the limit over the whole puts at least one part above it. So an added reading leaves every judged pair judged, or splits it into two judged ones.
+- **Retention.** Retention keeps the openings these pairs need: 30 s more history than before.
+- **What the extra pairs never do.** They add flags only. They never refuse as stalled and never move the L3 window, so L3 parity and the frozen `judged_windows` are unchanged. Their receipts go in `pair_windows`.
+- **P1.** P1 now also runs over every pair of each in-scope process's history at each admission, not only at the final verdict.
+- **The admission_flip case.** At 61 s the (30, 61) pair is still judged when a read at 31 s exists, so both modes withhold.
+
+**S3, tests.**
+
+- **Property test.** `test_lead_s_an_extra_reading_never_turns_a_withhold_into_a_publication` is seeded (20261125) and runs 2,200 cases, 1,100 per mode. Each case draws a true CPU curve: a resident, a newcomer, or a transient that exits. It also draws daemon gaps of 4–19 s, up to three forced admissions, and 0 or 10 ms accounting reads. Each case runs twice, the second time with one extra forced admission or daemon tick at a random instant. Some cases have the narrow check's shape. The test requires the second run to withhold whenever the first does.
+- **Property test result.** With the fix, 1,749 first runs withhold and 451 publish. The red commit `f41fd754` holds the tests alone. On `08707573`'s code the property test fails 8 cases: 4 extra daemon ticks in host mode and 4 extra admissions in inventory mode, all residents. With the fix it fails none.
+- **admission_flip.** `test_lead_s_admission_flip_an_extra_admission_never_publishes` ports `admission_flip.py`, in both modes, with and without the 31 s read. Both withhold with the (30, 61) flag. On `08707573` the two extra-read cases fail.
+- **mixed_read.** `mixed_read.py` stays covered by `test_lead_r1_admission_reading_is_withhold_evidence`. Its replay withholds in all four cases.
+- **Updated assertions.** Other tests asserted which flag reports first, the number of flags, the last flag, or the number of retained samples. Those assertions now follow the extra pairs; no test's verdict changed:
+  - the timezone flag counts;
+  - the 30 s-pruning count, now 5;
+  - the exited-worker windows;
+  - the interior-snapshot flags;
+  - the 300 s caller-gap and exit-delta flags.
+- **P1-proof tests.** In the r5 pigeonhole replay, the always-named Q1 control and the R1 tick-at-94 s cases, the 48 s series pair (46, 94) now flags first at 0.064 CPU-s/s, so P1 skips that process there. The r5 test still checks P1's bound (3.06 CPU-s, two windows) directly with `_proven_pair`.
+
+**S4, unchanged.** K1–K5, P1, Q1–Q3 and R1–R3 behave as before.
+
+- **1.49 CPU-s controls.** Astra's `stable_controls.py`, run against this clone, counts 460 stable, non-stalled 1.49 CPU-s controls, and all 460 publish: 400 always, 16 late, 16 middle, 16 never, 12 admission.
+- **Sweep.** The sweep's 7,080 runs pass.
+- **Tight spans, tried and dropped.** I also tried judging each pair over its shortest span: from the end of the opening read to the start of the closing read. That makes the split exact. It also withheld the 1.49 CPU-s control in `test_audit_r3_wall_gain_after_a_birth_is_listed_keeps_its_opening` whose closing read lasts 0.5 s (149 cs over 29.75 s), so I dropped it. P1 was not loosened.
+
+**KNOWN LIMITATION R0-RATE** reaches the extra pairs, still withhold-only. A contaminant averaging more than 0.05 CPU-s/s over any judged pair of reads at least 30 s apart, or over a newcomer's lifetime within one, withholds. At the 15 s cadence that includes a 45 s pair per closing.
+
+**Not monotone by design: the stall rule.** It is coverage, not evidence: a daemon read inside a gap of more than 50 s lifts that refusal. Admission reads cannot, as Astra's `admission_gap.py` shows. The property test's daemon gaps stay under 20 s, so the stall rule never decides one of its cases.
+
+**NEEDS_SPEC, not patched: reads that take time.** The admitted L3 lifetime rule charges a window from its opening read's start to its closing read's end. If a read splits a pair, both parts include that read's duration. So the two parts' spans exceed the whole pair's by that duration.
+
+- **Who is exposed.** A transient or newcomer whose rate is within one read's duration of the 0.05 bar (0.05 cs for a 10 ms read). The case also needs the process's lifetime to be judged only in admission windows of 60 s or more.
+- **What can happen.** An extra admission there can still publish.
+- **Example.** Parts of 125 cs over 25.002 s and 151 cs over 30.202 s stay at or below 0.05. The whole, 276 cs over 55.194 s, is above it.
+- **Two ways to close it, each with a cost.** Keep every admission pair for the whole run, which grows memory with run length. Or charge parts over shorter spans, which withholds 1.49 CPU-s controls when a read is slow.
+
+The property test does not hit this edge; a construction aimed at it would.
+
+Local checks used Python 3.13 under `taskpolicy -c utility`, `TZ=UTC` and synthetic inputs:
+
+- `tests.align.test_r0_host`: 161 tests passed with one native-capture skip, including the sweep and the property test. The census fault matrix test was skipped locally.
+- `tests.align.test_r0_checks` and `tests.hazards.test_contention`: 86 tests passed with three live skips.
+- Frozen v3, run unedited locally: the `v3-fixed` family passed 2/2 and `v3-endpoints` 368/368. The other families, and the census fault matrix, run in hosted CI.
+- `gen_state.py --check`, `repin.py --check` and `tests.test_docs_freshness` pass.
+
+Frozen v3 is byte-identical at SHA-256 `afd360c29d390f7d39400e1363a25add5c13ace71bca55c80d11ec0ceb4e5009`. `RUN_STATE.md` and `TASK_QUEUE.md` retain their PR-base blobs.

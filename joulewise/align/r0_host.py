@@ -28,6 +28,20 @@ only add a withhold. Admission reads still never open or extend a window. Admiss
 admitted L3 guard's flags; they can add a flag, never supply an opening to
 the verdict.
 
+Adding a reading of a process, from any read, can only add withhold
+evidence (lead S1). Every judgement uses every pair (lead S2). Each daemon
+or admission read that closes a window is also paired with every earlier
+opening less than 30 s before the window's own, under the same rule. With
+the window, those are the pairs no read splits into two parts of at least
+30 s. A longer pair holds such a read, and a rate above the limit over the
+pair puts one part above it. So an added reading keeps every judged pair or
+splits it into two judged ones. P1 runs over every pair of each process's
+history at each admission as well as at the final verdict. Two limits
+remain. The stall rule is coverage, not evidence: a daemon read inside a
+gap lifts it. When reads take time, a window's lifetime rule runs from the
+opening read's start to the closing read's end, so the two parts of a
+split pair both include the read that splits it.
+
 Foreground admission is advisory. It saves work that the final verdict
 would discard; it cannot make a run pass. Its last act before it returns
 clear re-reads the sampler's latch, the age of the newest sample (at most
@@ -568,7 +582,9 @@ class QuietGuard:
     snapshot stored since the last judged one, the window
     from the newest snapshot at least INTERVAL_S earlier (sliding windows,
     so a burst shorter than one cadence always falls wholly inside one 30 s
-    window and no stretch of time escapes judgement). A stored failure, a
+    window and no stretch of time escapes judgement), and the pair from
+    each earlier snapshot less than INTERVAL_S before that one (lead S2,
+    ``_judge_pairs``); admission windows get the same pairs. A stored failure, a
     stalled sampler or a window longer than MAX_WINDOW_S refuses. Every
     clear verdict re-reads the stored failure as its last act, so a census
     that fails while an admission's own probes run refuses that admission.
@@ -1078,6 +1094,45 @@ class QuietGuard:
             self._record_cpu_flags(receipt, endpoint, endpoint_busy)
             self._record_cpu_flags(receipt, details, lifetime_busy)
 
+    def _judge_pairs(self, receipt, sequence, samples, start, current, observations, births, *,
+                     previous_over=None):
+        """Lead S1-S2: judge every pair that ``current`` closes, not only the newest window.
+
+        ``samples[start]`` is the newest opening at least INTERVAL_S before
+        ``current``, the admitted L3 window the caller has judged. Each
+        earlier opening less than INTERVAL_S before it is judged by the same
+        rule here. With the L3 window, those are the pairs no read splits
+        into two parts of at least INTERVAL_S. A longer pair holds a read
+        that does, and a rate above the limit over it puts one part above
+        it. So a reading added anywhere keeps every judged pair, or splits
+        it into two judged ones. Flags only: these pairs never refuse as
+        stalled and never move the L3 window.
+        """
+        admitted = previous_over is not None
+        midpoint = (lambda read: read.admitted_midpoint_ns) if admitted else (lambda read: read.midpoint_ns)
+        newest = midpoint(samples[start])
+        dwell_ns = prewindow.INTERVAL_S * 1_000_000_000
+        busy = []
+        for index in range(start - 1, -1, -1):
+            opening = samples[index]
+            if midpoint(opening) <= newest - dwell_ns:
+                break
+            reads = _window_reads(observations, opening, current)
+            entry = {"sequence": sequence, "start_monotonic_s": opening.midpoint_ns / 1e9,
+                     "end_monotonic_s": current.midpoint_ns / 1e9,
+                     "elapsed_s": (current.midpoint_ns - opening.midpoint_ns) / 1e9}
+            details = {"regressed_counters": [], "regressed_noncontaminant": []}
+            endpoint, endpoint_busy, lifetime_busy = self._judge_cpu_interval(
+                opening, current, details, reads=reads, births=births,
+                previous_over=None if previous_over is None else dict(previous_over))
+            self._record_interval_flags(receipt, details, endpoint, endpoint_busy, lifetime_busy)
+            busy.extend(endpoint_busy + lifetime_busy)
+            for key in ("contention_flag", "clock_flag"):
+                if key in details:
+                    entry[key] = details[key]
+            receipt.setdefault("pair_windows", []).append(entry)
+        return busy
+
     def _admission_interval(self, receipt, current=None):
         if current is None:
             current = self._cpu_snapshot(admission=True)
@@ -1091,14 +1146,21 @@ class QuietGuard:
             details = {"regressed_counters": [], "regressed_noncontaminant": []}
             opening = samples[start]
             with self._snapshot_lock:
-                reads = _window_reads(self._process_observations, opening, current)
+                observations = list(self._process_observations)
                 births = dict(self._birth_bounds)
+            reads = _window_reads(observations, opening, current)
+            previous_over = dict(self._admission_previous_over)
             endpoint, endpoint_busy, lifetime_busy = self._judge_cpu_interval(
                 opening, current, details, reads=reads, births=births,
                 previous_over=self._admission_previous_over)
             self._record_interval_flags(receipt, details, endpoint, endpoint_busy, lifetime_busy)
             receipt.setdefault("admission_cpu_intervals", []).append(details)
-            del samples[:start]
+            self._judge_pairs(receipt, "admission", samples, start, current, observations, births,
+                              previous_over=previous_over)
+            # Keep every opening a later pair can need (lead S2).
+            keep = next(i for i in range(start + 1)
+                        if samples[i].admitted_midpoint_ns > opening.admitted_midpoint_ns - dwell_ns)
+            del samples[:keep]
         if not samples or samples[-1].admitted_midpoint_ns != current.admitted_midpoint_ns:
             samples.append(current)
         else:
@@ -1275,6 +1337,11 @@ class QuietGuard:
                     else:
                         self._record_interval_flags(receipt, interval_details, endpoint, endpoint_busy, lifetime_busy)
                         flagged.update((row["pid"], row["start"]) for row in endpoint_busy + lifetime_busy)
+                    # Lead S2: every pair this sample closes, not only the newest window.
+                    paired = self._judge_pairs(receipt, "series", snapshots, start, snapshots[end],
+                                               observations, births)
+                    busy.extend(paired)
+                    flagged.update((row["pid"], row["start"]) for row in paired)
                 # The exact check at this sample, against every earlier sample
                 # at most INTERVAL_S before it and each newcomer's birth bound.
                 busy.extend(self._exact_windows(receipt, snapshots, births, end, dwell_ns, flagged))
@@ -1300,11 +1367,15 @@ class QuietGuard:
                 for interval in judged]
             receipt["busy"] = receipt.get("busy", []) + busy
         if opening:
-            # Keep the newest opening and everything after it; the next
-            # window's opening can only be later.
-            with self._snapshot_lock:
-                del self._snapshots[:opening]
-            self._judged_end -= opening
+            # Keep the newest opening, every sample less than INTERVAL_S
+            # before it (later pairs open there, lead S2) and everything
+            # after it; the next window's opening can only be later.
+            keep = next(i for i in range(opening + 1)
+                        if snapshots[i].midpoint_ns > snapshots[opening].midpoint_ns - dwell_ns)
+            if keep:
+                with self._snapshot_lock:
+                    del self._snapshots[:keep]
+                self._judged_end -= keep
         # Completed windows precede a later failed census or stale tail.
         if background_failure:
             # This copy belongs to the snapshots judged above. A later latch
@@ -1432,6 +1503,9 @@ class QuietGuard:
             self._cpu_interval(receipt)
             self._census(receipt)
             self._admission_interval(receipt, current)
+            # Lead S2: P1 over every pair of each process's history at
+            # admission too, not only at the final verdict.
+            self._proven_history(receipt)
             self.last = self._now()
             self._start_sampler()
             self._close_admission(receipt)
