@@ -212,7 +212,8 @@ def seed_rules34_receipt(repo, look):
     if row.get("verdicts_sha256") != digest:
         return
     gate = {"commit": head, "ref": ref, "ref_commit": lm.shared_ref(repo, ref)[1]}
-    receipt = lm.rules34_receipt(repo, gate, row, digest)
+    pins, _ = lm.input_pins(repo, lm.load_json(repo / MANIFEST), complete=True)
+    receipt = lm.rules34_receipt(repo, gate, row, digest, pins)
     (look / lm.LOOK_FILES["rules_3_4_receipt"]).write_bytes(lm.release.dump(receipt))
 
 

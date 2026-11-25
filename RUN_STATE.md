@@ -6768,8 +6768,9 @@ the top of this file.
 - 2026-11-25 interim look RL-217 [AGENT]. The
   [run report](docs/run_reports/2026-11-25-look-rules34-rehearsal.md)
   gives the producer-to-stage-1 handoff and the stage-2 synthetic timing status.
-  Fix 1 adds the stock receipt gate found missing by Astra. RL-217 puts
-  the literal rehearsal and both campaign stages on the Air.
+  Fix 2 verifies the stock producer's span bytes and rechecks the campaign
+  stage-1 ledger and receipt before publication. RL-217 puts the literal
+  rehearsal and both campaign stages on the Air.
 - 2026-11-24 interim look admission follow-up [AGENT]. The draft branch
   `ops/2026-11-24-look-hp01-admission` implements the lead's hp-01 roster
   ruling and addresses the cold-seat findings. The [run report](docs/run_reports/2026-11-24-look-hp01-admission.md)

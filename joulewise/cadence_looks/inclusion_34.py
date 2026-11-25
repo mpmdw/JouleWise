@@ -424,7 +424,7 @@ def judge_leg(bundle, meter_streams, selected_keys, *, period_s=None):
 # Custody mode: the verdict file the stage-1 CLI reads (docs/process/cadence_look_fit_interface.md section 7).
 #
 #     python3 -I -B joulewise/cadence_looks/inclusion_34.py --roster ROSTER.json --custody ROOT
-#         [--span-dir SPAN_ID=PATH ...] --manifest MANIFEST.json [--allow-draft]
+#         --manifest MANIFEST.json [--allow-draft [--span-dir SPAN_ID=PATH ...]]
 #         --out VERDICTS.json [--detail-out DETAIL.json]
 #
 # VERDICTS.json is {"<span_id>/<leg_id>": {"sidecar_coverage": bool, "km003c_clean": bool}}, one entry per leg
@@ -651,6 +651,35 @@ def _publish_stock(lm, layout, verdicts, receipt):
     lm.release.sync_directory(layout.look)
 
 
+def _load_pinned_runner():
+    """Load the exact runner whose path and bytes the caller has already verified."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_pinned_look_runner", REPO / "scripts/cadence_look_run.py")
+    runner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runner)
+    return runner
+
+
+def _stock_judgment(lm, a, doc, layout, roster, selected):
+    import contextlib
+
+    run = _load_pinned_runner()
+    try:
+        run._guard_loaded(doc)
+        run.check_roster(roster)
+        span_ids = [entry["span_id"] for entry in roster]
+        loaded = run.load_pins(a, span_ids, doc=doc)
+        with contextlib.ExitStack() as stack:
+            # The isolated verifier hashes the complete inventory first. The in-process guard then serves
+            # verified operational bytes and hashes each stream again before its parser sees a byte.
+            run.admit_custody(a, span_ids, layout.span, stack, streams="verify", loaded=loaded, doc=doc)
+            return judge_custody(roster, layout.span, selected), loaded[0]
+    except (run.F.LookInputError, run.PINS.PinRefusal) as error:
+        message = f"custody pins: {error}" if isinstance(error, run.PINS.PinRefusal) else str(error)
+        raise lm.ManifestError([message]) from None
+
+
 def _fresh_bytecode_cache(*, create):
     """Mythos round-4 N4, Sol round-4 NEW-2: -B stops Python writing bytecode, not reading it. An unused
     pycache prefix means no repository module can run from a stale __pycache__ entry beside its
@@ -672,7 +701,6 @@ def _fresh_bytecode_cache(*, create):
 def _rehearse(destination):
     """RL-217 E.1: judge the entire input-bound draft roster using the campaign evaluator and serializer."""
     import contextlib
-    import importlib.util
     from types import SimpleNamespace
     from joulewise.cadence_looks import manifest as lm
 
@@ -688,9 +716,7 @@ def _rehearse(destination):
                              ledger_ref=ref, rehearsal=True)
         if doc["status"] != "draft" or doc["look_id"] != lm.INTERIM_LOOK_ID:
             raise lm.ManifestError(["rules-3-4 rehearsal requires an input-bound interim look draft"])
-        spec = importlib.util.spec_from_file_location("_pinned_look_runner", runner)
-        run = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(run)
+        run = _load_pinned_runner()
         input_refusal = run.F.LookInputError
         run._guard_loaded(doc)
         layout = run.layout_of(doc)
@@ -749,6 +775,8 @@ def main(argv=None):
         missing = [flag for flag in ("roster", "custody", "manifest", "out") if getattr(a, flag) is None]
         if missing:
             p.error("the following arguments are required: " + ", ".join(f"--{flag}" for flag in missing))
+        if not a.allow_draft and a.span_dir:
+            p.error("campaign mode refuses --span-dir and reads only the registered spans")
     if __name__ == "__main__":
         _fresh_bytecode_cache(create=a.rehearsal is None)
     if str(REPO) not in sys.path:                 # -I drops the repository from sys.path
@@ -759,10 +787,12 @@ def main(argv=None):
     try:
         # a committed run reads the ledger from origin/main only, fetched now (audit 3, rule P3)
         ledger_ref = None if a.allow_draft else "origin/main"
+        running = [Path(__file__).resolve(), REPO / RUNTIME_CONFIG]
         if not a.allow_draft:
             lm.fetch_public(REPO)
+            running.append(REPO / "scripts/cadence_look_run.py")
         doc = lm.verify_pins(a.manifest, REPO, allow_draft=a.allow_draft,
-                             running=[Path(__file__).resolve(), REPO / RUNTIME_CONFIG], ledger_ref=ledger_ref)
+                             running=running, ledger_ref=ledger_ref)
         stale = lm.cached_bytecode(REPO)
         if stale:
             raise lm.ManifestError([f"a repository module may have run from cached bytecode: {', '.join(stale[:4])}"])
@@ -779,8 +809,8 @@ def main(argv=None):
     if not isinstance(roster, list):
         print("REFUSE the roster is a JSON list (validate --span-ledger --roster-out writes it)")
         return 1
-    sdir_of = span_dirs(a.custody, a.span_dir)
     if a.allow_draft:
+        sdir_of = span_dirs(a.custody, a.span_dir)
         # Mythos N2: --allow-draft is for synthetic custody only (every span's receipt says so)
         real = [e["span_id"] for e in roster
                 if _json(Path(sdir_of(e["span_id"])) / "runner_receipt.json").get("synthetic") is not True]
@@ -789,7 +819,13 @@ def main(argv=None):
             return 1
     selected = keys(_json(REPO / RUNTIME_CONFIG)["sensors"])
     try:
-        verdicts, detail = judge_custody(roster, sdir_of, selected)
+        if a.allow_draft:
+            verdicts, detail = judge_custody(roster, sdir_of, selected)
+        else:
+            (verdicts, detail), pins = _stock_judgment(lm, a, doc, layout, roster, selected)
+    except lm.ManifestError as error:
+        print(f"REFUSE {error}")
+        return 1
     except Exception as exc:                      # type and line only: a message could carry a value
         if any(c.__name__ == "TimeFieldError" for c in type(exc).__mro__):    # time_fields' refusal names a file and a field, never a value
             print(f"REFUSE {exc}")
@@ -810,7 +846,7 @@ def main(argv=None):
         data = _verdict_text(verdicts).encode("utf-8")
         verdicts_sha = hashlib.sha256(data).hexdigest()
         try:
-            receipt = lm.rules34_receipt(REPO, gate, row, verdicts_sha)
+            receipt = lm.rules34_receipt(REPO, gate, row, verdicts_sha, pins)
             _publish_stock(lm, layout, data, receipt)
         except lm.ManifestError as error:
             print(f"REFUSE {error}")

@@ -351,7 +351,7 @@ def admit_custody(a, span_ids, sdir_of, stack, *, streams, loaded=None, scratch=
 
     For the rest of the stage every read of a roster path goes through the pins (``stack`` holds the guard open):
     an operational file is served from its verified bytes, and a stream is read from disk (``streams="pass"``,
-    stage 1) or re-checked against its pin at each open, immediately before it is decoded (``"verify"``, stage 2).
+    stage 1) or re-checked against its pin at each open (``"verify"``, stage 2 and the stock rules producer).
     Returns (the admitted custody, the pin list's sha256)."""
     if doc is None:
         doc, _ = _VERIFIED[0]
@@ -1439,6 +1439,17 @@ def cmd_stage1(a):
         return _stage1(a, stack)
 
 
+def campaign_stage1_gate(a, layout):
+    """Revalidate the fetched ledger and receipt, reusing verification only for an identical commit and receipt."""
+    receipt = layout.read("rules_3_4_receipt")
+    gate = M.ledger_gate(ROOT, a.ledger_ref)
+    if (gate, receipt) != getattr(a, "validated_stock_receipt", None):
+        row, verdicts_sha256, pins = a.stock_receipt_inputs
+        M.require_rules34_receipt(ROOT, gate, row, verdicts_sha256, pins, receipt)
+        a.validated_stock_receipt = gate, receipt
+    return gate
+
+
 def _stage1(a, stack):
     staging = []
     if a.level_r and not a.allow_draft:
@@ -1478,9 +1489,10 @@ def _stage1(a, stack):
                                              draft_rehearsal=rehearsal is not None and doc["status"] == "draft")
             if rehearsal is not None:
                 rehearsal_host(row)
-            ledger_gate = M.ledger_gate(ROOT, a.ledger_ref)
-            if rehearsal is None:
-                M.require_rules34_receipt(layout, ledger_gate, row, rules_sha)
+                ledger_gate = M.ledger_gate(ROOT, a.ledger_ref)
+            else:
+                a.stock_receipt_inputs = row, rules_sha, doc["inputs"]["pins"]
+                campaign_stage1_gate(a, layout)
         roster = M.strict_json(roster_raw)
         if not isinstance(roster, list) or not all(isinstance(s, dict) and isinstance(s.get("span_id"), str) for s in roster):
             raise F.LookInputError("roster: not a list of spans")
@@ -1520,6 +1532,8 @@ def _stage1(a, stack):
         plan = stage1_preflight(roster, sdir_of, rules34, ruled=ruled, also_ruled=superseded[1],
                                 synthetic_only=a.allow_draft, outputs=outputs)
         _guard_loaded(doc)
+        if not a.allow_draft and rehearsal is None:
+            ledger_gate = campaign_stage1_gate(a, layout)
         a.ledger_gate_record = ledger_gate
         extra = {"roster_sha256": roster_sha, "rules_3_4_sha256": rules_sha}
         return stage1_protected(a, layout, plan, ruled, superseded, extra, staging, sdir_of)
@@ -1881,6 +1895,8 @@ def finish_stage1(a, doc, out):
     probs = M.stage1_problems(ROOT, doc, out, sha256_file(a.manifest), allow_draft=a.allow_draft)
     if probs:
         raise owned_refusal("stage 1's own output: " + "; ".join(probs))
+    if not a.allow_draft:
+        out["ledger_gate"] = campaign_stage1_gate(a, a.layout)
     if getattr(a, "look_input_bytes", None) is not None:
         a.layout.create("level_r", a.look_input_bytes)
     return a.layout.create("stage1", F.dump(out))

@@ -1946,7 +1946,13 @@ def stage1_history(repo, look_id, head):
 
 
 RULES34_PRODUCER = "joulewise/cadence_looks/inclusion_34.py"
-RULES34_RECEIPT_SCHEMA = "joulewise.cadence_looks.rules_3_4_receipt.v1"
+RULES34_RECEIPT_SCHEMA = "joulewise.cadence_looks.rules_3_4_receipt.v2"
+
+
+def rules34_input_digests(pins):
+    """The verified inventory's names and digests, without sizes or any source values."""
+    return {f"{span['span_id']}/{entry['path']}": entry["sha256"]
+            for span in pins["spans"] for entry in span["files"]}
 
 
 def _rules34_receipt_binding(repo, gate, row, producer_commit):
@@ -1975,7 +1981,7 @@ def _rules34_receipt_binding(repo, gate, row, producer_commit):
             "verdicts_sha256": row["verdicts_sha256"]}, wall_floor_ns
 
 
-def rules34_receipt(repo, gate, row, verdicts_sha256):
+def rules34_receipt(repo, gate, row, verdicts_sha256, pins):
     """Stamp the stock result after verifying the campaign row and computing the verdict from scratch."""
     if verdicts_sha256 != row["verdicts_sha256"]:
         raise ManifestError(["stock rules-3-4 verdict sha256 differs from the committed rehearsal hash"])
@@ -1983,21 +1989,23 @@ def rules34_receipt(repo, gate, row, verdicts_sha256):
     wall_time_ns, monotonic_ns = time.time_ns(), time.monotonic_ns()
     if wall_time_ns <= wall_floor_ns or monotonic_ns <= 0:
         raise ManifestError(["rules-3-4 receipt: producer clocks do not establish a post-commit run"])
-    return {**binding, "wall_time_ns": wall_time_ns, "monotonic_ns": monotonic_ns}
+    return {**binding, "wall_time_ns": wall_time_ns, "monotonic_ns": monotonic_ns,
+            "input_pins": rules34_input_digests(pins)}
 
 
-def require_rules34_receipt(layout, gate, row, verdicts_sha256):
+def require_rules34_receipt(repo, gate, row, verdicts_sha256, pins, raw):
     """Admit only a closed stock receipt for the exact campaign row and the verdict bytes already read."""
-    raw = layout.read("rules_3_4_receipt")
     receipt = strict_json(raw)
     clocks = {"wall_time_ns", "monotonic_ns"}
     keys = {"schema", "look_id", "producer_commit", "ledger_commit", "manifest_sha256",
-            "roster_sha256", "verdicts_sha256"} | clocks
+            "roster_sha256", "verdicts_sha256", "input_pins"} | clocks
     if type(receipt) is not dict or receipt.keys() != keys or any(type(receipt[key]) is not int for key in clocks):
         raise ManifestError(["rules-3-4 receipt: invalid closed schema"])
     if receipt["verdicts_sha256"] != verdicts_sha256:
         raise ManifestError(["rules-3-4 receipt: verdict sha256 differs from rules_3_4.json"])
-    binding, wall_floor_ns = _rules34_receipt_binding(layout.repo, gate, row, receipt["producer_commit"])
+    if receipt["input_pins"] != rules34_input_digests(pins):
+        raise ManifestError(["rules-3-4 receipt: input pins differ from the committed manifest"])
+    binding, wall_floor_ns = _rules34_receipt_binding(repo, gate, row, receipt["producer_commit"])
     if any(receipt[key] != value for key, value in binding.items()):
         raise ManifestError(["rules-3-4 receipt: does not name the current committed LOOKS.json row"])
     if receipt["wall_time_ns"] <= wall_floor_ns or receipt["monotonic_ns"] <= 0:

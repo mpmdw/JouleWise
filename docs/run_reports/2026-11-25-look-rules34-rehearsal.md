@@ -111,3 +111,48 @@ seat's archived-data read boundary.
 The HIGH is addressed in the fix and awaits Astra's final-head recheck.
 The E.6 timings above remain provisional until the input pins provide
 per-stream byte sizes and the literal Air invocation is available.
+
+## Fix 2 after Astra's narrow recheck
+
+Both replays reproduced the block at `a5c6c2487`. Stock accepted an old
+synthetic span through `--span-dir` and accepted its stale bytes at the
+registered path. A fetch during stage-1 preflight changed the committed
+verdict hash, yet stage 1 wrote both outputs. The same fetch at parent
+`75ce4bf5c` exited 2 and wrote neither artifact. The isolated before-run
+logs are `fix2-span-before.log`, `fix2-fetch-head.log` and
+`fix2-fetch-parent.log` in the builder seat's `tmp` directory.
+
+Test-only commit `8a21e1324` records the failing regressions before the
+fix. It covers both stale-span routes, a fetch during preflight and a
+fetch just before publication. It also checks the receipt's exact
+committed pin inventory and corrupts that inventory to prove refusal.
+
+Campaign stock now accepts only the registered span paths. The existing
+isolated verifier checks the full committed pin inventory before judgment.
+The pinned reader supplies verified operational bytes and rehashes each
+consumed stream before returning its bytes for parsing. The version-2
+receipt records the verified relative names and SHA-256 digests. Campaign
+stage 1 checks that inventory against the committed manifest, and it
+revalidates the ledger and receipt at the end of preflight and immediately
+before publication. The rehearsal route retains its draft behavior.
+[RL-217 E.1](https://github.com/mpmdw/JouleWise/blob/0a1433996176d204ebcf4d4c7359803388821721/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L25934)
+
+The synthetic CLI replays refused both stale-span routes without a
+verdict or receipt and restored the parent fetch refusal without either
+stage-1 output. On 14 generated spans and 72 legs, stock and rehearsal
+verdicts were byte-identical at
+`21a928663d60134d5d6169c11caa5fbc67b695fab02a89133d93bb25bf25e16e`.
+The stock run and campaign stage 1 both exited 0 on those inputs. The
+manifest pins cover the three changed code files. This fix reuses the
+existing isolated verifier command site.
+
+Stage 2 still refused both a wrong stage-1 hash and an exact committed
+hash of the marked rehearsal artifact before taking a reservation. All 15
+rehearsal, protected-phase and command-inventory checks passed locally
+at utility priority with at most two concurrent workers. Draft validation,
+pin and generated-state checks passed. Suite rollup evidence is recorded
+against the fix head in the draft PR gate ledger.
+
+E.6 remains provisional until the committed pins supply per-stream sizes
+and the literal Air invocation can run. The independent final-head
+recheck and cold pass remain open.

@@ -615,9 +615,9 @@ rehearsal requires the lead's input commitments on the shared branch.
 
 P1 Phase Gate [AGENT], assigned by the lead for the manifest-pass packet.
 [The run report](docs/run_reports/2026-11-25-look-rules34-rehearsal.md)
-records the draft rules-3/4 route, fix-1 stock receipt gate and provisional
-stage-2 timing. The lead owns the input binding, literal rehearsal and
-stock hash comparison on the Air.
+records the rules-3/4 rehearsal, the stock receipt and fix-2 input-pin
+and ledger rechecks, and provisional stage-2 timing. The lead owns the
+input binding, literal rehearsal and stock hash comparison on the Air.
 
 ## Intake Batch Owed To The Kernel (2026-07-30/31)
 
