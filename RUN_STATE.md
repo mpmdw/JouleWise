@@ -6761,6 +6761,10 @@ Parenthetical states below are historical at each report's head; they are not
 current restart instructions. Current state is the CURRENT STATE block at
 the top of this file.
 
+- 2026-11-24 interim look stage-1 rehearsal [AGENT]. The
+  [run report](docs/run_reports/2026-11-24-look-stage1-rehearsal.md) records
+  the synthetic verification and the input commitments the lead needs
+  for the MBP rehearsal.
 - 2026-11-24 interim look admission follow-up [AGENT]. The draft branch
   `ops/2026-11-24-look-hp01-admission` implements the lead's hp-01 roster
   ruling and addresses the cold-seat findings. The [run report](docs/run_reports/2026-11-24-look-hp01-admission.md)

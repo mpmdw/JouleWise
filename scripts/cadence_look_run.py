@@ -6,7 +6,7 @@
     stage1 [--allow-draft] [--ruled-exclusion LEG_KEY=RULE=RL-n ...] [--stage-archives] [--level-r]
     stage2 --stage1-sha256 HEX [--allow-draft] [--level-e]
 
-No command takes a path (audit 2, lead ruling), and a committed run reads every public record (the ledger, the
+No campaign command takes a path (audit 2, lead ruling), and a committed run reads every public record (the ledger, the
 RUN_STATE the pins chain to) from origin/main after a fetch, never from a ref or a file a caller names (audit 3,
 rule P3). The manifest is the repository's
 docs/process/cadence/looks/lm-interim-01.json; it registers the look's root (``custody.root``) and carries the pin
@@ -26,6 +26,12 @@ Each path is checked before use: its own realpath, no symlink component, inside 
 that differs only in case. An archive is expanded into a fresh private directory outside every registered root and
 the repository. ``--level-r`` and ``--level-e`` (synthetic ``--allow-draft`` runs only) read
 input_level_r.json and input_level_e.json from the look's directory.
+
+    python3 -I -B scripts/cadence_look_run.py stage1 --rehearsal NEW_DIRECTORY
+
+The RL-180 B.2 rehearsal uses the manifest's dry-run blocks and keeps its two private outputs in a new
+directory outside the registered roots and the repository. It uses an already fetched checkout of the
+shared records and prints the stage-1 public fields for the lead.
 
 Stage 1 reads time fields and sample counters only from energy-bearing files. In custody mode it opens, per span: `runner_receipt.json`,
 `soak/soak_reference.json`, and per leg `leg_record.json`; per accepted attempt's bundle: `events.jsonl`
@@ -270,7 +276,7 @@ def _verifier_sigterm():
         signal.signal(signal.SIGTERM, previous)
 
 
-def run_verifier(doc, pins, pins_sha, span_ids, sdir_of):
+def run_verifier(doc, pins, pins_sha, span_ids, sdir_of, *, scratch=None):
     """RL-194a section 1: the hash-only verifier, as its own process, before this stage parses anything. It reads
     every pinned file as opaque bytes; this process reads back only its result file (``pass`` or ``fail``, and for
     each path the pinned and observed digests) and refuses unless that covers exactly the pinned files and every
@@ -284,7 +290,8 @@ def run_verifier(doc, pins, pins_sha, span_ids, sdir_of):
     # The result is read back from a directory this process made and removes. No caller names where it goes: a
     # refused run leaves no file anywhere (audit 1 on 2082c1a51: a result written at the public destination made
     # the next registered execution refuse, with no reservation taken).
-    with _verifier_sigterm(), tempfile.TemporaryDirectory(prefix="jw-look-verify-", ignore_cleanup_errors=True) as tmp:
+    with _verifier_sigterm(), tempfile.TemporaryDirectory(prefix="jw-look-verify-", dir=scratch,
+                                                         ignore_cleanup_errors=True) as tmp:
         out = Path(tmp) / "verification.json"
         pins_path = Path(tmp) / "pins.json"         # the manifest's own list, as the bytes its sha256 names
         pins_path.write_bytes(PINS.pin_list_bytes(pins))
@@ -306,7 +313,7 @@ def run_verifier(doc, pins, pins_sha, span_ids, sdir_of):
         raise F.LookInputError("custody pins: " + (problems[0] if problems else "the verifier did not pass"))
 
 
-def load_pins(a, span_ids):
+def load_pins(a, span_ids, *, selected=None):
     """RL-194 condition 2, before anything of custody is touched (a span directory, an archive): the pin list is the
     manifest's own and no other (audit 2, lead ruling: one source of pins), it names exactly the roster's spans, and
     each span's RUN_STATE Check item names its offload manifest (``run_state_text``). Returns (the pin list, the
@@ -319,15 +326,18 @@ def load_pins(a, span_ids):
             text = run_state_text(a.allow_draft)
         except OSError:
             raise F.LookInputError("custody pins: no RUN_STATE to chain the pins to") from None
-        unchained = PINS.check_chain_problems(pins, text)
+        unchained = PINS.check_chain_problems(pins, text, span_ids=selected)
         if unchained:
             raise F.LookInputError("custody pins: " + "; ".join(unchained[:4]))
+        if selected is not None:
+            pins = {**pins, "spans": [span for span in pins["spans"] if span["span_id"] in selected]}
+            pins_sha = PINS.pin_list_sha256(PINS.pin_list_bytes(pins))
     except PINS.PinRefusal as exc:
         raise F.LookInputError(f"custody pins: {exc}") from None
     return pins, pins_sha
 
 
-def admit_custody(a, span_ids, sdir_of, stack, *, streams, loaded=None):
+def admit_custody(a, span_ids, sdir_of, stack, *, streams, loaded=None, scratch=None):
     """RL-194 conditions 1 to 3 as RL-194a amends them, the first act of stage 1 and of stage 2 on custody, before
     any roster file is parsed and before the reservation:
 
@@ -344,7 +354,7 @@ def admit_custody(a, span_ids, sdir_of, stack, *, streams, loaded=None):
     pins, pins_sha = loaded if loaded is not None else load_pins(a, span_ids)
     try:
         custody = PINS.PinnedCustody(pins, span_ids, sdir_of, streams=streams)
-        run_verifier(doc, pins, pins_sha, span_ids, sdir_of)
+        run_verifier(doc, pins, pins_sha, span_ids, sdir_of, scratch=scratch)
         custody.verify()
     except PINS.PinRefusal as exc:
         raise F.LookInputError(f"custody pins: {exc}") from None
@@ -1312,6 +1322,67 @@ def superseded_source(row, layout):
     return old_input, old_ruled
 
 
+REHEARSAL_BRANCH = "align/2026-11-14-look-manifest"
+
+
+def rehearsal_ref():
+    """Use the rehearsal's shared merge branch before main contains HEAD. Check both authorities without fetching
+    into the repository, since the rehearsal may write only to its output directory."""
+    main_ref = M.PUBLIC_RUN_STATE_REF
+    on_main, _, _ = M._git(ROOT, "merge-base", "--is-ancestor", "HEAD", main_ref)
+    branch = "main" if on_main == 0 else REHEARSAL_BRANCH
+    branches = sorted({"main", branch})
+    heads = [f"refs/heads/{name}" for name in branches]
+    rc, raw, _ = M._git(ROOT, "ls-remote", "--exit-code", "origin", *heads)
+    remote = {ref: sha for sha, ref in (line.split() for line in raw.decode().splitlines())}
+    for name in branches:
+        rc_local, sha, _ = M._git(ROOT, "rev-parse", "--verify", f"refs/remotes/origin/{name}")
+        if rc or rc_local or sha.decode().strip() != remote.get(f"refs/heads/{name}"):
+            raise F.LookInputError("rehearsal requires a fresh checkout of the shared branch and origin/main")
+    return f"refs/remotes/origin/{branch}"
+
+
+def rehearsal_output(value, layout, ledger):
+    """Create a private destination exclusively, beside the registered roots and the checkout."""
+    try:
+        path = release.no_symlink_components(os.path.abspath(value), "rehearsal directory")
+    except ValueError as error:
+        raise F.LookInputError(str(error)) from None
+    if os.path.lexists(path) or M.name_collision(path.parent, path.name):
+        raise F.LookInputError("rehearsal directory already exists")
+    if not path.parent.is_dir() or not os.access(path.parent, os.W_OK | os.X_OK):
+        raise F.LookInputError("rehearsal directory needs an existing writable parent")
+    # Public roots are repository-relative by the ledger contract. Check every registered custody root,
+    # including ones for another look and ones not yet materialized on this host.
+    roots = {layout.repo, layout.root, *(Path(row["custody_root"]).resolve()
+                                         for row in ledger["looks"] if row.get("custody_root"))}
+    for root in roots:
+        if (path.is_relative_to(root) or root.is_relative_to(path)
+                or (root.is_dir() and release.physically_within(path.parent, root))):
+            raise F.LookInputError("rehearsal directory must be outside the repository and every registered root")
+    try:
+        path.mkdir(mode=0o700)
+    except FileExistsError:
+        raise F.LookInputError("rehearsal directory already exists") from None
+    return path
+
+
+def rehearsal_roster(roster, doc):
+    """The registered dry-run sentence specifies one inclusive, four-block development range."""
+    check_roster(roster)
+    ranges = re.findall(r"\bdev-([0-9]{2}) to dev-([0-9]{2})\b", doc["stages"]["stage1"]["dry_run"])
+    if len(ranges) != 1:
+        raise F.LookInputError("manifest stage-1 dry run must name one development block range")
+    first, last = map(int, ranges[0])
+    if last - first != 3:
+        raise F.LookInputError("manifest stage-1 dry run must name four consecutive development blocks")
+    blocks = {f"dev-{index:02d}" for index in range(first, last + 1)}
+    selected = [entry for entry in roster if entry["block_id"] in blocks]
+    if {entry["block_id"] for entry in selected} != blocks:
+        raise F.LookInputError("the roster does not cover every manifest stage-1 dry-run block")
+    return selected
+
+
 def cmd_stage1(a):
     with contextlib.ExitStack() as stack:
         return _stage1(a, stack)
@@ -1323,9 +1394,13 @@ def _stage1(a, stack):
         raise F.LookInputError("--level-r runs only with --allow-draft; a committed look reads custody")
     doc, mpath = _VERIFIED[0]
     layout = layout_of(doc)
-    for key in ("stage1", "level_r"):                 # created once, never replaced: refuse before reading anything
-        if layout.exists(key):
-            raise F.LookInputError(f"{M.LOOK_FILES[key]} already exists in the look's directory")
+    rehearsal = getattr(a, "rehearsal", None)
+    if rehearsal is None:
+        for key in ("stage1", "level_r"):             # created once, never replaced
+            if layout.exists(key):
+                raise F.LookInputError(f"{M.LOOK_FILES[key]} already exists in the look's directory")
+    else:
+        _, _, ledger = M.committed_ledger(ROOT, ledger_ref=a.ledger_ref)
     if a.level_r:
         raw = layout.read("input_level_r")
         look_input = json.loads(raw)
@@ -1344,7 +1419,8 @@ def _stage1(a, stack):
             # RL-173 E.1 item 4: a stage 1 run once more names the research lead's ruled exclusions, nothing else
             row = M.require_inputs_committed(ROOT, F.LOOK_ID, sha256_file(mpath), roster_sha256=roster_sha,
                                              verdicts_sha256=rules_sha, ledger_ref=a.ledger_ref,
-                                             ruled_exclusions={k: list(v) for k, v in ruled.items()})
+                                             ruled_exclusions={k: list(v) for k, v in ruled.items()},
+                                             draft_rehearsal=rehearsal is not None and doc["status"] == "draft")
         roster = M.strict_json(roster_raw)
         if not isinstance(roster, list) or not all(isinstance(s, dict) and isinstance(s.get("span_id"), str) for s in roster):
             raise F.LookInputError("roster: not a list of spans")
@@ -1355,7 +1431,14 @@ def _stage1(a, stack):
         # records nothing of the pin list: its output stays a function of time fields and operational files alone,
         # and a committed run's manifest hash already names the list.
         ids = [span["span_id"] for span in roster]
-        loaded = load_pins(a, ids)
+        selected = None
+        if rehearsal is not None:
+            roster = rehearsal_roster(roster, doc)
+            selected = {span["span_id"] for span in roster}
+        loaded = load_pins(a, ids, selected=selected)
+        if rehearsal is not None:
+            a.rehearsal_dir = rehearsal_output(rehearsal, layout, ledger)
+            ids = [span["span_id"] for span in roster]
         staging, staged = stage_custody(a, roster, loaded[0], layout, stack)
 
         def sdir_of(sid):
@@ -1365,16 +1448,18 @@ def _stage1(a, stack):
                 return layout.span(sid)
             except M.ManifestError as error:
                 raise F.LookInputError("layout: " + "; ".join(error.problems)) from None
-        admit_custody(a, ids, sdir_of, stack, streams="pass", loaded=loaded)
+        admit_custody(a, ids, sdir_of, stack, streams="pass", loaded=loaded,
+                      scratch=getattr(a, "rehearsal_dir", None))
         rules34 = M.strict_json(rules_raw)
         superseded = (None, None)
         if ruled and not a.allow_draft:
             superseded = superseded_source(row, layout)
         # Phase 1 (C1): every refusal that needs no protected file, for the whole roster, then the loaded code and
         # the ledger gate the output records. Nothing protected has been opened.
+        outputs = (a.rehearsal_dir,) if rehearsal is not None else (
+            sorted({layout.file(key).parent for key in ("stage1", "level_r")}))
         plan = stage1_preflight(roster, sdir_of, rules34, ruled=ruled, also_ruled=superseded[1],
-                                synthetic_only=a.allow_draft,
-                                outputs=sorted({layout.file(key).parent for key in ("stage1", "level_r")}))
+                                synthetic_only=a.allow_draft, outputs=outputs)
         _guard_loaded(doc)
         a.ledger_gate_record = None if a.allow_draft else M.ledger_gate(ROOT, a.ledger_ref)
         extra = {"roster_sha256": roster_sha, "rules_3_4_sha256": rules_sha}
@@ -1742,6 +1827,32 @@ def finish_stage1(a, doc, out):
     return a.layout.create("stage1", F.dump(out))
 
 
+def finish_rehearsal(a, doc, out):
+    problems = M.stage1_problems(ROOT, doc, out, sha256_file(a.manifest), allow_draft=False)
+    if problems:
+        raise owned_refusal("rehearsal stage 1's own output: " + "; ".join(problems))
+    # The closed campaign schema refuses the rehearsal marker if this artifact is supplied to stage 2.
+    files = {"level_r": a.look_input_bytes, "stage1": F.dump({**out, "rehearsal": True})}
+    summary = {
+        "exit_status": 0, "look_id": out["look_id"],
+        "blocks": sorted({span["block_id"] for span in out["roster"]["spans"]}),
+        "manifest_sha256": out["manifest_sha256"], "in_energy_fit": out["counts"]["in_energy_fit"],
+        **{key: "yes" if out["tripwires"][key]["trips"] else "no" for key in release.TRIPWIRES},
+        "sha256": {},
+    }
+    for key, data in files.items():
+        name = M.LOOK_FILES[key]
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+        with os.fdopen(os.open(a.rehearsal_dir / name, flags, 0o600), "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        summary["sha256"][name] = hashlib.sha256(data).hexdigest()
+    release.sync_directory(a.rehearsal_dir)
+    print(release.dump(summary).decode("utf-8"), end="")
+    return 0
+
+
 def owned_refusal(message):
     """A check the preflight owns: a refusal before stage 1's first protected open, a PreflightBreach after it."""
     return PreflightBreach(message) if _PHASE["protected"] else F.LookInputError(message)
@@ -1753,13 +1864,15 @@ def _refusal_text(exc):
 
 def main(argv=None, *, keep_redirected=False):
     # allow_abbrev=False: no former path option is taken as an abbreviation of one that remains
-    ap = argparse.ArgumentParser(description="The interim look's two stages (RL-166 Q8). No command takes a path: "
+    ap = argparse.ArgumentParser(description="The interim look's two stages (RL-166 Q8). Campaign paths are fixed: "
                                              "the manifest registers the look's root, and every file is a fixed name "
                                              "under it (manifest.LookLayout).", allow_abbrev=False)
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("host-id", help="print this machine's RL-184 execution host token", allow_abbrev=False)
     sub.add_parser("post-no-maxima", help="print the two private RL-184 prediction differences", allow_abbrev=False)
     p1 = sub.add_parser("stage1", allow_abbrev=False)
+    p1.add_argument("--rehearsal", metavar="NEW_DIRECTORY",
+                    help="RL-180 B.2: run the manifest's dry-run blocks and write solely to a new private directory")
     p1.add_argument("--level-r", action="store_true",
                     help="with --allow-draft only: read input_level_r.json in place of custody")
     p1.add_argument("--stage-archives", action="store_true",
@@ -1777,6 +1890,9 @@ def main(argv=None, *, keep_redirected=False):
     a = ap.parse_args(argv)
     if a.cmd == "stage1" and a.stage_archives and a.level_r:
         ap.error("--stage-archives reads custody; --level-r does not")
+    rehearsal = a.cmd == "stage1" and a.rehearsal is not None
+    if rehearsal and (a.level_r or a.stage_archives or a.ruled_exclusion or a.allow_draft):
+        ap.error("--rehearsal takes the registered raw custody copy and may not be combined with other stage-1 options")
     _PHASE["protected"] = False                 # set by read_protected at stage 1's first protected read
     try:
         if a.cmd == "host-id":
@@ -1797,27 +1913,34 @@ def main(argv=None, *, keep_redirected=False):
                 raise F.LookInputError("post-no: both private maxima must be evaluable")
             sys.stdout.buffer.write(release.dump(maxima))
             return 0
-        # A committed run reads its public records from origin/main only, fetched now (audit 3, rule P3)
+        # The campaign fetches public records. The rehearsal checks the fetched refs without writing to Git.
         a.ledger_ref = None if a.allow_draft else "origin/main"
-        if not a.allow_draft:
+        if rehearsal:
+            a.ledger_ref = rehearsal_ref()
+        elif not a.allow_draft:
             M.fetch_public(ROOT)
         # FIRST, before any input is opened: the running code must be the pinned code (Mythos cold seat 3; Sol 9)
         a.manifest = str(manifest_path())
-        doc = M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING, ledger_ref=a.ledger_ref)
+        doc = M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING, ledger_ref=a.ledger_ref,
+                            rehearsal=rehearsal)
         if doc["look_id"] != F.LOOK_ID:
             raise F.LookInputError(f"this look runner executes only {F.LOOK_ID}")
         _VERIFIED[:] = [(doc, a.manifest)]
         if a.cmd == "stage2":
             return cmd_stage2(a, keep_redirected=keep_redirected)
-        sha = finish_stage1(a, doc, cmd_stage1(a))
+        out = cmd_stage1(a)
+        if rehearsal:
+            return finish_rehearsal(a, doc, out)
+        sha = finish_stage1(a, doc, out)
     except ContentRefusal as exc:           # stage 1's protected phase: a condition on protected content
-        print(f"REFUSED {exc}", file=sys.stderr)
+        print(f"REFUSED {exc.code if rehearsal else exc}", file=sys.stderr)
         return 2
     except (F.LookInputError, M.ManifestError, PINS.PinRefusal) as exc:
         if _PHASE["protected"] or isinstance(exc, PreflightBreach):
             # C1: after stage 1's first protected open the only refusals are POST_OPEN_REASONS; anything else is a
             # check the preflight should have made, reported as a fault and never as a refusal
-            print(f"FAILED preflight breach: {type(exc).__name__}: {_refusal_text(exc)}", file=sys.stderr)
+            detail = "" if rehearsal else f": {_refusal_text(exc)}"
+            print(f"FAILED preflight breach: {type(exc).__name__}{detail}", file=sys.stderr)
             return 2
         prefix = "custody pins: " if isinstance(exc, PINS.PinRefusal) else ""
         print(f"REFUSED {prefix}{_refusal_text(exc)}", file=sys.stderr)

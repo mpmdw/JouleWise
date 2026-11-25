@@ -532,7 +532,7 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "b2b03788aea8a36dbc9cefc4a642664fe781a7a727d5a6907f266ead23232533"
+        "sha256": "b3233262f833267a1b89f155ba21e81fd49ab3b1cda465bf13c98f2de9707458"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
@@ -572,7 +572,7 @@
       },
       {
         "path": "joulewise/cadence_looks/custody_pins.py",
-        "sha256": "0baa4071fc511334b7066bf3cd61bb8a30b12fdd76d8277325c57f2bcb0f9de5"
+        "sha256": "29f8b67964a00332c273ca0287103db9e9a2d7709e1ca6d2b5f58ed1a812b140"
       },
       {
         "path": "scripts/cadence_look_verify_inputs.py",
@@ -883,7 +883,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "41b8aa0cc1662c21619b4a9c303b4581b431855f7b03a18b34bc7dbd56ab9873"
+        "sha256": "097c2a8a89ede0bd1b720b11e3d614eeb608a755b3ac0e0c230548525859894c"
       },
       {
         "path": "joulewise/desk_compress.py",
@@ -1305,7 +1305,7 @@
     "root": null,
     "seats": 1,
     "lead_checks_output_against_schema": true,
-    "custody_copy": "One verified custody copy of the roster's spans by the existing offload tooling, made while the MBP is unarmed; the look runs on that copy, never on the MBP's measurement root. The copy lives under the one root this manifest registers (root): each span at <root>/<span id>, and the look's own files at fixed names in <root>/lm-interim-01. No stage takes a path.",
+    "custody_copy": "One verified custody copy of the roster's spans by the existing offload tooling, made while the MBP is unarmed; the look runs on that copy, never on the MBP's measurement root. The copy lives under the one root this manifest registers (root): each span at <root>/<span id>, and the look's own files at fixed names in <root>/lm-interim-01. Campaign stages take no path. The stage-1 rehearsal takes only a new output directory outside the repository and every registered root.",
     "host": "Under RL-184 the lead records the admitted commit's host-id token from the named machine in the stage1_committed LOOKS.json row on main. Stage 2 recomputes it before reservation. A host change requires a new ledger row and confirmation that the first host has no reservation.",
     "no_import_by": [
       "scripts/cadence_legs_runner.py",
