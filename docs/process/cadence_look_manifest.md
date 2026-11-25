@@ -325,10 +325,18 @@ shared branch against origin.
    the verdict hash, the verified input names and hashes and the producer's
    wall and monotonic clock readings. Campaign stage 1 checks the receipt
    against the verdict, committed row and manifest pins before admitting
-   spans. It rechecks the ledger and receipt at the end of preflight and
-   before writing either stage-1 output. Rehearsal stage 1 uses the draft
-   verdict without a receipt. If the campaign row changes before stage 1,
-   the stock run must produce a fresh receipt for that row.
+   spans. Rehearsal stage 1 uses the draft verdict without a receipt. If
+   the campaign row changes before stage 1, the stock run must produce a
+   fresh receipt for that row.
+
+Every stage 1 that is not a draft run, campaign or rehearsal, derives its
+admission again at the end of preflight, before the first protected read,
+and immediately before its writes. It refuses any change and writes
+nothing. Each derivation checks the ledger gate and the committed row for
+this manifest, roster, verdict and ruled exclusions. A campaign run also
+checks the stock receipt and its input pins. A rehearsal also checks the
+registered host and the destination fence under the ledgers as fetched
+then.
 
 Stage 1 selects the range in `stages.stage1.dry_run`, verifies the
 selected spans against the pins and uses the campaign's stage-1 time
@@ -339,7 +347,9 @@ registered raw custody copy.
 Use an absolute destination with an existing parent and symlink-free
 components. It must be disjoint from the checkout and from the physical
 roots registered in either the rehearsal branch or fetched main.
-Those roots cover the campaign output and span directories. The producer
+Those roots cover the campaign output and span directories. A fetch during
+rehearsal stage 1 that registers a root containing the destination makes
+the stage refuse before it writes. The producer
 creates the directory exclusively with private permissions. Stage 1 takes
 the directory with only the verdict in it and writes `level_r.json` and
 `stage1.json` there. The

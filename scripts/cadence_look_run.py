@@ -1326,20 +1326,23 @@ def superseded_source(row, layout):
     return old_input, old_ruled
 
 
-def rehearsal_output(value, layout, refs, *, consume=False):
-    """Fence both rehearsal commands. The producer creates the directory, and stage 1 takes it with its one file."""
+def rehearsal_fence(value, layout, refs):
+    """The destination fence of both rehearsal commands: no symlinked component, an existing writable parent, and
+    outside and disjoint from the repository, the look's root and every root registered on each of ``refs``, read
+    from each ref's ledger and manifests as fetched now. Stage 1 runs it again at its preflight's exit and before
+    its writes (``stage1_authority``), so each refusal is an ``owned_refusal``. Returns the path."""
     try:
         path = release.no_symlink_components(value, "rehearsal directory")
     except ValueError as error:
-        raise F.LookInputError(str(error)) from None
+        raise owned_refusal(str(error)) from None
     if not path.parent.is_dir() or not os.access(path.parent, os.W_OK | os.X_OK):
-        raise F.LookInputError("rehearsal directory needs an existing writable parent")
+        raise owned_refusal("rehearsal directory needs an existing writable parent")
     roots = [layout.repo, layout.root]
     for ref in refs:
         _, commit = M.shared_ref(layout.repo, ref)
         rc, raw, _ = M._git(layout.repo, "show", f"{commit}:{M.LOOK_LEDGER_PATH}")
         if rc:
-            raise F.LookInputError(f"rehearsal cannot read the registered roots from {ref}'s ledger")
+            raise owned_refusal(f"rehearsal cannot read the registered roots from {ref}'s ledger")
         ledger = M.validate_look_ledger(M.strict_json(raw))
         manifests = set()
         for row in ledger["looks"]:
@@ -1351,17 +1354,17 @@ def rehearsal_output(value, layout, refs, *, consume=False):
         if not any(name == M.INTERIM_MANIFEST_PATH for name, _ in manifests):
             rc, entry, _ = M._git(layout.repo, "ls-tree", commit, "--", M.INTERIM_MANIFEST_PATH)
             if rc:
-                raise F.LookInputError(f"rehearsal cannot inspect {ref} for the interim manifest")
+                raise owned_refusal(f"rehearsal cannot inspect {ref} for the interim manifest")
             if entry:
                 manifests.add((M.INTERIM_MANIFEST_PATH, None))
         for name, expected in sorted(manifests):
             rc, raw, _ = M._git(layout.repo, "show", f"{commit}:{name}")
             if rc or (expected is not None and hashlib.sha256(raw).hexdigest() != expected):
-                raise F.LookInputError(f"rehearsal cannot verify {ref}'s registered manifest {name}")
+                raise owned_refusal(f"rehearsal cannot verify {ref}'s registered manifest {name}")
             root = M.strict_json(raw).get("custody", {}).get("root")
             if root is not None:
                 if M.root_problems(root, final=True):
-                    raise F.LookInputError(f"rehearsal cannot resolve the registered custody root in {ref}:{name}")
+                    raise owned_refusal(f"rehearsal cannot resolve the registered custody root in {ref}:{name}")
                 roots.append(Path(root))
 
     resolved_path = path.resolve()
@@ -1374,7 +1377,13 @@ def rehearsal_output(value, layout, refs, *, consume=False):
         if (folded_path.is_relative_to(folded_root) or folded_root.is_relative_to(folded_path)
                 or (root.exists() and release.physically_within(resolved_path.parent, root))
                 or (path.exists() and root.exists() and release.physically_within(root, resolved_path))):
-            raise F.LookInputError(f"rehearsal directory must be outside and disjoint from registered root {root}")
+            raise owned_refusal(f"rehearsal directory must be outside and disjoint from registered root {root}")
+    return path
+
+
+def rehearsal_output(value, layout, refs, *, consume=False):
+    """Fence both rehearsal commands. The producer creates the directory, and stage 1 takes it with its one file."""
+    path = rehearsal_fence(value, layout, refs)
     if consume:
         if (not path.is_dir() or path.stat().st_mode & 0o777 != 0o700 or path.stat().st_uid != os.geteuid()
                 or {item.name for item in path.iterdir()} != {M.LOOK_FILES["rules_3_4"]}):
@@ -1412,10 +1421,11 @@ def write_rehearsal_file(directory, name, data):
 
 
 def rehearsal_host(row):
+    """The row's registered host is this one. Stage 1 checks it again before its writes (``stage1_authority``)."""
     if not row.get("execution_host"):
-        raise F.LookInputError("rehearsal requires a registered execution_host")
+        raise owned_refusal("rehearsal requires a registered execution_host")
     if row["execution_host"] != M.execution_host():
-        raise F.LookInputError("rehearsal execution_host does not match this host")
+        raise owned_refusal("rehearsal execution_host does not match this host")
 
 
 def rehearsal_roster(roster, doc):
@@ -1439,14 +1449,43 @@ def cmd_stage1(a):
         return _stage1(a, stack)
 
 
-def campaign_stage1_gate(a, layout):
-    """Revalidate the fetched ledger and receipt, reusing verification only for an identical commit and receipt."""
-    receipt = layout.read("rules_3_4_receipt")
+def stage1_authority(a, layout, rehearsal):
+    """Everything a non-draft stage 1 runs under, derived afresh from the ledger as fetched now (PR #971 round 4).
+    For every mode: this look's committed row names the manifest verify_pins checked and the roster, verdict file and
+    ruled exclusions the run read (``require_inputs_committed``), the ledger gate holds (``ledger_gate``), and the
+    state records the manifest file's bytes as they now are. For a
+    rehearsal, also: the row's registered host is this one, and the destination fence holds under every fenced
+    ref's ledger. For a campaign run, also: the post-commit stock receipt names this row, these verdict bytes and
+    the manifest's input pins. Returns (the state the run is admitted under, the gate). The ref's own commit is
+    not part of the state: as at 75ce4bf5c, an unrelated commit on the ledger ref leaves the ledger, the row and
+    therefore the admission unchanged."""
+    inputs = a.stage1_inputs
+    row = M.require_inputs_committed(ROOT, F.LOOK_ID, inputs["manifest_sha256"], roster_sha256=inputs["roster_sha256"],
+                                     verdicts_sha256=inputs["verdicts_sha256"], ledger_ref=a.ledger_ref,
+                                     ruled_exclusions=inputs["ruled_exclusions"],
+                                     draft_rehearsal=inputs["draft_rehearsal"])
     gate = M.ledger_gate(ROOT, a.ledger_ref)
-    if (gate, receipt) != getattr(a, "validated_stock_receipt", None):
-        row, verdicts_sha256, pins = a.stock_receipt_inputs
-        M.require_rules34_receipt(ROOT, gate, row, verdicts_sha256, pins, receipt)
-        a.validated_stock_receipt = gate, receipt
+    # the manifest's bytes now: the row names the manifest verify_pins checked, and the file must still be it
+    state = {"head": gate["commit"], "ref": gate["ref"], "manifest_sha256": sha256_file(a.manifest), "row": row}
+    if rehearsal is not None:
+        rehearsal_host(row)
+        state["destination"] = str(rehearsal_fence(rehearsal, layout, a.rehearsal_refs))
+    else:
+        receipt = layout.read("rules_3_4_receipt")
+        M.require_rules34_receipt(ROOT, gate, row, inputs["verdicts_sha256"], inputs["pins"], receipt)
+        state["receipt_sha256"] = hashlib.sha256(receipt).hexdigest()
+    return state, gate
+
+
+def stage1_exit_authority(a, layout, rehearsal):
+    """Stage 1's one exit check, in every non-draft mode: at the preflight's exit, before the first protected read,
+    and again immediately before the writes. Refuse unless ``stage1_authority``, run now, derives exactly the state
+    the run was admitted under. Returns the gate."""
+    state, gate = stage1_authority(a, layout, rehearsal)
+    changed = sorted(key for key in state.keys() | a.stage1_admitted.keys()
+                     if state.get(key) != a.stage1_admitted.get(key))
+    if changed:
+        raise owned_refusal("stage 1's admission changed after it was admitted: " + ", ".join(changed))
     return gate
 
 
@@ -1469,7 +1508,6 @@ def _stage1(a, stack):
         sdir_of = None
     else:
         ruled = ruled_exclusions(a.ruled_exclusion)
-        ledger_gate = None
         try:
             if rehearsal is not None:
                 a.rehearsal_dir = rehearsal_output(rehearsal, layout, a.rehearsal_refs, consume=True)
@@ -1482,17 +1520,15 @@ def _stage1(a, stack):
         roster_sha, rules_sha = hashlib.sha256(roster_raw).hexdigest(), hashlib.sha256(rules_raw).hexdigest()
         if not a.allow_draft:
             # Mythos r3 N8: the committed ledger names this manifest, roster and verdict file before custody opens;
-            # RL-173 E.1 item 4: a stage 1 run once more names the research lead's ruled exclusions, nothing else
-            row = M.require_inputs_committed(ROOT, F.LOOK_ID, sha256_file(mpath), roster_sha256=roster_sha,
-                                             verdicts_sha256=rules_sha, ledger_ref=a.ledger_ref,
-                                             ruled_exclusions={k: list(v) for k, v in ruled.items()},
-                                             draft_rehearsal=rehearsal is not None and doc["status"] == "draft")
-            if rehearsal is not None:
-                rehearsal_host(row)
-                ledger_gate = M.ledger_gate(ROOT, a.ledger_ref)
-            else:
-                a.stock_receipt_inputs = row, rules_sha, doc["inputs"]["pins"]
-                campaign_stage1_gate(a, layout)
+            # RL-173 E.1 item 4: a stage 1 run once more names the research lead's ruled exclusions, nothing else.
+            # PR #971 round 4: stage1_authority derives the whole admission; stage1_exit_authority derives it again
+            # at the preflight's exit and before the writes, and refuses any change.
+            a.stage1_inputs = {"manifest_sha256": sha256_file(mpath), "roster_sha256": roster_sha,
+                               "verdicts_sha256": rules_sha, "ruled_exclusions": {k: list(v) for k, v in ruled.items()},
+                               "draft_rehearsal": rehearsal is not None and doc["status"] == "draft",
+                               "pins": doc["inputs"]["pins"]}
+            a.stage1_admitted, _ = stage1_authority(a, layout, rehearsal)
+            row = a.stage1_admitted["row"]
         roster = M.strict_json(roster_raw)
         if not isinstance(roster, list) or not all(isinstance(s, dict) and isinstance(s.get("span_id"), str) for s in roster):
             raise F.LookInputError("roster: not a list of spans")
@@ -1532,9 +1568,7 @@ def _stage1(a, stack):
         plan = stage1_preflight(roster, sdir_of, rules34, ruled=ruled, also_ruled=superseded[1],
                                 synthetic_only=a.allow_draft, outputs=outputs)
         _guard_loaded(doc)
-        if not a.allow_draft and rehearsal is None:
-            ledger_gate = campaign_stage1_gate(a, layout)
-        a.ledger_gate_record = ledger_gate
+        a.ledger_gate_record = None if a.allow_draft else stage1_exit_authority(a, layout, rehearsal)
         extra = {"roster_sha256": roster_sha, "rules_3_4_sha256": rules_sha}
         return stage1_protected(a, layout, plan, ruled, superseded, extra, staging, sdir_of)
     if a.allow_draft and look_input.get("synthetic") is not True:
@@ -1896,7 +1930,9 @@ def finish_stage1(a, doc, out):
     if probs:
         raise owned_refusal("stage 1's own output: " + "; ".join(probs))
     if not a.allow_draft:
-        out["ledger_gate"] = campaign_stage1_gate(a, a.layout)
+        # PR #971 round 4: the admission, derived again immediately before the writes. The file records the gate of
+        # the preflight's exit, which is the file stage1_problems just checked.
+        stage1_exit_authority(a, a.layout, None)
     if getattr(a, "look_input_bytes", None) is not None:
         a.layout.create("level_r", a.look_input_bytes)
     return a.layout.create("stage1", F.dump(out))
@@ -1906,6 +1942,8 @@ def finish_rehearsal(a, doc, out):
     problems = M.stage1_problems(ROOT, doc, out, sha256_file(a.manifest), allow_draft=False)
     if problems:
         raise owned_refusal("rehearsal stage 1's own output: " + "; ".join(problems))
+    # PR #971 round 4: the admission (row, host, destination fence, ledger gate), derived again before the writes
+    stage1_exit_authority(a, a.layout, a.rehearsal)
     # The closed campaign schema refuses the rehearsal marker if this artifact is supplied to stage 2.
     files = {"level_r": a.look_input_bytes, "stage1": F.dump({**out, "rehearsal": True})}
     summary = {

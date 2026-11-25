@@ -156,3 +156,89 @@ against the fix head in the draft PR gate ledger.
 E.6 remains provisional until the committed pins supply per-stream sizes
 and the literal Air invocation can run. The independent final-head
 recheck and cold pass remain open.
+
+## Round 4: one stage-1 exit authority and a parity check on the parent
+
+Astra's second narrow recheck reproduced a HIGH at `434f32151`. During
+rehearsal preflight, a fetch registered the rehearsal destination as the
+campaign look directory. Rehearsal then wrote `level_r.json` and a marked
+`stage1.json` there against the old ledger commit, which spent the
+write-once slot. At `75ce4bf5c` the same replay exited 2 and wrote
+nothing. Fix 2 had made the preflight-exit ledger check conditional on
+`rehearsal is None`. Each earlier fix had likewise closed its finding and
+dropped a guard that `75ce4bf5c` had. The retained audit is
+`astra-971-narrow2-1125`, with `tmp/rehearsal_fetch.py` and its parent and
+head logs.
+
+Commit `0e20148e0` restores `RUN_STATE.md` and `TASK_QUEUE.md` to the PR
+base bytes, as the lead's standing rule requires.
+
+Test-only commit `db5d7b183` adds the convergence check (lead spec S2).
+`tests/cadence/look_parity_cases.py` replays every reproducer from rounds
+1 to 3 on generated custody against one source tree. It adds two
+before-write variants and a branch rehearsal whose fetch registers the
+destination on main only. `Pr971Convergence` runs each replay against this
+checkout and against `75ce4bf5c` extracted from git. Every replay here
+must refuse for its stated reason and write nothing. Every parent refusal
+without a write must hold here too. The parent's outcomes must match the
+audits' observations. A second test lists every raise site and refusing
+call in the parent's `_stage1`, `finish_stage1` and `finish_rehearsal`,
+with the guards that reach each one. Each must survive at the same guards
+or name its replacement and the replacement's own guards. At `db5d7b183`
+three replays wrote outputs. The enumeration found the parent's
+preflight-exit ledger gate with no unconditional replacement.
+
+The fix (lead spec S1) replaces the separate checks with one function.
+`stage1_authority` derives everything a non-draft stage 1 runs under from
+the ledger as fetched now. That covers the committed row for this
+manifest, roster, verdict and ruled exclusions, the ledger gate and the
+manifest's current bytes. A campaign run adds the stock receipt and its
+input pins. A rehearsal adds the registered host and the destination
+fence under every fenced ref. Stage 1 calls it at admission.
+`stage1_exit_authority` calls it again at the end of preflight, before the
+first protected read, and immediately before the writes. It does this in
+campaign and rehearsal modes alike and refuses any change. The fence moved
+from `rehearsal_output` into `rehearsal_fence`, and the fence and host
+refusals now use `owned_refusal`. Before the first protected read these
+are the same refusals as before. After it they are preflight breaches.
+The stage-1 file records the preflight-exit gate again, as at `75ce4bf5c`,
+so `stage1_problems` checks the bytes that are written. An unrelated
+commit on the ledger ref leaves the ledger and row unchanged, so it still
+passes. The runner was re-pinned, along with the draft row's manifest
+digest. The manifest's `pin_check` and the operator sequence now describe
+the shared exit check.
+
+| Replay (audit round) | `75ce4bf5c` | `434f32151` | This fix |
+| --- | --- | --- | --- |
+| provenance (1) | wrote both | refused, no write | refused, no write |
+| span_override `--span-dir` (2) | wrote all three | refused, no write | refused, no write |
+| span_override stale copy (2) | wrote all three | refused, no write | refused, no write |
+| preflight_fetch (2) | refused, no write | refused, no write | refused, no write |
+| preflight fetch before writes (2) | wrote both | refused, no write | refused, no write |
+| rehearsal_fetch (3) | refused, no write | wrote both | refused, no write |
+| rehearsal fetch before writes (3) | wrote both | wrote both | refused, no write |
+| branch rehearsal, main fence (3) | wrote both | wrote both | refused, no write |
+
+Every control run succeeded on both trees. `rehearsal_fetch` now refuses
+with the parent's message. The branch case refuses because the fresh
+main ledger registers the destination's parent. Its ledger gate reads the
+shared branch and passes, as it did at the parent.
+
+On 14 generated spans and 72 legs, stock and rehearsal verdicts were
+byte-identical at
+`21a928663d60134d5d6169c11caa5fbc67b695fab02a89133d93bb25bf25e16e`. Stock
+and campaign stage 1 both exited 0. Astra's round-3 provenance replay gave
+the same results as at `434f32151`. Every receipt negative refused, the
+current stock receipt admitted stage 1, and stage 2 refused both a wrong
+stage-1 hash and the exact committed hash of the marked rehearsal
+artifact without taking a reservation. Locally, at utility priority with
+at most two workers, `test_look_run` (including the new class),
+`test_merge_audit_c3a0dd9f8`, `test_inclusion_34`, `test_round7_admission`
+and the host-command inventory passed: 183 tests. A run of the manifest,
+layout, custody-pin and input-review modules had passed 30 tests with no
+failure when the 20-minute local budget stopped it. Draft validation and
+the pin check are clean after the re-pin. No command-site key changed.
+The frozen admission matrix and the full suite run in hosted CI.
+
+E.6 remains provisional for the reasons above. The independent final-head
+recheck remains open.

@@ -1629,6 +1629,31 @@ class Pr971Convergence(unittest.TestCase):
                 problems.append(f"out of order: {first} must precede {then}")
         self.assertEqual(problems, [])
 
+    def test_the_exit_authority_refuses_any_change_of_the_admitted_state(self):
+        """``stage1_exit_authority`` compares every key ``stage1_authority`` derives with the admitted state: a
+        change refuses (a breach after the first protected read); an identical state returns the fresh gate."""
+        import types
+
+        admitted = {"head": "1" * 40, "ref": "refs/remotes/origin/main", "manifest_sha256": "2" * 64,
+                    "row": {"look_id": F.LOOK_ID, "status": "committed", "verdicts_sha256": "3" * 64},
+                    "receipt_sha256": "4" * 64}
+        gate = {"commit": "1" * 40, "ref": "refs/remotes/origin/main", "ref_commit": "5" * 40}
+        run = types.SimpleNamespace(stage1_admitted=admitted)
+        with unittest.mock.patch.object(R, "stage1_authority", return_value=(dict(admitted), gate)):
+            self.assertIs(R.stage1_exit_authority(run, None, None), gate)
+        changes = {"head": "6" * 40, "manifest_sha256": "7" * 64, "row": {**admitted["row"], "status": "spent"},
+                   "receipt_sha256": "8" * 64, "destination": "/generated/elsewhere"}
+        for key, value in changes.items():
+            for protected in (False, True):
+                with self.subTest(key=key, protected=protected), \
+                        unittest.mock.patch.object(R, "stage1_authority",
+                                                   return_value=({**admitted, key: value}, gate)), \
+                        unittest.mock.patch.dict(R._PHASE, {"protected": protected}):
+                    with self.assertRaises(F.LookInputError) as raised:
+                        R.stage1_exit_authority(run, None, None)
+                    self.assertIn(key, str(raised.exception))
+                    self.assertIs(type(raised.exception) is R.PreflightBreach, protected)
+
 
 class Stage1Custody(unittest.TestCase):
 
