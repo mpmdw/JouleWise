@@ -48,10 +48,11 @@ def synthetic_reservation_name(parent):
 
 
 def to_draft(doc):
-    """The manifest as a draft, whatever the checked-in status (Mythos round-4 N2: after the lead's freeze commit the
-    checked-in manifest is committed; the draft-mode tests and the mini repo work on a draft of it)."""
+    """A synthetic draft with an empty custody registration, whatever is registered in the checked-in manifest."""
     doc = json.loads(json.dumps(doc))
     doc["status"] = "draft"
+    doc["custody"]["root"] = None
+    doc["inputs"]["pins"]["spans"] = []
     return doc
 
 
@@ -295,9 +296,13 @@ def frozen_copy(test):
         if not target.exists():
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(REPO / rel, target)
-    for rel in (MANIFEST, lm.LOOK_LEDGER_PATH):          # every file the freeze commit rewrites
-        (root / rel).unlink()
-        shutil.copy2(REPO / rel, root / rel)
+    manifest = root / MANIFEST
+    manifest.unlink()
+    draft = to_draft(lm.load_json(REPO / MANIFEST))
+    manifest.write_text(json.dumps(draft, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    ledger = root / lm.LOOK_LEDGER_PATH
+    ledger.unlink()
+    shutil.copy2(REPO / lm.LOOK_LEDGER_PATH, ledger)
     commit(root, git_commit_it=False)
     registered = registered_root(test, root)
     doc = json.loads((root / MANIFEST).read_text(encoding="utf-8"))

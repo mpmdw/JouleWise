@@ -4,8 +4,9 @@
     {
       "look_id": "lm-interim-01",
       "manifest_path": "docs/process/cadence/looks/lm-interim-01.json",
-      "sha256": "025a8c5faf666ed0a0333c99e5d30aa373c18856fb5fe46332d7199c73fcdfc4",
-      "status": "draft"
+      "sha256": "bddeb059e43d5d4a0ce4daaf951a3b654bfe7d7b7ea2f7c136ed38136a3a46da",
+      "status": "draft",
+      "roster_sha256": "93cdec23e36c3b717e34a7865601f02d9e6135cafd26637849030fe0ef89b0bf"
     },
     {
       "look_id": "lm-qual-01",

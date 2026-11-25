@@ -1,5 +1,7 @@
-"""RL-194: the look's custody inputs are admitted by content address. Every byte here is generated; no custody,
-energy, meter or restricted file is read."""
+"""RL-194: the look's custody inputs are admitted by content address.
+
+The registered manifest test can compare staged SHA256SUMS text. Other input files are synthetic.
+"""
 from __future__ import annotations
 
 import copy
@@ -17,6 +19,7 @@ import unittest.mock
 from joulewise.cadence_looks import custody_pins as P
 
 COMMIT = "b4b6aeb192da60d895a7529311b06599efff5be4"
+MANIFEST = "docs/process/cadence/looks/lm-interim-01.json"
 FILES = {
     "runner_receipt.json": b'{"roster": ["L001"]}\n',
     "legs/L001/leg_record.json": b'{"result": {"bundle": "run"}}\n',
@@ -924,10 +927,26 @@ class GuardedReads(_Custody):
             self.assertEqual((link / "dev-01-s01" / RECEIPT).read_bytes(), FILES[RECEIPT])
 
 
+class RegisteredManifestInputs(unittest.TestCase):
+    def test_every_pin_matches_its_sums_line_in_order(self):
+        manifest = Path(__file__).resolve().parents[2] / MANIFEST
+        spans = json.loads(manifest.read_text(encoding="utf-8"))["inputs"]["pins"]["spans"]
+        self.assertEqual(len(spans), 14)
+        self.assertEqual(sum(len(span["files"]) for span in spans), 2855)
+        sums_dir = os.environ.get("JOULEWISE_LM_INTERIM_01_SUMS_DIR")
+        for span in spans:
+            span_id = span["span_id"]
+            with self.subTest(span=span_id):
+                rebuilt = P.offload_manifest_bytes(span)
+                self.assertEqual(sha(rebuilt), span["offload_manifest_sha256"])
+                if sums_dir:
+                    self.assertTrue(re.fullmatch(r"(?:dev-0[1-5]|hp-01)-s\d{2}", span_id))
+                    self.assertEqual(rebuilt, (Path(sums_dir) / f"{span_id}.SHA256SUMS").read_bytes())
+
+
 class ManifestInputs(unittest.TestCase):
     """The manifest carries the one pin list (audit 2: no other copy); the tool writes it from offload manifests
     and checks its chain."""
-    MANIFEST = "docs/process/cadence/looks/lm-interim-01.json"
 
     def setUp(self):
         from joulewise.cadence_looks import manifest as M
@@ -936,11 +955,12 @@ class ManifestInputs(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(prefix="pins-repo-")
         self.addCleanup(self.tmp.cleanup)
         self.repo = Path(self.tmp.name) / "repo"
-        self.manifest = self.repo / self.MANIFEST
+        self.manifest = self.repo / MANIFEST
         self.manifest.parent.mkdir(parents=True)
         real = Path(__file__).resolve().parents[2]
-        self.doc = json.loads((real / self.MANIFEST).read_text(encoding="utf-8"))
+        self.doc = json.loads((real / MANIFEST).read_text(encoding="utf-8"))
         self.doc["status"] = "draft"
+        self.doc["inputs"]["pins"]["spans"] = []
         self.manifest.write_text(json.dumps(self.doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         self.custody = Path(self.tmp.name) / "custody"
         self.plan = Path(self.tmp.name) / "plan.json"
