@@ -458,93 +458,14 @@ PART_C_GATED_D = "D_bank_benign_s1_gated_held"      # r1_phase_table.GATED_D_RUN
 PART_C_X_G = "X_G_contrast"
 
 
-def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
-                 facts=None, step_facts=None, prints=None):
-    """RL-145 step 3 / addendum section 6, Part C: a gated smoke on the final bytes.
-
-    The 30B predecessor, then step-D as the night runs it (Part A on the final bytes, with the
-    slots it needs), then the gated D_bank member seed 1 (the runtime applies W1's
-    inter-member schedule: the member's own configured idle), then X_G, which the existing
-    runtime kind runs with no further condition-13 code. It produces no slots and enters
-    nothing: the slots the gated runs read stay in this smoke's own step-D result. The verdict
-    is ``align_r1_part_c.evaluate``'s; a failure raises after the table is written.
-    """
+def smoke_part_c(output, runtime, _config, *, soak_reference, soak_ledger_sha256=None, invoke=None):
     from scripts import align_r1_part_c as part_c
-    facts = facts or part_c.facts_from_bundle
-    step_facts = step_facts or part_c.step_d_facts
-    if prints is None:
-        from joulewise.align.apple.rl145_prints import bundle_prints
-        prints = lambda bundle: bundle_prints(bundle, estimate_tokens=True)
-    output = Path(output)
-    output.mkdir(parents=True, exist_ok=False)
-    started = time.monotonic()
-    result = {"part": "C", "authority": "RL-145 step 3; RL-145 addendum section 6", "slots_entered": False, "members": {}}
 
-    def finish(verdict_doc=None, error=None):
-        if verdict_doc is not None:
-            result["evaluation"] = verdict_doc
-        if error is not None:
-            result["error"] = error
-        result["elapsed_s"] = time.monotonic() - started
-        (output / "smoke_part_c.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
-        (output / "smoke.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
-        # RL-153 section 1.2 note 6, RL-156 section 3.2: the verdict and the evaluation's log (RL-152 section
-        # 1.4's line among them) go to the terminal as well as the record; the record is unchanged.
-        if verdict_doc is not None:
-            print(f"Part C verdict: {verdict_doc.get('verdict')} (pass: {verdict_doc.get('pass')})")
-            for line in verdict_doc.get("log") or ():
-                print(f"Part C log: {line}")
-    try:
-        result["members"]["predecessor"] = invoke(runtime, "capture-predecessor-30b", output / "capture_predecessor_30b",
-                                                  soak_reference=soak_reference)
-        step_dir = output / rt.STEP_D_SEGMENT
-        step = invoke(runtime, "step-d", step_dir, soak_reference=soak_reference)
-        result["members"]["step_d"] = step
-        slots = step.get("slots")
-        n_chunk = (slots or {}).get("N_chunk")
-        step_line = step_facts(step_dir / step["bundle"], step) if step.get("bundle") else {"g0_outcome": step.get("g0_outcome")}
-        if not isinstance(slots, dict) or not isinstance(n_chunk, int):
-            doc = part_c.evaluate(step_d=step_line, d_bank=None, n_chunk=n_chunk if isinstance(n_chunk, int) else 1)
-            finish(doc, "step-D produced no slots: the gated members cannot run")
-            raise ValueError("Part C: step-D produced no slots; see smoke_part_c.json")
-        bank_dir = output / PART_C_GATED_D
-        bank = invoke(runtime, "d-bank-benign-s1", bank_dir, soak_reference=soak_reference)
-        result["members"]["d_bank"] = bank
-        bank_facts = facts(bank_dir / bank["bundle"], role="d-bank")
-        # The runtime's own X7 flag and T_dead are the authority where it reports them.
-        bank_facts["x7"] = bank.get("x7", bank_facts["x7"])
-        bank_facts["t_dead_s"] = (bank.get("deadman") or {}).get("T_dead_s", bank_facts["t_dead_s"])
-        # RL-149 section 1.5: the stop reason is read from the runtime's episode flags where it reports them.
-        if isinstance(bank.get("episode_flags"), list):
-            bank_facts["episode_flags"] = list(bank["episode_flags"])
-        printed = prints(bank_dir / bank["bundle"])
-        x_g_facts, why = None, None
-        try:
-            x_g = invoke(runtime, "x-g", output / PART_C_X_G, soak_reference=soak_reference)
-            result["members"]["x_g"] = x_g
-            x_g_facts = facts(output / PART_C_X_G / x_g["bundle"], role="x-g")
-            # PR #777 row-2 finding 7: the runtime's flags decide only when they are recorded (a list), as on
-            # D_bank's path; otherwise the bundle-derived X7 stands.
-            if isinstance(x_g.get("episode_flags"), list):
-                x_g_facts["x7"] = any(str(f).startswith("episode.deadman:") for f in x_g["episode_flags"])
-        except (r1.Refusal, ValueError, KeyError, OSError) as exc:
-            why = f"{type(exc).__name__}: {exc}"
-            print(f"Part C: X_G left out, the launcher could not run it without more condition-13 code: {why}",
-                  file=sys.stderr)
-        doc = part_c.evaluate(step_d=step_line, d_bank=bank_facts, n_chunk=n_chunk, x_g=x_g_facts,
-                              x_g_not_run_reason=why, printed=printed)
-        result["n_chunk_formula_recorded"] = (step.get("slot_detail") or {}).get("N_chunk_formula")
-        finish(doc)
-    except BaseException as exc:
-        if "evaluation" not in result and "error" not in result:
-            finish(error=f"{type(exc).__name__}: {exc}")
-        raise
-    if not doc["pass"]:
-        raise ValueError(f"Part C failed ({doc['verdict']}): {doc['disposition']}")
-    return result
+    return part_c.run_bound_part_c(output, runtime, soak_reference=soak_reference,
+                                   soak_ledger_sha256=soak_ledger_sha256, invoke=invoke)
 
 
-def smoke(output, part, runtime, *, soak_reference, invoke=r1._invoke):
+def smoke(output, part, runtime, *, soak_reference, soak_ledger_sha256=None, invoke=None):
     """Native only when explicitly run by the lead in an agent-free session.
 
     B runs the same admission followed by the D step, in one member. Its
@@ -560,7 +481,9 @@ def smoke(output, part, runtime, *, soak_reference, invoke=r1._invoke):
         raise ValueError("condition 13: smoke config differs from the bound runtime config")
     config, _ = rt.load_config(config_path)
     if part == "C":
-        return smoke_part_c(output, runtime, config, soak_reference=soak_reference, invoke=invoke)
+        return smoke_part_c(output, runtime, config, soak_reference=soak_reference,
+                            soak_ledger_sha256=soak_ledger_sha256, invoke=invoke)
+    invoke = invoke or r1._invoke
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
@@ -608,7 +531,12 @@ def main(argv=None):
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--part", choices=("A", "B", "C"), required=True)
     p.add_argument("--soak-reference", type=Path, required=True)
+    p.add_argument("--soak-ledger-sha256")
     p.add_argument("--inputs", type=Path, default=ROOT / reg.REGISTRATION / "inputs.json")
+    p = sub.add_parser("replay-archived", help="judge an authorized archive or verify one member binding")
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--runtime-config", type=Path, required=True)
+    p.add_argument("--kind", choices=("idle", "capture-predecessor-30b", "step-d", "d-bank-benign-s1", "x-g"))
     p = sub.add_parser("desk")
     p.add_argument("--run-dir", type=Path, required=True)
     p = sub.add_parser("regenerate-table", help="RL-122: re-derive (not re-measure) the Part B selection")
@@ -627,7 +555,25 @@ def main(argv=None):
             handle.write(raw)
         print(hashlib.sha256(raw).hexdigest())
     elif args.command == "smoke":
-        smoke(args.output, args.part, r1.runtime_argv_from_inputs(args.inputs), soak_reference=args.soak_reference)
+        smoke(args.output, args.part, r1.runtime_argv_from_inputs(args.inputs), soak_reference=args.soak_reference,
+              soak_ledger_sha256=args.soak_ledger_sha256)
+    elif args.command == "replay-archived":
+        from scripts import align_r1_part_c as part_c
+
+        if args.kind is None:
+            result = part_c.replay_archived(args.output, args.runtime_config)
+            print(json.dumps(result, sort_keys=True))
+            return 0 if result["verdict"] == "pass" else 1
+        try:
+            result = part_c.archived_custody_member(args.output, args.runtime_config, args.kind)
+        except part_c.EvidenceFailure as error:
+            print(json.dumps(error.finding(), sort_keys=True))
+            return 1
+        except (OSError, ValueError, TypeError):
+            print(json.dumps(part_c.EvidenceFailure(
+                "evidence_unverifiable", args.kind, "runtime_custody.json").finding(), sort_keys=True))
+            return 1
+        print(json.dumps(result, sort_keys=True))
     else:
         print(json.dumps(replay.night_desk(args.run_dir), indent=2, sort_keys=True))
     return 0

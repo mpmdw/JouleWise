@@ -2020,5 +2020,11 @@
     "locator": "_capture_parser:99396a2a5503574e",
     "command": "pmset",
     "seam": "none"
+  },
+  {
+    "file": "scripts/align_r1_part_c.py",
+    "locator": "_pinned_trace_problems:2bd56ab03eeb3e96",
+    "command": "python-isolated",
+    "seam": "subprocess.run, imported at call time (PinnedD018ClosureTests patches it); the child loads only the pinned D-018 closure from a private directory"
   }
 ]

@@ -28,6 +28,10 @@
       ],
       "fallback_rejection_threshold_seconds": 300,
       "_evidence": "CI-12 (2026-10-05): seconds is the median heavy unit (463.593 s) plus the median remainder unit (236.753 s) over runs 37402996922, 37402992313, 37402988115, 37397353773, 37397232989; the two units run in separate exclusive jobs, so this sum is not a serial observation. evidence_range_seconds is the min and max of the per-run sums. Dedicated runners and the 120-minute ceiling are unchanged."
+    },
+    "tests.align.test_partc_frozen_differential": {
+      "runs_in": ".github/workflows/partc-frozen-differential.yml",
+      "_evidence": "W1 Part C port PR #959 (trial PR #958 F-13). W1 has a tests/align package, so ordinary discovery collects the historical v3.2 differential runner. RL-215 retains that runner as a baseline and gives acceptance to the writer-produced v4 suite and inherited operands in the dedicated 16-shard workflow. Exclude the baseline from ordinary shards and the quick tier."
     }
   },
   "split_modules": {
@@ -810,6 +814,8 @@
     "tests.twins.test_harvest_twin_comparison": 7.145
   },
   "timing_exemptions": {
+    "tests.test_part_c_evidence_ledger": "RL-183c synthetic evidence binding; pending hosted timing.",
+    "tests.test_part_c_gate_evidence": "Round 10 Astra finding 2 synthetic evaluator regression; pending hosted timing. Discovery packs it at the default conservative weight.",
     "tests.b5_analysis.test_candidate_physics_memo": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
     "tests.b5_analysis.test_l4_custody_probe": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
     "tests.b5_analysis.test_pack_parallel": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",

@@ -39,7 +39,8 @@ class Finding1PartCBlackoutTests(unittest.TestCase):
                     patch.object(smoke.r1, 'executed_commit', return_value='0' * 40), \
                     patch.object(smoke.r1, '_now_local', lambda: moment), \
                     patch.object(smoke.r1, 'runtime_argv_from_inputs', return_value=['runtime']), \
-                    patch.object(smoke.r1, '_invoke', side_effect=RuntimeError('reached the soak')):
+                    patch.object(smoke.r1, '_invoke', side_effect=RuntimeError('reached the soak')), \
+                    patch.object(smoke.r1, '_run', side_effect=RuntimeError('reached the soak')):
                 smoke.soak_child(out, Path(directory) / 'inputs.json', parts=parts)
 
     def test_a_0129_start_refuses_for_part_c_and_not_for_the_soak_alone(self):
@@ -174,28 +175,28 @@ class Finding7PartCXgFlagsTests(unittest.TestCase):
     """LOW: X_G's X7 comes from the runtime's flags only when they are a list."""
 
     def test_missing_flags_keep_the_bundle_x7(self):
-        from scripts import align_r1_followup_kit as fkit
-        from tests.align.test_rl145_part_c import STEP, bank
+        from tests.align.test_rl145_part_c import KitSequenceTests, bank, write_receipt
+
+        case = KitSequenceTests("test_order_and_a_passing_table")
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        original = case.invoke
 
         def invoke(runtime, kind, output, **kw):
-            base = {'bundle': kind + '-bundle'}
-            if kind == 'step-d':
-                return {**base, 'g0_outcome': 'released', 'g0_wait_s': 212.0,
-                        'slots': {'N_chunk': 4096, 'B_D': 6144}, 'slot_detail': {}}
-            if kind == 'd-bank-benign-s1':
-                return {**base, 'x7': False, 'deadman': {'T_dead_s': 1000.0}}
-            return base                              # x-g: no episode_flags
+            receipt = original(runtime, kind, output, **kw)
+            if kind == "x-g":
+                receipt.pop("episode_flags")
+                write_receipt(output, receipt)
+            return receipt
 
-        def facts(bundle, *, role):
-            return bank() if role == 'd-bank' else {'x7': True, 'intervals': []}
-        with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stderr(io.StringIO()):
-            with self.assertRaisesRegex(ValueError, 'Part C failed'):
-                fkit.smoke_part_c(Path(tmp) / 'c', ['runtime'], SimpleNamespace(), soak_reference='s',
-                                  invoke=invoke, facts=facts, step_facts=lambda *_: dict(STEP),
-                                  prints=lambda bundle: {'turns': []})
-            table = json.loads((Path(tmp) / 'c' / 'smoke_part_c.json').read_text())
-        self.assertIs(table['evaluation']['lines']['x_g']['x7'], True)
-        self.assertFalse(table['evaluation']['lines']['x_g']['pass'])
+        case.invoke = invoke
+        case.facts = lambda bundle, *, role: bank(x7=role == "x-g")
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaisesRegex(ValueError, "Part C failed"):
+                case.run_c()
+        table = json.loads((case.tmp / "c" / "smoke_part_c.json").read_text())
+        self.assertIs(table["evaluation"]["lines"]["x_g"]["x7"], True)
+        self.assertFalse(table["evaluation"]["lines"]["x_g"]["pass"])
 
 
 class Finding8PartCLateFirstReadingTests(unittest.TestCase):
@@ -209,14 +210,16 @@ class Finding8PartCLateFirstReadingTests(unittest.TestCase):
                             'status': {'monotonic_ns': t, 'os_level': 0, 'pm_state': 'Nominal',
                                        'pm_observed_ns': t}}}
                 for t in (10 * NS, 11 * NS, 12 * NS, 80 * NS)]   # a journal gap from 12 s to 80 s
-        turns = [SimpleNamespace(index=0, start_ns=13 * NS, end_ns=90 * NS, decode_tokens=10, prefill_tokens=5)]
-        ep = SimpleNamespace(hardware={'thermal': {'intervals': []}, 'token_budget': {'deadman_s': 983.1}},
-                             turns=turns, flags=[])
+        turns = [SimpleNamespace(index=0, start_ns=13 * NS, end_ns=90 * NS, decode_tokens=10, prefill_tokens=2)]
+        ep = SimpleNamespace(hardware={"thermal": {"intervals": [], "flags": []},
+                                       "token_budget": {"deadman_s": 983.1}}, turns=turns, flags=[])
+        rows = [{"kind": "session_start", "module": "temperature", "values": {}}, *rows,
+                {"kind": "session_end", "module": "temperature", "values": {"collector_error": None}}]
         with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / 'outputs').mkdir()
-            (Path(tmp) / 'outputs/align_thermal.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
-            with patch('joulewise.align.apple.workload.read_episode_bundle', return_value=ep):
-                facts = pc.facts_from_bundle(tmp, role='d-bank')
+            (Path(tmp) / "outputs").mkdir()
+            (Path(tmp) / "outputs/align_thermal.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows))
+            with patch.object(pc, "read_checked_episode", return_value=(ep, {"flags": []})):
+                facts = pc.facts_from_bundle(tmp, role="d-bank")
         self.assertIsNone(facts['turns'][0]['first_reading_after_start'])
         line = pc.d_bank_start_state({**facts, 'intervals': []})
         self.assertIn('first reading after turn 0 start: no journal row for sample', line['reasons'])
