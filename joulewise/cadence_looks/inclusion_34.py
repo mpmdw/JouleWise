@@ -49,10 +49,16 @@ clock (epoch), which is step 3's convention for these bundles. The sidecar rows 
 ``started``/``finished`` ``wall_ns`` stamps. The registered ``thermal.coverage`` uses ``monotonic_ns``.
 Coverage counts cells on a grid anchored at the first sample, so a constant offset between the clocks does
 not change the result. Network time is off for the whole campaign (RL-149 section 2.2).
+
+    python3 -I -B joulewise/cadence_looks/inclusion_34.py --rehearsal NEW_DIRECTORY
+
+RL-217 E.1 runs the whole input-bound draft roster on the registered host. The producer writes the
+verdict in the new private directory and prints its basename and sha256 for the lead.
 """
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+import hashlib
 import json
 import sys
 import math
@@ -591,40 +597,117 @@ def judge_custody(roster, sdir_of, selected_keys):
     return verdicts, {"legs": detail, "span_trailers": trailers, "soak_retries": soaks}
 
 
+def _verdict_text(doc):
+    return json.dumps(doc, indent=1, sort_keys=True, allow_nan=False) + "\n"
+
+
 def _write(path, doc):
-    import hashlib
-    text = json.dumps(doc, indent=1, sort_keys=True, allow_nan=False) + "\n"
+    text = _verdict_text(doc)
     Path(path).write_text(text, encoding="utf-8")
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _fresh_bytecode_cache():
-    """Mythos round-4 N4, Sol round-4 NEW-2: -B stops Python writing bytecode, not reading it. A fresh, empty
-    pycache prefix (removed at exit) means no repository module can run from a stale __pycache__ entry beside its
+def _fresh_bytecode_cache(*, create):
+    """Mythos round-4 N4, Sol round-4 NEW-2: -B stops Python writing bytecode, not reading it. An unused
+    pycache prefix means no repository module can run from a stale __pycache__ entry beside its
     pinned source: each compiles from the bytes verify_pins hashes. Called before the first repository import when
     the file runs as a program; manifest.cached_bytecode() confirms it before custody opens."""
-    import atexit
-    import shutil
-    import tempfile
     sys.dont_write_bytecode = True
-    prefix = tempfile.mkdtemp(prefix="jw-look-pyc-")
-    sys.pycache_prefix = prefix
-    atexit.register(shutil.rmtree, prefix, True)
+    if create:
+        import atexit
+        import shutil
+        import tempfile
+        prefix = tempfile.mkdtemp(prefix="jw-look-pyc-")
+        sys.pycache_prefix = prefix
+        atexit.register(shutil.rmtree, prefix, True)
+    else:
+        import uuid
+        sys.pycache_prefix = str(REPO / f".jw-look-pyc-{uuid.uuid4().hex}")
+
+
+def _rehearse(destination):
+    """RL-217 E.1: judge the entire input-bound draft roster using the campaign evaluator and serializer."""
+    import contextlib
+    from types import SimpleNamespace
+    from joulewise.cadence_looks import manifest as lm
+
+    run = None
+    try:
+        lm.fetch_public(REPO)
+        refs = lm.rehearsal_refs(REPO)
+        ref = refs[0]
+        # Authenticate the runner's bytes before importing its shared rehearsal and custody admission path.
+        runner = REPO / "scripts/cadence_look_run.py"
+        manifest = REPO / lm.INTERIM_MANIFEST_PATH
+        doc = lm.verify_pins(manifest, REPO, running=[Path(__file__).resolve(), REPO / RUNTIME_CONFIG, runner],
+                             ledger_ref=ref, rehearsal=True)
+        if doc["status"] != "draft" or doc["look_id"] != lm.INTERIM_LOOK_ID:
+            raise lm.ManifestError(["rules-3-4 rehearsal requires an input-bound interim look draft"])
+        from scripts import cadence_look_run as run
+
+        run._guard_loaded(doc)
+        layout = run.layout_of(doc)
+        roster_raw = layout.read("roster")
+        row = lm.require_inputs_committed(REPO, doc["look_id"], lm.sha256_file(manifest),
+                                          roster_sha256=hashlib.sha256(roster_raw).hexdigest(),
+                                          ledger_ref=ref, draft_rehearsal=True)
+        run.rehearsal_host(row)
+        roster = lm.strict_json(roster_raw)
+        run.check_roster(roster)
+        span_ids = [entry["span_id"] for entry in roster]
+        args = SimpleNamespace(allow_draft=False)
+        loaded = run.load_pins(args, span_ids, doc=doc)
+        directory = run.rehearsal_output(destination, layout, refs)
+        with contextlib.ExitStack() as stack:
+            run.admit_custody(args, span_ids, layout.span, stack, streams="pass", loaded=loaded,
+                             scratch=directory, doc=doc)
+            verdicts, _ = judge_custody(roster, layout.span, keys(_json(REPO / RUNTIME_CONFIG)["sensors"]))
+        run._guard_loaded(doc)
+        data = _verdict_text(verdicts).encode("utf-8")
+        digest = hashlib.sha256(data).hexdigest()
+        if row.get("verdicts_sha256") not in (None, digest):
+            raise lm.ManifestError(["rehearsal verdict sha256 differs from the draft ledger commitment"])
+        name = lm.LOOK_FILES["rules_3_4"]
+        run.write_rehearsal_file(directory, name, data)
+        run.release.sync_directory(directory)
+    except lm.ManifestError as error:
+        print("REFUSE " + "; ".join(error.problems), file=sys.stderr)
+        return 1
+    except Exception as error:  # diagnostics from the evaluator may contain data
+        if run is not None and isinstance(error, run.F.LookInputError):
+            print(f"REFUSE {error}", file=sys.stderr)
+            return 1
+        print(f"FAILED {type(error).__name__}", file=sys.stderr)
+        return 2
+    print(f"{name} sha256={digest}")
+    return 0
 
 
 def main(argv=None):
     import argparse
     p = argparse.ArgumentParser(description="Rules 3 and 4 at the look (RL-166 Q7): the verdict file. No energy.")
-    p.add_argument("--roster", required=True)
-    p.add_argument("--custody", required=True)
+    p.add_argument("--rehearsal", metavar="NEW_DIRECTORY", help="RL-217 E.1: write only the private draft verdict")
+    p.add_argument("--roster")
+    p.add_argument("--custody")
     p.add_argument("--span-dir", action="append", default=[])
-    p.add_argument("--manifest", required=True, help="the look manifest; every pin is verified before custody is opened")
+    p.add_argument("--manifest", help="the look manifest; every pin is verified before custody is opened")
     p.add_argument("--allow-draft", action="store_true", help="synthetic runs only: a draft manifest")
-    p.add_argument("--out", required=True)
+    p.add_argument("--out")
     p.add_argument("--detail-out")
     a = p.parse_args(argv)
+    if a.rehearsal is not None:
+        if a.allow_draft or a.span_dir or any(x is not None for x in (a.roster, a.custody, a.manifest, a.out, a.detail_out)):
+            p.error("--rehearsal uses the registered inputs and may not be combined with campaign options")
+    else:
+        missing = [flag for flag in ("roster", "custody", "manifest", "out") if getattr(a, flag) is None]
+        if missing:
+            p.error("the following arguments are required: " + ", ".join(f"--{flag}" for flag in missing))
+    if __name__ == "__main__":
+        _fresh_bytecode_cache(create=a.rehearsal is None)
     if str(REPO) not in sys.path:                 # -I drops the repository from sys.path
         sys.path.insert(0, str(REPO))
+    if a.rehearsal is not None:
+        return _rehearse(a.rehearsal)
     from joulewise.cadence_looks import manifest as lm
     try:
         # a committed run reads the ledger from origin/main only, fetched now (audit 3, rule P3)
@@ -686,5 +769,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    _fresh_bytecode_cache()
     raise SystemExit(main())

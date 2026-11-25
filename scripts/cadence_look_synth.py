@@ -193,7 +193,7 @@ def planted_segment_energy(par, kind, n, P, c, u, v, z, onset, with_delta=True):
 
 
 # ------------------------------------------------------------------------------------------- build
-def build(scenario="noisy", seed=20261114, tokens=None):
+def build(scenario="noisy", seed=20261114, tokens=None, *, span_plan=SPANS):
     """(look_input, energy, truth). `tokens`, if a dict, receives every type-A leg's token stamps (for
     write_custody)."""
     par = params_for(scenario)
@@ -204,7 +204,7 @@ def build(scenario="noisy", seed=20261114, tokens=None):
 
     # pass 1: the plan, start readings, stamps
     plan = []
-    for si, (block, suf, date, hour, n, kit, rule) in enumerate(SPANS):
+    for si, (block, suf, date, hour, n, kit, rule) in enumerate(span_plan):
         span_id = f"{block}-{suf}"
         day_index = (np.datetime64(date) - np.datetime64(DAY0)).astype(int)
         t0 = DAY0_EPOCH + 86400.0 * float(day_index) + 3600.0 * hour
@@ -522,10 +522,14 @@ def _write_power_trace(path, pieces, lo, hi):
             f.write(f"{v!r},{w!r},powermetrics,gpu_power,{u!r},{v!r}\n")
 
 
-def _write_meter(path, pieces, t_lo, t_hi, off_ns, holes=()):
-    """A KM003C stream: 2 samples/s, Vbus 28 V, Ibus = W / 28, on CLOCK_MONOTONIC_RAW = epoch - off."""
+def _write_meter(path, pieces, t_lo, t_hi, off_ns, holes=(), *, rate_idx=0, poll_s=METER_POLL_S):
+    """A synthetic KM003C stream, on CLOCK_MONOTONIC_RAW = epoch - off."""
     import bisect
     import struct
+    from joulewise.external.km003c_parse import STEP_MS
+
+    step_ms = STEP_MS[rate_idx]
+    step_s = step_ms / 1000
     sample = struct.Struct("<HHiiHHHH")
     starts = [p[0] for p in pieces]
 
@@ -535,23 +539,23 @@ def _write_meter(path, pieces, t_lo, t_hi, off_ns, holes=()):
             return pieces[i][2]
         return DC_IDLE_W
     raw0 = int(round(t_lo * 1e9)) - off_ns
-    n = int((t_hi - t_lo) / METER_STEP_S) + 1
-    per_poll = int(round(METER_POLL_S / METER_STEP_S))
+    n = int(round((t_hi - t_lo) * 1000)) // step_ms + 1
+    per_poll = int(round(poll_s / step_s))
     compact = {"separators": (",", ":")}                 # the monitor writes compact lines
     with open(path, "w") as f:
-        f.write(json.dumps({"k": "h", "schema": "synthetic", "status": "streaming", "rate_idx": 0,
-                            "poll_s": METER_POLL_S, "sps": 1.0 / METER_STEP_S,
+        f.write(json.dumps({"k": "h", "schema": "synthetic", "status": "streaming", "rate_idx": rate_idx,
+                            "poll_s": poll_s, "sps": 1.0 / step_s,
                             "start_raw_ns": raw0, "start_real_ns": raw0 + off_ns,
                             "start_mono_ns": raw0}, sort_keys=True) + "\n")   # as km003c_monitor: sorted keys
         polls = 0
         for j in range(0, n, per_poll):
-            if any(a <= t_lo + j * METER_STEP_S < b for a, b in holes):
+            if any(a <= t_lo + j * step_s < b for a, b in holes):
                 continue
             raw = b""
             last = None
             for i in range(j, min(n, j + per_poll)):
-                x = t_lo + i * METER_STEP_S
-                dev_ms = int(round(i * METER_STEP_S * 1000))
+                x = t_lo + i * step_s
+                dev_ms = i * step_ms
                 w = watts(x)
                 raw += sample.pack(dev_ms % 65536, 0, 28_000_000, int(round(w / 28.0 * 1e6)), 0, 0, 0, 0)
                 last = raw0 + dev_ms * 1_000_000
@@ -560,7 +564,7 @@ def _write_meter(path, pieces, t_lo, t_hi, off_ns, holes=()):
                                 "n": len(raw) // 20, "p": raw.hex(), "smc": {}}, **compact) + "\n")
             polls += 1
         f.write(json.dumps({"k": "t", "polls": polls, "empties": 0, "bad": 0, "usb_errors": 0,
-                            "elapsed_s": n * METER_STEP_S, "end_raw_ns": raw0 + int(n * METER_STEP_S * 1e9),
+                            "elapsed_s": n * step_s, "end_raw_ns": raw0 + n * step_ms * 1_000_000,
                             "stop_reason": "signal 15"}, sort_keys=True) + "\n")
 
 
@@ -776,7 +780,7 @@ def _write_g0_timeout_bundle(bdir, g0_start, leg_id="L000"):
                                g0_start + 1200.0))
 
 
-def write_custody(root, look_input, energy, tokens):
+def write_custody(root, look_input, energy, tokens, *, meter_writer=_write_meter):
     """The synthetic custody copy: one directory per span, in the cadence runner's layout, plus the roster, the
     rules-3/4 verdicts and level E for comparison. Energy files (power_trace.csv, meter streams) are written
     beside everything stage 1 reads: they are the decoys stage 1 must never open."""
@@ -858,7 +862,7 @@ def write_custody(root, look_input, energy, tokens):
                                turn["last_token_s"] + 30.0)
             t_hi = max(t_hi, turn["last_token_s"] + 60.0)
         dc_pieces.sort()
-        _write_meter(os.path.join(sdir, "hazards/meter/stream-0001.jsonl"), dc_pieces, t_lo, t_hi,
+        meter_writer(os.path.join(sdir, "hazards/meter/stream-0001.jsonl"), dc_pieces, t_lo, t_hi,
                      off_ns=span["meter_offsets_ns"]["header"], holes=holes)
     paths = {}
     for name, obj in (("roster.json", roster), ("rules_3_4.json", rules34)):

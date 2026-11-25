@@ -1692,6 +1692,25 @@ def shared_ref(repo, ledger_ref=None):
     return full, sha.decode().strip()
 
 
+REHEARSAL_BRANCH = "align/2026-11-14-look-manifest"
+
+
+def rehearsal_refs(repo):
+    """Return the ledger ref followed by any other ref whose registered roots fence the rehearsal."""
+    main = PUBLIC_RUN_STATE_REF
+    on_main, _, _ = _git(repo, "merge-base", "--is-ancestor", "HEAD", main)
+    remote = f"refs/heads/{REHEARSAL_BRANCH}"
+    tracking = f"refs/remotes/origin/{REHEARSAL_BRANCH}"
+    rc, raw, _ = _git(repo, "ls-remote", "--exit-code", "origin", remote)
+    if rc == 2 and on_main == 0:
+        return (main,)
+    if not rc:
+        _, sha = shared_ref(repo, tracking)
+        if raw.split() == [sha.encode(), remote.encode()]:
+            return (main, tracking) if on_main == 0 else (tracking, main)
+    raise ManifestError(["rehearsal requires a fresh checkout of the shared branch"])
+
+
 def ledger_gate(repo, ledger_ref=None):
     """What satisfied the committed-ledger gate, for a stage's output: {commit, ref, ref_commit}."""
     head, ref, _ = committed_ledger(repo, ledger_ref=ledger_ref)
@@ -1980,12 +1999,15 @@ def require_stage1_committed(repo, look_id, stage1_sha256, *, stage1_doc, ledger
     return (head, row) if for_execution else row
 
 
-def require_inputs_committed(repo, look_id, manifest_sha256, *, roster_sha256, verdicts_sha256, ledger_ref=None,
+def require_inputs_committed(repo, look_id, manifest_sha256, *, roster_sha256, verdicts_sha256=None, ledger_ref=None,
                              ruled_exclusions=None, draft_rehearsal=False):
     """Stage 1's gate on its two inputs (Mythos round-3 N8): the committed LOOKS.json row for this look names this
     manifest at status committed or later, and the roster (``validate --roster-out``) and the rules-3-4 verdict file
     (``inclusion_34.py``) stage 1 was given, by sha256. The lead commits both hashes in the row before stage 1
-    runs. A pre-pass rehearsal accepts the same hash commitments on the checked-in draft row. Returns the row."""
+    runs. A pre-pass rehearsal accepts the same hash commitments on the checked-in draft row. The draft verdict
+    producer checks the roster before it has a verdict hash to check. Returns the row."""
+    if verdicts_sha256 is None and not draft_rehearsal:
+        raise ManifestError(["the rules-3-4 verdict sha256 is required"])
     head, _, ledger = committed_ledger(repo, ledger_ref=ledger_ref)
     row = _look_row(ledger, look_id)
     problems = []
@@ -2033,6 +2055,8 @@ def require_inputs_committed(repo, look_id, manifest_sha256, *, roster_sha256, v
         problems.append(f"LOOKS.json lists this look as {row.get('status')!r}, not committed")
     for field, given, what in (("roster_sha256", roster_sha256, "roster"),
                                ("verdicts_sha256", verdicts_sha256, "rules-3-4 verdict file")):
+        if field == "verdicts_sha256" and given is None:
+            continue
         if row.get(field) is None:
             problems.append(f"LOOKS.json {look_id} has no {field}: commit the {what}'s sha256 before stage 1")
         elif row.get(field) != given:

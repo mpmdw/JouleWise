@@ -592,10 +592,10 @@ def run_cli(argv, trap=False, mock_stage2=False, extra=None):
 # and a stage-2 stub for the tests that need them, then calls the CLI's main().
 _HARNESS = os.path.join(_PIN_DIR, "cli_harness.py")
 _HARNESS_SRC = r'''
-import json, os, re, sys, tempfile
+import json, os, re, sys, tempfile, uuid
 from pathlib import Path
 sys.dont_write_bytecode = True
-sys.pycache_prefix = tempfile.mkdtemp(prefix="jw-harness-pyc-")   # as the CLI does: no cached bytecode is read
+sys.pycache_prefix = os.path.join(tempfile.gettempdir(), f"jw-harness-pyc-{uuid.uuid4().hex}")
 opts = json.loads(sys.argv[1]); argv = sys.argv[2:]
 sys.path.insert(0, opts["repo"])
 opened = []
@@ -719,6 +719,8 @@ try:
     if opts.get("entry") == "manifest":
         from scripts import cadence_look_manifest as manifest_cli
         rc = manifest_cli.main(argv)
+    elif opts.get("entry") == "rules":
+        rc = R.I34.main(argv)
     else:
         rc = R.main(argv)
 finally:
@@ -841,7 +843,8 @@ class Stage1Rehearsal(unittest.TestCase):
         row.update(status="committed", sha256=R.sha256_file(self.manifest),
                    roster_sha256=R.sha256_file(self.look / M.LOOK_FILES["roster"]),
                    verdicts_sha256=R.sha256_file(self.look / M.LOOK_FILES["rules_3_4"]),
-                   custody_root=str(self.custody), public_root=M.LOOK_PUBLIC_ROOT)
+                   custody_root=str(self.custody), public_root=M.LOOK_PUBLIC_ROOT, execution_host="hw1:" + "a" * 64)
+        self.rules_raw = (self.look / M.LOOK_FILES["rules_3_4"]).read_bytes()
         # A second draft names a root via an alias in its ledger row and a future root in its manifest.
         other_manifest = self.manifest.with_name("lm-interim-02.json")
         other_manifest.write_bytes(R.release.dump(
@@ -853,14 +856,25 @@ class Stage1Rehearsal(unittest.TestCase):
         MR.git_commit(self.repo, "Register the synthetic rehearsal inputs", publish=False)
         self.git(self.repo, "push", "-q", "origin", "HEAD:refs/heads/main")
 
-    def invoke(self, directory=None):
+    def invoke(self, directory=None, *, producer=False, tmpdir=None):
         _pin_dir()
         report = self.scratch / "observed.json"
         opts = dict(repo=str(self.repo), spy=True, trap=True, report=str(report), exports={})
         argv = ["stage1"] if directory is None else ["stage1", "--rehearsal", str(directory)]
+        if producer:
+            opts["entry"] = "rules"
+            argv = argv[1:]
         done = subprocess.run([sys.executable, "-I", "-B", _HARNESS, json.dumps(opts), *argv],
-                              cwd=self.repo, capture_output=True, text=True, timeout=180)
+                              cwd=self.repo, capture_output=True, text=True, timeout=180,
+                              env=None if tmpdir is None else {**os.environ, "TMPDIR": str(tmpdir)})
         return done, rj(report)
+
+    def seed_rules(self, directory):
+        directory.mkdir(mode=0o700)
+        rules = directory / M.LOOK_FILES["rules_3_4"]
+        rules.write_bytes(self.rules_raw)
+        rules.chmod(0o600)
+        return rules
 
     def snapshot(self):
         return {path: R.sha256_file(path) if path.is_file() else None
@@ -879,13 +893,15 @@ class Stage1Rehearsal(unittest.TestCase):
             (self.look / M.LOOK_FILES[name]).unlink()
         before = self.snapshot()
 
+        self.seed_rules(self.rehearsal)
         rehearsal, rehearsal_observed = self.invoke(self.rehearsal)
         self.assertEqual(rehearsal.returncode, 0, rehearsal.stderr)
         self.assertEqual(rehearsal.stderr, "")
         self.assertEqual(self.snapshot(), before)
         self.assertEqual(self.rehearsal.stat().st_mode & 0o777, 0o700)
         self.assertEqual({path.name: path.stat().st_mode & 0o777 for path in self.rehearsal.iterdir()},
-                         {"level_r.json": 0o600, "stage1.json": 0o600})
+                         {"rules_3_4.json": 0o600, "level_r.json": 0o600, "stage1.json": 0o600})
+        self.assertNotIn(str(self.look / M.LOOK_FILES["rules_3_4"]), rehearsal_observed["opened"])
         blocks = [f"dev-{index:02d}" for index in range(1, 5)]
         pinned_roster = rj(self.look / M.LOOK_FILES["roster"])
         expected_ids = {row["span_id"] for row in pinned_roster if row["block_id"] in blocks}
@@ -927,7 +943,7 @@ class Stage1Rehearsal(unittest.TestCase):
         link.symlink_to(self.custody, target_is_directory=True)
         before = self.snapshot()
         relative = os.path.relpath(self.rehearsal, self.repo)
-        for path, reason in ((existing, "already exists"), (self.custody / "new", str(self.custody)),
+        for path, reason in ((existing, "containing only rules_3_4.json"), (self.custody / "new", str(self.custody)),
                              (self.custody, str(self.custody)), (self.other_custody / "new", str(self.other_custody)),
                              (self.repo / "new", str(self.repo)), (self.public / "new", str(self.repo)),
                              (self.planned_custody.parent, str(self.planned_custody)),
@@ -964,7 +980,7 @@ class Stage1Rehearsal(unittest.TestCase):
         ledger["looks"][0].update(status="draft", sha256=R.sha256_file(self.manifest), custody_root=str(branch_root))
         self.ledger.write_bytes(R.release.dump(ledger))
         MR.git_commit(self.repo, "Register distinct branch rehearsal custody", publish=False)
-        self.git(self.repo, "push", "-q", "origin", f"HEAD:refs/heads/{R.REHEARSAL_BRANCH}")
+        self.git(self.repo, "push", "-q", "origin", f"HEAD:refs/heads/{M.REHEARSAL_BRANCH}")
         self.git(self.repo, "checkout", "--detach", "-q")
         self.git(self.repo, "update-ref", M.PUBLIC_RUN_STATE_REF, f"{main}^")
 
@@ -978,6 +994,7 @@ class Stage1Rehearsal(unittest.TestCase):
             self.assertEqual(observed["served"], [])
 
         self.assertEqual(self.git(self.repo, "rev-parse", M.PUBLIC_RUN_STATE_REF).stdout.strip(), main)
+        self.seed_rules(self.rehearsal)
         external, _ = self.invoke(self.rehearsal)
         self.assertEqual(external.returncode, 0, external.stderr)
         self.git(self.repo, "checkout", "--detach", "-q", main)
@@ -994,6 +1011,27 @@ class Stage1Rehearsal(unittest.TestCase):
         self.assertFalse(self.rehearsal.exists())
         self.assertEqual(observed["served"], [])
 
+    def test_stage1_requires_the_private_ledger_bound_verdict(self):
+        rules = self.seed_rules(self.rehearsal)
+        for replacement in ("changed", "symlink", "hardlink"):
+            with self.subTest(replacement=replacement):
+                if replacement == "changed":
+                    rules.write_bytes(self.rules_raw + b"\n")
+                else:
+                    rules.unlink()
+                    target = self.look / M.LOOK_FILES["rules_3_4"]
+                    if replacement == "symlink":
+                        rules.symlink_to(target)
+                    else:
+                        os.link(target, rules)
+                refused, observed = self.invoke(self.rehearsal)
+                self.assertEqual(refused.returncode, 2, refused.stderr)
+                self.assertEqual(refused.stdout, "")
+                self.assertIn("not the one LOOKS.json" if replacement == "changed" else "private regular",
+                              refused.stderr)
+                self.assertEqual(observed["served"], [])
+                self.assertEqual(list(self.rehearsal.iterdir()), [rules])
+
     def test_prepass_draft_on_shared_merge_branch_and_manifest_range(self):
         from tests.cadence import look_minirepo as MR
 
@@ -1006,7 +1044,7 @@ class Stage1Rehearsal(unittest.TestCase):
         ledger["looks"][0].update(status="draft", sha256=R.sha256_file(self.manifest))
         self.ledger.write_bytes(R.release.dump(ledger))
         MR.git_commit(self.repo, "Pin the pre-pass synthetic draft", publish=False)
-        self.git(self.repo, "push", "-q", "origin", f"HEAD:refs/heads/{R.REHEARSAL_BRANCH}")
+        self.git(self.repo, "push", "-q", "origin", f"HEAD:refs/heads/{M.REHEARSAL_BRANCH}")
         self.git(self.repo, "checkout", "--detach", "-q")
         # Deliberately corrupt a generated file outside the new selection. The verifier must skip that whole span.
         outside = self.custody / "dev-01-s01" / "runner_receipt.json"
@@ -1014,10 +1052,8 @@ class Stage1Rehearsal(unittest.TestCase):
         other_tmp = self.scratch / "other-tmp"
         other_tmp.mkdir()
         before = self.snapshot()
-        done = subprocess.run(
-            [sys.executable, "-I", "-B", "scripts/cadence_look_run.py", "stage1", "--rehearsal", str(self.rehearsal)],
-            cwd=self.repo, env={**os.environ, "TMPDIR": str(other_tmp)}, capture_output=True, text=True, timeout=180,
-        )
+        self.seed_rules(self.rehearsal)
+        done, _ = self.invoke(self.rehearsal, tmpdir=other_tmp)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(list(other_tmp.iterdir()), [])
         stage1 = json.loads(self.outputs(self.rehearsal)["stage1"])
@@ -1026,12 +1062,81 @@ class Stage1Rehearsal(unittest.TestCase):
         self.assertEqual(self.snapshot(), before)
         inside = self.custody / "dev-02-s01" / "runner_receipt.json"
         inside.write_bytes(inside.read_bytes() + b" ")
-        refused, observed = self.invoke(self.scratch / "pin-mismatch")
+        mismatch = self.scratch / "pin-mismatch"
+        rules = self.seed_rules(mismatch)
+        refused, observed = self.invoke(mismatch)
         self.assertEqual(refused.returncode, 2, refused.stderr)
         self.assertIn("custody pins:", refused.stderr)
         self.assertEqual(refused.stdout, "")
         self.assertEqual(observed["served"], [])
-        self.assertEqual(list((self.scratch / "pin-mismatch").iterdir()), [])
+        self.assertEqual(list(mismatch.iterdir()), [rules])
+
+    def test_rules_rehearsal_matches_stock_bytes_after_commit(self):
+        from tests.cadence import look_minirepo as MR
+
+        doc, ledger = rj(self.manifest), rj(self.ledger)
+        doc["status"] = "draft"
+        self.manifest.write_bytes(R.release.dump(doc))
+        row = ledger["looks"][0]
+        row.update(status="draft", sha256=R.sha256_file(self.manifest))
+        row.pop("verdicts_sha256")
+        self.ledger.write_bytes(R.release.dump(ledger))
+        MR.git_commit(self.repo, "Bind synthetic draft inputs", publish=False)
+        branch = f"HEAD:refs/heads/{M.REHEARSAL_BRANCH}"
+        self.git(self.repo, "push", "-q", "origin", branch)
+        self.git(self.repo, "checkout", "--detach", "-q")
+        before = self.snapshot()
+
+        existing = self.scratch / "taken"
+        existing.mkdir()
+        alias = self.scratch / "alias"
+        alias.symlink_to(self.custody, target_is_directory=True)
+        for path, reason in ((existing, "already exists"), (self.custody / "new", str(self.custody)),
+                             (self.repo / "new", str(self.repo)), (self.other_custody / "new", str(self.other_custody)),
+                             (self.planned_custody.parent, str(self.planned_custody)), (alias / "new", "symlink"),
+                             ("relative", "not an absolute")):
+            with self.subTest(path=path):
+                refused, observed = self.invoke(path, producer=True)
+                self.assertEqual(refused.returncode, 1, refused.stderr)
+                self.assertIn(reason, refused.stderr)
+                self.assertEqual(refused.stdout, "")
+                self.assertEqual(observed["served"], [])
+
+        rehearsal, _ = self.invoke(self.rehearsal, producer=True)
+        self.assertEqual(rehearsal.returncode, 0, rehearsal.stderr)
+        self.assertEqual(self.snapshot(), before)
+        rules = self.rehearsal / "rules_3_4.json"
+        digest = M.sha256_file(rules)
+        self.assertEqual(rehearsal.stdout, f"rules_3_4.json sha256={digest}\n")
+        self.assertEqual({p.name for p in self.rehearsal.iterdir()}, {rules.name})
+        self.assertEqual(self.rehearsal.stat().st_mode & 0o777, 0o700)
+        self.assertEqual(rules.stat().st_mode & 0o777, 0o600)
+        self.assertTrue(any(key.startswith("hp-01-") for key in rj(rules)))
+
+        row["verdicts_sha256"] = digest
+        self.ledger.write_bytes(R.release.dump(ledger))
+        MR.git_commit(self.repo, "Bind the rehearsal verdict hash", publish=False)
+        self.git(self.repo, "push", "-q", "origin", branch)
+        campaign_rules = self.look / M.LOOK_FILES["rules_3_4"]
+        campaign_rules.unlink()
+        stage1, observed = self.invoke(self.rehearsal)
+        self.assertEqual(stage1.returncode, 0, stage1.stderr)
+        self.assertNotIn(str(campaign_rules), observed["opened"])
+        self.assertEqual(json.loads(stage1.stdout)["hp01_below_9"], "no")
+
+        doc["status"] = "committed"
+        self.manifest.write_bytes(R.release.dump(doc))
+        row.update(status="committed", sha256=R.sha256_file(self.manifest))
+        self.ledger.write_bytes(R.release.dump(ledger))
+        MR.git_commit(self.repo, "Commit the synthetic look", publish=False)
+        self.git(self.repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+        stock = MR.py(self.repo, "joulewise/cadence_looks/inclusion_34.py",
+                      "--roster", self.look / "roster.json", "--custody", self.custody,
+                      "--manifest", self.manifest, "--out", campaign_rules)
+        self.assertEqual(stock.returncode, 0, stock.stdout + stock.stderr)
+        self.assertEqual(M.sha256_file(campaign_rules), digest)
+        self.assertEqual(campaign_rules.read_bytes(), rules.read_bytes())
+        self.assertEqual(campaign_rules.read_text(), json.dumps(rj(rules), indent=1, sort_keys=True) + "\n")
 
 
 class Stage1Custody(unittest.TestCase):

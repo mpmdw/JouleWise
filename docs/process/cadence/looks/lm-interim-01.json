@@ -516,7 +516,7 @@
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
-        "sha256": "90be8b1aba10efd24db5ccb167b6b1527901dc0be9db7b7835732ff5c04dd285"
+        "sha256": "881eba45b869d88f5cee709e0ab1af0a53b36744dabaca6c03d9d50926d9b327"
       },
       {
         "path": "joulewise/cadence_looks/time_fields.py",
@@ -532,7 +532,7 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "78f7efb65b5ec1eb2f2625141923154771d9e0b9b9b9d8240848e17dbfa07f74"
+        "sha256": "4c0c21200da44f96c14544a5ee423c67853a6c0bb48ebbada6aa07661b401d61"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
@@ -883,7 +883,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "097c2a8a89ede0bd1b720b11e3d614eeb608a755b3ac0e0c230548525859894c"
+        "sha256": "a13fecdbea281d9543c9e6ef21ff37aeb2754c7bb86fa9efdd1c749044f27738"
       },
       {
         "path": "joulewise/desk_compress.py",
@@ -969,7 +969,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "90be8b1aba10efd24db5ccb167b6b1527901dc0be9db7b7835732ff5c04dd285"
+          "sha256": "881eba45b869d88f5cee709e0ab1af0a53b36744dabaca6c03d9d50926d9b327"
         },
         "cite": [
           "RL-149 §2.4",
@@ -985,7 +985,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "90be8b1aba10efd24db5ccb167b6b1527901dc0be9db7b7835732ff5c04dd285"
+          "sha256": "881eba45b869d88f5cee709e0ab1af0a53b36744dabaca6c03d9d50926d9b327"
         },
         "cite": [
           "RL-149 §2.4",
@@ -1305,8 +1305,8 @@
     "root": null,
     "seats": 1,
     "lead_checks_output_against_schema": true,
-    "custody_copy": "One verified custody copy of the roster's spans by the existing offload tooling, made while the MBP is unarmed; the look runs on that copy, never on the MBP's measurement root. The copy lives under the one root this manifest registers (root): each span at <root>/<span id>, and the look's own files at fixed names in <root>/lm-interim-01. Campaign stages take no path. The stage-1 rehearsal takes only a new output directory outside the repository and every registered root.",
-    "host": "Under RL-184 the lead records the admitted commit's host-id token from the named machine in the stage1_committed LOOKS.json row on main. Stage 2 recomputes it before reservation. A host change requires a new ledger row and confirmation that the first host has no reservation.",
+    "custody_copy": "One verified custody copy of the roster's spans by the existing offload tooling, made while the MBP is unarmed; the look runs on that copy, never on the MBP's measurement root. The copy lives under the one root this manifest registers (root): each span at <root>/<span id>, and the look's own files at fixed names in <root>/lm-interim-01. Campaign stages take no path. Under RL-217 E.1 the rules-3/4 rehearsal creates a private directory outside the repository and every registered root. Stage-1 rehearsal reads the verdict and writes its own outputs there.",
+    "host": "Under RL-217 E.1 the draft LOOKS.json row registers the campaign host and both rehearsal commands check its host-id token. Under RL-184 the lead records the admitted commit's token in the stage1_committed row on main. Stage 2 recomputes it before reservation. A host change requires a new ledger row and confirmation that the first host has no reservation.",
     "no_import_by": [
       "scripts/cadence_legs_runner.py",
       "scripts/cadence_leg_runtime.py",

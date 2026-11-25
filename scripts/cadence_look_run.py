@@ -27,10 +27,10 @@ that differs only in case. An archive is expanded into a fresh private directory
 the repository. ``--level-r`` and ``--level-e`` (synthetic ``--allow-draft`` runs only) read
 input_level_r.json and input_level_e.json from the look's directory.
 
-    python3 -I -B scripts/cadence_look_run.py stage1 --rehearsal NEW_DIRECTORY
+    python3 -I -B scripts/cadence_look_run.py stage1 --rehearsal RULES_DIRECTORY
 
-The RL-180 B.2 rehearsal uses the manifest's dry-run blocks and keeps its two private outputs in a new
-directory disjoint from the roots on the shared branch and origin/main. It refreshes origin/main and
+The RL-180 B.2 rehearsal uses the manifest's dry-run blocks and keeps its two private outputs beside the
+RL-217 E.1 rehearsal verdict in a directory disjoint from the roots on the shared branch and origin/main. It refreshes origin/main and
 prints the stage-1 public fields for the lead.
 
 Stage 1 reads time fields and sample counters only from energy-bearing files. In custody mode it opens, per span: `runner_receipt.json`,
@@ -69,6 +69,7 @@ from pathlib import Path
 import re
 import shutil
 import signal
+import stat
 import sys
 import tempfile
 import threading
@@ -313,12 +314,13 @@ def run_verifier(doc, pins, pins_sha, span_ids, sdir_of, *, scratch=None):
         raise F.LookInputError("custody pins: " + (problems[0] if problems else "the verifier did not pass"))
 
 
-def load_pins(a, span_ids, *, selected=None):
+def load_pins(a, span_ids, *, selected=None, doc=None):
     """RL-194 condition 2, before anything of custody is touched (a span directory, an archive): the pin list is the
     manifest's own and no other (audit 2, lead ruling: one source of pins), it names exactly the roster's spans, and
     each span's RUN_STATE Check item names its offload manifest (``run_state_text``). Returns (the pin list, the
     sha256 of its canonical bytes)."""
-    doc, _ = _VERIFIED[0]
+    if doc is None:
+        doc, _ = _VERIFIED[0]
     try:
         pins, pins_sha = M.input_pins(ROOT, doc, complete=True)
         PINS.require_roster(pins, span_ids)
@@ -337,7 +339,7 @@ def load_pins(a, span_ids, *, selected=None):
     return pins, pins_sha
 
 
-def admit_custody(a, span_ids, sdir_of, stack, *, streams, loaded=None, scratch=None):
+def admit_custody(a, span_ids, sdir_of, stack, *, streams, loaded=None, scratch=None, doc=None):
     """RL-194 conditions 1 to 3 as RL-194a amends them, the first act of stage 1 and of stage 2 on custody, before
     any roster file is parsed and before the reservation:
 
@@ -350,8 +352,9 @@ def admit_custody(a, span_ids, sdir_of, stack, *, streams, loaded=None, scratch=
     an operational file is served from its verified bytes, and a stream is read from disk (``streams="pass"``,
     stage 1) or re-checked against its pin at each open, immediately before it is decoded (``"verify"``, stage 2).
     Returns (the admitted custody, the pin list's sha256)."""
-    doc, _ = _VERIFIED[0]
-    pins, pins_sha = loaded if loaded is not None else load_pins(a, span_ids)
+    if doc is None:
+        doc, _ = _VERIFIED[0]
+    pins, pins_sha = loaded if loaded is not None else load_pins(a, span_ids, doc=doc)
     try:
         custody = PINS.PinnedCustody(pins, span_ids, sdir_of, streams=streams)
         run_verifier(doc, pins, pins_sha, span_ids, sdir_of, scratch=scratch)
@@ -1322,26 +1325,8 @@ def superseded_source(row, layout):
     return old_input, old_ruled
 
 
-REHEARSAL_BRANCH = "align/2026-11-14-look-manifest"
-
-
-def rehearsal_ref():
-    """Use the fetched main when it contains HEAD, or verify the rehearsal's shared merge branch is current."""
-    main_ref = M.PUBLIC_RUN_STATE_REF
-    on_main, _, _ = M._git(ROOT, "merge-base", "--is-ancestor", "HEAD", main_ref)
-    if on_main == 0:
-        return main_ref
-    remote_head = f"refs/heads/{REHEARSAL_BRANCH}"
-    local_ref = f"refs/remotes/origin/{REHEARSAL_BRANCH}"
-    rc, raw, _ = M._git(ROOT, "ls-remote", "--exit-code", "origin", remote_head)
-    _, sha = M.shared_ref(ROOT, local_ref)
-    if rc or raw.split() != [sha.encode(), remote_head.encode()]:
-        raise F.LookInputError("rehearsal requires a fresh checkout of the shared branch")
-    return local_ref
-
-
-def rehearsal_output(value, layout, ledger_ref):
-    """Exclusively create a private destination disjoint from the repository and both refs' registered roots."""
+def rehearsal_output(value, layout, refs, *, consume=False):
+    """Fence both rehearsal commands. The producer creates the directory, and stage 1 takes it with its one file."""
     try:
         path = release.no_symlink_components(value, "rehearsal directory")
     except ValueError as error:
@@ -1349,7 +1334,7 @@ def rehearsal_output(value, layout, ledger_ref):
     if not path.parent.is_dir() or not os.access(path.parent, os.W_OK | os.X_OK):
         raise F.LookInputError("rehearsal directory needs an existing writable parent")
     roots = [layout.repo, layout.root]
-    for ref in dict.fromkeys((M.PUBLIC_RUN_STATE_REF, ledger_ref)):
+    for ref in refs:
         _, commit = M.shared_ref(layout.repo, ref)
         rc, raw, _ = M._git(layout.repo, "show", f"{commit}:{M.LOOK_LEDGER_PATH}")
         if rc:
@@ -1389,6 +1374,11 @@ def rehearsal_output(value, layout, ledger_ref):
                 or (root.exists() and release.physically_within(resolved_path.parent, root))
                 or (path.exists() and root.exists() and release.physically_within(root, resolved_path))):
             raise F.LookInputError(f"rehearsal directory must be outside and disjoint from registered root {root}")
+    if consume:
+        if (not path.is_dir() or path.stat().st_mode & 0o777 != 0o700 or path.stat().st_uid != os.geteuid()
+                or {item.name for item in path.iterdir()} != {M.LOOK_FILES["rules_3_4"]}):
+            raise F.LookInputError("stage-1 rehearsal requires a private directory containing only rules_3_4.json")
+        return path
     if os.path.lexists(path) or M.name_collision(path.parent, path.name):
         raise F.LookInputError("rehearsal directory already exists")
     try:
@@ -1396,6 +1386,35 @@ def rehearsal_output(value, layout, ledger_ref):
     except FileExistsError:
         raise F.LookInputError("rehearsal directory already exists") from None
     return path
+
+
+def read_rehearsal_rules(directory):
+    name = M.LOOK_FILES["rules_3_4"]
+    try:
+        fd = os.open(directory / name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd, "rb") as handle:
+            meta = os.fstat(handle.fileno())
+            if (stat.S_ISREG(meta.st_mode) and meta.st_mode & 0o777 == 0o600
+                    and meta.st_uid == os.geteuid() and meta.st_nlink == 1):
+                return handle.read()
+    except OSError:
+        pass
+    raise F.LookInputError("stage-1 rehearsal requires a private regular rules_3_4.json file")
+
+
+def write_rehearsal_file(directory, name, data):
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+    with os.fdopen(os.open(directory / name, flags, 0o600), "wb") as handle:
+        handle.write(data)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def rehearsal_host(row):
+    if not row.get("execution_host"):
+        raise F.LookInputError("rehearsal requires a registered execution_host")
+    if row["execution_host"] != M.execution_host():
+        raise F.LookInputError("rehearsal execution_host does not match this host")
 
 
 def rehearsal_roster(roster, doc):
@@ -1439,7 +1458,12 @@ def _stage1(a, stack):
     else:
         ruled = ruled_exclusions(a.ruled_exclusion)
         try:
-            roster_raw, rules_raw = layout.read("roster"), layout.read("rules_3_4")
+            if rehearsal is not None:
+                a.rehearsal_dir = rehearsal_output(rehearsal, layout, a.rehearsal_refs, consume=True)
+                rules_raw = read_rehearsal_rules(a.rehearsal_dir)
+                roster_raw = layout.read("roster")
+            else:
+                roster_raw, rules_raw = layout.read("roster"), layout.read("rules_3_4")
         except M.ManifestError as error:
             raise F.LookInputError("; ".join(error.problems)) from None
         roster_sha, rules_sha = hashlib.sha256(roster_raw).hexdigest(), hashlib.sha256(rules_raw).hexdigest()
@@ -1450,6 +1474,8 @@ def _stage1(a, stack):
                                              verdicts_sha256=rules_sha, ledger_ref=a.ledger_ref,
                                              ruled_exclusions={k: list(v) for k, v in ruled.items()},
                                              draft_rehearsal=rehearsal is not None and doc["status"] == "draft")
+            if rehearsal is not None:
+                rehearsal_host(row)
         roster = M.strict_json(roster_raw)
         if not isinstance(roster, list) or not all(isinstance(s, dict) and isinstance(s.get("span_id"), str) for s in roster):
             raise F.LookInputError("roster: not a list of spans")
@@ -1466,7 +1492,6 @@ def _stage1(a, stack):
             selected = {span["span_id"] for span in roster}
         loaded = load_pins(a, ids, selected=selected)
         if rehearsal is not None:
-            a.rehearsal_dir = rehearsal_output(rehearsal, layout, a.ledger_ref)
             ids = [span["span_id"] for span in roster]
         staging, staged = stage_custody(a, roster, loaded[0], layout, stack)
 
@@ -1871,11 +1896,7 @@ def finish_rehearsal(a, doc, out):
     }
     for key, data in files.items():
         name = M.LOOK_FILES[key]
-        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
-        with os.fdopen(os.open(a.rehearsal_dir / name, flags, 0o600), "wb") as handle:
-            handle.write(data)
-            handle.flush()
-            os.fsync(handle.fileno())
+        write_rehearsal_file(a.rehearsal_dir, name, data)
         summary["sha256"][name] = hashlib.sha256(data).hexdigest()
     release.sync_directory(a.rehearsal_dir)
     print(release.dump(summary).decode("utf-8"), end="")
@@ -1900,8 +1921,8 @@ def main(argv=None, *, keep_redirected=False):
     sub.add_parser("host-id", help="print this machine's RL-184 execution host token", allow_abbrev=False)
     sub.add_parser("post-no-maxima", help="print the two private RL-184 prediction differences", allow_abbrev=False)
     p1 = sub.add_parser("stage1", allow_abbrev=False)
-    p1.add_argument("--rehearsal", metavar="NEW_DIRECTORY",
-                    help="RL-180 B.2: run the manifest's dry-run blocks and write solely to a new private directory")
+    p1.add_argument("--rehearsal", metavar="RULES_DIRECTORY",
+                    help="run the manifest's dry-run blocks using the private rules-3/4 rehearsal directory")
     p1.add_argument("--level-r", action="store_true",
                     help="with --allow-draft only: read input_level_r.json in place of custody")
     p1.add_argument("--stage-archives", action="store_true",
@@ -1947,7 +1968,8 @@ def main(argv=None, *, keep_redirected=False):
         if not a.allow_draft:
             M.fetch_public(ROOT)
         if rehearsal:
-            a.ledger_ref = rehearsal_ref()
+            a.rehearsal_refs = M.rehearsal_refs(ROOT)
+            a.ledger_ref = a.rehearsal_refs[0]
         # FIRST, before any input is opened: the running code must be the pinned code (Mythos cold seat 3; Sol 9)
         a.manifest = str(manifest_path())
         doc = M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING, ledger_ref=a.ledger_ref,
