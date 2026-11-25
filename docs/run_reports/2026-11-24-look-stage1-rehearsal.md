@@ -45,6 +45,24 @@ priority. The draft manifest and generated state checks also passed.
 The CLI option test recognizes the rehearsal destination and still
 checks every former path option.
 
+## Fix-2 after the host-command inventory check
+
+Shard 6 reported one missing row and zero stale rows. The repository's
+`scan()` and a scan of the module docstring in isolation traced
+`<module>:44c8da2be87da73a` to the documented
+`python3 -I -B scripts/cadence_look_run.py stage1 --rehearsal NEW_DIRECTORY`
+invocation. It gives the magistrate the rehearsal entry point with an
+isolated interpreter and bytecode writes disabled. The docstring is
+usage text and runs no command at import. The actual rehearsal uses the
+existing Git seam to fetch main for the destination fence and the
+existing isolated verifier to authenticate the selected spans. The
+scanner reported only the new usage line. [Shard 6 run](https://github.com/mpmdw/JouleWise/actions/runs/45556571166)
+
+Both inventory tests and all five rehearsal tests passed at utility
+priority. The inventory also passed on Python 3.13, the shard's
+interpreter. Astra's independent synthetic re-check at `f5b34c4d1`
+returned MERGE. Fix-2 changes the test inventory and this report.
+
 ## Draft re-pin
 
 `cadence_look_manifest.py pin --write` updates the three changed

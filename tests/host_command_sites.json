@@ -19,6 +19,12 @@
   },
   {
     "file": "scripts/cadence_look_run.py",
+    "locator": "<module>:44c8da2be87da73a",
+    "command": "python-isolated",
+    "seam": "Usage line for the stage-1 rehearsal in the runner's module docstring. The magistrate invokes it with an isolated interpreter and bytecode writes disabled."
+  },
+  {
+    "file": "scripts/cadence_look_run.py",
     "locator": "run_verifier:4c6bb39a61da7461",
     "command": "python-isolated",
     "seam": "Each stage launches the pinned hash-only verifier as its own process before it parses a roster file (RL-194a). It reads generated custody in tests/cadence/test_content_admission.py and writes one result file of words and hashes."
