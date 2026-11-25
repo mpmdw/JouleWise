@@ -1,16 +1,16 @@
 {
   "armed": null,
-  "next_observable": "the next f2-stab selection after 23:30 Tue uses this item's deadline bound (two- or three-leg spans where the deadline lands by 01:50), and names this item in its selection reason",
+  "next_observable": "f2stab08-d299d88d/run-out.txt shows LAUNCH_RC=0 with the fence (t0 ~02:38 Wed after three quiet minutes from 02:35:00; expected close ~04:43, worst case ~05:46, fence end ~06:10; read the true fence deadline and pid from run-out.txt; check the pid, not the deadline). The next activation, after the fence pid is gone and runner_receipt.json exists, Checks attempt cq-f2-stab-08-l008-l009-l010-a1 at /Users/edr/campaign-out/f2-stab-08/cq-f2-stab-08-l008-l009-l010-a1 with f2stab08-check-template-d299d88d/ (copy to f2stab08-check-NEWACT/, replace NEWACT; LEGS L008,L009,L010; kit sha aaba2ad0...bf00, campaign f2-stab-08, pin A 2d347f721; asserts batch_windows == ['02:00-02:35'] and roster prefix), maps each leg's quiet span to wall time through the receipt's ended pair and counts maintenance lines in it, copies at once with the template's offload-run.sh; L008 serves Wednesday's rank 1 if it ran; then the ladder (items 422, 463, 464, 507, 536, 553, 583): pin-A rank 4 kit 08 L011-L012, then kit 09 onward, ARG 02:00-02:35, a pin-A t0 by 10:50:00 is legal whatever its fence end (item 583), then the 10:50:01-13:14:59 pin-B gap takes kit 16 L001 onward.",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 583,
+      "item": 584,
       "owner": "magistrate",
       "status": "ISSUED"
     },
     {
       "expires_epoch_s": null,
-      "item": 582,
+      "item": 583,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -263,11 +263,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "583",
-  "source_item_heading_date": "2026-11-24",
+  "source_item": "584",
+  "source_item_heading_date": "2026-11-25",
   "wait": {
-    "deadline_epoch_s": 1796112000,
+    "deadline_epoch_s": 1795626000,
     "observable": "none",
-    "on_early_or_refused": "if a start check cannot assert the deadline bound, plan as before (02:00-02:35 band, the pin's full test); never launch an f2-stab span whose deadline (t0 + worst case) lands after 01:50"
+    "on_early_or_refused": "Read the verdict first. If f2stab08-d299d88d/run-out.txt has no LAUNCH_RC line (WAIT/STOP before launch, e.g. not quiet by 04:30, or a launcher precondition refusal), nothing launched: L008-L010 stay unrun and Wednesday's rank 1 is unserved; the next activation re-selects at its own t0 (pin A, ARG 02:00-02:35 from 02:35:00 through 10:50:00, 3/2/1 legs with the fence clear of every 02:00-02:35 band and the deadline bound of item 583) and issues a new typed item before launch, staying alive until LAUNCH_RC prints. A launcher refusal on kit or launcher state, or a non-clean close: record it, hold kit f2-stab-08 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, continue down the ladder. A census or soak refusal on a measured contending process with a proven clean close is not a kit hold (items 505, 547). A clean close with a leg not admitted is recorded, not a stop and not a kit hold (items 467, 479, 520). Item 576 stays BLOCKED until the lead records where its inputs come from; if the lead's answer is on main at a span boundary, run it there before issuing the next span."
   }
 }
