@@ -595,6 +595,14 @@ At the end of substantial work:
 - Keep hand-authored edits here to policy, completed/history records, and
   non-selection context.
 
+### 2026-11-24 interim look draft handoff
+
+P1 Phase Gate [AGENT], selected by the lead's 2026-11-24 ruling because
+admission blocked a rostered stage-1 block. The draft follows up on PR #795
+and #968. Use the [run report](docs/run_reports/2026-11-24-look-hp01-admission.md)
+for the implementation, verification, and remaining PR gates. This follow-up
+has no phase exit-checklist row.
+
 ## Intake Batch Owed To The Kernel (2026-07-30/31)
 
 **PARTIALLY FOLDED 2026-07-30.** Six rows —

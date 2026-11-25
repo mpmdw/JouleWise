@@ -9,6 +9,7 @@ identity, the shim's scope and the shard accounting honest.
 """
 from __future__ import annotations
 
+import copy
 import glob
 import gzip
 import hashlib
@@ -876,6 +877,92 @@ class KitTable(unittest.TestCase):
             change(doc["kit"])
             with self.subTest(label):
                 self.assertIsNotNone(verdict({**render(docs), T.RECEIPT: T.doc_bytes(T.RECEIPT, doc)}))
+
+
+@unittest.skipIf(T is None, "the frozen admission packet is absent")
+class HP01Admission(unittest.TestCase):
+    # Public frozen kit from bbd34dc87 and the dd206025a writer, with generated operational records.
+    KIT = {"campaign_id": "cl-hp-01", "frozen_commit": "dd206025abb30fd5c07515cd4b34b3e653174810",
+           "sha256": "7eaf2660312ce6b3af90e8a1d9da1e05a6c409366a88a7e5e558d3bebb9d2965"}
+
+    def setUp(self):
+        self.original = T.document_set("b4b6aeb19", "normal", T.load_corpus())
+        self.docs = copy.deepcopy(self.original)
+        receipt = self.docs[T.RECEIPT]
+        receipt["kit"] = dict(self.KIT)
+        marker = "/invented/marker"
+        held = {"ac_powermode": 2, "pmset_error": None, "host_marker": marker, "host_marker_present": True,
+                "marker_is_this_spans": True}
+        restored = {"action": "restore_automatic", "ok": True, "deferred": False, "attempts": 1}
+        proof = {"ac_powermode": 0, "pmset_error": None, "host_marker": marker, "host_marker_present": False,
+                 "proven": True}
+        restore_record = {"point": "restore_automatic", "exit_code": 0, "stdout": "", "stderr": ""}
+        guard = [restore_record, {"point": "after_restore_automatic", "exit_code": 0,
+                                  "stdout": "invented Automatic read-back", "observed": 0},
+                 {"point": "before_high", "stdout": "invented Automatic read-back"},
+                 {"point": "after_high", "stdout": "invented High Power read-back"}]
+        receipt["high_power"] = {"block_power_mode": 2, "host_marker": marker, "before_restore": held,
+                                 "restore": restored, "close_proof": proof, "guard": guard + guard[:2]}
+        receipt["span_result"]["restore_proven"] = True
+
+        # The cold probe's A span shares the runner's base grammar. Add the writer's extra steps at their actual
+        # positions and use the hp-01 kit's seeded leg specs and the observed mode in all their copies.
+        steps = {step["name"]: step for step in receipt["steps"]}
+        steps["frozen"]["result"]["head"] = self.KIT["frozen_commit"]
+        steps["restore"]["result"] = {"rc": 0, **restored}
+        before = {
+            "start-agents": [("host_lock", {"lock_path": "/invented/lock"}),
+                             ("high_power_marker_absent", {"host_marker": marker, "present": False})],
+            "display": [("powermode_guard", {"sudo_rule": "listed", "automatic_proved": True})],
+            "before-L001-volumes": [("high_power", {"ac_powermode": 2})],
+            "restore": [("power_last_look", held)],
+            "stop-volumes": [("power_proof", proof), ("host_lock_release", {"released": True})],
+        }
+        for row, (_, seed, *_rest) in zip(receipt["legs"], K.KITS[self.KIT["sha256"]]["legs"]):
+            leg = row["leg_id"]
+            record = self.docs[f"legs/{leg}/leg_record.json"]
+            record["spec"].update(campaign_id=self.KIT["campaign_id"], seed=seed)
+            summary = self.docs[f"legs/{leg}/leg_summary.json"]
+            summary.update(seed=seed, admitted=True)
+            row["summary"] = summary
+            record["result"]["ac_powermode"]["value"] = 2
+            attempt = f"{leg}.a1"
+            steps[attempt]["result"]["ac_powermode"]["value"] = 2
+            before[attempt] = [(f"{attempt}-powermode", held)]
+
+        receipt["steps"] = []
+        for name, step in steps.items():
+            receipt["steps"].extend({**step, "name": added, "rc": 0, "result": {"rc": 0, **result}}
+                                    for added, result in before.get(name, ()))
+            receipt["steps"].append(step)
+
+    def test_rostered_writer_shaped_span_is_admitted(self):
+        roster = A.validate_roster([("hp-01-s01", Mem(render(self.docs)))])
+        self.assertFalse(roster["hp-01-s01"]["synthetic"])
+
+    def test_high_power_member_is_refused_for_every_other_writer(self):
+        corpus = T.load_corpus()
+        for pin in ("b4b6aeb19", "2d347f721", "6e9d42f1d"):
+            with self.subTest(pin=pin):
+                docs = T.document_set(pin, "normal", corpus)
+                docs[T.RECEIPT]["high_power"] = self.docs[T.RECEIPT]["high_power"]
+                self.assertIn("member no pinned writer serializes", verdict(render(docs)))
+
+    def test_fabricated_revision_and_other_kit_at_hp01_revision_are_refused(self):
+        for field, value in (("frozen_commit", "1" * 40), ("sha256", self.original[T.RECEIPT]["kit"]["sha256"])):
+            with self.subTest(field=field):
+                docs = copy.deepcopy(self.docs)
+                docs[T.RECEIPT]["kit"][field] = value
+                self.assertIn("not a rostered writer revision", verdict(render(docs)))
+
+    def test_high_power_members_have_the_writers_json_kinds(self):
+        for field, value in (("block_power_mode", "high_power"), ("block_power_mode", 2.0),
+                             ("host_marker", True), ("close_proof", {"proven": "yes"}),
+                             ("guard", [{"point": "after_high", "stdout": 1}])):
+            with self.subTest(field=field, value=value):
+                docs = copy.deepcopy(self.docs)
+                docs[T.RECEIPT]["high_power"][field] = value
+                self.assertIn(".high_power", verdict(render(docs)))
 
 
 if __name__ == "__main__":

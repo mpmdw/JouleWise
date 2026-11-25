@@ -6,7 +6,8 @@ are a shape one writer revision issues, taken together: closed member sets, JSON
 step sequence and its exit paths, the soak history, and agreement between the independently serialized copies.
 
 The grammar mirrors ``scripts/cadence_legs_runner.py`` and ``joulewise/cadence/legs.py`` at the three rostered
-writer revisions (A ``b4b6aeb19``, B ``2d347f721``, C ``6e9d42f1d``). Line triples below are A/B/C in the runner
+Automatic writer revisions (A ``b4b6aeb19``, B ``2d347f721``, C ``6e9d42f1d``) and hp-01 (``dd206025a``,
+which shares A's leg and journal shape). Line triples below are A/B/C in the runner
 (R) or in legs.py (L). The bundle journals are in ``admission_journals``. A refusal names a file and a member,
 never a value. Nothing here reads an energy-bearing file.
 """
@@ -31,6 +32,8 @@ SPEC_V11 = "joulewise.cadence_leg_spec.v1.1"                            # L -/86
 PINS = {"b4b6aeb192da60d895a7529311b06599efff5be4": "A",
         "2d347f721552fe03bdd19f113e7bad7a7c24908e": "B",
         "6e9d42f1dd3d308bc9239143d0d634ab965e50e1": "C"}
+HP01_KIT = {"campaign_id": "cl-hp-01", "frozen_commit": "dd206025abb30fd5c07515cd4b34b3e653174810",
+            "sha256": "7eaf2660312ce6b3af90e8a1d9da1e05a6c409366a88a7e5e558d3bebb9d2965"}
 WORK_RESERVE_S = 370                                                    # R 72/72/79
 SOAK_ATTEMPTS = 2                                                       # R C:84, SOAK_RETRIES + 1
 SIGNAL_CODES = (129, 130, 143)                                          # R 362-363/365-366/497-498
@@ -242,10 +245,53 @@ def _display(value, where):
         refuse(f"{where}.rc", "not the code its exit status gives")
 
 
+# dd206025a: cadence_legs_runner.py's High Power steps and receipt, and PowerModeGuard's records.
+_HP_OBSERVED = {"ac_powermode": nullable(INT), "pmset_error": nullable(STR), "host_marker": STR,
+                "host_marker_present": BOOL}
+_HP_HELD = {**_HP_OBSERVED, "marker_is_this_spans": BOOL}
+_HP_RESTORE_NONE = {"action": const("none"), "reason": const("no mode command was issued by this span")}
+_HP_RESTORE = {"action": const("restore_automatic"), "ok": BOOL, "deferred": BOOL, "attempts": enum(1, 2, 3)}
+_HP_PROOF = {**_HP_OBSERVED, "proven": BOOL}
+_HP_TERMINATION = either(
+    obj({"argv": arr(STR, most=6), "pid": POS, "proven": const(False), "authority": const("lead ruling R8-1"),
+         "error": STR}),
+    obj({"argv": arr(STR, most=6), "pid": POS, "proven": const(False), "authority": const("lead ruling R8-1"),
+         "descendants": mapping(STR), "survivors": nullable(mapping(STR)), "returncode": nullable(INT)},
+        {key: const(True) for key in ("pipes_held_open", "census_failed", "unreaped")}))
+_HP_GUARD = either(
+    obj({"point": enum("before_high", "after_high"), "stdout": STR}),
+    obj({"point": const("restore_automatic"), "exit_code": INT, "stdout": STR, "stderr": STR}),
+    obj({"point": const("after_restore_automatic"), "exit_code": INT, "stdout": STR, "observed": nullable(INT)}),
+    obj({"point": enum("restore_raised", "after_restore_automatic"), "error": STR}),
+    obj({"point": const("restore_deferred"), "reason": STR}, {"unproven": arr(_HP_TERMINATION, least=1)}),
+    obj({"point": const("restore_deferred"), "reason": STR, "lock_error": nullable(STR)}))
+_HP_RECEIPT = obj(
+    {"block_power_mode": const(2), "host_marker": STR},
+    {"before_restore": obj(_HP_HELD), "restore": either(obj(_HP_RESTORE_NONE), obj(_HP_RESTORE)),
+     "close_proof": obj(_HP_PROOF), "guard": arr(_HP_GUARD),
+     "revoked": arr(obj({"leg_id": LEG_ID, "reason": STR}), least=1)})
+_HP_CLOSE = ("power_last_look", "restore", "power_proof", "host_lock_release")
+_HP_RESULTS = {
+    "host_lock": obj({"rc": const(0), "lock_path": STR}),
+    "high_power_marker_absent": obj({"rc": const(0), "host_marker": STR, "present": const(False)}),
+    "powermode_guard": obj({"rc": const(0), "sudo_rule": const("listed"), "automatic_proved": const(True)}),
+    "high_power": obj({"rc": const(0), "ac_powermode": const(2)}),
+    "power_last_look": either(obj({"rc": const(0), "skipped": const("High Power was never set")}),
+                              obj({"rc": const(0), **_HP_HELD})),
+    "restore": either(obj({"rc": const(0), **_HP_RESTORE_NONE}), obj({"rc": enum(0, 2), **_HP_RESTORE})),
+    "power_proof": obj({"rc": enum(0, 2), **_HP_PROOF}),
+    "host_lock_release": obj({"rc": const(0), "released": BOOL}),
+}
+_HP_CHECK = obj({"rc": const(0), **_HP_HELD, "ac_powermode": const(2), "host_marker_present": const(True),
+                 "marker_is_this_spans": const(True)})
+
+
 def _result_check(name, role, *, pin, mock):
     """The production a returned step attaches (GRAMMAR.md, "Span receipt and step grammar")."""
     if role == "leg":
         return _result_leg(pin, mock)
+    if role == "hp":
+        return _HP_CHECK if name.endswith("-powermode") else _HP_RESULTS[name]
     if role in ("start", "before", "close"):
         return obj({"rc": const(0)})                                   # every feed returns {"rc": 0} (smoke 142-205)
     if role == "wait":
@@ -377,15 +423,15 @@ def _spec(spec, where, *, pin, leg_id, position, campaign_id, budget_s, kit_leg=
             refuse(where, "not the kit's seeded leg")
 
 
-def _admitted(result, contaminated):
+def _admitted(result, contaminated, block_mode):
     """legs.leg_admitted (L 325-334/415-424): rules 1, 2, 5 and 6 as the runner sees them."""
     mode = result.get("ac_powermode")
     mode = mode.get("value") if isinstance(mode, dict) else mode
     return (not contaminated and result.get("leg_status") == "complete" and result.get("g0_released") is True
-            and result.get("decode_cap_reached") is True and is_int(mode) and mode == 0)
+            and result.get("decode_cap_reached") is True and is_int(mode) and mode == block_mode)
 
 
-def _summary(summary, where, *, spec, attempts, result, budget_s, cell, reference):
+def _summary(summary, where, *, spec, attempts, result, budget_s, cell, reference, block_mode, revoked):
     """legs.leg_summary (L 337-369/427-462): a projection of the spec, the accepted result and the attempts."""
     rejected = [a for a in attempts if a["contaminated"]]
     last = attempts[-1]
@@ -395,7 +441,7 @@ def _summary(summary, where, *, spec, attempts, result, budget_s, cell, referenc
                 "attempts": len(attempts), "contaminated_redos": len(rejected),
                 "redo_reasons": [a["redo_reason"] for a in rejected], "os_level_max": result["os_level_max"],
                 "pm_nominal": result["pm_nominal"], "started_epoch_s": attempts[0]["started_epoch_s"],
-                "admitted": _admitted(result, last["contaminated"])}
+                "admitted": not revoked and _admitted(result, last["contaminated"], block_mode)}
     if cell:
         expected.update(prefill_tokens=spec["prefill_tokens"], g0_shape=spec.get("g0_shape", "own"),
                         g0_role=spec.get("g0_role", "capture"), span_reference=reference)
@@ -426,11 +472,12 @@ def _receipt(receipt, where):
         refuse(where, "not an object")
     kit = receipt.get("kit")
     obj({"campaign_id": STR, "sha256": DIGEST, "frozen_commit": REVISION})(kit, f"{where}.kit")
-    pin = PINS.get(kit["frozen_commit"])
+    hp01 = kit == HP01_KIT
+    pin = "A" if hp01 else PINS.get(kit["frozen_commit"])
     if pin is None:
         refuse(f"{where}.kit.frozen_commit", "not a rostered writer revision")
     registered = kits.KITS.get(kit["sha256"])
-    if registered is None and kit["sha256"] not in kits.FILLERS:
+    if registered is None and (hp01 or kit["sha256"] not in kits.FILLERS):
         refuse(f"{where}.kit.sha256", "not a registered kit")
     if registered is not None and (kit["campaign_id"] != registered["campaign_id"]
                                    or kit["frozen_commit"] != registered["frozen_commit"]):
@@ -441,10 +488,18 @@ def _receipt(receipt, where):
                 "batch_windows", "steps", "legs", "feeds", "rc", "span_result", "meter", "legs_finished",
                 "legs_planned", "load_redos_used"]
     optional = ["error", "soak_reference", "meter_health_error", "desk_bundle_error"]
+    if hp01:
+        required.append("high_power")
+        optional.append("late_signals")
     if pin == "C":
         required.append("soak_attempts")                                # R C:453, always initialized
         optional += ["span_id", "t0_authority"]
     keys(receipt, where, required, optional)
+    hp = receipt["high_power"] if hp01 else {}
+    if hp01:
+        _HP_RECEIPT(hp, f"{where}.high_power")
+        if "late_signals" in receipt:
+            arr(TEXT, least=1)(receipt["late_signals"], f"{where}.late_signals")
     const(RECEIPT_SCHEMA)(receipt["schema"], f"{where}.schema")
     (const("cadence-legs-v1") if pin == "A" else enum("cadence-legs-v1", "cadence-legs-v1.1"))(
         receipt["runner_kind"], f"{where}.runner_kind")
@@ -500,9 +555,14 @@ def _receipt(receipt, where):
         refuse(f"{where}.legs_planned", "not the length of the plan")
 
     facts = {"pin": pin, "mock": mock, "roster": roster, "campaign_id": kit["campaign_id"], "planned": planned,
-             "cell": pin != "A" and receipt["runner_kind"] == "cadence-legs-v1.1"}
+             "cell": pin != "A" and receipt["runner_kind"] == "cadence-legs-v1.1",
+             "block_mode": 2 if hp01 else 0, "revoked": [row["leg_id"] for row in hp.get("revoked", ())]}
     span_error = "error" in receipt
     work_rc = error_code(receipt["error"], f"{where}.error") if span_error else 0
+    if hp01 and "late_signals" in receipt:
+        late_codes = [error_code(message, f"{where}.late_signals[{i}]")
+                      for i, message in enumerate(receipt["late_signals"])]
+        work_rc = work_rc or late_codes[0]
 
     # ---- the steps: the work prefix, then the whole close (R 365-466,485-503 / 368-491,511-529 / 500-649,669-687)
     steps = receipt["steps"]
@@ -513,11 +573,12 @@ def _receipt(receipt, where):
             refuse(f"{where}.steps[{index}]", "not a step row")
     feeds = ("agents", "meter", "volumes")
     before = feeds if mock else ("volumes",)            # the feeds with a per-part check (smoke: the volume feed)
-    close = ["restore", *("stop-" + feed for feed in reversed(feeds)), *(() if mock else ("close-volumes",))]
+    power_close = _HP_CLOSE if hp01 else ("restore",)
+    close = [*power_close, *("stop-" + feed for feed in reversed(feeds)), *(() if mock else ("close-volumes",))]
     names = [step["name"] for step in steps]
-    if "restore" not in names:
+    if close[0] not in names:
         refuse(f"{where}.steps", "the close never ran")
-    cut = names.index("restore")
+    cut = names.index(close[0])
     if names[cut:] != close:
         refuse(f"{where}.steps", "not the close sequence")
     work, closing = steps[:cut], steps[cut:]
@@ -571,13 +632,20 @@ def _receipt(receipt, where):
             state = take(f"before-{label}-{feed}", "before")
             if not proceeds(state):
                 return state
+        if hp01 and role == "leg":
+            state = take(f"{step_name}-powermode", "hp")
+            if not proceeds(state):
+                return state
         return take(step_name, role)
 
     def run():
         nonlocal complete
-        for name in ("deadline", "frozen", "night_agents", "ac_power", "condition13", *("start-" + f for f in feeds),
-                     "read_power", "display", "dwell", "plan"):
-            if not proceeds(take(name, name if "-" not in name else "start")):
+        work_steps = ("deadline", "frozen", "night_agents", "ac_power", "condition13",
+                      *(("host_lock", "high_power_marker_absent") if hp01 else ()), *("start-" + f for f in feeds),
+                      "read_power", *(("powermode_guard",) if hp01 else ()), "display", "dwell", "plan")
+        for name in work_steps:
+            role = "hp" if hp01 and name in _HP_RESULTS else name.split("-")[0]
+            if not proceeds(take(name, role)):
                 return
         if not same(states[-1][3]["result"]["legs"], roster):
             refuse(f"{where}.steps[{position - 1}].result.legs", "not the roster")
@@ -594,6 +662,8 @@ def _receipt(receipt, where):
             if not retried:
                 return
             number += 1
+        if hp01 and not proceeds(take("high_power", "hp")):
+            return
         for leg_id in roster:
             number = 1
             while True:
@@ -721,18 +791,20 @@ def _receipt(receipt, where):
     for offset, step in enumerate(closing):
         index = cut + offset
         name = step["name"]
-        role = "restore" if name == "restore" else name.split("-")[0]
-        state = _step(step, f"{where}.steps[{index}]", role if role != "restore" else "restore", pin=pin, mock=mock)
+        role = "hp" if hp01 and name in power_close else name.split("-")[0]
+        state = _step(step, f"{where}.steps[{index}]", role, pin=pin, mock=mock)
         if state == "initial":
             refuse(f"{where}.steps[{index}]", "a close step that never ran")
         closed[name] = (state, step)
         failed_close = failed_close or state != "returned"
+    if hp01:
+        _high_power_close(hp, closed, states, facts, where)
     restore = closed["restore"][1]
     if closed["restore"][0] == "returned" and not mock and "ok" in restore["result"] and (
             (restore["result"]["rc"] == 0) != restore["result"]["ok"]):
-        refuse(f"{where}.steps[{cut}].result.rc", "not zero exactly when the restore verified")
+        refuse(f"{where}.steps[{names.index('restore')}].result.rc", "not zero exactly when the restore verified")
     if closed["restore"][0] == "both" and "ok" in restore["result"] and restore["result"]["ok"]:
-        refuse(f"{where}.steps[{cut}].result.ok", "true on a restore that returned a failure")
+        refuse(f"{where}.steps[{names.index('restore')}].result.ok", "true on a restore that returned a failure")
     fault = any(closed["stop-" + feed][0] != "returned" for feed in feeds)
 
     obj({feed: lambda value, at: None for feed in feeds})(receipt["feeds"], f"{where}.feeds")
@@ -766,10 +838,35 @@ def _receipt(receipt, where):
     done = chain == 0 and finished == len(roster)
     obj({"chain_exit_code": const(chain), "chain_outcome": const("COMPLETE" if done else "INCOMPLETE"),
          "fault": const(fault), "outcome": const("MEASURED_OK" if done and not fault else "REFUSED"),
-         "verdict": const(f"{finished}/{len(roster)} legs run")})(receipt["span_result"], f"{where}.span_result")
+         "verdict": const(f"{finished}/{len(roster)} legs run"),
+         **({"restore_proven": const(hp.get("close_proof", {}).get("proven", False))} if hp01 else {})})(
+        receipt["span_result"], f"{where}.span_result")
     if receipt["rc"] != (chain or (2 if "desk_bundle_error" in receipt else 0)):
         refuse(f"{where}.rc", "not the code its error, close and desk give")
     return facts
+
+
+def _high_power_close(hp, closed, states, facts, where):
+    """Check the typed copies of the mode observations and close proof in the receipt and steps."""
+    at = f"{where}.high_power"
+    for name, key in (("power_last_look", "before_restore"), ("restore", "restore"), ("power_proof", "close_proof")):
+        result = closed[name][1].get("result")
+        if result is not None:
+            copied = None if "skipped" in result else {k: v for k, v in result.items() if k != "rc"}
+            if not same(hp.get(key), copied):
+                refuse(f"{at}.{key}", "not what its close step returned")
+    observations = [row[3].get("result", {}) for row in states if row[1] == "hp"]
+    observations += [hp.get("before_restore", {}), hp.get("close_proof", {})]
+    if any("host_marker" in item and item["host_marker"] != hp["host_marker"] for item in observations):
+        refuse(f"{at}.host_marker", "not the marker named in the mode observations")
+    if "close_proof" in hp:
+        proof = hp["close_proof"]
+        proven = proof["ac_powermode"] == 0 and not proof["host_marker_present"]
+        if proof["proven"] != proven or closed["power_proof"][1].get("result", {}).get("rc", 2) != (0 if proven else 2):
+            refuse(f"{at}.close_proof", "not what the Automatic read-back and marker proved")
+    if facts["revoked"] != [entry["leg_id"] for entry in facts["legs"]
+                            if entry["done"] and entry["leg_id"] in facts["revoked"]]:
+        refuse(f"{at}.revoked", "not a list of finished legs in order")
 
 
 # ================================================================================================ soak reference
@@ -854,7 +951,7 @@ def validate_span(files, where="span"):
             reference = {key: row["span_reference"][key] for key in _SPAN_REFERENCE}
         _summary(row["summary"], f"{where}/{RECEIPT}.legs[{entry['position']}].summary", spec=spec,
                  attempts=row["attempts"], result=result, budget_s=row["budget_s"], cell=facts["cell"],
-                 reference=reference)
+                 reference=reference, block_mode=facts["block_mode"], revoked=leg_id in facts["revoked"])
         if not same(summary, row["summary"]):
             refuse(f"{where}/{summary_rel}", "not the summary the receipt records for this leg")
         _bundle(files, docs, f"legs/{leg_id}/runtime/{result['bundle']}", where,

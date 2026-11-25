@@ -919,6 +919,11 @@ def run(argv, *args, **kwargs):
         result.stdout = json.dumps(frame, sort_keys=True, separators=(",", ":")).encode() + b"\n"
     return result
 interim_twin.subprocess.run = run
+comparison_error = {"attribute_error": AttributeError, "index_error": IndexError, "runtime_error": RuntimeError}
+if fault in comparison_error:
+    def broken_compare(*args, **kwargs):
+        raise comparison_error[fault]("generated comparison exception")
+    interim_twin.compare = broken_compare
 status = look.main(sys.argv[5:], keep_redirected=True)
 assert len(attempts) == 1, len(attempts)
 sys.exit(status)
@@ -938,8 +943,7 @@ class TwinThroughCLI(unittest.TestCase):
         draft = M.load_json(self.manifest)
         pin = M.load_json(REPO / MR.MANIFEST)["fit"]["twin"]
         self.twin = self.mini / pin["path"]
-        self.assertEqual(digest(self.twin.read_bytes()),
-                         "91ca54ab8747ede3d0fe8826e1b7d06ef721bce94de52969b9508a3eac890aab")
+        self.assertEqual(digest(self.twin.read_bytes()), pin["sha256"])
         draft["fit"]["twin"] = pin
         self.manifest.write_bytes(C.dump(draft))
         tokens = {}
@@ -1033,6 +1037,8 @@ class TwinThroughCLI(unittest.TestCase):
                                  # RL-194 condition 4: the twin's wrapper checks the pins and raises on a mismatch
                                  ("pin_changed", "not_evaluable"), ("pin_extra", "not_evaluable"),
                                  ("pin_symlink", "not_evaluable"),
+                                 ("attribute_error", "not_evaluable"), ("index_error", "not_evaluable"),
+                                 ("runtime_error", "not_evaluable"),
                                  ("malformed", "not_evaluable"), ("timeout", "not_evaluable")):
             with self.subTest(fault=fault):
                 run, private, public = self.trial(fault, relocated=relocated)

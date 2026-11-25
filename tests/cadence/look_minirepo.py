@@ -221,8 +221,9 @@ def commit(root, *, stage1_sha256=None, roster_sha256=None, verdicts_sha256=None
         doc["inputs"]["pins"] = write_pins(root, span_dirs)
     if doc["custody"].get("root") is None:                  # a committed look registers its root (audit 2)
         doc["custody"]["root"] = str(registered_root(None, root))
-    (root / TWIN_PATH).write_bytes(TWIN_SOURCE)
-    doc["fit"]["twin"] = TWIN_PIN
+    if doc["fit"]["twin"] is None:
+        (root / TWIN_PATH).write_bytes(TWIN_SOURCE)
+        doc["fit"]["twin"] = TWIN_PIN
     drift = next(d for d in doc["decisions"] if d["id"] == "drift_tripwire")
     if drift.pop("pending", None) is not None:  # a committed manifest carries Q11's disposition (synthetic here)
         drift["disposed_by"] = "RL-999"               # synthetic disposing ruling
