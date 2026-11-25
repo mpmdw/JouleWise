@@ -1091,7 +1091,7 @@ class TransactionTests(unittest.TestCase):
                     r"\[--launchd-probe\] \[--probe-timeout-s S\] \[--probe-max-age-s S\] "
                     r"\[--hour H\] \[--minute M\] "
                     r"\[--uninstall\] \[--render-only DIR\] \[--launchctl-bin PATH\] "
-                    r"\[--courier-bin ABS_PATH\]\n\Z")
+                    r"\[--courier-bin ABS_PATH\] \[--execution-commit OID\]\n\Z")
                 self.assertEqual([], fixture.fake.calls())
                 self.assertEqual(before, snapshot())
 

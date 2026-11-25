@@ -24,6 +24,13 @@ check and its diagnostic basis. Invalid root schemas, missing commits or mismatc
 record/series identity refuse before a packet can be built.
 
 Pass the resulting JSON to `align_v4_session.py install --next-arm-triage`.
+For a staged C1 arm, the lead commits the exact resulting JSON as
+`series/c1-next-arm.json` in the prepared source checkout. The consumer
+derives the packet's transport pin from that Git blob at source HEAD. It
+compares the supplied bytes with the pin before decoding. Use the staged
+path `measurement/series/c1-next-arm.json` or a byte-identical file inside
+the source checkout. The packet still identifies its earlier series and
+predecessor commits for independent rebuild.
 
 **A packet is a pointer, never trusted data.** At the arm, `arm_checks` rebuilds the packet with
 `build_packet` from the identities the supplied packet names (`record_commit`, `record_path`,
@@ -153,6 +160,166 @@ state at `--series-commit`, with:
   (the four D slots plus `cohort_identity`), `thermal_policy`, and `code_config`
   (optional `code_config_commit`). It must be the projection of the installed
   plan, not a proposed configuration. Scorer/series registration remains lead-owned.
+* For C1, commit the selected materialized kit under
+  `configs/campaigns/align_v4_c1` in the tree named by `--series-commit`.
+  The packet's `c1_kit` records the SHA-256 of the sorted, canonical JSON map
+  from kit-relative file paths to their byte digests, the raw collection-plan
+  SHA-256, the member count, and the ordered sentinel ordinals. The builder
+  checks the materialization against the committed series and projection.
+  Commit the auxiliary campaign manifests and their configs in that same
+  tree. The packet binds the ordered science IDs and the exact staged bytes
+  of each stage's order manifest. The builder derives the latter from the
+  committed order and the same relocation used by the staging view. It also
+  binds the dispatched config digests and any declared spare order files.
+  Projection-only packets are usable for off-host preflight. C1 install
+  requires the kit binding and checks the selected materialization before
+  host actions. The arm checks it against its own rebuild and verifies the
+  staged plan, launch-tree binding, and mirrored kit files. It resolves
+  the staged campaign argv with the writer's dispatch resolver and checks
+  order manifest and config digests, including scaffold stages. The C1
+  roster count and sentinel positions come from the ordered science IDs.
+  The packet's `staged_inventory` binds every staged input the consumer opens,
+  including the exact regenerated launch tree, original and relocated kit
+  files, and the registered code and configuration artifacts. It also binds
+  every repository file referenced by the resolved stage commands, including
+  tool programs, derivation manifests, and each campaign directory's resolved
+  order manifest and configs. The builder requires committed bytes for each
+  such file even when the stage carries no input descriptor. The consumer
+  derives the same closure from the verified staged tree and resolved orders.
+  The stage resolver uses the runner's argument binding rules. Repository
+  paths, paths relative to the `repo_root` binding, and relative literal or
+  tree-pointer operands share one normalized repository-relative key. The
+  campaign directory expands into its order manifest and dispatched configs.
+  Declared runtime bindings stay in their control roles. The prepared
+  `repo_root` must name the staging view. Unknown bindings, escaping paths,
+  and a repository root standing in for a file refuse.
+  It refuses a missing reference, a missing pin, or an inventory entry
+  outside that closure and the registered inputs. Only registered artifacts
+  outside the required dispatch can be recorded as absent. The consumer
+  checks each digest before decoding and hands parsers the same verified
+  bytes. A request for an unlisted input refuses before opening it. Prepare's
+  session plan and live control inputs belong outside the immutable view.
+  For the W1 desk check, the C1 consumer hashes the artifact bytes seen in
+  the staged view. Links resolve within that view and its prepared source
+  checkout. A matching copy has the same digest. An escaping link or a
+  staged kit or dispatch mismatch refuses install with exit 2 and
+  `packet_kit_mismatch`.
+  The C1 chain runs with a closed environment. Before any stage, it exports
+  the validated ledger, head pin, attempt inputs, plan ID and `cache_home`.
+  It unsets every other variable that a chain consumer reads
+  (`joulewise.b5.chain.C1_ENVIRONMENT_NAMES`, `JOULEWISE_*` and `PYTHON*`).
+  Without `cache_home` it unsets `XDG_CACHE_HOME`. `NIGHT_DIR` is the
+  driver's output directory and the only launch variable kept. Preflight
+  derives that environment from the renderer's own function. It runs each
+  consumer's pre-host checks under that environment and in the launch view.
+  Those checks are the reservation's ledger, custody-deadline, frozen-plan and
+  session-input gates (host-measured identity fields get a stand-in), the
+  capture writer's argument, custody-deadline and ledger gates, the runner's
+  policy, log, waiver, analysis-manifest, order, config and duplicate-ID
+  gates, and the SHADE task's own offline resolver. The reservation must
+  carry `--execute`. It reserves the frozen C1 window. Its `--window-id`,
+  the frozen plan's `window_id` and any window identity in the tree all
+  name `C1`, its evidence root matches that identity, and its runs root is
+  the window's claim runs root. The reservation writer itself refuses a
+  `--window-id` that differs from the window its frozen plan declares
+  (`calibration_reservation_input_invalid`, `plan_window_mismatch`).
+  That ID has one source: `v4_registration.C1_WINDOW` and
+  `window_identity(window_id, pack_id)`. The materializer writes the
+  identity into the plan tree and the same window into the collection
+  plan. The reservation's `--window-id` and `--evidence-root-id` are tree
+  pointers into it, and the C1 preflight and the installer compare with
+  `C1_WINDOW`. A series window's reservation reserves its series ID, never
+  its pack ID (`align-v4-c1`).
+  Each stage writes only this attempt's locations, each where the harvest
+  reads it. The reservation's runs root is the claim runs root. Each
+  capture's output root is `<claim runs root>/instrument_validation`, so
+  its flag root is the claim runs root. Each campaign stage's runs
+  directory is its dispatch runs root. A collection stage's `--log`, if
+  given, is `<runs directory>/campaign_log.jsonl`. The bound derivation
+  writes `<bound runs root>/neg8-drift-bound.json`. Each path is compared
+  as spelled from the launch view, so another root, a previous attempt or
+  a parent step refuses.
+  No value the night plan or render inputs carry is trusted when it can be
+  derived from the current attempt. The attempt's own directory holds its
+  verified staged inputs; it is the session root in production. Every root
+  the launch writes must resolve (realpath) inside that directory:
+  - both runs roots;
+  - the operator log root;
+  - both calibration directories;
+  - both backup destinations;
+  - the ledger;
+  - custody;
+  - the session root.
+
+  Prepare creates both runs roots and the operator log root empty and never
+  reuses one. Before arm, each must still be absent or an empty directory
+  that is not a link. Custody may hold records but no link at or below it.
+  The driver publishes the window lineage from the night plan, so preflight
+  binds each launch field it reads:
+  - the pack's window, pack plan id and evidence root, as the reservation
+    renders them;
+  - the bracket session, read through the driver's own `lineage_identity`;
+  - the pack id and the plan tree digest;
+  - `pack_sha256`, through the one pack predicate,
+    `window_lineage.admit_pack`. A pack holds only regular files and
+    directories. A link of any kind refuses: inside or outside the
+    verified roots, to a file or to a directory. So does any other
+    non-regular entry, such as a FIFO. Then:
+    - the plan tree must be the pinned one;
+    - each dispatched config must be a regular pack file whose bytes are its
+      committed inventory row;
+    - the pack's D-134 digest (`pack_tree_digest`: paths, modes, lengths
+      and SHA-256s) must equal `pack_sha256`, so a stray, a missing file or
+      a byte or mode change refuses.
+
+    C1 prepare records that digest. Build, install and direct arm all run
+    the predicate through preflight, and the launch binding
+    (`authenticate_campaign`) runs the same call on the lineage's copy, so
+    the earliest stage refuses, always as `pack_inadmissible`. Spare sets
+    are inventoried like members, since a spare retry dispatches them;
+  - `repo_head` and `measurement_head`, as the execution commit;
+  - the runs roots, as the chain's bindings;
+  - the attempt, window plan id and custody root, as the prepared session
+    inputs;
+  - the measurement root, as the launch view.
+
+  Any other digest field in the night plan refuses. The window env and
+  registration digests are recomputed when the plan is loaded.
+
+  The night plan is not a staged input. Prepare publishes it at
+  `night_gate.night_plan_path(custody_root)`, the custody root's
+  `night_plan.json`. That is the one place the installer admits it and
+  the driver reads it. The staged `session.json` binds its bytes through
+  `plan_sha256`, and custody holds no link. The installer checks
+  `repo_head` and `measurement_head` against the same pinned commit as the
+  launch view: `v4_registration.execution_commit`, passed as
+  `--execution-commit`. It never asks git in the export where its own
+  module resolves. A missing commit refuses as `execution_commit_missing`,
+  and a head that differs from it refuses as `execution_commit_mismatch`.
+
+  C1 prepare also refuses a collection selection that mixes configs tagged
+  `launch_lineage_required` with legacy ones, using the runner's own
+  predicate. The campaign would otherwise refuse it only after arm.
+
+  Consumers must agree: each capture's `--power-policy`
+  equals the policy the reservation records (desk epoch, then desk T1, then
+  `POWER_POLICY`). Its `--sampler-binary` selects the reservation's sampler,
+  which preflight compares by path without opening either file. Its
+  session, attempt and custody locator match its reserved slot. Every
+  capture and campaign stage reads the reservation's head-pin file. Each
+  capture is a live bracket capture. It uses the frozen protocol's pulse
+  count and finite, positive sampler-ready and rollover timeouts, and it
+  carries no test-only option. A collection stage takes no `--dry-run` and
+  no block limit. A `--max-blocks` below 1 refuses with the runner's own
+  `--max-blocks must be >= 1`, and any other value with the runner's
+  HAZARD_PACK refusal. An `--instrument-power-policy` equals the reserved
+  policy. The
+  reservation's pre-reserve readiness also runs read-only, with no lease or
+  append, on the canonical starting ledger and the exact parsed
+  `--head-pin`. A SHADE workload without a cache binding refuses. A
+  `CALIBRATION_LEDGER` in the caller's shell can only refuse. If set, it
+  must resolve through the fence to the canonical ledger, and an empty
+  value refuses. The chain never consumes it.
 * The window records are **hash-chained**: each record names its predecessor
   (`previous_record`: `commit`, `path`, `sha256`) and the series ledger `series/state.json`
   names the latest one (`previous_record`, `series_sha256`). The builder walks the chain back to

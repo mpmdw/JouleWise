@@ -7,7 +7,7 @@ counting-isolation tests are explicit; the exact generated spelling has its
 own witness. Host observations and the final installer alone are replaced.
 """
 from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
-from tests.align.v4_registration_fixtures import session_plan
+from tests.align.v4_registration_fixtures import projection_arm_checks, session_plan
 from copy import deepcopy
 import json
 import os
@@ -21,7 +21,7 @@ from joulewise.align.apple import v4_cadence as cadence, v4_registration
 from scripts import align_v4_kit as kit, align_v4_next_arm_packet as builder
 from scripts import align_v4_series as series, align_v4_session as session
 from tests.align.test_v4_cadence import write_battery_log
-from tests.align.test_v4_next_arm_packet import NOW, Scenario
+from tests.align.test_v4_next_arm_packet import NOW, Scenario, write_c1_fixture_kit
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -33,7 +33,22 @@ class Delta5Witnesses(unittest.TestCase):
         cls.plans = {}
         for extras in (0, 2):
             files = series.build_files(ROOT, cls.manifest, 'C1', extra_sentinels=extras)
-            cls.plans[extras] = json.loads(files[series.kit_path('C1') / 'collection_plan.json'])
+            directory = series.kit_path('C1')
+            cls.plans[extras] = json.loads(files[directory / series.C1_PLAN])
+            if extras:
+                # Arm's synthetic host observes Automatic. Give its kit the
+                # same explicit power declaration the earlier arm witness used.
+                cls.c1_plan = deepcopy(cls.plans[extras])
+                cls.c1_plan['runtime_requirements']['ac_powermode'] = 0
+                for member in cls.c1_plan['members']:
+                    member['ac_powermode'] = 0
+                plan_raw = series.raw_json(cls.c1_plan)
+                files[directory / series.C1_PLAN] = plan_raw
+                tree_path = directory / 'plan_tree.json'
+                tree = json.loads(files[tree_path])
+                tree['plan'].update(actual_sha256=series.sha(plan_raw), declared_sha256=series.sha(plan_raw))
+                files[tree_path] = series.raw_json(tree)
+                cls.c1_files = files
 
     def setUp(self):
         temp = tempfile.TemporaryDirectory(prefix='jw-r11-delta5-')
@@ -99,10 +114,12 @@ class Delta5Witnesses(unittest.TestCase):
              patch('joulewise.align.apple.external_volume.arm_check',
                    return_value={'verdict': 'PASS', 'reasons': []}), \
              patch('joulewise.battery_float.observe', return_value=(good, b'synthetic ioreg')), \
+             patch.object(session, 'arm_checks', side_effect=projection_arm_checks(session.arm_checks)), \
              patch.object(session, 'w1_disk_check', return_value={'status': 'pass'}), \
              patch.object(session.pilot, 'install', return_value={'exit_code': 0}) as installer:
             try:
-                session._arm_and_install(scratch, state, s.root, {'runtime_requirements': {'ac_powermode': 0}},
+                plan = self.c1_plan if window == 'C1' else {'runtime_requirements': {'ac_powermode': 0}}
+                session._arm_and_install(scratch, state, s.root, plan,
                     None, watchdog_check=_watchdog_acceptance, runner=host, volume_runner=host, now=lambda: NOW, w1_disk_config=None, disk_gate=None,
                     obc_off_attested_by='synthetic-review', battery_log=log, next_arm_triage=packet,
                     meter_probe=lambda root: {'live': True})
@@ -142,7 +159,10 @@ class Delta5Witnesses(unittest.TestCase):
             if (self.tmp / 'repo').exists():
                 self.tmp = self.tmp / 'independent'
                 self.tmp.mkdir()
-            s = self.scenario(previous, next_window=target).finish()
+            s = self.scenario(previous, next_window=target)
+            if target == 'C1':
+                write_c1_fixture_kit(s, self.c1_files)
+            s.finish()
             honest = s.build()
             record, error, calls = self.arm(s, honest, window=target)
             self.assertIsNone(error, record['reasons'])

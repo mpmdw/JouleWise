@@ -536,7 +536,8 @@ class InstallNightAgentTests(unittest.TestCase):
         usage = (" --plan PLAN.json [--python ABS_PATH] "
                  "[--launchd-probe] [--probe-timeout-s S] [--probe-max-age-s S] "
                  "[--hour H] [--minute M] [--uninstall] "
-                 "[--render-only DIR] [--launchctl-bin PATH] [--courier-bin ABS_PATH]\n")
+                 "[--render-only DIR] [--launchctl-bin PATH] [--courier-bin ABS_PATH] "
+                 "[--execution-commit OID]\n")
         # Exercise both real entrypoints; the shell already had this contract.
         for entrypoint in (["/bin/zsh", str(SCRIPT_PATH)],
                            [sys.executable, "-B", "-m", "joulewise.night_agent_install"]):
@@ -578,7 +579,7 @@ class InstallNightAgentTests(unittest.TestCase):
             "[--python ABS_PATH] [--launchd-probe] [--probe-timeout-s S] "
             "[--probe-max-age-s S] [--hour H] [--minute M] "
             "[--uninstall] [--render-only DIR] "
-            "[--launchctl-bin PATH] [--courier-bin ABS_PATH]\n", result.stderr)
+            "[--launchctl-bin PATH] [--courier-bin ABS_PATH] [--execution-commit OID]\n", result.stderr)
         self.assertEqual([], self.fake.calls())
         self.assertEqual(before, snapshot())
 

@@ -25,10 +25,11 @@ import unittest
 from unittest.mock import patch
 
 from joulewise.align.apple import v4_cadence as cad, v4_registration
+from joulewise.b5.chain import stage_plan
 from scripts import align_pilot_session as pilot, align_v4_kit as kit, align_v4_series as s
 from scripts import align_v4_session as session, bytes_h_session as h
 from tests.align.test_v4_cadence import arm_seams, write_battery_log
-from tests.align.v4_registration_fixtures import session_plan
+from tests.align.v4_registration_fixtures import fixture_c1_preflight, localize_c1_artifacts, session_plan
 from tests.align.test_v4_kit import FakeArmHost, ready_inputs
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -59,6 +60,13 @@ def mirror(target):
             if p.name not in omitted and not p.name.startswith('align_v4_'):
                 (target / relative / p.name).symlink_to(p, target_is_directory=p.is_dir())
     shutil.copytree(ROOT / kit.KIT, target / kit.KIT)
+    # These checked-in templates provide the auxiliary stage manifests in
+    # both the rendered kit and the actual linked launch view.
+    for name in ('neg8_reference_corpus_v5', 'window_references_v5'):
+        directory = Path('configs/campaigns') / name
+        (target / directory).unlink()
+        shutil.copytree(ROOT / directory, target / directory)
+    localize_c1_artifacts(target)
 
 
 class SeriesCadenceEndToEnd(unittest.TestCase):
@@ -148,6 +156,20 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
         # The plan writer is skipped here; stage the synthetic plan its t0 names, which the batch's
         # post-install watchdog acceptance reads (RL-53 W-1).
         session_plan(target, state, now=state['t0_epoch_s'] - 3600)
+        if pack_id == s.pack_id('C1'):
+            plan_path = Path(state['plan_path'])
+            plan = json.loads(plan_path.read_bytes())
+            tree_raw = (pack / 'plan_tree.json').read_bytes()
+            stages = stage_plan(json.loads(tree_raw))
+            # The launch budget includes scaffold campaign stages.
+            planned = sum(stage.expected_count for stage in stages
+                          if stage.in_chain and stage.kind == 'campaign_collection')
+            roster = json.loads((pack / s.C1_PLAN).read_bytes())['members']
+            self.assertGreater(planned, len(roster))
+            plan['hazard_window'] = {'pack': {'pack_root': str(pack),
+                                             'plan_tree_sha256': s.sha(tree_raw)},
+                                     'member_count': planned}
+            h.write(plan_path, plan)
         h.write(target / 'session.json', state)
         return state
 
@@ -185,10 +207,11 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
                 for k, v in statuses.items()}
 
     def packet(self, window, **checks):
-        return s.make_packet(self.measurement, window, self.history,
-                             self.checks(first=window == 'W1', **checks), record_commit=COMMIT,
-                             last_desk_passed_artifact_set_sha256=v4_registration.artifact_set_digest(self.measurement),
-                             valid_until_epoch_s=1000.0, now_epoch_s=500.0, commit_check=lambda root, commit: True)
+        packet = s.make_packet(self.measurement, window, self.history,
+                               self.checks(first=window == 'W1', **checks), record_commit=COMMIT,
+                               last_desk_passed_artifact_set_sha256=v4_registration.artifact_set_digest(self.measurement),
+                               valid_until_epoch_s=1000.0, now_epoch_s=500.0, commit_check=lambda root, commit: True)
+        return packet
 
     def next_window(self):
         rows, nxt, _, _ = s.calibration_rows(self.manifest, self.history)
@@ -206,21 +229,29 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
     # -- one arm ---------------------------------------------------------------
     def arm(self, window, packet, *, n):
         root = self.tmp / f'session-{window}-{n}'
-        session.prepare(self.measurement, root, window_id=window)
+        state = session.prepare(self.measurement, root, window_id=window)
+        is_c1 = state['v4_series']['window_id'] == 'C1'
         path = self.tmp / f'packet-{window}-{n}.json'
         path.write_text(json.dumps(packet))
         host = FakeArmHost(mode=0)
         log = write_battery_log(self.tmp / f'battery-{window}-{n}.jsonl', time.time())
         before = len(self.installed)
-        try:
-            session.install(root, runner=host, volume_runner=host, obc_off_attested_by='synthetic',
-                            battery_log=log, next_arm_triage=path, w1_disk_config=self.disk_config,
-                            **arm_seams(),
-                            disk_gate=lambda config: {'status': 'pass', 'offloads': []})
-            error = None
-        except ValueError as exc:
-            error = str(exc)
-        record = json.loads(sorted((root / 'staging').glob('v4-arm-*.json'))[-1].read_text())
+        with ExitStack() as stack:
+            seams = arm_seams()
+            if is_c1:
+                stack.enter_context(patch.object(session, 'c1_arm_preflight',
+                                                 side_effect=fixture_c1_preflight(state, packet, seams['packet_builder'])))
+                seams['c1_handoff'] = {'window': 'C1'}
+            try:
+                session.install(root, runner=host, volume_runner=host, obc_off_attested_by='synthetic',
+                                battery_log=log, next_arm_triage=path, w1_disk_config=self.disk_config,
+                                **seams, disk_gate=lambda config: {'status': 'pass', 'offloads': []})
+                error = None
+            except ValueError as exc:
+                error = str(exc)
+        records = sorted((root / 'staging').glob('v4-arm-*.json'))
+        self.assertTrue(records, error or 'install produced no arm record')
+        record = json.loads(records[-1].read_text())
         return root, record, error, len(self.installed) - before
 
     def assert_armed(self, window, record, error, calls, root):
@@ -294,6 +325,21 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
         self.assertFalse(record['admitted'])
         self.assertEqual(calls, 0)
         self.assertTrue(any(r.startswith('series_binding: C4') for r in record['reasons']))
+
+    def test_c1_refuses_an_unlisted_staged_path_in_an_offload_receipt(self):
+        self.outcome('W1', captured=18)
+        packet = self.packet('C1')
+        relative = 'unlisted-daytime-receipt.json'
+        receipt = self.tmp / 'session-C1-1' / 'measurement' / relative
+        config = json.loads(self.disk_config.read_bytes())
+        config.update(daytime_offload_receipt=str(receipt),
+                      daytime_offload_freshness={'max_age_s': 60, 'lead_signature': SIGNATURE})
+        self.disk_config.write_text(json.dumps(config))
+        _, record, error, calls = self.arm('C1', packet, n=1)
+        self.assertEqual(calls, 0)
+        self.assertFalse(record['admitted'])
+        self.assertIn('packet_kit_mismatch', record['reasons'])
+        self.assertIn('live control path is inside the staged view', error)
 
     def test_an_unbound_packet_cannot_arm_w1_or_a_series_window(self):
         for window in ('W1', 'C1'):

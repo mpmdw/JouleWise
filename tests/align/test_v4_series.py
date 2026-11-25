@@ -13,6 +13,7 @@ import math
 import json
 import os
 from pathlib import Path
+import shutil
 import tempfile
 import time
 from types import SimpleNamespace
@@ -28,7 +29,7 @@ from joulewise.b5 import plan
 from joulewise.b6 import registration
 from tests.test_b5_driver import Harness, fake_monitor_argv
 from tests.align.test_v4_cadence import arm_seams
-from tests.align.v4_registration_fixtures import span_aware_watchdog
+from tests.align.v4_registration_fixtures import fixture_c1_preflight, span_aware_watchdog
 from tests.align.test_v4_kit import ROOT, FakeArmHost
 
 
@@ -409,7 +410,14 @@ class FakeWorld:
                 target.symlink_to(path, target_is_directory=path.is_dir())
         for path in (ROOT / 'configs/campaigns').iterdir():
             target = m / 'configs/campaigns' / path.name
-            if path.name != 'align_v4' and not target.exists():
+            if name == 'C1' and path.name in ('neg8_reference_corpus_v5', 'window_references_v5'):
+                # Harness already links auxiliary packs out of the fixture.
+                # K2/K3 read their contents inside the fixture's own root.
+                if target.is_symlink():
+                    target.unlink()
+                if not target.exists():
+                    shutil.copytree(path, target)
+            elif path.name != 'align_v4' and not target.exists():
                 target.symlink_to(path, target_is_directory=path.is_dir())
         # This existing policy directory needs an additional safe repo fixture.
         target = m / 'configs/campaign_policies/quiet_mac_p2_b5.json'
@@ -423,6 +431,9 @@ class FakeWorld:
         source_path = Path('scripts/zero_ntp_frequency.c')
         source_raw = (ROOT / source_path).read_bytes()
         write(m, source_path, source_raw)
+        if name == 'C1':
+            # Desk-stage argv names a backup tool even though the arm witness never runs it.
+            write(m, 'scripts/backup_runs.sh', b'#!/bin/sh\nexit 97\n')
         receipt_path = Path(v4_registration.REGISTRATION) / 'registration_receipt.json'
         receipt = json.loads((m / receipt_path).read_bytes()) if (m / receipt_path).exists() else {}
         receipt.setdefault('artifacts', {})[source_path.as_posix()] = s.sha(source_raw)
@@ -519,6 +530,12 @@ class FakeWorld:
             # wait. The pre-arm clock is earlier; the real preflight still reads
             # and verifies the actual writer's plan and budget.
             stack.enter_context(patch.object(session, 'time', SimpleNamespace(**(vars(time) | {'time': lambda: time.time() - 600}))))
+            shared_prepare = h.prepare
+
+            def replay_prepare(*args, attempt_c1=False, **kwargs):
+                return shared_prepare(*args, **kwargs)
+
+            stack.enter_context(patch.object(h, 'prepare', side_effect=replay_prepare))
             state = session.prepare(m, self.session, window_id=self.name, run=self.run_process,
                 now=lambda: time.time() - 480, statvfs=lambda _: SimpleNamespace(f_bavail=10**12, f_frsize=1),
                 capacity=lambda _: None, frequency_reader=lambda: frequency_probe(0),
@@ -535,11 +552,16 @@ class FakeWorld:
             host = FakeArmHost(0)
             stack.enter_context(patch.object(session, 'w1_disk_check', return_value={'admitted': True}))
             stack.enter_context(patch.dict(os.environ, {'JOULEWISE_HOST_STATE_DIR': str(self.root / 'host-state')}))
+            seams = {**arm_seams(), 'watchdog_check': span_aware_watchdog}
+            if self.name == 'C1':
+                stack.enter_context(patch.object(session, 'c1_arm_preflight',
+                                                 side_effect=fixture_c1_preflight(state, packet, seams['packet_builder'])))
+                seams['c1_handoff'] = {'window': 'C1'}
             installed = session.install(self.session, run=self.run_process, runner=host, volume_runner=host,
                 now=lambda: state['t0_epoch_s'] - 1, next_arm_triage=packet,
                 obc_off_attested_by='SYNTHETIC operator', battery_log=self.battery_log(state),
                 frequency_reader=lambda: frequency_probe(0),
-                **{**arm_seams(), 'watchdog_check': span_aware_watchdog})
+                **seams)
             test.assertEqual(installed['exit_code'], 0)
             test.assertEqual(len(self.installer_calls), 1)
             harness.plan_path = Path(state['plan_path'])

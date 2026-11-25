@@ -527,7 +527,8 @@ def _desk(session_root, *, run=subprocess.run, harvest=True, compare_session=Non
 
 def main(argv=None, *, kit=KIT, pack_id=PACK_ID, desk_schema=SCHEMA,
          prepare_fn=prepare, install_fn=install, session_prefix='align-pilot-',
-         desk_extra_checks=None, install_options=(), prepare_options=(), desk_fn=None):
+         desk_extra_checks=None, install_options=(), prepare_options=(), desk_fn=None,
+         install_refusals=()):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     p = commands.add_parser('prepare')
@@ -564,6 +565,8 @@ def main(argv=None, *, kit=KIT, pack_id=PACK_ID, desk_schema=SCHEMA,
         return 0
     except (OSError, ValueError, RuntimeError, KeyError) as exc:
         print('align_pilot_session: ' + str(exc), file=sys.stderr)
+        if args.command == 'install' and isinstance(exc, install_refusals):
+            return 2
         return 1
 
 

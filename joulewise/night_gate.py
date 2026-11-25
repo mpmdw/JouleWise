@@ -37,6 +37,20 @@ PACK_PLAN_SCHEMA_VERSION = 3
 QUIET_PLAN_SCHEMA = "joulewise.night_plan.v4"
 QUIET_PLAN_SCHEMA_VERSION = 4
 QUIET_RECEIPT_SCHEMA = "joulewise.unattended_night_receipt.v3"
+PLAN_BASENAME = "night_plan.json"
+
+
+def night_plan_path(custody_root: str | Path) -> Path:
+    """Where a window's night plan is published: ``<custody_root>/night_plan.json``.
+
+    This is the only definition of that location (CAP 10 I2, PR #896). The
+    producer writes the plan here, and the installer's publication check
+    admits only this path. A C1 attempt keeps its chain controls in its
+    staged inputs (S), but it publishes its night plan here too.
+    """
+    return Path(custody_root) / PLAN_BASENAME
+
+
 RECEIPT_CLASSES = (
     "DIAGNOSTIC_NO_PACK",
     "REHEARSAL_STUB",

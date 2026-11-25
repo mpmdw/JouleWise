@@ -83,6 +83,57 @@ The lead authorized this seat to do four "lead" items itself (D2). Each is a nor
 | 19 | PR #960 at `96ffb3fd5` (D2c). No file changes; the trial already carries `e2cf3ca00` | `1d6435007` | 10/10 |
 | 20 | PR #961 at `0baa173c1` (D1, D2b). `DEVIATIONS.md` merges clean, and all four owners' hunks reverse-apply | `5a7b1bae4` | 10/10 |
 
+### 0.2 Lead fix 2 · refresh onto the current W1 line
+
+Trial parent `e0b509b04` absorbs W1 head `7699c5e51`, which contains C1
+PR #896 at `38e19a3c9` and the final Part C port PR #959 at `7699c5e51`.
+The trial remains a rehearsal. The two changes are already landed on the
+W1 line.
+
+| Conflict | Resolution | Source |
+|---|---|---|
+| `test_v4_next_arm_packet.py` | Keep both fixture helpers, `unpack_receipt` and `retarget_next_members`, and the C1 manifest initialization. Retain the trial's RL-183b digest-only finality tests and the line's C1 rebuild tests. | #896 C1 fixture and trial RL-183b finality |
+| `test_smoke_delta3_sol1.py` | Keep the admitted control, explicit sentinel manifest source, and C3 omission. Assert exactly 506 probes. | #896 adds two manifest-source probes and the trial adds 16 probes for eight receipt-source positions, on the same 488-case baseline. |
+| `test_smoke_delta3_sol2.py` | Require all 506 probes to run, zero admitted mutations, the C3 omission, and the exact changed and removed labels for the manifest source. Retain the independent leaf walk. | #896 manifest source and trial RL-183b receipt sources |
+
+The test inventory preserves both parents' cases. The two R17 tests that
+already changed on the trial by RL-183b retain their digest-only forms.
+The three-file reconciliation is trial-only. The C1 identity tests are
+#896's J1–J3, and the current-launcher F-2 and frozen v4 contracts are
+#959's. RL-215 and RL-216 supersede the earlier v3.2 signing-suite wording
+in sections 6 and 9.
+
+**New local failure and its source.** The first focused run had four
+errors in #896's fixture, in `test_j3_a_materialized_kit_builds_reserves_and_installs`
+and the three CAP10 installer contract tests. This was a trial-only
+interaction with the existing RL-163 and RL-183b finality contract.
+The frozen C1 history supplies the old `finalized_manifest` descriptor
+and the trial's packet builder requires its digest and an unpack receipt.
+The C1 adapter now binds the existing synthetic digest and canonical
+receipt in its private clone, and refreshes the matching history links.
+The frozen C1 suite and production checks keep their exact bytes. The
+local packet module passed all 72 tests, and the J1–J3 and CAP10 modules
+passed all seven tests after the adapter change.
+
+**Current findings for step 1 and signing**
+
+- **F-4a and F-4b.** #824 is still open. Step 1 needs the lead-authorized
+  R0 digest and the lead's `member_s` file. Then bind R0 and complete the
+  RL-207 thermal-policy shape, fill `w1_plan.json`, and regenerate the kit,
+  template and eligible closure trace. Reproduce the reader and refusal
+  censuses on that head.
+- **Final assembly.** The promoted head still needs the lead's accepted
+  component decisions and exact-tree checks. #826, #831, #839, #886 and
+  #904 are present as trial components and remain open as PRs. #944,
+  #960, #961, #896 and #959 have landed on W1. #960 supplies RL-212;
+  #961 supplies the RL-203 and RL-204 records and the anti-hindsight list.
+- **F-9 and signing.** After the last regeneration, run the step-4
+  three-blob check and the authorized U3, WP19 and protected Part C
+  replay steps. Bind the STRICT receipt, reader-census evidence, published
+  file list and exact-head proofs. Then obtain the final `--check`, sign,
+  and hand the promoted head to Fable for the cold pass. The known S6
+  shared-path limitation applies if R1 is ever rerun.
+
 ## 1. Composition and order
 
 The order is RL-193 §3's confirmed composition: "on PIN, #826, #839, #831,
