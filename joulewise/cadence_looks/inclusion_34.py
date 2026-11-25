@@ -628,10 +628,11 @@ def _fresh_bytecode_cache(*, create):
 def _rehearse(destination):
     """RL-217 E.1: judge the entire input-bound draft roster using the campaign evaluator and serializer."""
     import contextlib
+    import importlib.util
     from types import SimpleNamespace
     from joulewise.cadence_looks import manifest as lm
 
-    run = None
+    input_refusal = ()
     try:
         lm.fetch_public(REPO)
         refs = lm.rehearsal_refs(REPO)
@@ -643,8 +644,10 @@ def _rehearse(destination):
                              ledger_ref=ref, rehearsal=True)
         if doc["status"] != "draft" or doc["look_id"] != lm.INTERIM_LOOK_ID:
             raise lm.ManifestError(["rules-3-4 rehearsal requires an input-bound interim look draft"])
-        from scripts import cadence_look_run as run
-
+        spec = importlib.util.spec_from_file_location("_pinned_look_runner", runner)
+        run = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(run)
+        input_refusal = run.F.LookInputError
         run._guard_loaded(doc)
         layout = run.layout_of(doc)
         roster_raw = layout.read("roster")
@@ -674,7 +677,7 @@ def _rehearse(destination):
         print("REFUSE " + "; ".join(error.problems), file=sys.stderr)
         return 1
     except Exception as error:  # diagnostics from the evaluator may contain data
-        if run is not None and isinstance(error, run.F.LookInputError):
+        if isinstance(error, input_refusal):
             print(f"REFUSE {error}", file=sys.stderr)
             return 1
         print(f"FAILED {type(error).__name__}", file=sys.stderr)
