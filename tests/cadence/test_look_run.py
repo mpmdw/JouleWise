@@ -1310,6 +1310,326 @@ class Stage1Rehearsal(unittest.TestCase):
         self.assertEqual(accepted.returncode, 0, accepted.stderr)
 
 
+def refusal_sites(source, functions):
+    """Every refusal path of the named module functions, as ``(site, line)`` in source order. A site is a raise
+    statement or a call of a module function or of an ``M.``, ``F.``, ``release.``, ``PINS.``, ``layout.`` or
+    ``a.`` attribute, written ``function | guards | raise <exception>`` or ``function | guards | call <callee>``.
+    The guards are the conditions that reach it: each enclosing ``if X`` or ``else X`` (also of a conditional
+    expression), loop, ``except`` clause and preceding short-circuit operand, and ``unless X`` / ``after X`` for an
+    earlier ``if`` in the same block whose branch returns, continues or breaks. An earlier branch that raises adds no
+    guard: a new refusal before a check strengthens the path to it, while a new early return skips it. A nested
+    function is listed as ``outer.inner``. An absent function contributes nothing."""
+    import ast
+    tree = ast.parse(source)
+    defs = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+    roots = {"M", "F", "release", "PINS", "layout", "a"}
+    out = []
+
+    def callee(func):
+        root = func
+        while isinstance(root, ast.Attribute):
+            root = root.value
+        if isinstance(func, ast.Name) and func.id in defs:
+            return func.id
+        if isinstance(func, ast.Attribute) and isinstance(root, ast.Name) and root.id in roots:
+            return ast.unparse(func)
+        return None
+
+    def add(name, guards, what, node):
+        out.append((f"{name} | {' / '.join(guards) or '-'} | {what}", node.lineno))
+
+    def expr(name, node, guards):
+        if isinstance(node, ast.IfExp):
+            test = ast.unparse(node.test)
+            expr(name, node.test, guards)
+            expr(name, node.body, guards + (f"if {test}",))
+            expr(name, node.orelse, guards + (f"else {test}",))
+            return
+        if isinstance(node, ast.BoolOp):
+            op, earlier = ("and" if isinstance(node.op, ast.And) else "or"), ()
+            for value in node.values:
+                expr(name, value, guards + earlier)
+                earlier += (f"{op} {ast.unparse(value)}",)
+            return
+        if isinstance(node, ast.Lambda):
+            return
+        if isinstance(node, ast.Call) and (target := callee(node.func)) is not None:
+            add(name, guards, f"call {target}", node)
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.expr):
+                expr(name, child, guards)
+            elif isinstance(child, (ast.keyword, ast.comprehension)):
+                for sub in ast.iter_child_nodes(child):
+                    if isinstance(sub, ast.expr):
+                        expr(name, sub, guards)
+
+    def skips(body):
+        return bool(body) and isinstance(body[-1], (ast.Return, ast.Continue, ast.Break))
+
+    def block(name, body, guards):
+        for node in body:
+            statement(name, node, guards)
+            if isinstance(node, ast.If):
+                if skips(node.body):
+                    guards = guards + (f"unless {ast.unparse(node.test)}",)
+                elif skips(node.orelse):
+                    guards = guards + (f"after {ast.unparse(node.test)}",)
+
+    def statement(name, node, guards):
+        if isinstance(node, ast.If):
+            test = ast.unparse(node.test)
+            expr(name, node.test, guards)
+            block(name, node.body, guards + (f"if {test}",))
+            block(name, node.orelse, guards + (f"else {test}",))
+        elif isinstance(node, ast.For):
+            expr(name, node.iter, guards)
+            block(name, node.body, guards + (f"for {ast.unparse(node.target)} in {ast.unparse(node.iter)}",))
+            block(name, node.orelse, guards)
+        elif isinstance(node, ast.While):
+            expr(name, node.test, guards)
+            block(name, node.body, guards + (f"while {ast.unparse(node.test)}",))
+        elif isinstance(node, ast.Try):
+            block(name, node.body, guards)
+            for handler in node.handlers:
+                caught = ast.unparse(handler.type) if handler.type is not None else ""
+                block(name, handler.body, guards + (f"except {caught}",))
+            block(name, node.orelse, guards)
+            block(name, node.finalbody, guards)
+        elif isinstance(node, ast.With):
+            for item in node.items:
+                expr(name, item.context_expr, guards)
+            block(name, node.body, guards)
+        elif isinstance(node, ast.FunctionDef):
+            block(f"{name}.{node.name}", node.body, ())
+        elif isinstance(node, ast.Raise):
+            exc = node.exc
+            for part in (exc.args + [k.value for k in exc.keywords]) if isinstance(exc, ast.Call) else [exc]:
+                if part is not None:
+                    expr(name, part, guards)
+            add(name, guards, f"raise {ast.unparse(exc) if exc is not None else ''}", node)
+        else:
+            for child in ast.iter_child_nodes(node):
+                if isinstance(child, ast.expr):
+                    expr(name, child, guards)
+
+    for name in functions:
+        if name in defs:
+            block(name, defs[name].body, ())
+    return out
+
+
+class Pr971Convergence(unittest.TestCase):
+    """PR #971 round 4, lead spec S2: the convergence check against the pre-fix parent 75ce4bf5c. Each of three audit
+    rounds closed its finding and dropped a guard the parent had. Here every audit reproducer is replayed on generated
+    custody (``look_parity_cases.py``) against both this checkout and the parent's own files, extracted from git; and
+    every refusal path of the parent's stage-1 entry points must survive here or name its replacement."""
+
+    maxDiff = None
+    PARENT = "75ce4bf5c3c4fae2c43c467dd2878f0e9b814dff"
+    # the parent's fixture, runner, producer and the files the fixture copies (look_minirepo.fixture_sources)
+    PARENT_FILES = ("joulewise", "scripts", "tests/__init__.py", "tests/git_fixture.py", "tests/host_command_guard.py",
+                    "tests/cadence", "docs/process", "configs/align/v4/r1_runtime.json",
+                    "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/looks/lm-qual-01.manifest.json")
+    # case: (the parent's outcome, a text each refusal here prints). The audits observed the parent for provenance
+    # (round 1: exit 0, both files), preflight_fetch (round 2) and rehearsal_fetch (round 3) (exit 2, no file); the
+    # replay asserts the parent's outcome for every case, so the replays are the audits' reproductions.
+    CASES = {
+        "provenance": ("accepted", ("rules_3_4.receipt.json: absent",)),
+        "span_override_flag": ("accepted", ("refuses --span-dir", "rules_3_4.json: absent")),
+        "span_override_copy": ("accepted", ("custody pins:", "rules_3_4.json: absent")),
+        "preflight_fetch": ("refused_no_write", ("not the one on",)),
+        "preflight_fetch_publication": ("accepted", ("preflight breach", "not the one on")),
+        "rehearsal_fetch": ("refused_no_write", ("not the one on",)),
+        "rehearsal_fetch_publication": ("accepted", ("preflight breach",)),
+        "rehearsal_fence_branch": ("accepted", ("registered root",)),
+    }
+    FUNCTIONS = ("_stage1", "finish_stage1", "finish_rehearsal")
+    # refusal_sites(the parent's scripts/cadence_look_run.py, FUNCTIONS); checked against git when the parent is there
+    PARENT_SITES = (
+        "_stage1 | if a.level_r and (not a.allow_draft) | raise F.LookInputError('--level-r runs only with --allow-draft; a committed look reads custody')",
+        "_stage1 | - | call layout_of",
+        "_stage1 | if rehearsal is None / for key in ('stage1', 'level_r') | call layout.exists",
+        "_stage1 | if rehearsal is None / for key in ('stage1', 'level_r') / if layout.exists(key) | raise F.LookInputError(f\"{M.LOOK_FILES[key]} already exists in the look's directory\")",
+        "_stage1 | if a.level_r | call layout.read",
+        "_stage1 | else a.level_r | call ruled_exclusions",
+        "_stage1 | else a.level_r / if rehearsal is not None | call rehearsal_output",
+        "_stage1 | else a.level_r / if rehearsal is not None | call read_rehearsal_rules",
+        "_stage1 | else a.level_r / if rehearsal is not None | call layout.read",
+        "_stage1 | else a.level_r / else rehearsal is not None | call layout.read",
+        "_stage1 | else a.level_r / else rehearsal is not None | call layout.read",
+        "_stage1 | else a.level_r / except M.ManifestError | raise F.LookInputError('; '.join(error.problems))",
+        "_stage1 | else a.level_r / if not a.allow_draft | call M.require_inputs_committed",
+        "_stage1 | else a.level_r / if not a.allow_draft | call sha256_file",
+        "_stage1 | else a.level_r / if not a.allow_draft / if rehearsal is not None | call rehearsal_host",
+        "_stage1 | else a.level_r | call M.strict_json",
+        "_stage1 | else a.level_r / if not isinstance(roster, list) or not all((isinstance(s, dict) and isinstance(s.get('span_id'), str) for s in roster)) | raise F.LookInputError('roster: not a list of spans')",
+        "_stage1 | else a.level_r / if rehearsal is not None | call rehearsal_roster",
+        "_stage1 | else a.level_r | call load_pins",
+        "_stage1 | else a.level_r | call stage_custody",
+        "_stage1.sdir_of | unless sid in staged | call layout.span",
+        "_stage1.sdir_of | unless sid in staged / except M.ManifestError | raise F.LookInputError('layout: ' + '; '.join(error.problems))",
+        "_stage1 | else a.level_r | call admit_custody",
+        "_stage1 | else a.level_r | call M.strict_json",
+        "_stage1 | else a.level_r / if ruled and (not a.allow_draft) | call superseded_source",
+        "_stage1 | else a.level_r / else rehearsal is not None | call layout.file",
+        "_stage1 | else a.level_r | call stage1_preflight",
+        "_stage1 | else a.level_r | call _guard_loaded",
+        "_stage1 | else a.level_r / else a.allow_draft | call M.ledger_gate",
+        "_stage1 | else a.level_r | call stage1_protected",
+        "_stage1 | after a.level_r / if a.allow_draft and look_input.get('synthetic') is not True | raise F.LookInputError('--allow-draft runs on synthetic input only (Mythos N2)')",
+        "_stage1 | after a.level_r | call F.stage1",
+        "_stage1 | after a.level_r | call code_hashes",
+        "_stage1 | after a.level_r | call _stamp",
+        "finish_stage1 | - | call M.stage1_problems",
+        "finish_stage1 | - | call sha256_file",
+        "finish_stage1 | if probs | raise owned_refusal(\"stage 1's own output: \" + '; '.join(probs))",
+        "finish_stage1 | if getattr(a, 'look_input_bytes', None) is not None | call a.layout.create",
+        "finish_stage1 | - | call a.layout.create",
+        "finish_stage1 | - | call F.dump",
+        "finish_rehearsal | - | call M.stage1_problems",
+        "finish_rehearsal | - | call sha256_file",
+        "finish_rehearsal | if problems | raise owned_refusal(\"rehearsal stage 1's own output: \" + '; '.join(problems))",
+        "finish_rehearsal | - | call F.dump",
+        "finish_rehearsal | for (key, data) in files.items() | call write_rehearsal_file",
+        "finish_rehearsal | - | call release.sync_directory",
+        "finish_rehearsal | - | call release.dump",
+    )
+    # a parent site that is gone, and the sites here that replace it: the call at the same guards, and inside the
+    # called function the parent's check itself, at the guards listed (for a shared check: none, in every mode)
+    REPLACED = {
+        "_stage1 | else a.level_r / if not a.allow_draft | call M.require_inputs_committed": (
+            "_stage1 | else a.level_r / if not a.allow_draft | call stage1_authority",
+            "stage1_authority | - | call M.require_inputs_committed"),
+        "_stage1 | else a.level_r / if not a.allow_draft / if rehearsal is not None | call rehearsal_host": (
+            "_stage1 | else a.level_r / if not a.allow_draft | call stage1_authority",
+            "stage1_authority | if rehearsal is not None | call rehearsal_host"),
+        "_stage1 | else a.level_r / else a.allow_draft | call M.ledger_gate": (
+            "_stage1 | else a.level_r / else a.allow_draft | call stage1_exit_authority",
+            "stage1_exit_authority | - | call stage1_authority",
+            "stage1_authority | - | call M.ledger_gate"),
+    }
+    # spec S1: the one exit authority runs before both stages' writes in every non-draft mode, and also re-runs the
+    # rehearsal destination fence, or the campaign's receipt check, under the ledger as fetched then
+    REQUIRED = (
+        "finish_stage1 | if not a.allow_draft | call stage1_exit_authority",
+        "finish_rehearsal | - | call stage1_exit_authority",
+        "stage1_authority | if rehearsal is not None | call rehearsal_fence",
+        "stage1_authority | else rehearsal is not None | call layout.read",
+        "stage1_authority | else rehearsal is not None | call M.require_rules34_receipt",
+    )
+    HEAD_FUNCTIONS = FUNCTIONS + ("stage1_authority", "stage1_exit_authority")
+
+    def parent_available(self):
+        done = subprocess.run(["git", "-C", str(REPO), "cat-file", "-e", f"{self.PARENT}^{{commit}}"],
+                              capture_output=True)
+        if done.returncode == 0:
+            return True
+        if os.environ.get("CI"):
+            self.fail(f"the parity check needs the parent {self.PARENT[:9]} (a full-history checkout)")
+        return False
+
+    def parent_tree(self):
+        import tarfile
+        tree = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="pr971-parent-"))).resolve()
+        archive = subprocess.run(["git", "-C", str(REPO), "archive", "--format=tar", self.PARENT, "--",
+                                  *self.PARENT_FILES], capture_output=True, check=True).stdout
+        with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+            tar.extractall(tree, filter="data")
+        return tree
+
+    def replay(self, tree, case, report):
+        done = subprocess.run([sys.executable, "-I", "-B", str(REPO / "tests/cadence/look_parity_cases.py"),
+                               str(tree), case, str(report)], capture_output=True, text=True, timeout=900)
+        if done.returncode or not report.exists():
+            return {"error": f"replay exit {done.returncode}: {done.stderr.strip()[-800:]}"}
+        found = rj(report)
+        act = found["act"]
+        if act["exit"][-1] != 0 and not act["written"]:
+            found["outcome"] = "refused_no_write"
+        elif act["exit"][-1] == 0 and act["written"]:
+            found["outcome"] = "accepted"
+        else:
+            found["outcome"] = "mixed"
+        return found
+
+    def test_every_audit_reproducer_refuses_without_writing_where_the_parent_did(self):
+        """(a) Here every replay refuses for its reason and writes nothing; (b) every replay the parent refused
+        without a write is refused without a write here. Each control run succeeds on both trees."""
+        from concurrent.futures import ThreadPoolExecutor
+
+        trees = {"head": REPO}
+        if self.parent_available():
+            trees["parent"] = self.parent_tree()
+        reports = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="pr971-reports-")))
+        jobs = [(label, tree, case) for case in self.CASES for label, tree in trees.items()]
+        with ThreadPoolExecutor(max_workers=2) as pool:      # two generated looks at a time
+            results = dict(zip([(label, case) for label, _, case in jobs], pool.map(
+                lambda job: self.replay(job[1], job[2], reports / f"{job[0]}-{job[2]}.json"), jobs)))
+        table = {case: {label: results[(label, case)].get("outcome", "error") for label in trees}
+                 for case in self.CASES}
+        if os.environ.get("JW_PR971_PARITY_TABLE"):
+            Path(os.environ["JW_PR971_PARITY_TABLE"]).write_text(json.dumps(
+                {"table": table, "results": {f"{label}:{case}": value for (label, case), value in results.items()}},
+                indent=1, sort_keys=True) + "\n")
+        for case, (parent_outcome, reasons) in self.CASES.items():
+            with self.subTest(case=case):
+                head = results[("head", case)]
+                self.assertNotIn("error", head, head.get("error"))
+                for control in head["controls"]:
+                    self.assertTrue(all(code == 0 for code in control["exit"]), control)
+                self.assertEqual(head["outcome"], "refused_no_write", head["act"])                       # (a)
+                self.assertEqual(head["act"]["written"], [])
+                for reason in reasons:
+                    self.assertIn(reason, "\n".join(head["act"]["output"]))
+                if "parent" in trees:
+                    parent = results[("parent", case)]
+                    self.assertNotIn("error", parent, parent.get("error"))
+                    for control in parent["controls"]:
+                        self.assertTrue(all(code == 0 for code in control["exit"]), control)
+                    self.assertEqual(parent["outcome"], parent_outcome, parent["act"])
+                    if parent["outcome"] == "refused_no_write":
+                        self.assertEqual(head["outcome"], "refused_no_write", head["act"])               # (b)
+
+    def test_every_parent_refusal_site_survives_or_names_its_replacement(self):
+        """Every raise site and refusing call of the parent's _stage1, finish_stage1 and finish_rehearsal is still
+        here at the same guards, or is listed in REPLACED with the sites that replace it; no entry is stale; and the
+        exit authority runs at the preflight's exit and before every write."""
+        from collections import Counter
+
+        if self.parent_available():
+            source = subprocess.run(["git", "-C", str(REPO), "show", f"{self.PARENT}:scripts/cadence_look_run.py"],
+                                    capture_output=True, check=True).stdout.decode("utf-8")
+            self.assertEqual(tuple(site for site, _ in refusal_sites(source, self.FUNCTIONS)), self.PARENT_SITES)
+        found = refusal_sites(Path(R.__file__).read_text(encoding="utf-8"), self.HEAD_FUNCTIONS)
+        here = Counter(site for site, _ in found)
+        wanted = Counter(self.PARENT_SITES)
+        problems = [f"dropped with no named replacement: {site}" for site, count in wanted.items()
+                    if here[site] < count and site not in self.REPLACED]
+        for site, replacements in self.REPLACED.items():
+            if site not in wanted:
+                problems.append(f"REPLACED names a site the parent does not have: {site}")
+            if here[site]:
+                problems.append(f"stale REPLACED entry, the parent site is still here: {site}")
+            problems += [f"replacement missing: {r}" for r in replacements if r not in here]
+        problems += [f"required site missing: {site}" for site in self.REQUIRED if site not in here]
+        line = {}
+        for site, number in found:
+            line.setdefault(site, []).append(number)
+        exit_call = "_stage1 | else a.level_r / else a.allow_draft | call stage1_exit_authority"
+        order = [("_stage1 | else a.level_r | call stage1_preflight", exit_call),
+                 (exit_call, "_stage1 | else a.level_r | call stage1_protected"),
+                 ("finish_stage1 | if not a.allow_draft | call stage1_exit_authority",
+                  "finish_stage1 | if getattr(a, 'look_input_bytes', None) is not None | call a.layout.create"),
+                 ("finish_stage1 | if not a.allow_draft | call stage1_exit_authority",
+                  "finish_stage1 | - | call a.layout.create"),
+                 ("finish_rehearsal | - | call stage1_exit_authority",
+                  "finish_rehearsal | for (key, data) in files.items() | call write_rehearsal_file")]
+        for first, then in order:
+            if first in line and then in line and not max(line[first]) < min(line[then]):
+                problems.append(f"out of order: {first} must precede {then}")
+        self.assertEqual(problems, [])
+
+
 class Stage1Custody(unittest.TestCase):
 
     @classmethod
