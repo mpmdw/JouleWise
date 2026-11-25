@@ -1052,6 +1052,37 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+595. **Magistrate be1187cb (headless, Opus 5.5), 2026-11-25 14:05 PST: f2-stab-16 L001 Check RECEIPT OK (1/1 run, L001 not admitted: one cpu_load redo, quota 0), copied; item 588 restore resumed for item 576 (loop-bytes subset verified 40/40; sessions archive downloading); next span after item 576**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-26T12:00:00-08:00
+on_early_or_refused: If activation be1187cb is gone before a later item records item 576's result: nothing is fenced and no span is launched. The next activation reads restore588-6031f6e8/ (download-be1187cb.txt, the TSVs, verify outputs) and the state of /Users/edr/night-b6 and the iCloud sessions.tar.zst (stat -f %b vs %z; re-issue `brctl download` if not fully local); resumes item 588 from the first unverified tree (loop-bytes subset is verified: verify-loopbytes-subset.txt; a partly extracted sessions tree is deleted and re-extracted), then item 576 from step 1 with refit-1 if $S1/refit-1 does not exist (else the next free N), then item 588 cleanup, then the ladder. Item 588's stops apply (a failed per-file check, free space under 80 GiB, a path outside the three trees); item 592's stops apply to 576 (listing differs, any refusal, a cmp difference: send the lead names or exit codes and continue the ladder).
+next_observable: a magistrate RUN_STATE item with item 588's restore verdict for sessions, item 576's results (two name files' membership, driver rc and verdict, two cmp rcs, seal commit and manifest sha256), item 588 cleanup and free space; then the next span from the ladder (pin A, kit 09 L007 onward, fillers-w2/queues-3leg/f2-stab-09-l007-l008-l009.json or the 2-leg/1-leg rows, fence clear of every 02:00-02:35 band).
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795644080, "number": 595, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": ["594"]}
+```
+
+- **Spawn.** Activation be1187cb spawned 13:57:51 PST Wednesday (watchdog attempt 2112, previous exit class generic_error) after the kit 16 L001 span closed (receipt 13:56:00; fence pid 52313 gone). No align-r0 or night label loaded, no night plist on disk. No notices pending, no unread mail from Ed, directive list unchanged (587/422/421/417/416/408/405), no standdown request. Origin main by ls-remote = canonical `fb32bea01`.
+- **Item 594 Check: f2-stab-16 L001** (attempt `cq-f2-stab-16-l001-a1`, pin B `6e9d42f1d`; custody `f2stab16-check-be1187cb/check.sh` and `check-out.txt`, from `f2stab16-check-template-6031f6e8`, only NEWACT replaced). **RECEIPT OK, 1/1 legs run, MEASURED_OK, chain COMPLETE, fault false; L001 NOT admitted** (one contaminated redo, reason `cpu_load`, redo quota 0).
+  - runner_kind `cadence-legs-v1.1`, roster [L001] = leg rows, kit sha256 `0fc1139d...2b96`, frozen commit `6e9d42f1dd3d308bc9239143d0d634ab965e50e1`, campaign f2-stab-16, mock false, rc 0, error None, batch_windows [], span_id `cq-f2-stab-16-l001-a1`, canonical path = realpath.
+  - LAUNCH_RC 0 at 1795640057 (12:54:17); close epoch_s 1795643760.875 (13:56:00), monotonic_ns 3628098768062291: about 3,704 s against the expected 4,703 s (worst case 5,850).
+  - Every step rc 0 (deadline through close-volumes, L001.a1 included). Feeds agents, meter and volumes proven stopped; meter group reaped, census empty, 0 restarts. Meter 18,397 polls over 3,679.4 s, 0 bad, 0 USB errors.
+  - **L001**: leg_status complete, g0 released after 205.2 s, prefill 19,458, decode 512 cap reached, wall 1,575.3 s against a 1,553 s budget, contaminated_redos 1, admitted false, max busy cores 2.041, max gap 1.29 s, os_level_max 0, redo reasons [cpu_load]. Quiet span 13:41:50.3-13:51:50.3 (600.0 s): 2,081 maintenance lines (dasd 1,540, cloudd 541).
+  - Maintenance log 12:54:40-13:56:00, 18,984 lines.
+  - Receipt `/Users/edr/campaign-out/f2-stab-16/cq-f2-stab-16-l001-a1/runner_receipt.json`, **sha256 `4dd3a99a5cbb66f7a52af1cb13d390669ccfe3d27516456ff9236e0ad1e33329`**.
+  - Host after close (13:58): network time Off, powermode 0, kernel frequency word 0 (status 0x2081), no High Power marker, AC, not charging, InstantAmperage 0, no desk fence, no align-r0 label, no runner/monitor group, no root powermetrics, 122 GiB free. measurement_mode verify's one FAIL is this activation's own codex MCP and pdf-server processes; its two WARNs are the known ones (item 201).
+  - **Copied at once** (row 14): 56 files, manifest sha256 `77d3161b...0b02`, enc sha256 `6b0f17fd...b1ab`, iCloud caught up at 13:59:31 (last-sync 13:59:07 after the copy at 13:58:52); marker written. Custody `offload-f2stab16-{brctl,poll}-be1187cb.txt`, `f2stab16-check-be1187cb/offload-out.txt`.
+  - A clean close with a leg not admitted is recorded, not a stop and not a kit hold (items 467, 479, 520). Kit 16 L001 position is spent.
+- **594 superseded by this item.**
+- **Item 592 at this boundary (item 576 re-run, item 588 restore):** started at 13:59, before any next span, as items 588 and 592 schedule it.
+  - `loop-bytes` subset restored: archive sha256 `2705214e...caa63` = receipt (re-hashed 14:00); explicit member list `restore588-6031f6e8/loopbytes-subset.members` (37 files: `blinding/` 14, `blinding-sessions/` the twelve `$M` sessions' 24 names; `withheld/` and the 16 extra bindings left out, item 592). `verify.py` against `loopbytes-subset.tsv` (rows from the streamed member hashes): 40 rows, 40 OK, 0 failed, 0 extra on disk under `loop-bytes/packs/bytes` (`verify-loopbytes-subset.txt`). `ls -1A blinding-sessions` = 24 names.
+  - `sessions.tar.zst` (18.8 GB): `brctl download` issued 13:59:44; progress logged in `restore588-6031f6e8/download-be1187cb.txt`. Then: sha256 against receipt `7c6e9f35...43ae3`, streamed member hashes for the twelve sessions only, extraction by explicit member list, `verify.py`, item 576 from step 1.
+  - Free space 122 GiB at 14:00.
+
 594. **Magistrate 6031f6e8: correction to item 591: the sessions-archive download stopped after the evict (only loop-bytes is local); the run block's download gate never passed and was stopped at 12:51 with nothing launched; v2 without the gate launches f2-stab-16-l001 at about 12:56**
 
 ```pointer
