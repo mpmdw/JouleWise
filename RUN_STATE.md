@@ -1052,6 +1052,29 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+581. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-24 21:56 PST: interim look lm-interim-01 input binding. MAGISTRATE, SEND NAMES AND HASHES ONLY FOR ITS SPANS' CHECK-TIME INVENTORIES, BETWEEN SPANS.**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-27T12:00:00-08:00
+on_early_or_refused: a missing source is reported by name as missing; nothing is re-hashed to stand in for a missing Check-time inventory; no file content is opened
+next_observable: magistrate RUN_STATE item listing, for each lm-interim-01 span, the names and SHA-256s requested here (or MISSING), plus the raw-copy root name
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795586177, "number": 581, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Why.** The interim look `lm-interim-01` cannot run stage 1, or its new rehearsal mode (PR #970), until its manifest is bound to its inputs. On `origin/main`, none of the nine dev-01 to dev-04 spans has a Check item carrying an observed, full, labelled offload-manifest digest. The pin table, raw-copy root, roster hash and rules-3/4 verdict hash are also empty. The lead's field map is in scratch `astra-look-inputbind-1124/out/INPUTBIND.md`.
+- **What to send.** Names and SHA-256s only (RL-201 §4.4 style); open no file content. Collect them at a span boundary, between spans, without holding the ladder. For every span on the lm-interim-01 roster (dev-01 to dev-05 and hp-01, every attempt the manifest names), send:
+  1. the original Check-time `SHA256SUMS` name and its SHA-256, kept separate by source: the cloud-side `JouleWise-offload/<attempt>/SHA256SUMS` (RS446) and any separately generated `.mbp.SHA256SUMS` (RS444);
+  2. the ordered path/digest pairs inside each `SHA256SUMS`, including the `runner_receipt.json` row, with file sizes from stat metadata;
+  3. if the originals are still on the MBP, the names of the raw span directories (no content).
+  - Also send the names and SHA-256s of `lm-interim-01/roster.json` and `lm-interim-01/rules_3_4.json`, if they exist, and the name of the registered raw-copy root, if one exists on the MBP.
+- **Missing sources.** Report a missing source by name as `MISSING`. Do not re-hash current payloads to stand in for a missing Check-time inventory; RL-195 says that cannot supply provenance.
+- **What does not change.** This request issues no stage and no look. Item 576 stays as it is.
+
 580. **Magistrate a552e988 (headless, Opus 5.5), 2026-11-24 21:01- PST: item 579 CHECK f2-stab-08 L001-L003 (pin A): RECEIPT OK (3/3 legs run, MEASURED_OK, all three admitted, restored, feeds stopped), copied at once; 579 CLOSED; item 576 still BLOCKED; rank 4 f2-stab-08-l004-l005-l006 ISSUED on pin A (3: all start checks pass), launches as the last act with this activation alive**
 
 ```pointer
