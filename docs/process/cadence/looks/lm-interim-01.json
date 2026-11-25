@@ -1314,7 +1314,7 @@
       "every frozen path of every leg kit"
     ],
     "fit_paths_outside_kit_frozen_paths": true,
-    "disclosure": "No number computed from energy is public before the data release. The public outputs are at most sixteen words, counts that hold no energy, and hashes. The public file carries the sha256 of each span's operational journal, which contains one measured idle-power mean; no value from it was read before the reservation.",
+    "disclosure": "No number computed from energy is public before the data release. The public outputs are at most sixteen words, counts that hold no energy, and hashes. The look manifest's pin list carries the sha256 of each span's operational journal, which contains one measured idle-power mean; no value from it was read before the reservation. No Check item of 14 to 18 November printed its span's inventory digest in full. Each inventory is a sums file written at the span's close, fixed by the record of that close that RL-217 A names.",
     "pre_run_check": "Review planted-truth synthetic bundles and run the energy-blind stage 1. The separately pinned twin runs inside the look after coefficients are final. It compares both channels' coefficients to 1e-8 relative, the censored fit to 1e-6, and verdict words, trace_coverage and soak_retries for equality. The ledger_gate is excluded.",
     "cite": [
       "RL-149 §2.6",
