@@ -16,14 +16,14 @@ import sys
 from zoneinfo import ZoneInfo
 HERE=Path(__file__).resolve().parents[1]; META=json.loads((HERE/'items.json').read_text()); BASE=Path(sys.argv[1]).resolve(); TZ=ZoneInfo('America/Los_Angeles')
 sys.path.insert(0, str(HERE/'tools'))
-from pinned import pinned
+from pinned import ROOT, pinned
+from test_freeze2_public_arm import DIGEST, PublicHistory, commit as fixture_commit, deliver_provider
 
 NS=1_000_000_000
 checks=failures=0
 
 def quote(s): return "'"+str(s).replace("'","'\"'\"'")+"'"
 def dump(p,obj): p.parent.mkdir(parents=True,exist_ok=True); p.write_text(json.dumps(obj))
-def git(repo,*args,**kw): return subprocess.check_output(['git','-C',str(repo),*args],stderr=subprocess.DEVNULL,**kw).decode().strip()
 def epoch(day): return int(dt.datetime.fromisoformat(day+'T12:00:00').replace(tzinfo=TZ).timestamp())
 
 def run_item(item,shell,source_tree):
@@ -35,17 +35,17 @@ def run_item(item,shell,source_tree):
     assert '--batch-window' not in blocks[1] and 'launch_cadence_span.py launch' in blocks[1]
     src=(HERE/'gates.sh').read_text().split('# BEGIN TESTABLE GATES\n')[1].split('# END TESTABLE GATES')[0]
     assert gates==src  # Test exactly the final emitted functions.
-    home=BASE/(item['item']+'-'+shell); home.mkdir(); root=home/'mock-root'; wt=home/'worktree-root'; markers=home/'markers'; auth=home/'auth'; auth.mkdir()
-    git(auth,'init','-q'); (auth/'coefficients.json').write_text('{"SYNTHETIC":true,"coefficients":[1,2,3]}\n')
-    coefsha=hashlib.sha256((auth/'coefficients.json').read_bytes()).hexdigest()
-    for i in META['items']:
-        p=auth/i['queue_path']; p.parent.mkdir(parents=True,exist_ok=True); p.write_bytes((HERE/i['queue_file']).read_bytes())
-    git(auth,'add','.')
-    env=dict(os.environ,GIT_AUTHOR_NAME='Synthetic fixture',GIT_AUTHOR_EMAIL='fixture@invalid',GIT_COMMITTER_NAME='Synthetic fixture',GIT_COMMITTER_EMAIL='fixture@invalid',GIT_AUTHOR_DATE='2026-11-12T12:00:00-08:00',GIT_COMMITTER_DATE='2026-11-12T12:00:00-08:00')
-    git(auth,'commit','-q','-m','Synthetic coefficients and queues, never published',env=env)
-    commit=git(auth,'rev-parse','HEAD')
-    git(auth,'update-ref','refs/remotes/origin/audit/2026-11-10-fable',commit); git(auth,'update-ref','refs/remotes/origin/main',commit)
-    empty=git(auth,'mktree',input=b''); orphan=git(auth,'commit-tree',empty,'-m','Synthetic unrelated history',env=env)
+    home=BASE/(item['item']+'-'+shell); home.mkdir(); root=home/'mock-root'; wt=home/'worktree-root'; markers=home/'markers'
+    world = PublicHistory(home / 'public-history', ROOT)
+    auth = world.auth
+    deliver_provider(ROOT, auth)
+    for entry in META['items']:
+        path = world.publisher / entry['queue_path']
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes((HERE / entry['queue_file']).read_bytes())
+    commit = fixture_commit(world.publisher, 'Synthetic audit queue', world.main)
+    world.set_heads(world.main, commit)
+    world.fetch()
     now=epoch(item['date']); predout=root/item['predecessor_camp']/f"cq-{item['predecessor']}-a1-20261119T090000Z"
     latest=wt/'partc'/'.desk'/'f0-synthetic-20261119T100000Z'
     latest_receipt=latest/'runner_receipt.json'
@@ -63,7 +63,7 @@ def run_item(item,shell,source_tree):
         SESSION_READY='no',SESSION_RECORD='synthetic fresh READY census',STOPS_CLEAR='yes',VETO_CLEAR='yes',CHECKLIST_OK='yes',PILOT_PASSED='yes',SAMPLE_HAND_CLEAR='yes',COPY_KEY_SAFE='yes',OFFLOAD_CLEAR='yes',
         LINE6_RECORD='synthetic stops clear',CHECKLIST_RECORD='synthetic native checklist',VETO_RECORD='synthetic veto census',SAMPLE_HAND_RECORD='synthetic sampled hand pass',
         QUAL01_SOAK_HAND_READ='SAME',QUAL01_SOAK_RECORD='synthetic RL172a soak comparison',QUAL01_TYPES_HAND_READ='PASS',QUAL01_TYPES_HAND_RECORD='synthetic same-pin q0 capture and consumer comparison')
-    fills=dict(ISSUED_EPOCH=now-100,FREEZE2_COMMIT=commit,FREEZE2_COEF_SHA256=coefsha,FREEZE2_COEF_PATH='coefficients.json',COLD_SEAT_RECORD='synthetic cold seat pointer',LINE2_RECORD='synthetic test-for-test red comparison',HOST_EVENT_RECORD='synthetic pre-freeze event/readback',HOST_STATE_ID='synthetic-host',INCLUSION_RECORD='synthetic research-lead unchanged inclusion ruling',QUEUE_COMMIT=commit)
+    fills=dict(ISSUED_EPOCH=now-100,FREEZE2_COEF_SHA256=DIGEST,COLD_SEAT_RECORD='synthetic cold seat pointer',LINE2_RECORD='synthetic test-for-test red comparison',HOST_EVENT_RECORD='synthetic pre-freeze event/readback',HOST_STATE_ID='synthetic-host',INCLUSION_RECORD='synthetic research-lead unchanged inclusion ruling',QUEUE_COMMIT=commit)
     def fixture():
         for d in (root,wt,markers): shutil.rmtree(d,ignore_errors=True); d.mkdir()
         source=BASE/'mock'/item['predecessor']
@@ -221,12 +221,16 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
         run('C.4 '+label,overrides={'BATCH_SYSCTL':boot_at(batch)},command=batch_only,want=allow,contains=note)
     run('C.4 missing boot STOP',overrides={'BATCH_SYSCTL_RC':1},command=batch_only,want=False,contains='boot time unavailable')
     run('C.4 malformed boot STOP',overrides={'BATCH_SYSCTL':'invalid'},command=batch_only,want=False,contains='unreadable boot time')
-    run('freeze2 unfilled WAIT',fill_changes={'FREEZE2_COMMIT':None},want=False,contains='HOLD_FOR_FIT_FREEZE')
-    run('coefficient sha unfilled WAIT',fill_changes={'FREEZE2_COEF_SHA256':None},want=False,contains='HOLD_FOR_FIT_FREEZE')
-    run('freeze2 wrong sha STOP',fill_changes={'FREEZE2_COEF_SHA256':'0'*64},want=False,contains='sha256 mismatch')
-    run('freeze2 missing path STOP',fill_changes={'FREEZE2_COEF_PATH':'missing.json'},want=False,contains='unreadable')
-    run('freeze2 nonancestor STOP',fill_changes={'FREEZE2_COMMIT':orphan},want=False,contains='not ancestor')
-    run('freeze2 path escapes STOP',fill_changes={'FREEZE2_COEF_PATH':'../coefficients.json'},want=False,contains='path not permitted')
+    run('issued public hash unfilled WAIT',fill_changes={'FREEZE2_COEF_SHA256':None},want=False,contains='HOLD_FOR_FIT_FREEZE')
+    run('issued public hash malformed STOP',fill_changes={'FREEZE2_COEF_SHA256':'invalid'},want=False,contains='malformed issued')
+    refusal = 'REFUSE freeze 2 public authority'
+    run('public hash differs from issue',fill_changes={'FREEZE2_COEF_SHA256':'0'*64},want=False,contains=refusal)
+    for case in ('no','missing-report','execution-binding'):
+        world.set_heads(world.publish(case, parent=world.main), commit)
+        world.fetch()
+        run('public freeze refuses '+case,want=False,contains=refusal)
+    world.set_heads(world.main, commit)
+    world.fetch()
     for key in ('COLD_SEAT_RECORD','LINE2_RECORD'):
         run(key+' unfilled WAIT',fill_changes={key:None},want=False,contains='WAIT')
     for key,value in [('COLD_SEAT_KIT_SHA','0'*64),('QUAL_COLD_SEAT','UNKNOWN'),('LINE2_EQUAL','no'),('LINE2_PIN','bad'),('LINE2_BASE','bad'),('FIRST_CAPTURE_CONFIRMED','no')]:
@@ -432,15 +436,14 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
         run('C.3 second receipt for recorded s01 REFUSE',stamp=epoch(later),overrides=recovery,
             setup=lambda:date_receipt(item['camp'],item['predecessor'],item['date'],item['predecessor_legs'],2),
             command='day_gate',want=False,contains='multiple receipts')
-        queue_path=auth/item['queue_path']
+        queue_path=world.publisher/item['queue_path']
         queue=json.loads(queue_path.read_bytes())
         next(entry for entry in queue['spans'] if entry['span_id']==item['span'])['not_before']=later
         queue['expires_at']='2026-11-25T00:00:00-08:00'
         dump(queue_path,queue)
-        git(auth,'add',item['queue_path'])
-        git(auth,'commit','-q','-m','Synthetic half-run queue',env=env)
-        recovery_commit=git(auth,'rev-parse','HEAD')
-        git(auth,'update-ref','refs/remotes/origin/audit/2026-11-10-fable',recovery_commit)
+        recovery_commit = fixture_commit(world.publisher, 'Synthetic half-run queue', commit)
+        world.set_heads(world.main, recovery_commit)
+        world.fetch()
         later_noon=epoch(later)
         run('C.3 full recovery with authenticated later queue and original s01',stamp=later_noon,
             overrides={**recovery,'QUEUE_SHA':hashlib.sha256(queue_path.read_bytes()).hexdigest(),
