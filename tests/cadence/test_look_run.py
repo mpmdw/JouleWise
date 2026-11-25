@@ -644,6 +644,16 @@ if opts.get("trap"):
         raise AssertionError("plist parsed")
     plistlib.loads = plistlib.load = _no_plist
 from scripts import cadence_look_run as R
+if opts.get("advance_main"):
+    target, source = opts["advance_main"]
+    original = getattr(R, target)
+    def after_fetch(*args, **kwargs):
+        bare = Path(opts["repo"]).with_name(Path(opts["repo"]).name + "-origin.git")
+        rc, _, err = R.M._git(bare, "fetch", "--quiet", source, "HEAD:refs/heads/main")
+        assert rc == 0, err
+        R.M.fetch_public(R.ROOT)
+        return original(*args, **kwargs)
+    setattr(R, target, after_fetch)
 if opts.get("manifest"):                     # the test's manifest stands in for the repository's fixed one
     R.manifest_path = lambda: Path(opts["manifest"])
 if opts.get("run_state") is not None:          # the harness's fixture RUN_STATE (no CLI option takes one): a
@@ -858,10 +868,10 @@ class Stage1Rehearsal(unittest.TestCase):
         MR.git_commit(self.repo, "Register the synthetic rehearsal inputs", publish=False)
         self.git(self.repo, "push", "-q", "origin", "HEAD:refs/heads/main")
 
-    def invoke(self, directory=None, *, producer=False, tmpdir=None):
+    def invoke(self, directory=None, *, producer=False, tmpdir=None, advance_main=None):
         _pin_dir()
         report = self.scratch / "observed.json"
-        opts = dict(repo=str(self.repo), spy=True, trap=True, report=str(report), exports={})
+        opts = dict(repo=str(self.repo), spy=True, trap=True, report=str(report), exports={}, advance_main=advance_main)
         argv = ["stage1"] if directory is None else ["stage1", "--rehearsal", str(directory)]
         if producer:
             opts["entry"] = "rules"
@@ -886,6 +896,98 @@ class Stage1Rehearsal(unittest.TestCase):
 
     def outputs(self, directory):
         return {name: (directory / M.LOOK_FILES[name]).read_bytes() for name in ("level_r", "stage1")}
+
+    def campaign_producer(self, *extra):
+        from tests.cadence import look_minirepo as MR
+
+        return MR.py(self.repo, M.RULES34_PRODUCER, "--manifest", self.manifest,
+                     "--roster", self.look / M.LOOK_FILES["roster"], "--custody", self.custody,
+                     "--out", self.look / M.LOOK_FILES["rules_3_4"], *extra)
+
+    def stock_commitment(self):
+        from tests.cadence import look_minirepo as MR
+
+        generated = self.scratch / "draft_verdicts.json"
+        made = self.campaign_producer("--allow-draft", "--out", generated)
+        self.assertEqual(made.returncode, 0, made.stdout + made.stderr)
+        rows = rj(self.ledger)
+        rows["looks"][0]["verdicts_sha256"] = M.sha256_file(generated)
+        self.ledger.write_bytes(R.release.dump(rows))
+        MR.git_commit(self.repo, "Bind the generated verdicts on main", publish=False)
+        self.git(self.repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+        return rows
+
+    def test_stock_rejects_stale_span_override_and_copy_at_registered_path(self):
+        from tests.cadence import look_minirepo as MR
+
+        rows = self.stock_commitment()
+        old = rj(self.scratch / "draft_verdicts.json")
+        sid, leg = next(key.split("/") for key, verdict in old.items()
+                        if key.startswith("dev-") and verdict["sidecar_coverage"])
+        span = self.custody / sid
+        stale = self.scratch / sid
+        shutil.copytree(span, stale)
+        bundle = M.runtime_bundle(span, leg, rj(span / "legs" / leg / "leg_record.json"))
+        changed = bundle / "rich_telemetry.jsonl"
+        old_bytes = changed.read_bytes()
+        lines = old_bytes.splitlines(keepends=True)
+        self.assertGreater(len(lines), 10)
+        current = lines[0] + lines[-1]
+        changed.write_bytes(current)
+        doc = rj(self.manifest)
+        doc["inputs"]["pins"] = MR.write_pins(self.repo, {
+            entry["span_id"]: self.custody / entry["span_id"] for entry in rj(self.look / "roster.json")})
+        self.manifest.write_bytes(R.release.dump(doc))
+        rows["looks"][0]["sha256"] = M.sha256_file(self.manifest)
+        self.ledger.write_bytes(R.release.dump(rows))
+        MR.git_commit(self.repo, "Commit the updated generated span", publish=False)
+        self.git(self.repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+        campaign_rules = self.look / M.LOOK_FILES["rules_3_4"]
+        receipt = self.look / M.LOOK_FILES["rules_3_4_receipt"]
+        campaign_rules.unlink()
+        for override in (True, False):
+            with self.subTest(override=override):
+                args = ("--span-dir", f"{sid}={stale}") if override else ()
+                if not override:
+                    changed.write_bytes(old_bytes)
+                try:
+                    result = self.campaign_producer(*args)
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    message = result.stdout + result.stderr
+                    self.assertIn("--span-dir" if override else "custody pins:", message)
+                    if not override:
+                        self.assertIn(str(changed.relative_to(self.custody)), message)
+                    self.assertFalse(campaign_rules.exists())
+                    self.assertFalse(receipt.exists())
+                finally:
+                    changed.write_bytes(current)
+                    campaign_rules.unlink(missing_ok=True)
+                    receipt.unlink(missing_ok=True)
+
+    def test_campaign_refuses_a_verdict_hash_fetched_during_preflight(self):
+        self.refuse_fetched_verdict("run_verifier")
+
+    def test_campaign_refuses_a_verdict_hash_fetched_before_publication(self):
+        self.refuse_fetched_verdict("finish_stage1")
+
+    def refuse_fetched_verdict(self, checkpoint):
+        from tests.cadence import look_minirepo as MR
+
+        rows = self.stock_commitment()
+        stock = self.campaign_producer()
+        self.assertEqual(stock.returncode, 0, stock.stdout + stock.stderr)
+        other = self.scratch / "second-checkout"
+        self.git(self.scratch, "clone", "--quiet", "--no-hardlinks", str(self.repo), str(other))
+        rows["looks"][0]["verdicts_sha256"] = "e" * 64
+        (other / M.LOOK_LEDGER_PATH).write_bytes(R.release.dump(rows))
+        MR.git_commit(other, "Advance the paper verdict hash", publish=False)
+        result, _ = self.invoke(advance_main=(checkpoint, str(other)))
+        self.assertEqual(self.git(self.repo, "rev-parse", M.PUBLIC_RUN_STATE_REF).stdout,
+                         self.git(other, "rev-parse", "HEAD").stdout)
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn("not the one on", result.stderr)
+        self.assertFalse((self.look / M.LOOK_FILES["stage1"]).exists())
+        self.assertFalse((self.look / M.LOOK_FILES["level_r"]).exists())
 
     def test_rehearsal_uses_campaign_reads_and_leaves_later_campaign_byte_identical(self):
         from tests.cadence import look_minirepo as MR
@@ -1169,8 +1271,12 @@ class Stage1Rehearsal(unittest.TestCase):
         self.assertEqual(recorded["ledger_commit"], commit)
         self.assertEqual(recorded["producer_commit"], commit)
         self.assertEqual(recorded["verdicts_sha256"], digest)
+        expected_pins = {f"{span['span_id']}/{entry['path']}": entry["sha256"]
+                         for span in doc["inputs"]["pins"]["spans"] for entry in span["files"]}
+        self.assertEqual(recorded["input_pins"], expected_pins)
         self.assertEqual(receipt.stat().st_mode & 0o777, 0o600)
         for update, reason in (({"verdicts_sha256": "0" * 64}, "verdict sha256 differs"),
+                               ({"input_pins": {}}, "input pins differ"),
                                ({"unexpected": True}, "invalid closed schema"),
                                ({"wall_time_ns": 0}, "post-commit run"),
                                ({"monotonic_ns": True}, "invalid closed schema")):
