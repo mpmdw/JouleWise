@@ -8,4 +8,6 @@ The draft manifest registers `/Volumes/JW-EXT/lm-interim-01-root`. Every span ha
 
 Draft validation reported `ok lm-interim-01 (draft); open placeholders: 0`. The read-only `pin` check found zero changes. `check-inputs --roster …` bound 2,855 files across all 14 spans and returned pin-list SHA-256 `a3f0e7fce89c229edfa918fa7d0efa4a0de1ed6bc1388e3a85f038876f8b8ee9`. The focused test compared each ordered inventory with the staged sums text and checked the same round trip against the committed digests. The checks used repository files and staged metadata. The lead retained custody-side verification. CI runs the full suite.
 
+The miniature repository and freeze fixtures reset the copied registration and pin list before generating synthetic inputs. Final validation passed against the synthetic freeze fixture's public Check item.
+
 The lead places the staged roster at `/Volumes/JW-EXT/lm-interim-01-root/lm-interim-01/roster.json`, registers `execution_host`, and runs the rules-3/4 rehearsal under RL-217 E.1.
