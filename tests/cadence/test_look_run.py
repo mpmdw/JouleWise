@@ -158,13 +158,16 @@ class AstraPreResponse(unittest.TestCase):
                 if key != "stage1":
                     raise AssertionError("opened responses")
                 return F.dump(stage1)
+        # The frozen test copy has no Git history. Supply the draft commit at the same seam as the mocked ledger.
         with unittest.mock.patch.object(R, "_VERIFIED", [({}, None)]), \
              unittest.mock.patch.object(R, "layout_of", return_value=Layout()), \
              unittest.mock.patch.object(R, "_json", side_effect=[{}, AssertionError("opened responses")]) as read, \
+             unittest.mock.patch.object(R.M, "_git", return_value=(0, b"0" * 40 + b"\n", b"")) as git, \
              unittest.mock.patch.object(R, "draft_ledger_check"), \
              unittest.mock.patch.object(R, "stage2_energy_preflight"):
             with self.assertRaisesRegex(F.LookInputError, reason):
                 R.cmd_stage2(args)
+            git.assert_called_once_with(R.ROOT, "rev-parse", "HEAD")
             read.assert_called_once()
 
 class PrefixPublication(unittest.TestCase):
