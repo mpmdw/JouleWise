@@ -1539,7 +1539,7 @@ class Pr971Convergence(unittest.TestCase):
         "finish_stage1 | if not a.allow_draft | call stage1_exit_authority",
         "finish_rehearsal | - | call stage1_exit_authority",
         "stage1_authority | if rehearsal is not None | call rehearsal_fence",
-        "stage1_authority | if rehearsal is None | call layout.read",
+        "stage1_authority | else rehearsal is not None | call layout.read",
         "stage1_authority | else rehearsal is not None | call M.require_rules34_receipt",
     )
     HEAD_FUNCTIONS = FUNCTIONS + ("stage1_authority", "stage1_exit_authority")
