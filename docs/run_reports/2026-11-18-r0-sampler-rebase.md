@@ -645,3 +645,58 @@ Local checks used Python 3.13 under `taskpolicy -c utility`, `TZ=UTC` and synthe
 - `gen_state.py --check`, `repin.py --check` and `tests.test_docs_freshness` pass.
 
 Frozen v3 is byte-identical at SHA-256 `afd360c29d390f7d39400e1363a25add5c13ace71bca55c80d11ec0ceb4e5009`. `RUN_STATE.md` and `TASK_QUEUE.md` retain their PR-base blobs.
+
+## 2026-11-25 every pair at the final verdict and a narrowing birth bound for PR #824 (lead T1–T4)
+
+Astra's round-S check at `7c7139659d124ed978f89bc31e587f7aaab7bb6a` was BLOCK. Both reproducers use zero-time reads, and both reproduced on this clone at that head in host and inventory mode.
+
+- **`resident_flip.py`.** A resident "python3" is named only by the 91 s final read. It uses 3.20 CPU-s from 30 to 91 s, which is 0.0525 CPU-s/s. The (30, 91) pair flags it. A daemon or admission read at 60.5 or 61 s moved that window's opening, and the earlier opening at 30 s fell outside round S's 30 s set. The (30, 61) part never judged the process, because no read had named it yet. All four such cases published.
+- **`birth_flip.py`.** A daemon read from 44.75 to 45.25 s lists the worker first. Its midpoint, 45.0 s, equals the printed start second. The exact check's zero required the printed second to be strictly before the sighting's midpoint, so the zero fell back to the 30 s absence and the 1.50 CPU-s flag at 75 s was lost.
+
+**T1, every pair at the final verdict.** `QuietGuard._pair_history` runs at `finish()` and `verify_publication()`, after P1, for every process any read identified (Q1) and not yet flagged.
+
+- **Reading pairs.** It judges every pair of the process's readings whose midpoints are at least 30 s apart, with no bound on the span. A pair is above the admitted rate rule when the later counter less the earlier, over the midpoints' span, exceeds 0.05 CPU-s/s, with either counter. A running minimum makes this one pass per process (`_rate_pair`).
+- **Folded readings.** `_readings` still folds a run of unchanged readings to its first and last. A new read index (`_read_stamps`) restores every read between them (`_expand_readings`): each accounting read is a complete process table, so every reading of the process is judged.
+- **Birth pairs.** A process first listed after the first read is also judged from its birth bound to each reading, using the admitted lifetime convention (the counter over the span to that read's end). That floor is the latest of the read before its first listing, the printed second, and the series bound.
+- **Admission time.** Admission-time judgements stay incremental, as ruled. `resident_flip` now withholds in all 20 cases. Its (30, 91) pair alone is above the limit; the reported flag is the pair furthest above it, (30, 60.5).
+
+**T2, the birth bound only narrows.** The exact check's zero is now max(absence, printed second) whenever the sighting read ended no earlier than the printed second. That is the latest instant every reading allows as the earliest birth, and contention is still claimed only if it holds for every birth time in the bracket. An added absence can only move the zero later, and an added sighting leaves it where it is.
+
+The zero changes only when the printed second falls inside the sighting read, between its midpoint and its end. There it used to fall back to the absence; that is `birth_flip`'s case, which now keeps its 45 s zero and withholds. The fallback for a printed second after the sighting read ends is unchanged. No stable control is withheld, so the both-ways verdict the lead allowed was not needed.
+
+**T3, tests.**
+
+- **Named regressions.** `test_lead_t_resident_flip_a_read_inside_a_pair_never_publishes` and `test_lead_t_birth_flip_a_sighting_never_moves_the_zero_earlier`. On `7c713965` the first fails 8 subtests and the second 2. After the red commit, two of their assertions changed. The first asserted that the reported flag was (30, 91); it now asserts that the (30, 91) pair alone is above the limit, since the reported flag is the pair furthest above it. The second read the exact flag's proof interval; it now takes the flag's own interval when the two coincide.
+- **Adversarial property test.** `test_lead_t_adversarial_reading_never_turns_a_withhold_into_a_publication` runs 800 seeded cases (20261126) with zero-time reads.
+  - **Contamination.** Every case is within 10% of the 1.50 CPU-s bar: steady, in bursts, falling across the bar with sparse daemon reads, or exactly 1.50 CPU-s in the 30 s after a whole-second birth.
+  - **Placement.** Extra readings go at the midpoints of the first run's judged pairs (flagged ones first), and at and around the inferred birth: the printed second, the true birth, and 1 ms either side.
+- **Results.** On `7c713965`, 7 of its 1,668 extended runs publish after a withhold: 4 falling, resident_flip's class, and 3 ties, birth_flip's class. With the fix, 0 of 1,869 extended runs do (521 of the 800 first runs withhold).
+- **S3 test.** The 2,200-case S3 property test is unchanged and passes.
+
+**T4, unchanged.** K1–K5, P1, Q1–Q3, R1–R3 and S3 behave as before. No existing test's expectation changed.
+
+- **1.49 controls.** Astra's `stable_controls.py` counts 460 stable, non-stalled 1.49 CPU-s controls, and all 460 publish.
+- **Sweep.** The sweep's 7,080 runs pass.
+- **Frozen v3.** It is byte-identical. Locally, `v3-fixed` passed 2/2 and `v3-endpoints` 368/368. The full 7,683 and the census matrix's 6,903 faults run in hosted CI.
+
+**Memory (T1)**, measured with `sys.getsizeof` at realistic magnitudes, for a 10 h run at the daemon's 15 s cadence (2,400 reads; each admission read adds one more):
+
+- **Read index.** 248 B per read, 0.60 MB.
+- **Readings per process.** At most one 232 B reading per read while its counter changes, at most 0.56 MB per process; a run of unchanged readings keeps two.
+- **First listing.** One 220 B record per process ever seen.
+- **At the verdict.** The expansion is temporary: at most the reads in one process's lifetime. Each process takes one pass.
+
+**R0-MONO-EDGE closes as a side effect of T1.** That is the read-duration split edge round S reported as NEEDS_SPEC.
+
+- **Why.** The edge arose because a read splitting a window counts its own duration in both parts. The final verdict now judges each whole span from the process's own readings, whatever splits the windows. A resident is judged reading to reading. A newcomer or transient is judged from its birth bound to its last reading, a span no longer than the window's lifetime. A process listed at a window's opening that exits after the split is judged on its opening and last readings, at least 30 s apart.
+- **What remains.** Where a later holder of the same PID bounds a lifetime inside that process's last read, the window's span can still be up to one read shorter. This is an argument, not a construction; the property tests did not hit the edge either way.
+
+The stall rule stays coverage, not evidence: a daemon read inside a gap of more than 50 s lifts it.
+
+Local checks used Python 3.13 under `taskpolicy -c utility`, `TZ=UTC` and synthetic inputs:
+
+- `tests.align.test_r0_host`: 164 tests passed with one native-capture skip, including the sweep and both property tests. The census fault matrix test was skipped locally.
+- `tests.align.test_r0_checks` and `tests.hazards.test_contention`: 86 tests passed with three live skips.
+- `gen_state.py --check`, `repin.py --check` and `tests.test_docs_freshness` pass.
+
+Frozen v3 is byte-identical at SHA-256 `afd360c29d390f7d39400e1363a25add5c13ace71bca55c80d11ec0ceb4e5009`. `RUN_STATE.md` and `TASK_QUEUE.md` retain their PR-base blobs.

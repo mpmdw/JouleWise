@@ -36,11 +36,19 @@ the window, those are the pairs no read splits into two parts of at least
 30 s. A longer pair holds such a read, and a rate above the limit over the
 pair puts one part above it. So an added reading keeps every judged pair or
 splits it into two judged ones. P1 runs over every pair of each process's
-history at each admission as well as at the final verdict. Two limits
-remain. The stall rule is coverage, not evidence: a daemon read inside a
-gap lifts it. When reads take time, a window's lifetime rule runs from the
-opening read's start to the closing read's end, so the two parts of a
-split pair both include the read that splits it.
+history at each admission as well as at the final verdict.
+
+The final verdict is authoritative (lead T1). It judges every pair of each
+in-scope process's readings, with no bound on the span, under the admitted
+rate rule (``QuietGuard._pair_history``). Runs of unchanged readings are
+kept as their first and last, and every read between them is restored from
+the read index. A newcomer is also judged from its birth bound to each
+reading. A read added between two readings therefore never removes their
+pair, and a read that splits a window no longer splits these judgements.
+The birth bound only narrows (lead T2). Its zero is the latest instant every
+reading allows as the earliest birth, so an added sighting cannot move it
+earlier. The stall rule stays coverage, not evidence: a daemon read inside
+a gap lifts it.
 
 Foreground admission is advisory. It saves work that the final verdict
 would discard; it cannot make a run pass. Its last act before it returns
@@ -80,6 +88,7 @@ that returns between two reads is indistinguishable from a stable clock.
 """
 from __future__ import annotations
 
+import bisect
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta, timezone
 from fnmatch import fnmatchcase
@@ -337,9 +346,15 @@ class _BirthBound:
 
     @property
     def zero_ns(self):
-        """The exact check's zero: the earliest birth the samples allow."""
-        if self.absent_ns < self.printed_ns < self.sighted_midpoint_ns:
-            return self.printed_ns
+        """The exact check's zero: the latest instant every reading allows as the earliest birth.
+
+        Lead T2: the process was born after the absence and no earlier than
+        its printed start second, which counts whenever the sighting read
+        ended no earlier than it. An added reading can only narrow this:
+        a later absence moves the zero later, an earlier sighting leaves it.
+        """
+        if self.printed_ns <= self.sighted_finished_ns:
+            return max(self.absent_ns, self.printed_ns)
         return self.absent_ns
 
     @property
@@ -407,6 +422,55 @@ def _proven_pair(points, closing_finished_ns, closing_cs):
                 and (best is None or growth_cs * best[3] > best[2] * windows)):
             best = (started_ns, midpoint_ns, growth_cs, windows, span_ns)
     return best
+
+
+def _expand_readings(history, stamps, starts):
+    """Every reading of one process, restoring the reads a run of unchanged ones folded away.
+
+    ``history`` keeps only the first and last of a run of unchanged
+    readings (``QuietGuard._readings``). Each accounting read is a complete
+    process table, so every read between them listed the process with the
+    same counters. ``stamps`` and ``starts`` index every accounting read.
+    """
+    readings = []
+    for previous, entry in zip((None, *history), history):
+        if previous is not None and previous[3:] == entry[3:]:
+            low, high = bisect.bisect_right(starts, previous[0]), bisect.bisect_left(starts, entry[0])
+            readings.extend((stamp[0], stamp[1], stamp[2], entry[3], entry[4]) for stamp in stamps[low:high])
+        readings.append(entry)
+    return readings
+
+
+def _rate_pair(readings):
+    """Lead T1: the admitted rate rule over every pair of one process's readings.
+
+    For readings a before b whose midpoints are at least INTERVAL_S apart,
+    the pair is above the limit when b's counter less a's, over the
+    midpoints' span, exceeds it, with the lower-bound or the printed
+    counters. Returns (a, b, growth cs, span ns) for the pair furthest
+    above the limit, or None.
+    """
+    window_ns = prewindow.INTERVAL_S * 1_000_000_000
+    scale = 1_000_000_000 * _CPU_LIMIT_DEN
+    lowest = [None, None]
+    best = None
+    opened = 0
+    for index, (_, _, midpoint_ns, lower_cs, printed_cs) in enumerate(readings):
+        while opened < index and readings[opened][2] <= midpoint_ns - window_ns:
+            for k in (0, 1):
+                value = readings[opened][3 + k] * scale - _CPU_LIMIT_NUM * readings[opened][2]
+                if lowest[k] is None or value < lowest[k][0]:
+                    lowest[k] = (value, opened)
+            opened += 1
+        for k, cs in enumerate((lower_cs, printed_cs)):
+            if lowest[k] is not None:
+                excess = cs * scale - _CPU_LIMIT_NUM * midpoint_ns - lowest[k][0]
+                if excess > 0 and (best is None or excess > best[0]):
+                    best = (excess, lowest[k][1], index, k)
+    if best is None:
+        return None
+    _, a, b, k = best
+    return readings[a], readings[b], readings[b][3 + k] - readings[a][3 + k], readings[b][2] - readings[a][2]
 
 
 def _window_reads(reads, opening, current):
@@ -634,9 +698,17 @@ class QuietGuard:
         # (lead R1), oldest first, as
         # (started ns, finished ns, midpoint ns, lower-bound cs, printed cs).
         # Of a run of unchanged readings only the first and last are kept:
-        # no other can give a larger proven bound (lead P1).
+        # no other can give a larger proven bound (lead P1), and the final
+        # verdict restores the rest from the read index (lead T1).
         self._readings = {}
         self._commands = {}
+        # Every accounting read, oldest first, as (started ns, finished ns,
+        # midpoint ns, largest wall - monotonic offset of its accounting
+        # table, the same including its arguments table), and each
+        # (pid, start)'s first reading: (index into it, printed start
+        # second). Lead T1 judges every pair of readings from these.
+        self._read_stamps = []
+        self._first_listings = {}
         self._admission_snapshots = []
         self._admission_previous_over = {}
         self._process_observations = []
@@ -764,11 +836,18 @@ class QuietGuard:
         # evidence for that (pid, start). It can only add a withhold:
         # admission reads still never open or extend a judged window.
         started_ns, finished_ns = snapshot.started.monotonic_ns, snapshot.finished.monotonic_ns
+        offsets = _stamp_offsets_ns(snapshot)
+        read_index = len(self._read_stamps)
+        self._read_stamps.append((started_ns, finished_ns, (started_ns + finished_ns) // 2,
+                                  max(offsets[:2]), max(offsets)))
         for identity, row in rows.items():
             entry = (started_ns, finished_ns, (started_ns + finished_ns) // 2,
                      round(row.get("peak_cpu_seconds", row["cumulative_cpu_seconds"]) * 100),
                      round(row["cumulative_cpu_seconds"] * 100))
-            history = self._readings.setdefault(identity, [])
+            history = self._readings.get(identity)
+            if history is None:
+                history = self._readings[identity] = []
+                self._first_listings[identity] = (read_index, int(row["start_epoch_s"]))
             if len(history) >= 2 and history[-2][3:] == history[-1][3:] == entry[3:]:
                 history[-1] = entry
             else:
@@ -980,6 +1059,7 @@ class QuietGuard:
             self.receipts.append(receipt)
             self._cpu_interval(receipt)
             self._proven_history(receipt)
+            self._pair_history(receipt)
             if not stopped:
                 raise Refused("census indeterminate: background sampler did not stop within the join bound")
             self._require_background_clear()
@@ -1005,6 +1085,7 @@ class QuietGuard:
             self._admission_interval(receipt, current)
             self._cpu_interval(receipt)
             self._proven_history(receipt)
+            self._pair_history(receipt)
             self._require_fresh_background(self._now(), latest)
             self._require_background_clear()
             self._require_stable_clock(receipt)
@@ -1293,6 +1374,86 @@ class QuietGuard:
                 f"{windows} window{'s' if windows > 1 else ''} of at most {prewindow.INTERVAL_S:g} s")
         self._record_cpu_flags(receipt, details, [evidence], kind="proven_30s", note=note)
         return evidence
+
+    def _pair_history(self, receipt):
+        """Lead T1: the admitted rate rule over every pair of each in-scope process's readings.
+
+        Runs at the final verdict, after P1, over every process any read
+        identified (lead Q1) and not yet flagged. Every reading of it is
+        judged against every earlier one at least INTERVAL_S before it,
+        with no bound on the span (``_rate_pair``), so a read added between
+        two readings never removes their pair. A process first listed after
+        the first read is also judged from its birth bound: its counter at
+        each reading over the span from the latest instant every reading
+        allows as its birth (lead T2) to the end of that read, the admitted
+        rule's lifetime convention, once a read at least INTERVAL_S before
+        it exists. Flags only.
+        """
+        window_ns = prewindow.INTERVAL_S * 1_000_000_000
+        with self._snapshot_lock:
+            readings = {identity: tuple(history) for identity, history in self._readings.items()}
+            stamps = list(self._read_stamps)
+            firsts = dict(self._first_listings)
+            births = dict(self._birth_bounds)
+            commands = dict(self._commands)
+            scope = {(pid, start) for pid, holders in self._process_history.items()
+                     for start, (_, matches) in holders.items() if matches}
+        if not stamps:
+            return []
+        starts = [stamp[0] for stamp in stamps]
+        flagged = {(row["pid"], row["start"]) for flag in self.contention_flags for row in flag["busy"]}
+        busy = []
+        for identity in sorted(scope - flagged):
+            history = readings.get(identity, ())
+            if not history:
+                continue
+            expanded = _expand_readings(history, stamps, starts)
+            pair = _rate_pair(expanded)
+            basis = "CPU between two readings of one process at least 30 s apart"
+            if pair is None:
+                pair = self._birth_pair(identity, expanded, stamps, firsts, births, window_ns)
+                basis = "CPU since its birth bound, to the end of a later read"
+            if pair is None:
+                continue
+            opening, closing, growth_cs, span_ns = pair
+            evidence = {"pid": identity[0], "command": commands.get(identity, "?"), "start": identity[1],
+                        "cpu_s_per_s": growth_cs / 100 / (span_ns / 1e9), "basis": basis}
+            details = {"start_monotonic_s": opening[2] / 1e9, "end_monotonic_s": closing[2] / 1e9,
+                       "elapsed_s": (closing[2] - opening[2]) / 1e9, "span_s": span_ns / 1e9,
+                       "cpu_s": growth_cs / 100, "busy": [evidence]}
+            receipt.setdefault("pair_history", []).append(details)
+            note = (f"{growth_cs / 100:.2f} CPU-s over {span_ns / 1e9:.3f} s, above "
+                    f"{prewindow.CPU_LIMIT_PERCENT / 100:g} CPU-s/s, from the reading at {opening[2] / 1e9:.3f} s "
+                    f"to {closing[2] / 1e9:.3f} s")
+            self._record_cpu_flags(receipt, details, [evidence], kind="pair_rate", note=note)
+            busy.append(evidence)
+        return busy
+
+    @staticmethod
+    def _birth_pair(identity, readings, stamps, firsts, births, window_ns):
+        """The admitted lifetime rule from a newcomer's birth bound to each of its readings (lead T1-T2)."""
+        index, printed_s = firsts.get(identity, (0, None))
+        if index == 0:
+            return None  # listed by the first read: no absence bounds its birth
+        absent, sighted = stamps[index - 1], stamps[index]
+        printed_ns = printed_s * 1_000_000_000 - max(absent[4], sighted[3])
+        floor_ns = max(absent[0], printed_ns) if printed_ns <= sighted[1] else absent[0]
+        bound = births.get(identity)
+        if bound is not None:
+            floor_ns = max(floor_ns, bound.lifetime_floor_ns)
+        scale = 1_000_000_000 * _CPU_LIMIT_DEN
+        best = None
+        for reading in readings:
+            span_ns = reading[1] - floor_ns
+            if span_ns <= 0 or reading[2] - stamps[0][2] < window_ns:
+                continue
+            excess = reading[3] * scale - _CPU_LIMIT_NUM * span_ns
+            if excess > 0 and (best is None or excess * best[1] > best[0] * span_ns):
+                best = (excess, span_ns, reading)
+        if best is None:
+            return None
+        _, span_ns, reading = best
+        return (absent[0], absent[1], absent[2]), reading, reading[3], span_ns
 
     def _cpu_interval(self, receipt):
         # Admission's closing read can judge a second batch into its receipt.

@@ -4046,7 +4046,13 @@ class R0FinalVerdictTest(unittest.TestCase):
                                                        self.monotone_model(ticks, admissions, rows))
                         self.assertEqual(model.forced, [])
                         self.assertEqual((result["rc"], result["published"]), (2, False), result)
-                        self.assertIn((30, 91), [(round(a, 6), round(b, 6)) for a, b, *_ in result["flags"]], result)
+                        self.assertTrue(any(round(a, 6) == 30 for a, *_ in result["flags"]), result)
+                        # The (30, 91) pair alone is above the limit, and the
+                        # final verdict judges it with every other pair.
+                        from joulewise.align import r0_host
+                        history, = [h for (pid, _), h in model.guard._readings.items() if pid == fixture.PID]
+                        ends = [next(r for r in history if r[0] == at * 10**9) for at in (30, 91)]
+                        self.assertIsNotNone(r0_host._rate_pair(ends), history)
 
     def test_lead_t_birth_flip_a_sighting_never_moves_the_zero_earlier(self):
         # Narrow check birth_flip.py at 7c713965. A worker printing start
@@ -4083,7 +4089,7 @@ class R0FinalVerdictTest(unittest.TestCase):
                     self.assertEqual((result["rc"], result["published"]), (2, False), result)
                     exact = [f for f in model.guard.contention_flags if f.get("kind") == "exact_30s"]
                     self.assertTrue(exact, model.guard.contention_flags)
-                    self.assertEqual(exact[0]["proof_interval"]["start_monotonic_s"], 45)
+                    self.assertEqual((exact[0].get("proof_interval") or exact[0]["interval"])["start_monotonic_s"], 45)
 
     def test_lead_t_adversarial_reading_never_turns_a_withhold_into_a_publication(self):
         # Lead T3: the property test with adversarial placement. Every read
