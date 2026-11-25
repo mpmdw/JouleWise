@@ -6,13 +6,12 @@ read to get back here. Session records live in `docs/run_reports/` and
 policy lives in `docs/decision_log.md`. Do not create a dated restart doc;
 update this file instead.
 
-**2026-11-24 qualification freeze-2 bind [AGENT].** PR #835 binds the
-reviewed #795 verifier at `6f81504db0c50ced6ef488d13afab0bf2662ec5b`.
-Both public decision paths passed in the synthetic Start and Run replay.
-The provider's reserved-report route is an open blinding blocker. The
-lead owns disposition and the one Astra replay. Qualification remains
-HOLD_FOR_FIT_FREEZE. The Nov 25–27 renewal was reproduced in scratch
-for lead selection. [Bind report](docs/run_reports/2026-11-24-pr835-freeze2-bind.md)
+**2026-11-24 qualification freeze-2 re-bind [AGENT].** PR #835 uses
+the reviewed #968 provider `e3f2c7ae8c9be7a7884cf3fefa1fba3c9875f675`.
+The reserved-route regression and both authorization paths passed on
+invented histories. The Nov 25–27 renewal was reproduced in scratch
+for lead selection. Qualification remains HOLD_FOR_FIT_FREEZE. The lead
+owns provider staging and issue. [Fix-1 report](docs/run_reports/2026-11-24-pr835-freeze2-fix1.md)
 
 **Current pointer: read the top numbered item first.** That is the
 highest-numbered item; from item 168 on, items run newest first and start

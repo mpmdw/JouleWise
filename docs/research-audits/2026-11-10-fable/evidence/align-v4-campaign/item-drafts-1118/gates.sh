@@ -115,8 +115,8 @@ repo, expected = sys.argv[1:]
 if not re.fullmatch(r"[0-9a-f]{64}", expected):
     sys.exit("STOP: malformed issued freeze-2 public hash")
 
-# PR #795 reviewed public verifier. The measurement runner has its own pin.
-provider_commit = "6f81504db0c50ced6ef488d13afab0bf2662ec5b"
+# PR #968 reviewed public verifier. The measurement runner has its own pin.
+provider_commit = "e3f2c7ae8c9be7a7884cf3fefa1fba3c9875f675"
 provider_paths = (
     "scripts/cadence_look_manifest.py",
     "joulewise/__init__.py",

@@ -24,13 +24,13 @@ QUAL_REGISTERED_PATH = (
 )
 MANIFEST = f"docs/process/cadence/looks/{LOOK}.json"
 SCHEMA = f"docs/process/cadence/looks/{LOOK}.output.schema.json"
-ROOT = "invented/public"
+ROOT = "public"
 REPORT = f"{ROOT}/{LOOK}/PUBLIC.json"
 NAMING = f"docs/process/cadence/looks/{LOOK}.freeze2.json"
 DECISIONS = "docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md"
 NAMING_SCHEMA = "joulewise.cadence_looks.freeze2_naming.v1"
 RULING = "RL-9999"  # Invented ruling applying RL-184 §2.
-PROVIDER = "6f81504db0c50ced6ef488d13afab0bf2662ec5b"
+PROVIDER = "e3f2c7ae8c9be7a7884cf3fefa1fba3c9875f675"
 CLI = "scripts/cadence_look_manifest.py"
 CODE_PATHS = (
     CLI,
@@ -46,6 +46,10 @@ CODE_PATHS = (
     "joulewise/cadence_looks/schema_check.py",
 )
 DEPENDENCY = CODE_PATHS[-1]
+MISSING_EXECUTION_FIELDS = {
+    "missing-execution-host": "execution_host",
+    "missing-execution-custody-root": "custody_root",
+}
 QUAL_REGISTERED_SHA = "82a8da3deadbc43fb61d213b748b57c6c29dab101e3c06ac4e36b9e69a83c3a0"
 SHELLS = ("/bin/bash", "/bin/zsh")
 FETCH = (
@@ -202,9 +206,12 @@ class PublicHistory:
             rows = [self.stage1, dict(self.qual, status="run")]
         if case == "duplicate-execution":
             rows = [*rows, self.stage1]
-        self.ledger(rows)
         if case == "stale-execution":
-            self.ledger([dict(self.stage1, status="committed"), self.qual])
+            rows[0] = dict(self.stage1, status="committed")
+        if case in MISSING_EXECUTION_FIELDS:
+            rows[0] = dict(self.stage1)
+            del rows[0][MISSING_EXECUTION_FIELDS[case]]
+        self.ledger(rows)
         return commit(self.publisher, f"Synthetic execution {case}")
 
     def publish(self, case, parent=None):
@@ -232,9 +239,14 @@ class PublicHistory:
             del report["twin_agrees"]
         if case == "nonancestor-execution":
             report["commit"] = commit(self.publisher, "Unrelated synthetic execution")
-        if case in ("bad-execution-sibling", "duplicate-execution", "stale-execution", "single"):
+        if case in ("bad-execution-sibling", "duplicate-execution", "stale-execution", "single",
+                    *MISSING_EXECUTION_FIELDS):
             report["commit"] = self.execution_commit(case)
             parent = report["commit"]
+        if case == "missing-main-host":
+            del row["execution_host"]
+        if case == "missing-main-custody-root":
+            del row["custody_root"]
         for label, field, value in (
             ("frozen", "status", "frozen"), ("registered-interim", "status", "registered"),
             ("execution-binding", "execution_host", "other-invented-host"),
@@ -488,10 +500,18 @@ def remote_ops(ref):
 
 
 def public_rules(world, main, *, pin=PROVIDER, execution=None, naming=False):
+    execution = execution or world.execution
+    history_query = ["log", "--full-history", "--format=%H", main, "--", LEDGER]
+    history = git(world.publisher, *history_query).decode().split()
+    if execution in history:
+        # In the valid fixture history the report's execution row is the first match.
+        history = history[:history.index(execution) + 1]
     ops = provider_ops(pin) + remote_ops(MAIN)
-    ops.extend(["show", main + ":" + path] for path in (LEDGER, MANIFEST, SCHEMA, REPORT))
-    ops.extend((["merge-base", "--is-ancestor", execution or world.execution, main],
-                ["show", (execution or world.execution) + ":" + LEDGER]))
+    ops.extend(["show", main + ":" + path] for path in (LEDGER, MANIFEST, SCHEMA))
+    ops.append(history_query)
+    ops.extend(["show", commit + ":" + LEDGER] for commit in history)
+    ops.extend((["show", main + ":" + REPORT], ["merge-base", "--is-ancestor", execution, main],
+                ["show", execution + ":" + LEDGER]))
     if naming:
         ops.append(["show", main + ":" + NAMING])
     return dict(repo=str(world.auth), tmp=str(world.tmp), git=ops, code=CODE_PATHS)
@@ -735,6 +755,16 @@ def positive_matrix(root, probe, world, items, projections):
 
 
 def refusal_matrix(root, probe, world, definitions, start):
+    before_report = {
+        "bad-execution-sibling": "history does not authenticate the execution row",
+        "duplicate-execution": "history does not authenticate the execution row",
+        "stale-execution": "history does not authenticate the execution row",
+        "execution-binding": "history does not authenticate the execution row",
+        "missing-main-host": "execution row lacks execution_host",
+        "missing-main-custody-root": "execution row lacks custody_root",
+        "report-route": "allowed public root is 'public'",
+        **dict.fromkeys(MISSING_EXECUTION_FIELDS, "history does not authenticate the execution row"),
+    }
     cases = (
         "single", "frozen", "dirty-sources", "no", "not-evaluable", "bad-word", "bare-ruling",
         "missing-word", "missing-report", "audit-only", "audit-only-note", "worktree-only", "qual-only",
@@ -742,7 +772,8 @@ def refusal_matrix(root, probe, world, definitions, start):
         "duplicate-execution", "stale-execution", "manifest-pin", "manifest-look", "report-pin",
         "report-look", "report-manifest", "report-stage1", "report-coefficient", "noncanonical-report",
         "schema-pin", "execution-binding", "nonancestor-execution", "manifest-route", "report-route",
-        "schema-route", "wrong-expected", "malformed-expected", "unset-expected", "unfilled",
+        "schema-route", "missing-main-host", "missing-main-custody-root", *MISSING_EXECUTION_FIELDS,
+        "wrong-expected", "malformed-expected", "unset-expected", "unfilled",
         "unbound-pin", "wrong-pin", "noncommit-pin", "missing-dependency", "symlink-dependency",
         "altered-staged-dependency", "failed-main-fetch", "failed-audit-fetch",
     )
@@ -782,6 +813,8 @@ def refusal_matrix(root, probe, world, definitions, start):
             branch = "main" if case == "failed-main-fetch" else "audit/2026-11-10-fable"
             git(world.publisher, "update-ref", "-d", f"refs/heads/{branch}")
         rules = public_rules(world, main, pin=pin, execution=execution, naming=case == "bare-ruling")
+        if case in before_report:
+            rules["git"].remove(["show", main + ":" + REPORT])
         if case == "altered-staged-dependency":
             rules["alter_staged"] = DEPENDENCY
         value = {"wrong-expected": OTHER, "malformed-expected": "wrong", "unfilled": ""}.get(case, DIGEST)
@@ -810,6 +843,13 @@ def refusal_matrix(root, probe, world, definitions, start):
                 assert "requires a regular code blob" in result.stderr
             if case == "altered-staged-dependency":
                 assert "staged code differs from the pinned blob" in result.stderr
+            if case in before_report:
+                assert before_report[case] in result.stderr, result.stderr
+                assert not any(op[0] == "show" and op[-1].endswith("/PUBLIC.json") for op in decisions)
+            if case == "nonancestor-execution":
+                assert "execution commit is not in main's history" in result.stderr
+                assert ["show", main + ":" + REPORT] in decisions
+                assert ["show", execution + ":" + LEDGER] not in decisions
             if case in ("audit-only", "audit-only-note"):
                 assert ["show", main + ":" + REPORT] in decisions
                 assert not any(audit + ":" in arg for op in decisions for arg in op)
@@ -879,19 +919,20 @@ def observer_checks(root, probe, world, definitions, start):
 
 
 def reserved_report_route(root, probe, world, definitions, start):
-    # Record the provider defect without performing the out-of-scope Git read.
     main = world.publish("reserved-report-route")
     world.set_heads(main)
     rules = public_rules(world, main)
-    blocked = ["git", "-C", str(world.auth), "show", f"{main}:invented/restricted/{LOOK}/PUBLIC.json"]
+    rules["git"] = provider_ops(PROVIDER) + remote_ops(MAIN) + [["show", main + ":" + LEDGER]]
+    label = "reserved-report-route"
     for shell in SHELLS:
-        label = "provider attempts a report lookup in a reserved directory"
         result, trace = exercise(root, probe, shell, definitions + "\n" + start, world.auth, rules,
                                  label=label)
-        assert_outcome(result, trace, False, label=(label, shell), denied_count=1)
-        assert ["DENIED", blocked] in trace
-        assert not any(kind == "exit" and value[0] == blocked[3:] for kind, value in trace)
-    print("BLOCK provider follows a reserved report route; observer prevented the Git lookup (bash, zsh)")
+        assert_outcome(result, trace, False, label=(label, shell))
+        assert "REFUSE freeze 2 public authority:" in result.stderr
+        assert f"reserved component in report route 'invented/restricted/{LOOK}/PUBLIC.json'" in result.stderr
+        assert [op for kind, op in trace if kind == "git"] == rules["git"]
+        assert not any(kind == "file" and detail[1].endswith("/PUBLIC.json") for kind, detail in trace)
+    print("PASS reserved-report-route provider refusal with zero report reads (bash, zsh)")
 
 
 def matrix(root, probe, items):
