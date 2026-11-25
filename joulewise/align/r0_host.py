@@ -18,7 +18,11 @@ check (lead P1). Against each earlier point of the same process's life,
 whether a reading or its birth bound with a zero counter, it takes the
 growth less one centisecond over the largest span the reads allow. It splits
 that span into k windows of at most 30 s, and flags if growth / k reaches
-the limit times 30 s: one of those windows held at least that much. Admission windows reproduce the
+the limit times 30 s: one of those windows held at least that much. Scope
+is sticky (lead Q1). A (pid, start) that any read identified is in scope for
+its whole retained history. At the final verdict, every such process is
+judged over all pairs of its points, whichever read ends a pair. Readings
+of a process are kept whether or not the read identified it. Admission windows reproduce the
 admitted L3 guard's flags; they can add a flag, never supply an opening to
 the verdict.
 
@@ -364,6 +368,31 @@ def _birth_window_evidence(current, births, dwell_ns):
     return windows.items()
 
 
+def _proven_pair(points, closing_finished_ns, closing_cs):
+    """Lead P1 for one reading: the earlier point proving the largest share, or None.
+
+    ``points`` are (start ns, midpoint ns, lower-bound cs) of earlier
+    readings, or of the birth bound with 0 cs. The span runs from a point's
+    start to the end of the closing read; the growth is the closing counter
+    less the point's, less one centisecond. Over k = ceil(span / 30 s)
+    windows (k = 1 up to 30 s) one holds at least growth / k. Returns
+    (start ns, midpoint ns, growth cs, k, span ns) when that reaches the
+    limit times 30 s.
+    """
+    window_ns = prewindow.INTERVAL_S * 1_000_000_000
+    best = None
+    for started_ns, midpoint_ns, lower_cs in points:
+        span_ns = closing_finished_ns - started_ns
+        growth_cs = closing_cs - lower_cs - 1
+        if span_ns <= 0 or growth_cs <= 0:
+            continue
+        windows = max(1, -(-span_ns // window_ns))
+        if (growth_cs * 1_000_000_000 * _CPU_LIMIT_DEN >= _CPU_LIMIT_NUM * window_ns * windows
+                and (best is None or growth_cs * best[3] > best[2] * windows)):
+            best = (started_ns, midpoint_ns, growth_cs, windows, span_ns)
+    return best
+
+
 def _window_reads(reads, opening, current):
     start = next(i for i, read in enumerate(reads) if read is opening)
     end = next(i for i in range(start + 1, len(reads)) if reads[i] is current)
@@ -588,6 +617,7 @@ class QuietGuard:
         # Of a run of unchanged readings only the first and last are kept:
         # no other can give a larger proven bound (lead P1).
         self._readings = {}
+        self._commands = {}
         self._admission_snapshots = []
         self._admission_previous_over = {}
         self._process_observations = []
@@ -742,6 +772,7 @@ class QuietGuard:
                     history[-1] = entry
                 else:
                     history.append(entry)
+                self._commands[identity] = row["command"]
             self._pending["wall_clock_backwards"] |= backwards
             self._snapshots.append(snapshot)
             if census_summary is not None:
@@ -924,6 +955,7 @@ class QuietGuard:
                 receipt["monotonic_s"] = self._now()
             self.receipts.append(receipt)
             self._cpu_interval(receipt)
+            self._proven_history(receipt)
             if not stopped:
                 raise Refused("census indeterminate: background sampler did not stop within the join bound")
             self._require_background_clear()
@@ -948,6 +980,7 @@ class QuietGuard:
             current = self._cpu_snapshot()
             self._admission_interval(receipt, current)
             self._cpu_interval(receipt)
+            self._proven_history(receipt)
             self._require_fresh_background(self._now(), latest)
             self._require_background_clear()
             self._require_stable_clock(receipt)
@@ -1124,46 +1157,72 @@ class QuietGuard:
         growth / k. Contention is proven if that reaches the limit times
         30 s. Identities another check flagged at this read are skipped.
         """
-        window_ns = prewindow.INTERVAL_S * 1_000_000_000
-        closing_ns = current.finished.monotonic_ns
         busy = []
         for identity, row in current.rows.items():
             if not row["contaminant"] or identity in flagged:
                 continue
-            closing_cs = round(row["cumulative_cpu_seconds"] * 100)
             points = [(started, midpoint, lower) for started, _, midpoint, lower, _ in readings.get(identity, ())
                       if midpoint < current.midpoint_ns]
             bound = births.get(identity)
             if bound is not None:
                 points.append((bound.lifetime_floor_ns, bound.lifetime_floor_ns, 0))
-            best = None
-            for started_ns, midpoint_ns, lower_cs in points:
-                span_ns = closing_ns - started_ns
-                growth_cs = closing_cs - lower_cs - 1
-                if span_ns <= 0 or growth_cs <= 0:
-                    continue
-                windows = max(1, -(-span_ns // window_ns))
-                if (growth_cs * 1_000_000_000 * _CPU_LIMIT_DEN >= _CPU_LIMIT_NUM * window_ns * windows
-                        and (best is None or growth_cs * best[3] > best[2] * windows)):
-                    best = (started_ns, midpoint_ns, growth_cs, windows, span_ns)
+            best = _proven_pair(points, current.finished.monotonic_ns, round(row["cumulative_cpu_seconds"] * 100))
             if best is None:
                 continue
-            started_ns, midpoint_ns, growth_cs, windows, span_ns = best
-            evidence = {"pid": identity[0], "command": row["command"], "start": identity[1],
-                        "cpu_s_per_s": growth_cs / windows / 100 / prewindow.INTERVAL_S,
-                        "basis": "CPU between two points of one process's life, split into windows of at most 30 s"}
-            details = {"start_monotonic_s": midpoint_ns / 1e9, "end_monotonic_s": current.midpoint_ns / 1e9,
-                       "elapsed_s": (current.midpoint_ns - midpoint_ns) / 1e9, "span_s": span_ns / 1e9,
-                       "cpu_s": growth_cs / 100, "windows": windows, "bound_cpu_s": growth_cs / windows / 100,
-                       "busy": [evidence]}
-            receipt.setdefault("proven_windows", []).append(details)
-            note = (f"{growth_cs / 100:.2f} CPU-s after rounding from {started_ns / 1e9:.3f} s to "
-                    f"{closing_ns / 1e9:.3f} s: at least {growth_cs / windows / 100:.3f} CPU-s in one of "
-                    f"{windows} window{'s' if windows > 1 else ''} of at most {prewindow.INTERVAL_S:g} s")
-            self._record_cpu_flags(receipt, details, [evidence], kind="proven_30s", note=note)
+            busy.append(self._record_proven(receipt, identity, row["command"], best,
+                                            current.midpoint_ns, current.finished.monotonic_ns))
             flagged.add(identity)
-            busy.append(evidence)
         return busy
+
+    def _proven_history(self, receipt):
+        """Lead Q1: P1 over the complete history of every process in scope at any read.
+
+        Scope is sticky: a (pid, start) that any read identified as a
+        contaminant is judged over every retained reading of it, earlier
+        and later, and its birth bound, whatever later or earlier reads
+        made of it. Every pair is checked, whichever read ends it. This
+        runs at the final verdict, so a change of scope at any read is
+        covered; processes already flagged are skipped.
+        """
+        with self._snapshot_lock:
+            readings = {identity: tuple(history) for identity, history in self._readings.items()}
+            births = dict(self._birth_bounds)
+            commands = dict(self._commands)
+            scope = {(pid, start) for pid, holders in self._process_history.items()
+                     for start, (_, matches) in holders.items() if matches}
+        flagged = {(row["pid"], row["start"]) for flag in self.contention_flags for row in flag["busy"]}
+        busy = []
+        for identity in sorted(scope - flagged):
+            history = readings.get(identity, ())
+            bound = births.get(identity)
+            best = None
+            for index, (_, finished_ns, midpoint_ns, _, printed_cs) in enumerate(history):
+                points = [(started, midpoint, lower) for started, _, midpoint, lower, _ in history[:index]
+                          if midpoint < midpoint_ns]
+                if bound is not None:
+                    points.append((bound.lifetime_floor_ns, bound.lifetime_floor_ns, 0))
+                proof = _proven_pair(points, finished_ns, printed_cs)
+                if proof is not None and (best is None or proof[2] * best[0][3] > best[0][2] * proof[3]):
+                    best = (proof, midpoint_ns, finished_ns)
+            if best is not None:
+                busy.append(self._record_proven(receipt, identity, commands.get(identity, "?"), *best))
+        return busy
+
+    def _record_proven(self, receipt, identity, command, proof, closing_midpoint_ns, closing_finished_ns):
+        started_ns, midpoint_ns, growth_cs, windows, span_ns = proof
+        evidence = {"pid": identity[0], "command": command, "start": identity[1],
+                    "cpu_s_per_s": growth_cs / windows / 100 / prewindow.INTERVAL_S,
+                    "basis": "CPU between two points of one process's life, split into windows of at most 30 s"}
+        details = {"start_monotonic_s": midpoint_ns / 1e9, "end_monotonic_s": closing_midpoint_ns / 1e9,
+                   "elapsed_s": (closing_midpoint_ns - midpoint_ns) / 1e9, "span_s": span_ns / 1e9,
+                   "cpu_s": growth_cs / 100, "windows": windows, "bound_cpu_s": growth_cs / windows / 100,
+                   "busy": [evidence]}
+        receipt.setdefault("proven_windows", []).append(details)
+        note = (f"{growth_cs / 100:.2f} CPU-s after rounding from {started_ns / 1e9:.3f} s to "
+                f"{closing_finished_ns / 1e9:.3f} s: at least {growth_cs / windows / 100:.3f} CPU-s in one of "
+                f"{windows} window{'s' if windows > 1 else ''} of at most {prewindow.INTERVAL_S:g} s")
+        self._record_cpu_flags(receipt, details, [evidence], kind="proven_30s", note=note)
+        return evidence
 
     def _cpu_interval(self, receipt):
         # Admission's closing read can judge a second batch into its receipt.

@@ -542,3 +542,29 @@ Local checks used Python 3.13 under `taskpolicy -c utility`, `TZ=UTC` and synthe
 - `tests.align.test_r0_checks` and `tests.hazards.test_contention`: 86 tests passed with three live skips.
 
 Frozen v3 and the census fault matrix run in hosted CI. Frozen v3 is byte-identical at SHA-256 `afd360c29d390f7d39400e1363a25add5c13ace71bca55c80d11ec0ceb4e5009`. `RUN_STATE.md` and `TASK_QUEUE.md` retain their PR-base blobs.
+
+## 2026-11-24 sticky identity for PR #824 (lead Q1–Q3, closing round for this class)
+
+The narrow check of `29fa45432cbecb90f0c60f976652a8fe4e334921` found one more false publication of this class. A "python3" worker was a contaminant only by its arguments. They named it on the first read after birth and from 110 s; other reads printed just "python3". Its readings at 46.000 s (0.00 CPU-s) and 94.010 s (3.07 CPU-s) prove at least 1.530 CPU-s in one 30 s window. P1 judged a pair only when the later read identified the process, so both modes published. The same worker named on every read withheld. `series_replay.py` reproduced on that head before this change.
+
+**Q1, sticky identity.** A (pid, start) identified as a contaminant at any read is in scope for its whole retained history, earlier and later. At the final verdict, `finish()` and `verify_publication()` now run P1 over every in-scope process's complete history. That is every pair of retained points, the readings and the birth bound, whichever read ends the pair, O(n²) per process. `_proven_history` records any proof with the existing contention reason, pair and bound. Readings of a process are kept whether or not a read identified it, as they already were. P1's arithmetic moved unchanged into `_proven_pair`, which the per-read check and the final pass share. K1–K5 are unchanged.
+
+**Q2, tests.**
+
+- `test_narrow_p1_intermittent_identity_is_judged_over_the_whole_history` ports `series_replay.py` in host and inventory mode, with intermittent and always-named arguments. All four withhold with "3.06 CPU-s after rounding from 46.000 s to 94.010 s: at least 1.530 CPU-s in one of 2 windows". On `29fa45432`'s `r0_host.py` the two intermittent cases fail.
+- The independent sweep, now 7,008 CLI runs, adds intermittent identity. A "python3" worker is named by its arguments only from the last tick, only at one interior tick, or never, for every kind and load at 2, 30, 16 and 35 s cadences. The expectation comes from the true CPU curve and the test's reads:
+  - "late" and "middle" put the worker in scope for its whole history;
+  - "never" must publish.
+  - On `29fa45432`'s code the sweep fails exactly 8 cases, the late-named split worker at 16 and 35 s for all four kinds.
+- The sweep's stall expectation now uses the read starts and ends it schedules. At 50 s cadence the publication read, 20 ms after the last tick's, makes the final judged window 50.015 s, which stalls; that was the cause of the 20 withheld 1.49 controls. Where that coincides with an unstable clock, `finish()` reports `clock_unstable` first, and either reason is accepted. The 0.01 band is no longer needed as a reason to withhold. Every 1.49 stable control at the original cadences publishes.
+
+**KNOWN LIMITATION R0-RATE** (lead ruling). The admitted R0-L3 rate rule withholds, never publishes, when a contaminant averages more than 0.05 CPU-s/s over a sampled window of 30–50 s or over a newcomer's lifetime within one, even without 1.50 CPU-s in any 30 s. A worker using 1.48 CPU-s in a burst every 30 s averages 0.074 CPU-s/s over a 40 s window and is withheld.
+
+**NEEDS_SPEC, not patched (lead: last round for this class).** In the narrow check's `mixed_read.py`, the reading that proves the pair is a foreground admission read at 94 s, with no daemon read there. A resident worker read at 46 s (0.00) and at the 94 s admission (3.07) still publishes, before and after this change. The verdict's series excludes admission reads by the round-5 ruling: "admission windows can add a flag, never supply an opening to the verdict". With a daemon read at 94 s it withholds. Whether admission accounting reads should be P1 points is a spec question.
+
+Local checks used Python 3.13 under `taskpolicy -c utility`, `TZ=UTC` and synthetic inputs:
+
+- `tests.align.test_r0_host`: 158 tests passed with one native-capture skip, including the sweep. The census fault matrix test was skipped locally.
+- `tests.align.test_r0_checks` and `tests.hazards.test_contention`: 86 tests passed with three live skips.
+
+Frozen v3 and the census fault matrix run in hosted CI. Frozen v3 is byte-identical at SHA-256 `afd360c29d390f7d39400e1363a25add5c13ace71bca55c80d11ec0ceb4e5009`. `RUN_STATE.md` and `TASK_QUEUE.md` retain their PR-base blobs.

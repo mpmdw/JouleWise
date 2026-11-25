@@ -3644,6 +3644,68 @@ class R0FinalVerdictTest(unittest.TestCase):
                             if mode == "host":
                                 self.assertIn("at least 1.530 CPU-s in one of 2 windows", result["reason"])
 
+    def test_narrow_p1_intermittent_identity_is_judged_over_the_whole_history(self):
+        # Narrow check of 29fa45432 (series_replay.py). A "python3" process
+        # born at 32.005 s is a contaminant only by its arguments, which
+        # name it on the first read after birth and from 110 s; other reads
+        # print just "python3". It used 1.48, 0.11 and 1.48 CPU-s from 59,
+        # 69 and 79 s. Its readings at 46.000 s (0.00) and 94.010 s (3.07)
+        # prove at least 1.530 CPU-s in one of two 30 s windows. P1 judged a
+        # pair only when the later read identified it, so both modes
+        # published. Lead Q1: identification at any read puts the whole
+        # history in scope, and the final verdict checks every pair. The
+        # same worker named on every read is the control.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        ns = 10**9
+        ticks = (32, 46, 62, 78, 94, 110, 126)
+        bursts = ((59 * ns, 60_480_000_000), (69 * ns, 69_110_000_000), (79 * ns, 80_480_000_000))
+        birth = 32_005_000_000
+
+        def used(t):
+            return sum(max(0, min(t, stop) - begin) for begin, stop in bursts)
+
+        self.assertEqual(used(85 * ns) - used(55 * ns), 3_070_000_000)
+        for mode in ("host", "inventory"):
+            for always in (False, True):
+                def rows(seconds, always=always):
+                    t = round(seconds * ns)
+                    if t >= birth:
+                        named = always or t < 33 * ns or t >= 110 * ns
+                        yield (fixture.PID, birth // ns, (used(t) + 5_000_000) // 10_000_000, "python3",
+                               "python3 mdworker_task.py" if named else "python3")
+
+                class Worker(self.series_fixture(ticks, rows)):
+                    def wall_ns(self):
+                        return fixture.EPOCH * ns + round(self.now * ns)
+
+                    def run(self, argv, **kwargs):
+                        start = self.now
+                        result = super().run(argv, **kwargs)
+                        if tuple(argv) == tuple(prewindow.PS_ARGV):
+                            self.named_at = getattr(self, "named_at", [])
+                            if any(line.startswith(f"{fixture.PID} ") and "mdworker_task.py" in line
+                                   for line in result.stdout.splitlines()):
+                                self.named_at.append(round(start * ns))
+                        if tuple(argv) == tuple(contention.PS_ARGV) and start in ticks[:-1]:
+                            self.now += 0.01
+                        return result
+
+                with self.subTest(mode=mode, always=always):
+                    result, model = self.run_model(fixture.Case("same_worker", schedule=mode, end=126), Worker)
+                    history, = [h for (pid, _), h in model.guard._readings.items() if pid == fixture.PID]
+                    reads = [(start / ns, end / ns, printed / 100) for start, end, _, _, printed in history]
+                    self.assertIn((46, 46.01, 0.0), reads)
+                    self.assertIn((94, 94.01, 3.07), reads)
+                    if not always:
+                        self.assertIn(32_010_000_000, model.named_at)
+                        self.assertIn(110 * ns, model.named_at)
+                        self.assertFalse([t for t in model.named_at if 33 * ns <= t < 110 * ns])
+                    self.assertEqual((result["rc"], result["published"]), (2, False), result)
+                    proven = [f["flag"] for f in model.guard.contention_flags if f.get("kind") == "proven_30s"]
+                    self.assertTrue(any("3.06 CPU-s after rounding from 46.000 s to 94.010 s: at least 1.530 CPU-s "
+                                        "in one of 2 windows" in flag for flag in proven), model.guard.contention_flags)
+
     def test_publication_matches_an_independent_workload_model(self):
         # Lead r4 S4(c), rewritten for lead P2. Each worker has a true birth
         # and a true CPU curve; its printed start second is the simulated
@@ -3670,9 +3732,15 @@ class R0FinalVerdictTest(unittest.TestCase):
         # 3.07 CPU-s is proven only by P1, since every sliding window
         # averages 0.0497 CPU-s/s and no two reads 30 s apart differ by 1.50.
         #
+        # Identity: the worker is named by its command ("always"), or it is
+        # a "python3" process named by its arguments only from the last tick
+        # ("late"), only at one interior tick ("middle"), or never ("never").
+        # Any read that names it puts its whole history in scope (lead Q1).
+        #
         # Expectation, from the test's own reads alone, never from the guard:
-        # - A gap above 50 s between daemon reads withholds as a stalled
-        #   sampler (the existing fail-closed rule, which reports first).
+        # - A judged window longer than 50 s withholds as a stalled sampler
+        #   (the existing fail-closed rule, which reports first). The test
+        #   computes it from the read starts and ends it schedules.
         # - A wall change above 1 ms withholds as clock_unstable (R0-CLOCK).
         # - P1-provable contention withholds. Points are the worker's reads
         #   (their counters) and its birth bound's earliest instant
@@ -3682,9 +3750,10 @@ class R0FinalVerdictTest(unittest.TestCase):
         # - With instant reads, the narrower existing exact rule also
         #   withholds: two reads at most 30 s apart differing by 1.50, or
         #   1.50 at most 30 s after the earliest birth.
-        # - Whatever withholds is true contention, a clock change, a stall,
-        #   within 0.01 CPU-s of 1.50 with timed reads, or the admitted
-        #   R0-L3 rate rule. That rule (docs/align/r0/R0-L3-contention-rule.md,
+        # - A process never named publishes, busy or not.
+        # - Whatever withholds a process in scope is true contention, a
+        #   clock change, a stall, or the admitted R0-L3 rate rule (known
+        #   limitation R0-RATE, withhold-only). That rule (docs/align/r0/R0-L3-contention-rule.md,
         #   required by frozen v3) flags an average above 0.05 CPU-s/s over a
         #   sampled window of at least 30 s, or over a newcomer's lifetime
         #   within one. A bursty worker such as "spread" can trip it without
@@ -3725,7 +3794,14 @@ class R0FinalVerdictTest(unittest.TestCase):
                 spans += [(ns(t), ns(t) + (10_000_000 if sparse else 0)) for t in ticks]
                 spans.append((spans[-1][1] + (10_000_000 if sparse else 0),) * 2)
                 run_end = spans[-1][1]
-                stalled = sparse and cadence > 50
+                # A judged window opens at the newest read whose midpoint is at
+                # least 30 s before its closing read's; longer than 50 s it
+                # withholds as a stalled sampler. With 50 s cadence the
+                # publication read, 20 ms after the last tick's, makes it 50.015 s.
+                mids = [(s + e) // 2 for s, e in spans]
+                stalled = any(mids[j] - mids[i] > 50 * 10**9 for j in range(1, len(mids))
+                              for i in [next((i for i in range(j - 1, -1, -1) if mids[j] - mids[i] >= window), None)]
+                              if i is not None)
                 jump = close - 0.05
                 if not sparse:
                     self.assertFalse([t for t in ticks if jump <= t < close])
@@ -3760,7 +3836,10 @@ class R0FinalVerdictTest(unittest.TestCase):
 
                     counts = [counter(s) for s, _ in spans]  # ps captures each table as its read starts
                     clocks = sparse_clocks if sparse else dense_clocks
-                    for clock in clocks:
+                    variants = [("always", clock) for clock in clocks]
+                    if cadence in (2, 30, 16, 35):
+                        variants += [(identity, None) for identity in ("late", "middle", "never")]
+                    for identity, clock in variants:
                         if clock is None:
                             def offset(seconds):
                                 return 0
@@ -3837,12 +3916,33 @@ class R0FinalVerdictTest(unittest.TestCase):
                             self.assertEqual(best, 148)
                         if load in ("busy", "split") and not sparse and not unstable:
                             self.assertTrue(proven or exact, (kind, cadence, load, clock))
+                        # Intermittent identity (lead Q2): a "python3" worker whose
+                        # arguments name it only from the last tick ("late"), only
+                        # at one interior tick ("middle"), or never. A named read is
+                        # a read of it, so "late" and "middle" put it in scope for
+                        # its whole history; "never" leaves it out.
+                        middle = ticks[len(ticks) // 2]
+                        if identity == "late":
+                            def named(now):
+                                return now >= ticks[-1]
+                        elif identity == "middle":
+                            def named(now, middle=middle):
+                                return middle <= now < middle + 0.03
+                        else:
+                            def named(now, identity=identity):
+                                return identity == "always"
+                        self.assertTrue(birth is None or middle > birth)
+                        in_scope = identity != "never"
 
-                        def rows(now, counter=counter, kind=kind, printed=printed):
+                        def rows(now, counter=counter, kind=kind, printed=printed, identity=identity, named=named):
                             cpu = counter(ns(now))
                             if cpu is not None:
-                                yield (fixture.PID, -100 if printed is None else printed, cpu, fixture.WORKER,
-                                       "/fixture/mdworker_shared")
+                                started = -100 if printed is None else printed
+                                if identity == "always":
+                                    yield fixture.PID, started, cpu, fixture.WORKER, "/fixture/mdworker_shared"
+                                else:
+                                    yield (fixture.PID, started, cpu, "python3",
+                                           "python3 mdworker_task.py" if named(now) else "python3")
                             elif kind == "reused":
                                 yield fixture.PID, -100, 7, "ordinary", "/fixture/ordinary"
 
@@ -3859,21 +3959,26 @@ class R0FinalVerdictTest(unittest.TestCase):
 
                         Clocked.reads_at = {tuple(contention.PS_ARGV): {ns(t) for t in ticks},
                                             tuple(prewindow.PS_ARGV): {ns(t) + 10_000_000 for t in ticks}}
-                        label = dict(kind=kind, cadence=cadence, load=load, clock=clock)
+                        label = dict(kind=kind, cadence=cadence, load=load, clock=clock, identity=identity)
                         with self.subTest(**label):
                             result, model = self.run_model(fixture.Case(f"{kind}_{load}", end=ticks[-1]), Clocked)
                             withheld = (result["rc"], result["published"]) == (2, False)
                             if stalled:
+                                # When the stall shows only in the publication read's
+                                # window, an unstable clock withholds first, at finish().
                                 self.assertTrue(withheld, result)
-                                self.assertIn("stalled", result["reason"])
+                                self.assertTrue("stalled" in result["reason"]
+                                                or (unstable and "clock_unstable" in result["reason"]), result)
                             elif unstable:
                                 self.assertTrue(withheld, result)
                                 self.assertIn("clock_unstable", result["reason"])
                                 self.assertEqual(bool([f for f in model.guard.contention_flags
                                                        if f.get("kind") == "wall_clock"]), diverged, result)
-                            elif proven or exact:
+                            elif in_scope and (proven or (exact and identity == "always")):
                                 self.assertTrue(withheld, result)
-                            elif not (truth or l3_rate or (sparse and best >= 149)):
+                            elif not (in_scope and (truth or l3_rate)):
+                                # R0-RATE, the admitted rate rule, is the only
+                                # disclosed reason to withhold without true contention.
                                 self.assertEqual((result["rc"], result["published"], result["flags"]),
                                                  (0, True, []), result)
 
