@@ -1052,6 +1052,26 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+594. **Magistrate 6031f6e8: correction to item 591: the sessions-archive download stopped after the evict (only loop-bytes is local); the run block's download gate never passed and was stopped at 12:51 with nothing launched; v2 without the gate launches f2-stab-16-l001 at about 12:56**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-25T20:00:00-08:00
+on_early_or_refused: Read the verdict first. If f2stab16-6031f6e8/run-out.txt has no LAUNCH_RC line (WAIT/STOP before launch: not quiet, or the sessions-archive download not finished, by 13:10; or a launcher precondition refusal), nothing launched: L001 stays unrun; the next activation re-selects at its own t0 (from 13:15:00 pin A, ARG 02:00-02:35, kit 09 L007 onward, 3/2/1 legs with the fence clear of every 02:00-02:35 band) and issues a new typed item before launch, staying alive until LAUNCH_RC prints. A launcher refusal on kit or launcher state, or a non-clean close: record it, hold kit f2-stab-16 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, continue down the ladder. A census or soak refusal on a measured contending process with a proven clean close is not a kit hold (items 505, 547). A clean close with a leg not admitted is recorded, not a stop and not a kit hold (items 467, 479, 520). Item 576 is STOPPED at step 1 until the lead answers on main (the code line for the extra bindings, and whether packs/bytes/withheld is restored); at the first span boundary after that answer, finish item 588 (download sessions.tar.zst again, it is NOT local; then extract and verify per restore588-6031f6e8/) and run item 576 from step 1 with the next refit-N, before issuing the next span.
+next_observable: f2stab16-6031f6e8/run-out.txt shows LAUNCH_RC=0 with the fence (t0 after three quiet minutes from 12:53, expected ~12:56 Wed; expected close t0+4,703 s, worst case t0+5,850 s; read the true deadline and pid from run-out.txt; check the pid, not the deadline). The next activation, after the fence pid is gone and runner_receipt.json exists, Checks attempt cq-f2-stab-16-l001-a1 at /Users/edr/campaign-out/f2-stab-16/cq-f2-stab-16-l001-a1 with f2stab16-check-template-6031f6e8/ (copy to f2stab16-check-NEWACT/, replace NEWACT; LEGS L001; kit sha 0fc1139d...2b96, pin B 6e9d42f1d; asserts batch_windows == [] and span_id == cq-f2-stab-16-l001-a1), maps the quiet span to wall time through the receipt's ended pair and counts maintenance lines in it, copies at once with the template's offload-run.sh; then the ladder (items 422, 463, 464, 507, 536, 553, 583): before 13:15:00 kit 16 L002 on pin B (queues-1leg/f2-stab-16.json seq 2) if the plan fits the gap; from 13:15:00 pin A with kit 09 L007 onward (fillers-w2/queues-3leg/f2-stab-09-l007-l008-l009.json or the 2-leg/1-leg rows).
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795639959, "number": 594, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": ["591"]}
+```
+
+- **Correction to item 591.** The `sessions.tar.zst` download did stop after the 10:45 `brctl evict` (no download op in `brctl status` from about 11:00, free space flat at 123 GiB, file still 0 blocks local). So item 591's claim that iCloud kept downloading it and that it would be kept local is wrong: **only `loop-bytes.tar.zst` is local; the sessions archive must be downloaded again for item 576's re-run** (about 1.5 h).
+- The v1 run block's added gate (sessions archive fully local) could therefore never pass. It sampled from 10:51 to 12:50, the host quiet from about 11:00 on, and was stopped at 12:51 by this session's 2 h background-job limit, before any launch: no output directory, no label, attempt unspent.
+- **v2 run block** (`f2stab16-6031f6e8/run-block.sh`; v1 kept as `run-block.v1-dlgate.sh`): the download gate replaced by "no `brctl download` process", everything else unchanged (three quiet minutes, give-up 13:10, t0 asserted in 10:50:01-13:14:59, roster [L001], worst case 5,850 s). Started 12:52; launch expected about 12:56, the last act of this activation.
+- The ~2 h of quiet Mac time from 11:00 to 12:51 was lost to my gate; cost named here as the session record requires.
+- Email to Ed at 10:51 said the archives stay on the Mac; one of the two does not. No new email (no change he must act on).
+
 593. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-25 10:56 PST: RL-217 A.5 ADDENDUM, the fourteen lm-interim-01 inventories in full**
 
 ```pointer
