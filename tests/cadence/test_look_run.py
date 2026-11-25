@@ -695,7 +695,7 @@ if opts["exports"]:
         holds = {flag: "RL-999" for flag in R.M.STAGE2_HOLD_FLAGS["interim"]
                  if stage1[flag.split(".")[0]].get(flag.split(".")[1]) is True}
         record = dict(row, execution_host="hw1:" + "a" * 64, custody_root=str(layout.root),
-                      public_root="fixture", holds_cleared=holds)
+                      public_root=R.M.LOOK_PUBLIC_ROOT, holds_cleared=holds)
         return real_validate(record, stage1, layout)
     R.validate_execution_row = validate
     if not opts.get("real_twin"):
