@@ -242,3 +242,11 @@ The frozen admission matrix and the full suite run in hosted CI.
 
 E.6 remains provisional for the reasons above. The independent final-head
 recheck remains open.
+
+## Round 5 (lead fix, after Astra's final narrow check)
+
+Astra's final narrow check at `3c45f2e0d` (reproducer `final_receipt_fetch.py`) stopped the run while it opened the stock receipt in the before-write check and fetched a ledger whose verdict commitment had changed. `434f32151` exited 2. `3c45f2e0d` exited 0 and wrote `level_r.json` and `stage1.json` against the superseded commitment, because `stage1_authority` read the ledger before the receipt.
+
+The fix is in `stage1_authority`. It reads the receipt before the ledger, and its last read is the committed row again (`require_inputs_committed`), which refuses if the row changed while the receipt or the fence was being validated. The only window left is between that final read and the write, a single comparison; the parent has the same window.
+
+The regression is `test_campaign_refuses_a_verdict_hash_fetched_while_the_last_receipt_is_validated`. The fetch fires just before the third `require_rules34_receipt` call. It fails at `3c45f2e0d` (exit 0, `stage1.json` written) and passes here. The harness's `advance_main` now takes `before:`/`after:` with a call number, and `M.` targets. The enumeration test names the receipt read under its new condition. The runner and manifest digests are re-pinned.

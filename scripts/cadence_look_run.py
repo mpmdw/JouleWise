@@ -1460,6 +1460,11 @@ def stage1_authority(a, layout, rehearsal):
     not part of the state: as at 75ce4bf5c, an unrelated commit on the ledger ref leaves the ledger, the row and
     therefore the admission unchanged."""
     inputs = a.stage1_inputs
+    # PR #971 round 5 (Astra final_receipt_fetch): every file this check reads comes BEFORE the ledger fetch, so a
+    # fetch that lands while the receipt is read is seen by the ledger read below, not missed by an earlier one.
+    receipt = None
+    if rehearsal is None:
+        receipt = layout.read("rules_3_4_receipt")
     row = M.require_inputs_committed(ROOT, F.LOOK_ID, inputs["manifest_sha256"], roster_sha256=inputs["roster_sha256"],
                                      verdicts_sha256=inputs["verdicts_sha256"], ledger_ref=a.ledger_ref,
                                      ruled_exclusions=inputs["ruled_exclusions"],
@@ -1471,9 +1476,16 @@ def stage1_authority(a, layout, rehearsal):
         rehearsal_host(row)
         state["destination"] = str(rehearsal_fence(rehearsal, layout, a.rehearsal_refs))
     else:
-        receipt = layout.read("rules_3_4_receipt")
         M.require_rules34_receipt(ROOT, gate, row, inputs["verdicts_sha256"], inputs["pins"], receipt)
         state["receipt_sha256"] = hashlib.sha256(receipt).hexdigest()
+    # PR #971 round 5: the last read of this check is the ledger row again, so a fetch that lands while the receipt
+    # or the fence is validated is seen here rather than missed by the reads above.
+    final = M.require_inputs_committed(ROOT, F.LOOK_ID, inputs["manifest_sha256"], roster_sha256=inputs["roster_sha256"],
+                                       verdicts_sha256=inputs["verdicts_sha256"], ledger_ref=a.ledger_ref,
+                                       ruled_exclusions=inputs["ruled_exclusions"],
+                                       draft_rehearsal=inputs["draft_rehearsal"])
+    if final != row:
+        raise owned_refusal("stage 1's admission changed while it was derived: row")
     return state, gate
 
 

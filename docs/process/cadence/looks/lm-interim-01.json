@@ -532,7 +532,7 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "7235c1c088ea5f74696be11ddb3e4d041f9ef879e6c8117b794fa122daaa49b8"
+        "sha256": "38a6cdff1087d5bdd86ec62bf386b7454714c3f338a2803e2132c9676c6f174b"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
