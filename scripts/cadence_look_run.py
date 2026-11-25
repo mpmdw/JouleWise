@@ -62,8 +62,10 @@ import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import sys
 import tempfile
+import threading
 import uuid
 import time
 
@@ -251,6 +253,23 @@ def layout_of(doc):
         raise F.LookInputError("layout: " + "; ".join(error.problems)) from None
 
 
+@contextlib.contextmanager
+def _verifier_sigterm():
+    """Unwind the verifier's temporary directory on CLI SIGTERM. SIGKILL cannot run cleanup."""
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+
+    def terminate(signum, _frame):
+        raise SystemExit(128 + signum)
+
+    previous = signal.signal(signal.SIGTERM, terminate)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
 def run_verifier(doc, pins, pins_sha, span_ids, sdir_of):
     """RL-194a section 1: the hash-only verifier, as its own process, before this stage parses anything. It reads
     every pinned file as opaque bytes; this process reads back only its result file (``pass`` or ``fail``, and for
@@ -265,7 +284,7 @@ def run_verifier(doc, pins, pins_sha, span_ids, sdir_of):
     # The result is read back from a directory this process made and removes. No caller names where it goes: a
     # refused run leaves no file anywhere (audit 1 on 2082c1a51: a result written at the public destination made
     # the next registered execution refuse, with no reservation taken).
-    with tempfile.TemporaryDirectory(prefix="jw-look-verify-") as tmp:
+    with _verifier_sigterm(), tempfile.TemporaryDirectory(prefix="jw-look-verify-", ignore_cleanup_errors=True) as tmp:
         out = Path(tmp) / "verification.json"
         pins_path = Path(tmp) / "pins.json"         # the manifest's own list, as the bytes its sha256 names
         pins_path.write_bytes(PINS.pin_list_bytes(pins))
@@ -1618,12 +1637,17 @@ def finish_stage2(a, stage1, prepared, doc, commit, manifest_sha, restricted, pu
     coefficient_sha = sha256_file(coefficient_path)
     verdict = fit["qualified_interim_half"]["verdict"]
     drift = step3["tripwire"]["decision"]
-    comparison = run_twin(twin_path, a, stage1, fit, step3, coefficients, doc=doc, commit=commit,
-                          manifest_sha=manifest_sha, coefficient_sha=coefficient_sha, restricted=restricted,
-                          deadline=deadline, overrides=overrides)
+    try:
+        comparison = run_twin(twin_path, a, stage1, fit, step3, coefficients, doc=doc, commit=commit,
+                              manifest_sha=manifest_sha, coefficient_sha=coefficient_sha, restricted=restricted,
+                              deadline=deadline, overrides=overrides)
+        agreement = comparison["agreement"]
+    except Exception:  # RL-180: failure of the independent comparison leaves the primary fit evaluable.
+        comparison = {"agreement": "not_evaluable"}
+        agreement = comparison["agreement"]
     if sha256_file(coefficient_path) != coefficient_sha:
         raise F.LookInputError("the stored coefficient bytes changed during the twin comparison")
-    if comparison["agreement"] == "no":
+    if agreement == "no":
         from joulewise.cadence_looks import interim_twin
 
         try:
@@ -1635,7 +1659,7 @@ def finish_stage2(a, stage1, prepared, doc, commit, manifest_sha, restricted, pu
         raise F.LookInputError("stage 2: unexpected private artifact names")
     release.sync_directory(restricted)
     expected = release.public_record(doc["look_id"], manifest_sha, commit, stage1, a.stage1_sha256, coefficient_sha,
-                                     verdict, drift, comparison["agreement"])
+                                     verdict, drift, agreement)
     release.write_public(public, restricted, expected, public_schema, expected=expected)
 
 

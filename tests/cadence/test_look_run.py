@@ -18,6 +18,8 @@ import re
 import shutil
 import statistics
 import struct
+import subprocess
+import sys
 import tempfile
 import unittest
 import unittest.mock
@@ -156,13 +158,16 @@ class AstraPreResponse(unittest.TestCase):
                 if key != "stage1":
                     raise AssertionError("opened responses")
                 return F.dump(stage1)
+        # The frozen test copy has no Git history. Supply the draft commit at the same seam as the mocked ledger.
         with unittest.mock.patch.object(R, "_VERIFIED", [({}, None)]), \
              unittest.mock.patch.object(R, "layout_of", return_value=Layout()), \
              unittest.mock.patch.object(R, "_json", side_effect=[{}, AssertionError("opened responses")]) as read, \
+             unittest.mock.patch.object(R.M, "_git", return_value=(0, b"0" * 40 + b"\n", b"")) as git, \
              unittest.mock.patch.object(R, "draft_ledger_check"), \
              unittest.mock.patch.object(R, "stage2_energy_preflight"):
             with self.assertRaisesRegex(F.LookInputError, reason):
                 R.cmd_stage2(args)
+            git.assert_called_once_with(R.ROOT, "rev-parse", "HEAD")
             read.assert_called_once()
 
 class PrefixPublication(unittest.TestCase):
@@ -1048,6 +1053,36 @@ class CliGate(unittest.TestCase):
                                   "--out", os.path.join(d, "fit.json")], mock_stage2=True)
             self.assertEqual(rc, 2)
             self.assertEqual(LAST_RUN["stage2_calls"], 0)
+
+
+class VerifierCleanup(unittest.TestCase):
+    @unittest.skipIf(_NUMPY_MISSING, "the look runner needs numpy")
+    def test_sigterm_removes_the_verifiers_temporary_digests(self):
+        driver = r'''
+import os
+from pathlib import Path
+import signal
+import subprocess
+from unittest.mock import patch
+from scripts import cadence_look_run as run
+
+def interrupt(argv, **kwargs):
+    pins = Path(argv[argv.index("--pins") + 1])
+    assert pins.is_file()
+    Path(argv[argv.index("--out") + 1]).write_text("invented verifier result")
+    signal.raise_signal(signal.SIGTERM)
+    raise AssertionError("SIGTERM did not unwind the verifier")
+
+doc = run.M.load_json(run.manifest_path())
+with patch.object(subprocess, "run", interrupt):
+    run.run_verifier(doc, {"spans": []}, "0" * 64, [], None)
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(__file__).resolve().parents[2]
+            result = subprocess.run([sys.executable, "-B", "-c", driver], cwd=root,
+                                    env={**os.environ, "TMPDIR": tmp}, capture_output=True, timeout=30)
+            self.assertEqual((result.returncode, result.stdout, result.stderr), (143, b"", b""))
+            self.assertEqual(list(Path(tmp).iterdir()), [])
 
 
 class NoHpEnergy(unittest.TestCase):

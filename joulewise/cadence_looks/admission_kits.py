@@ -7,6 +7,23 @@ file of a filler is in this repository, so its legs are unknown here. tests/cade
 regenerates both from those files and compares."""
 
 KITS = {
+    "7f5456458d029c6413a6bb164d1dfef7945e7b564638590f48a7a61f075c465d": {  # docs/process/cadence/kits/cl-ctl-01.draft.json
+        "campaign_id": "cl-ctl-01", "frozen_commit": "0000000000000000000000000000000000000000", "runner_kind": "cadence-ctl-v1",
+        "legs": (
+            ('L001', 2492371355, 'q0', 2000, 2048, 'span'),
+            ('L002', 3901590846, 'q0', 2000, 1024, 'span'),
+            ('L003', 4008811407, 'q0', 2000, 1024, 'span'),
+            ('L004', 1386543436, 'q0', 2000, 1024, 'span'),
+            ('L005', 92817822, 'q0', 2000, 1024, 'span'),
+            ('L006', 603567892, 'q0', 2000, 1024, 'span'),
+            ('L007', 603567892, 'q0', 2000, 1024, 'span'),
+            ('L008', 3928512548, 'q0', 2000, 1024, 'span'),
+            ('L009', 800711026, 'q0', 2000, 1024, 'span'),
+            ('L010', 2927643913, 'q0', 2000, 1024, 'span'),
+            ('L011', 3745194143, 'q0', 2000, 1024, 'span'),
+            ('L012', 807871911, 'q0', 2000, 1024, 'span'),
+        ),
+    },
     "c76344c50aebc271cef5711ecb4f9b05482e8b5593a57afa16e973dfe1dc66d7": {  # docs/process/cadence/kits/cl-dev-01.json
         "campaign_id": "cl-dev-01", "frozen_commit": "b4b6aeb192da60d895a7529311b06599efff5be4", "runner_kind": "cadence-legs-v1",
         "legs": (
@@ -107,6 +124,23 @@ KITS = {
             ('L010', 287678889, 'q0', 2000, 4096, 'own'),
             ('L011', 1231432479, 'q0', 19458, 4096, 'own'),
             ('L012', 1449588256, 'q0', 10000, 4096, 'span'),
+        ),
+    },
+    "7eaf2660312ce6b3af90e8a1d9da1e05a6c409366a88a7e5e558d3bebb9d2965": {  # docs/process/cadence/kits/cl-hp-01.json
+        "campaign_id": "cl-hp-01", "frozen_commit": "dd206025abb30fd5c07515cd4b34b3e653174810", "runner_kind": "cadence-legs-v1",
+        "legs": (
+            ('L001', 4048693807, 'q0', 19458, 4096, 'own'),
+            ('L002', 1251089132, 'q0', 19458, 4096, 'own'),
+            ('L003', 3543179003, 'q0', 19458, 4096, 'own'),
+            ('L004', 954626506, 'q0', 19458, 4096, 'own'),
+            ('L005', 983646378, 'q0', 19458, 4096, 'own'),
+            ('L006', 2048410933, 'q0', 19458, 4096, 'own'),
+            ('L007', 1350544700, 'q0', 19458, 4096, 'own'),
+            ('L008', 1180804720, 'q0', 19458, 4096, 'own'),
+            ('L009', 3701535075, 'q0', 19458, 4096, 'own'),
+            ('L010', 2827066148, 'q0', 19458, 4096, 'own'),
+            ('L011', 2178814401, 'q0', 19458, 4096, 'own'),
+            ('L012', 1042807770, 'q0', 19458, 4096, 'own'),
         ),
     },
     "85c03600256e907d3a7e03667e922407df69698d14cbe0ab2bd64660ed052450": {  # docs/process/cadence/kits/cl-qual-01.v1.1.json

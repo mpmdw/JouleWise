@@ -6761,6 +6761,10 @@ Parenthetical states below are historical at each report's head; they are not
 current restart instructions. Current state is the CURRENT STATE block at
 the top of this file.
 
+- 2026-11-24 interim look admission follow-up [AGENT]. The draft branch
+  `ops/2026-11-24-look-hp01-admission` implements the lead's hp-01 roster
+  ruling and addresses the cold-seat findings. The [run report](docs/run_reports/2026-11-24-look-hp01-admission.md)
+  records the pin changes and draft gates.
 - 2026-07-31 claims desk day (metrology suite merged via PR #90 + D-096
   window-A freeze; D-094/D-095; cooldown-join gauntlet commits 1-2 merged
   via PR #91 with DA-1 closed under the D-097 cold-gate deferral):
