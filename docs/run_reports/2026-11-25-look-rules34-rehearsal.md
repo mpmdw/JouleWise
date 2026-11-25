@@ -70,3 +70,44 @@ the registered reservation basename.
 The lead's next step for E.1 is to bind the manifest, whole roster, input
 pins and Air host in the shared draft, then follow the
 [operator sequence](../process/cadence_look_manifest.md#7-stage-1-rehearsal-for-the-manifest-pass).
+
+## Fix 1 after Astra's audit
+
+Astra reproduced a HIGH at `75ce4bf5c`. The official row command accepted
+the rehearsal verdict hash. Moving that same file into the registered
+campaign location then let stage 1 and the stage-1 row command succeed
+with zero stock producer invocations. The retained audit is under
+`astra-971-audit-1125`, with `FINAL-MESSAGE.md`, `tmp/provenance.py` and
+`tmp/provenance.log`.
+
+The stock producer now verifies the manifest, roster and rehearsal hash
+commitments on main, computes the same verdict bytes and publishes the
+verdict followed by a private, closed `rules_3_4.receipt.json`. The receipt
+binds the committed producer code, the first-parent main commit that put
+the current look row in effect, the manifest, roster and verdict hashes,
+and the producer's wall and monotonic clock readings. The wall reading
+must follow the Git committer timestamp. The monotonic reading is sampled
+in the producer after the verified row and completed judgment. A later
+commit that leaves the look row intact preserves its receipt. A changed
+row needs a fresh stock run. Campaign stage 1 verifies the receipt before
+admitting spans. The draft rehearsal continues to publish only verdict
+bytes. [RL-217 E.1](https://github.com/mpmdw/JouleWise/blob/0a1433996176d204ebcf4d4c7359803388821721/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L25934)
+
+The regression uses the official row command and moves the same rehearsal
+inode to the campaign destination. Stage 1 refuses without the receipt.
+Wrong verdict, clock, shape and stale ledger bindings also refuse. The
+post-commit stock run reproduces the rehearsal bytes and admits stage 1.
+The admission suite's driver plants receipts for its generated inputs.
+Its case-source digest, test data and expected decisions are unchanged.
+The runner, producer and manifest library were re-pinned. The host-command
+inventory tracks the revised runner docstring; production commands reuse
+the existing Git seam.
+
+All seven rehearsal checks and both host-command inventory checks passed
+locally at utility priority. Draft validation, pin and generated-state
+checks passed. The canonical local discovery suite remains outside this
+seat's archived-data read boundary.
+
+The HIGH is addressed in the fix and awaits Astra's final-head recheck.
+The E.6 timings above remain provisional until the input pins provide
+per-stream byte sizes and the literal Air invocation is available.

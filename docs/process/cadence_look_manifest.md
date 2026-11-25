@@ -311,9 +311,19 @@ shared branch against origin.
    `python3 -I -B scripts/cadence_look_run.py stage1 --rehearsal RULES_DIRECTORY`
    with the producer's directory. Stage 1 verifies the verdict hash against
    the draft ledger before it reads the selected spans.
-3. After the manifest is committed, run the stock producer and compare its
-   output sha256 to the rehearsal sha256. The lead returns a mismatch to the
-   research lead before campaign stage 1.
+3. Commit the manifest and then bind the registered roster and rehearsal
+   verdict hashes in the committed row on main with the `row` command. Once
+   that row is on main, run the stock producer with the registered manifest,
+   roster, custody root and `rules_3_4.json` destination. A different stock
+   hash refuses before publication and goes to the research lead.
+4. A successful stock run writes `rules_3_4.receipt.json` beside its verdict.
+   The receipt records the producer commit, the first-parent main commit
+   that installed the current look row, the manifest and roster hashes,
+   the verdict hash and the producer's wall and monotonic clock readings.
+   Campaign stage 1 checks the receipt and verdict against that row before
+   admitting spans. Rehearsal stage 1 uses the draft verdict without a
+   receipt. If the campaign row changes before stage 1, the stock run must
+   produce a fresh receipt for that row.
 
 Stage 1 selects the range in `stages.stage1.dry_run`, verifies the
 selected spans against the pins and uses the campaign's stage-1 time

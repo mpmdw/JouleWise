@@ -782,6 +782,8 @@ def _cli_subprocess(argv, trap=False, mock_stage2=False, repo=None, extra=None):
         placed = look_minirepo.place_in(repo, argv, pin=pin)
         if placed.ledger:                   # a draft copy's scratch ledger, in place of the copy's LOOKS.json
             layout_opts = {"ledger": placed.ledger}
+        if placed.argv[0] == "stage1" and "--allow-draft" not in placed.argv:
+            look_minirepo.seed_rules34_receipt(repo, placed.root / F.LOOK_ID)
     else:
         placed = layout_fixture.place(argv, repo=REPO)
         if placed.placed:
@@ -886,6 +888,9 @@ class Stage1Rehearsal(unittest.TestCase):
         return {name: (directory / M.LOOK_FILES[name]).read_bytes() for name in ("level_r", "stage1")}
 
     def test_rehearsal_uses_campaign_reads_and_leaves_later_campaign_byte_identical(self):
+        from tests.cadence import look_minirepo as MR
+
+        MR.seed_rules34_receipt(self.repo, self.look)
         campaign, campaign_observed = self.invoke()
         self.assertEqual(campaign.returncode, 0, campaign.stderr)
         control = self.outputs(self.look)
@@ -964,6 +969,7 @@ class Stage1Rehearsal(unittest.TestCase):
         from tests.cadence import look_minirepo as MR
 
         main = self.git(self.repo, "rev-parse", "HEAD").stdout.strip()
+        MR.seed_rules34_receipt(self.repo, self.look)
         campaign, _ = self.invoke()
         self.assertEqual(campaign.returncode, 0, campaign.stderr)
         control = self.outputs(self.look)
@@ -1089,6 +1095,8 @@ class Stage1Rehearsal(unittest.TestCase):
 
         existing = self.scratch / "taken"
         existing.mkdir()
+        occupied_receipt = existing / M.LOOK_FILES["rules_3_4_receipt"]
+        occupied_receipt.write_bytes(b"generated sentinel")
         alias = self.scratch / "alias"
         alias.symlink_to(self.custody, target_is_directory=True)
         for path, reason in ((existing, "already exists"), (self.custody / "new", str(self.custody)),
@@ -1101,6 +1109,7 @@ class Stage1Rehearsal(unittest.TestCase):
                 self.assertIn(reason, refused.stderr)
                 self.assertEqual(refused.stdout, "")
                 self.assertEqual(observed["served"], [])
+        self.assertEqual(occupied_receipt.read_bytes(), b"generated sentinel")
 
         rehearsal, _ = self.invoke(self.rehearsal, producer=True)
         self.assertEqual(rehearsal.returncode, 0, rehearsal.stderr)
@@ -1127,16 +1136,72 @@ class Stage1Rehearsal(unittest.TestCase):
         doc["status"] = "committed"
         self.manifest.write_bytes(R.release.dump(doc))
         row.update(status="committed", sha256=R.sha256_file(self.manifest))
+        row.pop("verdicts_sha256")
         self.ledger.write_bytes(R.release.dump(ledger))
         MR.git_commit(self.repo, "Commit the synthetic look", publish=False)
         self.git(self.repo, "push", "-q", "origin", "HEAD:refs/heads/main")
-        stock = MR.py(self.repo, "joulewise/cadence_looks/inclusion_34.py",
-                      "--roster", self.look / "roster.json", "--custody", self.custody,
-                      "--manifest", self.manifest, "--out", campaign_rules)
+        row_cli = MR.py(self.repo, "scripts/cadence_look_manifest.py", "row", "--repo", self.repo,
+                        "--manifest", self.manifest, "--roster", self.look / "roster.json",
+                        "--verdicts", rules, "--write")
+        self.assertEqual(row_cli.returncode, 0, row_cli.stdout + row_cli.stderr)
+        MR.git_commit(self.repo, "Bind inputs through the stock row CLI", publish=False)
+        self.git(self.repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+        inode = rules.stat().st_ino
+        rules.rename(campaign_rules)
+        self.assertEqual(campaign_rules.stat().st_ino, inode)
+        refused, observed = self.invoke()
+        self.assertEqual(refused.returncode, 2, refused.stderr)
+        self.assertIn("rules_3_4.receipt.json: absent", refused.stderr)
+        self.assertEqual(observed["served"], [])
+        self.assertFalse((self.look / "stage1.json").exists())
+        campaign_rules.rename(rules)
+
+        stock_args = ("joulewise/cadence_looks/inclusion_34.py", "--roster", self.look / "roster.json",
+                      "--custody", self.custody, "--manifest", self.manifest, "--out", campaign_rules)
+        stock = MR.py(self.repo, *stock_args)
         self.assertEqual(stock.returncode, 0, stock.stdout + stock.stderr)
         self.assertEqual(M.sha256_file(campaign_rules), digest)
         self.assertEqual(campaign_rules.read_bytes(), rules.read_bytes())
         self.assertEqual(campaign_rules.read_text(), json.dumps(rj(rules), indent=1, sort_keys=True) + "\n")
+        receipt = self.look / M.LOOK_FILES["rules_3_4_receipt"]
+        recorded = rj(receipt)
+        commit = self.git(self.repo, "rev-parse", "HEAD").stdout.strip()
+        self.assertEqual(recorded["ledger_commit"], commit)
+        self.assertEqual(recorded["producer_commit"], commit)
+        self.assertEqual(recorded["verdicts_sha256"], digest)
+        self.assertEqual(receipt.stat().st_mode & 0o777, 0o600)
+        for update, reason in (({"verdicts_sha256": "0" * 64}, "verdict sha256 differs"),
+                               ({"unexpected": True}, "invalid closed schema"),
+                               ({"wall_time_ns": 0}, "post-commit run"),
+                               ({"monotonic_ns": True}, "invalid closed schema")):
+            with self.subTest(update=update):
+                receipt.write_bytes(R.release.dump({**recorded, **update}))
+                refused, observed = self.invoke()
+                self.assertEqual(refused.returncode, 2, refused.stderr)
+                self.assertIn(reason, refused.stderr)
+                self.assertEqual(observed["served"], [])
+        receipt.write_bytes(R.release.dump(recorded))
+
+        MR.git_commit(self.repo, "Unrelated change after the receipt", publish=False)
+        self.git(self.repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+        accepted, _ = self.invoke()
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        for name in ("stage1", "level_r"):
+            (self.look / M.LOOK_FILES[name]).unlink()
+
+        ledger = rj(self.ledger)
+        ledger["looks"][0]["execution_host"] = "hw1:" + "b" * 64
+        self.ledger.write_bytes(R.release.dump(ledger))
+        MR.git_commit(self.repo, "Change this look's row without changing its input hashes", publish=False)
+        self.git(self.repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+        refused, observed = self.invoke()
+        self.assertEqual(refused.returncode, 2, refused.stderr)
+        self.assertIn("producer commit must contain the ledger row on main", refused.stderr)
+        self.assertEqual(observed["served"], [])
+        stock = MR.py(self.repo, *stock_args)
+        self.assertEqual(stock.returncode, 0, stock.stdout + stock.stderr)
+        accepted, _ = self.invoke()
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
 
 
 class Stage1Custody(unittest.TestCase):

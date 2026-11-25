@@ -189,11 +189,31 @@ def py(root, rel, *args, tmpdir=None, pin=True):
         placed = place_in(root, args, pin=pin)
         if placed.ledger:                  # a draft copy reads its own LOOKS.json in place of a scratch ledger
             shutil.copyfile(placed.ledger, root / lm.LOOK_LEDGER_PATH)
+        if placed.argv[0] == "stage1" and "--allow-draft" not in placed.argv:
+            seed_rules34_receipt(root, placed.root / lm.INTERIM_LOOK_ID)
         result = run([sys.executable, "-I", "-B", str(root / rel), *placed.argv], tmpdir or tempfile.gettempdir(),
                      env=env)
         placed.collect()
         return result
     return run([sys.executable, "-I", "-B", str(root / rel), *map(str, args)], tmpdir or tempfile.gettempdir(), env=env)
+
+
+def seed_rules34_receipt(repo, look):
+    """Attest a generated verdict for tests that exercise later stage-1 checks with planted inputs."""
+    path = look / lm.LOOK_FILES["rules_3_4"]
+    if not path.is_file():
+        return
+    try:
+        head, ref, ledger = lm.committed_ledger(repo, ledger_ref=lm.PUBLIC_RUN_STATE_REF)
+    except lm.ManifestError:
+        return  # the test must reach its own checkout or ledger refusal
+    row = lm._look_row(ledger, lm.INTERIM_LOOK_ID)
+    digest = lm.sha256_file(path)
+    if row.get("verdicts_sha256") != digest:
+        return
+    gate = {"commit": head, "ref": ref, "ref_commit": lm.shared_ref(repo, ref)[1]}
+    receipt = lm.rules34_receipt(repo, gate, row, digest)
+    (look / lm.LOOK_FILES["rules_3_4_receipt"]).write_bytes(lm.release.dump(receipt))
 
 
 def write_pins(root, span_dirs=None, pins=None):

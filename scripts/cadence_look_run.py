@@ -15,6 +15,7 @@ list. Every other path is that root and the look id (``manifest.LookLayout``):
     <root>/<span id>/                          each roster span's custody copy
     <root>/lm-interim-01/roster.json            the roster (validate --span-ledger --roster-out)
     <root>/lm-interim-01/rules_3_4.json         inclusion_34.py's verdict file
+    <root>/lm-interim-01/rules_3_4.receipt.json post-commit producer receipt (RL-217 E.1)
     <root>/lm-interim-01/stage1.json            stage 1's output, created once; stage 2's input
     <root>/lm-interim-01/level_r.json           stage 1's level-R input, created once beside it
     <root>/lm-interim-01/superseded_stage1.json, superseded_level_r.json    a ruled rerun's kept files
@@ -1457,6 +1458,7 @@ def _stage1(a, stack):
         sdir_of = None
     else:
         ruled = ruled_exclusions(a.ruled_exclusion)
+        ledger_gate = None
         try:
             if rehearsal is not None:
                 a.rehearsal_dir = rehearsal_output(rehearsal, layout, a.rehearsal_refs, consume=True)
@@ -1476,6 +1478,9 @@ def _stage1(a, stack):
                                              draft_rehearsal=rehearsal is not None and doc["status"] == "draft")
             if rehearsal is not None:
                 rehearsal_host(row)
+            ledger_gate = M.ledger_gate(ROOT, a.ledger_ref)
+            if rehearsal is None:
+                M.require_rules34_receipt(layout, ledger_gate, row, rules_sha)
         roster = M.strict_json(roster_raw)
         if not isinstance(roster, list) or not all(isinstance(s, dict) and isinstance(s.get("span_id"), str) for s in roster):
             raise F.LookInputError("roster: not a list of spans")
@@ -1515,7 +1520,7 @@ def _stage1(a, stack):
         plan = stage1_preflight(roster, sdir_of, rules34, ruled=ruled, also_ruled=superseded[1],
                                 synthetic_only=a.allow_draft, outputs=outputs)
         _guard_loaded(doc)
-        a.ledger_gate_record = None if a.allow_draft else M.ledger_gate(ROOT, a.ledger_ref)
+        a.ledger_gate_record = ledger_gate
         extra = {"roster_sha256": roster_sha, "rules_3_4_sha256": rules_sha}
         return stage1_protected(a, layout, plan, ruled, superseded, extra, staging, sdir_of)
     if a.allow_draft and look_input.get("synthetic") is not True:

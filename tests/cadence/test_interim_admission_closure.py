@@ -601,6 +601,7 @@ class Arena:
         self.ledger.write_bytes(release.dump(shared) if self.audit else wire(shared))
         mr.git(self.mini,"reset","-q","--soft",self.base)
         mr.git_commit(self.mini,"Pin the generated custody as it now is")
+        mr.seed_rules34_receipt(self.mini,self.source/LOOK)  # each generated case has its own committed row
         self.ledger_bytes=self.ledger.read_bytes()
     def invoke(self,path):
         self.out.unlink(missing_ok=True)

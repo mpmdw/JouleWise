@@ -62,6 +62,7 @@ import hashlib
 import json
 import sys
 import math
+import os
 from pathlib import Path
 import re
 from typing import Any
@@ -607,6 +608,49 @@ def _write(path, doc):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _stock_inputs(lm, a, doc, ledger_ref):
+    head, ref, ledger = lm.committed_ledger(REPO, ledger_ref=ledger_ref)
+    row = lm._look_row(ledger, doc["look_id"])
+    layout = lm.LookLayout(REPO, doc)
+    rules = layout.file("rules_3_4")
+    receipt = layout.file("rules_3_4_receipt")
+    names = ((a.manifest, REPO / row["manifest_path"]), (a.roster, layout.file("roster")),
+             (a.custody, layout.root), (a.out, rules))
+    if any(Path(value).absolute() != path for value, path in names):
+        raise lm.ManifestError(["stock rules-3-4 requires the registered manifest, roster, custody root and verdict path"])
+    if a.detail_out and Path(a.detail_out).resolve() in (rules, receipt):
+        raise lm.ManifestError(["stock rules-3-4 detail output overlaps the verdict or receipt"])
+    roster_raw = layout.read("roster")
+    if (row["status"] != "committed" or not row.get("verdicts_sha256")
+            or row.get("roster_sha256") != hashlib.sha256(roster_raw).hexdigest()):
+        raise lm.ManifestError(["stock rules-3-4 requires the committed roster and rehearsal verdict hashes on main"])
+    gate = {"commit": head, "ref": ref, "ref_commit": lm.shared_ref(REPO, ref)[1]}
+    return gate, row, layout, roster_raw
+
+
+def _publish_stock(lm, layout, verdicts, receipt):
+    import tempfile
+
+    # Prepare both bytes before publishing. The receipt goes last; an earlier receipt can only attest
+    # the new bytes if both the row and the freshly computed verdict are identical.
+    with tempfile.TemporaryDirectory(prefix=".rules-3-4-", dir=layout.look) as tmp:
+        for key, data in (("rules_3_4", verdicts), ("rules_3_4_receipt", lm.release.dump(receipt))):
+            if key == "rules_3_4_receipt":
+                mode = 0o600
+            else:
+                mode = 0o644
+            target = layout.file(key)
+            scratch = Path(tmp) / target.name
+            with os.fdopen(os.open(scratch, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode), "wb") as handle:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+        for key in ("rules_3_4", "rules_3_4_receipt"):
+            target = layout.file(key)
+            os.replace(Path(tmp) / target.name, target)
+    lm.release.sync_directory(layout.look)
+
+
 def _fresh_bytecode_cache(*, create):
     """Mythos round-4 N4, Sol round-4 NEW-2: -B stops Python writing bytecode, not reading it. An unused
     pycache prefix means no repository module can run from a stale __pycache__ entry beside its
@@ -719,15 +763,19 @@ def main(argv=None):
             lm.fetch_public(REPO)
         doc = lm.verify_pins(a.manifest, REPO, allow_draft=a.allow_draft,
                              running=[Path(__file__).resolve(), REPO / RUNTIME_CONFIG], ledger_ref=ledger_ref)
-        gate = None if a.allow_draft else lm.ledger_gate(REPO, ledger_ref)
         stale = lm.cached_bytecode(REPO)
         if stale:
             raise lm.ManifestError([f"a repository module may have run from cached bytecode: {', '.join(stale[:4])}"])
+        gate = None
+        if a.allow_draft:
+            roster_raw = Path(a.roster).read_bytes()
+        else:
+            gate, row, layout, roster_raw = _stock_inputs(lm, a, doc, ledger_ref)
+        roster = lm.strict_json(roster_raw)
     except lm.ManifestError as error:
         for problem in error.problems:
             print(f"REFUSE {problem}")
         return 1
-    roster = _json(a.roster)
     if not isinstance(roster, list):
         print("REFUSE the roster is a JSON list (validate --span-ledger --roster-out writes it)")
         return 1
@@ -755,16 +803,29 @@ def main(argv=None):
     if unpinned:
         print("REFUSE loaded repository modules the manifest does not pin: " + ", ".join(unpinned[:6]))
         return 1
-    verdicts_sha = _write(a.out, verdicts)
-    print(f"wrote {a.out} sha256={verdicts_sha} legs={len(verdicts)} roster_sha256={lm.sha256_file(a.roster)}")
+    roster_sha = hashlib.sha256(roster_raw).hexdigest()
+    if a.allow_draft:
+        verdicts_sha = _write(a.out, verdicts)
+    else:
+        data = _verdict_text(verdicts).encode("utf-8")
+        verdicts_sha = hashlib.sha256(data).hexdigest()
+        try:
+            receipt = lm.rules34_receipt(REPO, gate, row, verdicts_sha)
+            _publish_stock(lm, layout, data, receipt)
+        except lm.ManifestError as error:
+            print(f"REFUSE {error}")
+            return 1
+        except OSError as error:
+            print(f"FAILED writing stock rules-3-4 output: {type(error).__name__}")
+            return 2
+    print(f"wrote {a.out} sha256={verdicts_sha} legs={len(verdicts)} roster_sha256={roster_sha}")
     detail["pins"] = {"manifest_sha256": lm.sha256_file(a.manifest), "look_id": doc["look_id"],
                       "inclusion_34_sha256": lm.sha256_file(Path(__file__).resolve()),
                       "runtime_config_sha256": lm.sha256_file(REPO / RUNTIME_CONFIG),
                       "code_sha256": lm.loaded_repo_files(REPO)}
     detail["allow_draft"] = bool(a.allow_draft)
     detail["ledger_gate"] = gate
-    # Mythos round-3 N8: the lead commits these two hashes in LOOKS.json before stage 1, which checks them
-    detail["roster_sha256"] = lm.sha256_file(a.roster)
+    detail["roster_sha256"] = roster_sha
     detail["verdicts_sha256"] = verdicts_sha
     if a.detail_out:
         print(f"wrote {a.detail_out} sha256={_write(a.detail_out, detail)}")

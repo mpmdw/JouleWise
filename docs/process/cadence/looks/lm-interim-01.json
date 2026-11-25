@@ -516,7 +516,7 @@
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
-        "sha256": "0ebbfef12638ba95a02984e6628b3f6085c70c4809106211f2457ee24b3b2103"
+        "sha256": "3484ae0c7d681d46a48a16ddc2cf5513f5878bf8b340bd80bf23cad7628098a8"
       },
       {
         "path": "joulewise/cadence_looks/time_fields.py",
@@ -532,7 +532,7 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "4c0c21200da44f96c14544a5ee423c67853a6c0bb48ebbada6aa07661b401d61"
+        "sha256": "a1fdb4b856db2831132e77f431ce70b7af47399ccdcd67fe199e6302f790f9fc"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
@@ -883,7 +883,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "a13fecdbea281d9543c9e6ef21ff37aeb2754c7bb86fa9efdd1c749044f27738"
+        "sha256": "c588f73b4dbe5a5737609370f0d338abcfd1b30c6aef4b8f2a11ece12ccf5f9e"
       },
       {
         "path": "joulewise/desk_compress.py",
@@ -969,7 +969,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "0ebbfef12638ba95a02984e6628b3f6085c70c4809106211f2457ee24b3b2103"
+          "sha256": "3484ae0c7d681d46a48a16ddc2cf5513f5878bf8b340bd80bf23cad7628098a8"
         },
         "cite": [
           "RL-149 §2.4",
@@ -985,7 +985,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "0ebbfef12638ba95a02984e6628b3f6085c70c4809106211f2457ee24b3b2103"
+          "sha256": "3484ae0c7d681d46a48a16ddc2cf5513f5878bf8b340bd80bf23cad7628098a8"
         },
         "cite": [
           "RL-149 §2.4",
@@ -1329,7 +1329,7 @@
       "RL-195 §1",
       "RL-180 §1"
     ],
-    "pin_check": "Stage 1 and stage 2 verify the repository pins, stage-1 roster and verdict commitments, and the committed LOOKS.json row. Stage 2 checks its host, both registered roots, the hold rulings, prior execution history and the twin pins before reserving RESTRICTED/ by exclusive mkdir. Stage 2 redirects stdout and stderr into RESTRICTED/ before opening a response file. An interrupted reservation spends the id and is recorded as interrupted with error_type none_recorded (RL-183). The parent captures both streams from the pinned isolated twin and adjudicates the stdout frame after writing the coefficient file (RL-181). A delivered RL-180 failure notice is recorded as failed with its closed type."
+    "pin_check": "Stage 1 and stage 2 verify the repository pins, stage-1 roster and verdict commitments, and the committed LOOKS.json row. Under RL-217 E.1 campaign stage 1 also verifies the receipt from the stock post-commit rules-3/4 run against that row and the verdict bytes. Stage 2 checks its host, both registered roots, the hold rulings, prior execution history and the twin pins before reserving RESTRICTED/ by exclusive mkdir. Stage 2 redirects stdout and stderr into RESTRICTED/ before opening a response file. An interrupted reservation spends the id and is recorded as interrupted with error_type none_recorded (RL-183). The parent captures both streams from the pinned isolated twin and adjudicates the stdout frame after writing the coefficient file (RL-181). A delivered RL-180 failure notice is recorded as failed with its closed type."
   },
   "review": {
     "cold_seat": "Mythos 5.2: the design attack on RL-166 Q1 to Q4 (Sun 10:00), then a fresh Mythos seat's cold review of the manifest, rules 3 and 4, the step 3 adapter and the fit code against RL-149 §2.6 and §2.7 as amended, with Q6's and Q11's checks (Mon 14:00). Neither wrote any of the code.",

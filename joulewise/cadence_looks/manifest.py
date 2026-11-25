@@ -38,6 +38,7 @@ import re
 import stat
 import subprocess
 import sys
+import time
 from datetime import date
 
 from joulewise.cadence_looks import custody_pins, interim_release as release, schema_check
@@ -1185,6 +1186,7 @@ def inputs_final_problems(repo, doc, run_state_text, roster_ids=None):
 LOOK_FILES = {
     "roster": "roster.json",                        # validate --span-ledger --roster-out
     "rules_3_4": "rules_3_4.json",                  # inclusion_34.py's verdict file
+    "rules_3_4_receipt": "rules_3_4.receipt.json",  # the post-commit stock producer's receipt (RL-217 E.1)
     "stage1": "stage1.json",                        # stage 1's output; stage 2's input
     "level_r": "level_r.json",                      # stage 1's level-R input, written beside its output
     "superseded_stage1": "superseded_stage1.json",  # a ruled rerun's kept stage-1 file (RL-173 E.1 item 4)
@@ -1282,7 +1284,7 @@ class LookLayout:
         """A fixed input's bytes: a regular file, opened without following a link."""
         path = self.file(key)
         try:
-            descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))
         except FileNotFoundError:
             raise ManifestError([f"{LOOK_FILES[key]}: absent from the look's directory"]) from None
         except OSError:
@@ -1941,6 +1943,65 @@ def stage1_history(repo, look_id, head):
         if row.get("stage1_sha256") and _triple(row) not in seen:
             seen.append(_triple(row))
     return seen
+
+
+RULES34_PRODUCER = "joulewise/cadence_looks/inclusion_34.py"
+RULES34_RECEIPT_SCHEMA = "joulewise.cadence_looks.rules_3_4_receipt.v1"
+
+
+def _rules34_receipt_binding(repo, gate, row, producer_commit):
+    """The commit that installed this exact row on main, even when unrelated main commits follow it."""
+    main = gate["ref_commit"]
+    rc, history, _ = _git(repo, "log", "--first-parent", "--format=%H %ct", main, "--", LOOK_LEDGER_PATH)
+    ledger_commit = None
+    if rc == 0:
+        for line in history.decode("ascii").splitlines():
+            commit, timestamp = line.split()
+            status, raw, _ = _git(repo, "show", f"{commit}:{LOOK_LEDGER_PATH}")
+            if status or row not in strict_json(raw)["looks"]:
+                break
+            ledger_commit, wall_floor_ns = commit, int(timestamp) * 1_000_000_000
+    if ledger_commit is None:
+        raise ManifestError(["rules-3-4 receipt: cannot identify this LOOKS.json row's main commit"])
+    if (not isinstance(producer_commit, str) or not re.fullmatch(r"[0-9a-f]{40}", producer_commit)
+            or _git(repo, "merge-base", "--is-ancestor", ledger_commit, producer_commit)[0]
+            or _git(repo, "merge-base", "--is-ancestor", producer_commit, main)[0]):
+        raise ManifestError(["rules-3-4 receipt: producer commit must contain the ledger row on main"])
+    rc, raw, _ = _git(repo, "show", f"{producer_commit}:{RULES34_PRODUCER}")
+    if rc or hashlib.sha256(raw).hexdigest() != sha256_file(Path(repo) / RULES34_PRODUCER):
+        raise ManifestError(["rules-3-4 receipt: producer code differs from the pinned producer at its commit"])
+    return {"schema": RULES34_RECEIPT_SCHEMA, "look_id": row["look_id"], "producer_commit": producer_commit,
+            "ledger_commit": ledger_commit, "manifest_sha256": row["sha256"], "roster_sha256": row["roster_sha256"],
+            "verdicts_sha256": row["verdicts_sha256"]}, wall_floor_ns
+
+
+def rules34_receipt(repo, gate, row, verdicts_sha256):
+    """Stamp the stock result after verifying the campaign row and computing the verdict from scratch."""
+    if verdicts_sha256 != row["verdicts_sha256"]:
+        raise ManifestError(["stock rules-3-4 verdict sha256 differs from the committed rehearsal hash"])
+    binding, wall_floor_ns = _rules34_receipt_binding(repo, gate, row, gate["commit"])
+    wall_time_ns, monotonic_ns = time.time_ns(), time.monotonic_ns()
+    if wall_time_ns <= wall_floor_ns or monotonic_ns <= 0:
+        raise ManifestError(["rules-3-4 receipt: producer clocks do not establish a post-commit run"])
+    return {**binding, "wall_time_ns": wall_time_ns, "monotonic_ns": monotonic_ns}
+
+
+def require_rules34_receipt(layout, gate, row, verdicts_sha256):
+    """Admit only a closed stock receipt for the exact campaign row and the verdict bytes already read."""
+    raw = layout.read("rules_3_4_receipt")
+    receipt = strict_json(raw)
+    clocks = {"wall_time_ns", "monotonic_ns"}
+    keys = {"schema", "look_id", "producer_commit", "ledger_commit", "manifest_sha256",
+            "roster_sha256", "verdicts_sha256"} | clocks
+    if type(receipt) is not dict or receipt.keys() != keys or any(type(receipt[key]) is not int for key in clocks):
+        raise ManifestError(["rules-3-4 receipt: invalid closed schema"])
+    if receipt["verdicts_sha256"] != verdicts_sha256:
+        raise ManifestError(["rules-3-4 receipt: verdict sha256 differs from rules_3_4.json"])
+    binding, wall_floor_ns = _rules34_receipt_binding(layout.repo, gate, row, receipt["producer_commit"])
+    if any(receipt[key] != value for key, value in binding.items()):
+        raise ManifestError(["rules-3-4 receipt: does not name the current committed LOOKS.json row"])
+    if receipt["wall_time_ns"] <= wall_floor_ns or receipt["monotonic_ns"] <= 0:
+        raise ManifestError(["rules-3-4 receipt: producer clocks do not establish a post-commit run"])
 
 
 def require_stage1_committed(repo, look_id, stage1_sha256, *, stage1_doc, ledger_ref=None, for_execution=False):

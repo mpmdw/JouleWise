@@ -121,22 +121,25 @@ def prepare(repo, size_manifest):
     doc["inputs"]["pins"] = pins
     doc["fit"]["twin"] = M.load_json(MR.REPO / MR.MANIFEST)["fit"]["twin"]
     manifest.write_bytes(F.dump(doc))
+    producer = "joulewise/cadence_looks/inclusion_34.py"
+    generated_verdict = Path(generated["rules_3_4.json"])
+    cli(repo, producer, "--roster", roster, "--custody", custody, "--manifest", manifest,
+        "--allow-draft", "--out", generated_verdict)
     MR.commit(repo, git_commit_it=False)
     commit(repo, "Commit the generated campaign manifest")
 
     rules = look / M.LOOK_FILES["rules_3_4"]
-    cli(repo, "joulewise/cadence_looks/inclusion_34.py", "--roster", roster, "--custody", custody,
-        "--manifest", manifest, "--out", rules)
     ledger = repo / M.LOOK_LEDGER_PATH
     rows = M.load_json(ledger)
     row = next(row for row in rows["looks"] if row["look_id"] == M.INTERIM_LOOK_ID)
     host, _ = cli(repo, "scripts/cadence_look_run.py", "host-id")
-    row.update(roster_sha256=M.sha256_file(roster), verdicts_sha256=M.sha256_file(rules),
+    row.update(roster_sha256=M.sha256_file(roster), verdicts_sha256=M.sha256_file(generated_verdict),
                execution_host=host, custody_root=str(custody), public_root=M.LOOK_PUBLIC_ROOT)
     public = repo / M.public_report_path(row)
     public.parent.mkdir(parents=True)
     ledger.write_bytes(F.dump(rows))
     commit(repo, "Bind generated roster and verdicts")
+    cli(repo, producer, "--roster", roster, "--custody", custody, "--manifest", manifest, "--out", rules)
     cli(repo, "scripts/cadence_look_run.py", "stage1")
 
     stage1 = look / M.LOOK_FILES["stage1"]
