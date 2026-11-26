@@ -1052,6 +1052,30 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+610. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-26 06:50 PST: item 609 rulings: pilot restore floor 75 GiB for p8-p10 and §4.4 only; archive sha256 authenticates; flag names only if code literals**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-27T13:00:00-08:00
+on_early_or_refused: restore only between spans, never inside a quiet lead-in; if free space would fall below 75 GiB or an archive sha256 differs from its receipt, stop that session and report; §4.4 runs once only with all seven on disk
+next_observable: a magistrate item with p8-p10 restore results (archive sha256 vs receipt, stream_manifest match or none, file counts), the §4.4 pilot export's pairs/unavailable counts and exit code, and the item-608 flag-name answer
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795704630, "number": 610, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Lead rulings on item 609. This item issues no arm and closes no ladder item. Items 601, 604 and 605 stay ISSUED.**
+- **Pilot floor (item 604).** The restore of p8-p10 may take free space down to **75 GiB**, for item 604's restores and the §4.4 export only. Every span and every other operation keeps item 588's 80 GiB floor and the 60 GiB measurement stop. The reason is physics: a span uses about 5 GiB and is offloaded at its close, so 75 GiB still leaves more than two spans of margin over the stop. Restore only between spans, never inside a quiet lead-in, with `restore_one.sh`'s floor check set to 75 GiB.
+  - Keep the seven restored run pairs read-only on disk until the W1 receipt is signed. The §4 three-blob check can send W1 back to a fresh export at the signing pin, which needs them. After signing they may be evicted again (the archives stay in iCloud).
+  - If 75 GiB still does not fit, stop and report the shortfall. Do not delete a retained tree for it.
+- **p8-p10 authentication.** Each archive must have a sha256 equal to its `.receipt.json` and to `~/mbp-packed/shipped.tsv`. That authenticates the bytes the close offload shipped. Run `stream_manifest.py` once per archive and record whether a serialisation matches the receipt's `manifest_sha256` ("match: <form>" or "none"). "None" is not a hold when the archive sha256 matches: record the per-file sha256 of the two restored run directories from the stream, as the exporter's own bundle verification reads them. An archive sha256 mismatch is a hold for that session.
+- **Then §4.4 once** (item 601's command, `$J` at `dcdedecb1`), when all seven sessions are on disk. Post the `pairs` and `unavailable` counts and the exit code. Stage `pilot.json` as item 601 says. The push to `w1-results/2026-11-26-signing-inputs` still waits for item 601's full set; the WP19 receipt is being ruled.
+- **Item 608's flag names.** Post the two recorded-only `episode flags` names in RUN_STATE **only if** both appear verbatim as string literals in `joulewise/` or `scripts/` at `dcdedecb1` (`git grep -F`). Then they are code vocabulary, not run data. Otherwise post "not code literals" and keep them private for the research lead. The research lead is ruling on item 608's result under RL-219.
+- **Item 609's slip** (worktree removal run with `-C` on the canonical repo): noted. It caused no harm, and the next activations use a linked worktree as item 609 says.
+- **Item 607 (True):** the WP19 disposition is the lead's and goes in the W1 cold pass. Nothing more is asked of the magistrate for WP19 now.
+
 609. **Magistrate 5b03bc0f (headless, Opus 5.5), 2026-11-26 06:46 PST: f2-stab-10 L011-L012 Check RECEIPT OK (2/2 admitted), copied, kit 10 complete; items 607 (True) and 608 (patched read: tool_boundaries passes, stops at workload_replay episode flags) answered; item 604 pilot restore 4/7 verified, p8-p10 held at the 80 GiB floor; f2-stab-11 L001-L003 ISSUED on pin A from 06:40, launches as the last act**
 
 ```pointer
