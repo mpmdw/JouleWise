@@ -1,14 +1,16 @@
 """Opt-in RL-217 E.6 timing using generated inputs and the real interim-look CLI.
 
 Run as a module on the Air at utility priority. The temporary repository has its
-own bare origin and generated input pins. A supplied public manifest contributes
-only span IDs, paths and byte counts for the size comparison.
+own bare origin and generated input pins. With a public size manifest, use its
+span IDs, paths and byte counts to generate the fixture and time one trial.
 """
 from __future__ import annotations
 
 import argparse
+from itertools import chain
 import json
 from pathlib import Path
+import plistlib
 import re
 import shutil
 import subprocess
@@ -17,7 +19,7 @@ import tempfile
 import unittest
 from time import perf_counter
 
-from joulewise.cadence_looks import fit_interim as F, manifest as M
+from joulewise.cadence_looks import custody_pins, fit_interim as F, manifest as M
 from scripts import cadence_look_synth as synth
 from tests.cadence import look_minirepo as MR
 
@@ -35,26 +37,141 @@ SPANS = (
     ("hp-01-s01", 3, None), ("hp-01-s02", 4, None), ("hp-01-s03", 5, None),
 )
 STREAMS = re.compile(r"(?:\.(?:csv|jsonl|plist)$|(?:^|/)stream-[^/]+$)")
+METER_STREAM = re.compile(r"hazards/meter/stream-[^/]+\.jsonl")
 
 
-def write_campaign(root):
-    """Generate the public roster counts using the synthetic writer and 50 Hz / 200 ms meter polls."""
+def campaign_plan(roster):
+    """Assign each span a synthetic date, clock and mix of prompt cells."""
     span_plan = []
-    poll_counts = {}
-    for sid, legs, polls in SPANS:
+    for sid, leg_count in roster.items():
         block, suffix = sid.rsplit("-", 1)
         day = int(block[-2:]) if block.startswith("dev") else 6
-        span_plan.append((block, suffix, f"2026-11-{13 + day:02d}", 3 * int(suffix[1:]), legs, "v1.1", "mixed"))
-        poll_counts[sid] = polls if polls is not None else 6600 * legs + 9000
+        span_plan.append((block, suffix, f"2026-11-{13 + day:02d}", 3 * int(suffix[1:]),
+                          leg_count, "v1.1", "mixed"))
+    return span_plan
+
+
+def pinned_layout(pins):
+    """Derive roster and accepted bundle paths from public pin names."""
+    legs, bundles = {}, {}
+    for span in pins["spans"]:
+        sid = span["span_id"]
+        if not re.fullmatch(r"(?:dev|hp)-\d{2}-s\d{2}", sid) or sid in legs:
+            raise ValueError(f"invalid or repeated span ID: {sid}")
+        span_legs = set()
+        for file in span["files"]:
+            path = file["path"]
+            if not custody_pins.safe_relative(path):
+                raise ValueError(f"{sid}: invalid relative pin path")
+            parts = path.split("/")
+            if len(parts) < 3 or parts[0] != "legs":
+                continue
+            leg = parts[1]
+            span_legs.add(leg)
+            if len(parts) >= 6 and parts[2:4] == ["runtime", "runs"]:
+                bundle = "/".join(parts[3:5])
+                if bundles.setdefault(f"{sid}/{leg}", bundle) != bundle:
+                    raise ValueError(f"{sid}/{leg}: multiple accepted bundles")
+        if not span_legs:
+            raise ValueError(f"{sid}: no pinned legs")
+        legs[sid] = sorted(span_legs)
+    return legs, bundles
+
+
+def sized_records(path, records, separator, target):
+    """Match the byte count with whitespace that leaves the records and their delimiters intact."""
+    rows = list(records)
+    extra = target - sum(len(row) + len(separator) for row in rows)
+    if extra < 0 and path.suffix == ".jsonl":
+        rows = [json.dumps(json.loads(row), separators=(",", ":")).encode() for row in rows]
+        extra = target - sum(len(row) + len(separator) for row in rows)
+    # The stamp reader requires the original CSV header and the writer's literal stamps.
+    # Response readers use float() for the power field, which accepts trailing space.
+    header = rows[:1] if path.suffix == ".csv" else []
+    data = rows[len(header):]
+    padding, remainder = divmod(max(extra, 0), len(data))
+
+    def padded_records():
+        for i, row in enumerate(data):
+            spaces = b" " * (padding + (i < remainder))
+            if header:
+                stamp, power, fields = row.split(b",", 2)
+                yield b",".join((stamp, power + spaces, fields))
+            else:
+                yield row + spaces
+
+    synth._write_records(path, chain(header, padded_records()), separator)
+
+
+def write_auxiliary_stream(path, size):
+    """Generate the streams that the selected synthetic bundles do not consume."""
+    if path.suffix == ".plist":
+        row, separator = plistlib.dumps({"synthetic": True}), b"\0"
+    elif path.suffix == ".csv":
+        row, separator = b"synthetic", b"\n"
+    else:
+        row, separator = b'{"synthetic":true}', b"\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as handle:
+        if size < len(row) + len(separator):
+            handle.write(b"\n" * size)
+            return
+        count = max(1, size // (64 * 1024))
+        width, remainder = divmod(size, count)
+        for i in range(count):
+            handle.write(row.ljust(width - len(separator) + (i < remainder)) + separator)
+
+
+def write_campaign(root, size_manifest=None):
+    """Write the generated campaign and return its look files and span directories."""
+    root = Path(root).resolve()
+    leg_ids = bundles = None
+    if size_manifest is None:
+        roster = {sid: legs for sid, legs, _ in SPANS}
+        poll_counts = {sid: polls if polls is not None else 6600 * legs + 9000 for sid, legs, polls in SPANS}
+    else:
+        pins = size_manifest["inputs"]["pins"]
+        leg_ids, bundles = pinned_layout(pins)
+        roster = {sid: len(ids) for sid, ids in leg_ids.items()}
+        meters = {sid: [] for sid in roster}
+        remaining = {}
+        for (sid, rel), size in stream_sizes(pins).items():
+            path = root / sid / rel
+            remaining[path] = size
+            if METER_STREAM.fullmatch(rel):
+                meters[sid].append(path)
+        if not roster or not remaining:
+            raise ValueError("the public stream-size inventory is empty")
+
+    def write_records(path, records, separator):
+        path = Path(path)
+        if path in remaining:
+            sized_records(path, records, separator, remaining.pop(path))
 
     def write_meter(path, pieces, start, end, **kwargs):
-        span_id = Path(path).parents[2].name
-        synth._write_meter(path, pieces, start, max(end, start + (poll_counts[span_id] - 1) / 5),
-                           rate_idx=2, poll_s=0.2, **kwargs)
+        sid = Path(path).parents[2].name
+        if size_manifest is None:
+            synth._write_meter(path, pieces, start, max(end, start + (poll_counts[sid] - 1) / 5),
+                               rate_idx=2, poll_s=0.2, **kwargs)
+            return
+        # At 50 Hz a 200 ms poll carries ten 20-byte samples, encoded as 400 hex
+        # characters, plus around 100 bytes of JSON and clock stamps.
+        for target in sorted(meters[sid], key=remaining.__getitem__, reverse=True):
+            polls = max(1, round(remaining.pop(target) / 500))
+            end = max(end, start + (polls - 1) / 5)
+            synth._write_meter(target, pieces, start, end, rate_idx=2, poll_s=0.2, **kwargs)
+            start = end = end + 0.2
+            pieces, kwargs = [], {**kwargs, "holes": ()}
 
     tokens = {}
-    level, response, _ = synth.build("exact", tokens=tokens, span_plan=span_plan)
-    return synth.write_custody(root, level, response, tokens, meter_writer=write_meter)
+    level, response, _ = synth.build("exact", tokens=tokens, span_plan=campaign_plan(roster), leg_ids=leg_ids,
+                                     complete_turns=size_manifest is not None)
+    options = {} if size_manifest is None else {"bundle_paths": bundles, "write_records": write_records}
+    generated = synth.write_custody(root, level, response, tokens, meter_writer=write_meter, **options)
+    if size_manifest is not None:
+        for path, size in remaining.items():
+            write_auxiliary_stream(path, size)
+    return generated, {sid: root / sid for sid in roster}
 
 
 def stream_sizes(pins):
@@ -108,15 +225,17 @@ def prepare(repo, size_manifest):
     manifest = repo / MR.MANIFEST
     doc = M.load_json(manifest)
     custody = Path(doc["custody"]["root"])
-    generated = write_campaign(custody)
+    generated, span_dirs = write_campaign(custody, size_manifest)
     look = custody / M.INTERIM_LOOK_ID
     roster = look / M.LOOK_FILES["roster"]
     Path(generated[roster.name]).rename(roster)
-    pins = MR.write_pins(repo, {sid: custody / sid for sid, _, _ in SPANS})
+    pins = MR.write_pins(repo, span_dirs)
     sizes = stream_sizes(pins)
     if size_manifest is not None:
         check_sizes(sizes, size_manifest)
-    print(json.dumps({"spans": len(SPANS), "legs": sum(legs for _, legs, _ in SPANS), "stream_files": len(sizes),
+    leg_count = len({(span["span_id"], pin["path"].split("/")[1]) for span in pins["spans"]
+                     for pin in span["files"] if pin["path"].startswith("legs/")})
+    print(json.dumps({"spans": len(span_dirs), "legs": leg_count, "stream_files": len(sizes),
                       "stream_bytes": sum(sizes.values()), "size_matched": size_manifest is not None}), flush=True)
     doc["inputs"]["pins"] = pins
     doc["fit"]["twin"] = M.load_json(MR.REPO / MR.MANIFEST)["fit"]["twin"]
@@ -173,7 +292,8 @@ def main():
                 "-c", SYNTHETIC_RESERVATION_RUNNER)
             print(json.dumps({"reservation": reservation}), flush=True)
             stage1_sha, look, public = prepare(repo, size_manifest)
-            for n in range(1, 4):
+            trials = 1 if size_manifest is not None else 3
+            for n in range(1, trials + 1):
                 _, elapsed = cli(repo, *entry, "stage2", "--stage1-sha256", stage1_sha)
                 result = M.load_json(public)
                 agreement = result["twin_agrees"]

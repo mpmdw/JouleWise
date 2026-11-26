@@ -193,9 +193,9 @@ def planted_segment_energy(par, kind, n, P, c, u, v, z, onset, with_delta=True):
 
 
 # ------------------------------------------------------------------------------------------- build
-def build(scenario="noisy", seed=20261114, tokens=None, *, span_plan=SPANS):
+def build(scenario="noisy", seed=20261114, tokens=None, *, span_plan=SPANS, leg_ids=None, complete_turns=False):
     """(look_input, energy, truth). `tokens`, if a dict, receives every type-A leg's token stamps (for
-    write_custody)."""
+    write_custody). Complete turns supply even the bundles that the default plants omit."""
     par = params_for(scenario)
     rng = np.random.default_rng(seed)
     plants = par["plants"]
@@ -223,7 +223,8 @@ def build(scenario="noisy", seed=20261114, tokens=None, *, span_plan=SPANS):
         roles = _g0_roles(kit, n, rng)
         for pos in range(n):
             key = (si, pos)
-            leg_id = f"{'H' if role == 'describe' else 'L'}{pos + 1:03d}"
+            leg_id = (f"{'H' if role == 'describe' else 'L'}{pos + 1:03d}"
+                      if leg_ids is None else leg_ids[span_id][pos])
             st = par["start"]
             h = 0.03 if pos == 0 else float(rng.uniform(0.35, 1.0))
             tf08 = st["tf08_cold"] + st["tf08_span"] * h + float(rng.normal(0, st["tf08_sd"]))
@@ -242,12 +243,14 @@ def build(scenario="noisy", seed=20261114, tokens=None, *, span_plan=SPANS):
             rd_i = r_d * (1 + float(rng.normal(0, par["noise"]["rate_jitter"]["r_d"])))
             ts = t0 + 600.0 + LEG_GAP_S * pos + float(rng.uniform(0, 30))
             excluded_rule = plants["excluded"].get(key)
+            if complete_turns and excluded_rule == "g0_released":
+                excluded_rule = None
             plan.append({
                 "si": si, "pos": pos, "span_id": span_id, "block": block, "role": role, "date": date,
                 "leg_id": leg_id, "leg_key": f"{span_id}/{leg_id}", "cell": cells[pos], "g0_role": roles[pos],
                 "P": P, "N": N, "rp": rp_i, "rd": rd_i, "ts": ts, "soak": soak,
                 "tf08": tf08, "fan": fan, "tv0h": tv0h, "exc": exc,
-                "type": "T" if key in plants["type_T"] else "A",
+                "type": "T" if not complete_turns and key in plants["type_T"] else "A",
                 "excluded_rule": excluded_rule,
                 "missing_start": key in plants["start_reading_missing"],
                 "out_of_state": key in plants["start_out_of_state"],
@@ -505,20 +508,28 @@ def _pieces(turn, energy_ch, idle_w):
     return out
 
 
-def _write_power_trace(path, pieces, lo, hi):
+def _write_records(path, records, separator):
+    with open(path, "wb") as f:
+        for record in records:
+            f.write(record + separator)
+
+
+def _write_power_trace(path, pieces, lo, hi, *, write_records=_write_records):
     rows = []
-    x = lo
     for a, b, w in [(lo, pieces[0][0], GPU_IDLE_W)] + pieces + [(pieces[-1][1], hi, GPU_IDLE_W)]:
         n = max(1, int(math.ceil((b - a) / 1.0)))
         for i in range(n):
             u, v = a + (b - a) * i / n, a + (b - a) * (i + 1) / n
             if v > u:
                 rows.append((u, v, w))
-    with open(path, "w") as f:
-        f.write("timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n")
+
+    def records():
+        yield b"timestamp_s,power_w,source,rail,interval_start_s,interval_end_s"
         for u, v, w in rows:
-            f.write(f"{v!r},{3.5!r},powermetrics,cpu_power,{u!r},{v!r}\n")
-            f.write(f"{v!r},{w!r},powermetrics,gpu_power,{u!r},{v!r}\n")
+            yield f"{v!r},{3.5!r},powermetrics,cpu_power,{u!r},{v!r}".encode()
+            yield f"{v!r},{w!r},powermetrics,gpu_power,{u!r},{v!r}".encode()
+
+    write_records(path, records(), b"\n")
 
 
 def _write_meter(path, pieces, t_lo, t_hi, off_ns, holes=(), *, rate_idx=0, poll_s=METER_POLL_S):
@@ -636,10 +647,8 @@ def _event(t, kind, phase, message, metadata):
     return {"timestamp_s": t, "event_type": kind, "phase": phase, "message": message, "metadata": metadata}
 
 
-def _write_jsonl(path, rows):
-    with open(path, "w") as f:
-        for row in rows:
-            f.write(json.dumps(row) + "\n")
+def _write_jsonl(path, rows, write_records=_write_records):
+    write_records(path, (json.dumps(row).encode() for row in rows), b"\n")
 
 
 def _thermal_rows(readings, gate, g0_start, g0_end):
@@ -678,7 +687,8 @@ def _reading_values(sensors, status):
             "errors": {}, "readings": {k: {"value": v, "error": None} for k, v in sensors.items()}, "status": status}
 
 
-def _write_bundle(bdir, turn, tok, leg_id="L000", fan_keys=("F0Ac", "F1Ac")):
+def _write_bundle(bdir, turn, tok, leg_id="L000", fan_keys=("F0Ac", "F1Ac"), *,
+                  write_records=_write_records):
     """A bundle that inclusion_34.py can judge: a G0 gate event, config.json's sampling.power_hz, TV1h in the
     journal, and journal and powermetrics rows from the G0 start on (outside level R's window, so level R is
     unchanged). Its journals have the writer's shapes."""
@@ -706,7 +716,8 @@ def _write_bundle(bdir, turn, tok, leg_id="L000", fan_keys=("F0Ac", "F1Ac")):
                                                              "pm_observed_ns": mono - 50_000_000 - age})))
     at_g0 = readings[0][1]["sensors"]
     gate = _g0_interval(g0, ts - 2.0, at_g0)
-    _write_jsonl(os.path.join(bdir, "outputs/align_thermal.jsonl"), _thermal_rows(readings, gate, g0, ts - 2.0))
+    _write_jsonl(os.path.join(bdir, "outputs/align_thermal.jsonl"), _thermal_rows(readings, gate, g0, ts - 2.0),
+                 write_records)
     turn0 = {"align_turn_index": 0}
     prompt_ids = list(range(256))
     events = [_event(g0, "phase_start", "align_thermal_gate", "G0", gate),
@@ -728,7 +739,7 @@ def _write_bundle(bdir, turn, tok, leg_id="L000", fan_keys=("F0Ac", "F1Ac")):
     events.append(_event(tok[-1], "phase_end", "decode", "mlx decode completed",
                          {**turn0, "phase_boundary_method": "first_token", "emitted_tokens": len(tok),
                           "requested_output_tokens": 4096}))
-    _write_jsonl(os.path.join(bdir, "events.jsonl"), events)
+    _write_jsonl(os.path.join(bdir, "events.jsonl"), events, write_records)
     generation = {"finish_reason": None, "output_token_ids": [7] * turn["decode_tokens"],
                   "prior_hidden_prefill_method": "chat_template_token_count_difference", "prior_hidden_prefill_tokens": 0,
                   "prompt_token_ids": prompt_ids,
@@ -744,26 +755,30 @@ def _write_bundle(bdir, turn, tok, leg_id="L000", fan_keys=("F0Ac", "F1Ac")):
                    "start_stamp": _s_stamp(ts), "end_stamp": _s_stamp(turn["last_token_s"]),
                    "clock_mapping": {"trace_domain": "joulewise.controller.epoch_ns",
                                      "episode_domain": "synthetic.monotonic", "offset_ns": 0, "uncertainty_ns": 0,
-                                     "method": "synthetic"}}])
+                                     "method": "synthetic"}}], write_records)
     import plistlib
-    with open(os.path.join(bdir, "rich_telemetry.jsonl"), "w") as fr, \
-            open(os.path.join(bdir, "raw/powermetrics.plist"), "wb") as fp:
-        y0 = turn["native_pm"][0]["t_end_s"] if turn["native_pm"] else ts + 0.5
-        pre = []
-        y = y0 - 1.0
-        while y >= g0 - 1.0:
-            pre.append({"t_end_s": y, "state": "Nominal"})
-            y -= 1.0
-        for i, r in enumerate(pre[::-1] + turn["native_pm"]):
-            fr.write(json.dumps({"index": i, "timestamp_s": r["t_end_s"], "elapsed_ns": 1_000_000_000,
-                                 "gpu": {"gpu_energy": 12345, "dvfm_states": []}}) + "\n")
+    y0 = turn["native_pm"][0]["t_end_s"] if turn["native_pm"] else ts + 0.5
+    pre = []
+    y = y0 - 1.0
+    while y >= g0 - 1.0:
+        pre.append({"t_end_s": y, "state": "Nominal"})
+        y -= 1.0
+    pm_rows = pre[::-1] + turn["native_pm"]
+    _write_jsonl(os.path.join(bdir, "rich_telemetry.jsonl"),
+                 ({"index": i, "timestamp_s": r["t_end_s"], "elapsed_ns": 1_000_000_000,
+                   "gpu": {"gpu_energy": 12345, "dvfm_states": []}} for i, r in enumerate(pm_rows)), write_records)
+
+    def frames():
+        for r in pm_rows:
             doc = {"elapsed_ns": 1_000_000_000, "processor": {"gpu_power": 17.5, "gpu_energy": 17500}}
             if r["state"] is not None:
                 doc["thermal_pressure"] = r["state"]
-            fp.write(plistlib.dumps(doc) + b"\0")
+            yield plistlib.dumps(doc)
+
+    write_records(os.path.join(bdir, "raw/powermetrics.plist"), frames(), b"\0")
 
 
-def _write_g0_timeout_bundle(bdir, g0_start, leg_id="L000"):
+def _write_g0_timeout_bundle(bdir, g0_start, leg_id="L000", *, write_records=_write_records):
     """A G0 timeout's bundle: config, the G0 gate events, a journal; no tokens and no align_turns.jsonl."""
     os.makedirs(os.path.join(bdir, "outputs"), exist_ok=True)
     with open(os.path.join(bdir, "config.json"), "w") as f:
@@ -772,18 +787,20 @@ def _write_g0_timeout_bundle(bdir, g0_start, leg_id="L000"):
     gate = _g0_interval(g0_start, g0_start + 1200.0, sensors, outcome="timeout")
     _write_jsonl(os.path.join(bdir, "events.jsonl"),
                  [_event(g0_start, "phase_start", "align_thermal_gate", "G0", gate),
-                  _event(g0_start + 1200.0, "phase_end", "align_thermal_gate", "G0", gate)])
+                  _event(g0_start + 1200.0, "phase_end", "align_thermal_gate", "G0", gate)], write_records)
     status = {"os_level": 0, "pm_state": "Nominal", "pm_observed_ns": _ns(g0_start) - MONO_OFFSET_NS}
     _write_jsonl(os.path.join(bdir, "outputs/align_thermal.jsonl"),
                  _thermal_rows([(g0_start + 1.0, _reading_values(sensors, status))], gate, g0_start,
-                               g0_start + 1200.0))
+                               g0_start + 1200.0), write_records)
 
 
-def write_custody(root, look_input, energy, tokens, *, meter_writer=_write_meter):
+def write_custody(root, look_input, energy, tokens, *, meter_writer=_write_meter, bundle_paths=None,
+                  write_records=_write_records):
     """The synthetic custody copy: one directory per span, in the cadence runner's layout, plus the roster, the
     rules-3/4 verdicts and level E for comparison. Energy files (power_trace.csv, meter streams) are written
     beside everything stage 1 reads: they are the decoys stage 1 must never open."""
     root = os.path.abspath(root)
+    bundle_paths = bundle_paths or {}
     os.makedirs(root, exist_ok=True)
     roster, rules34 = [], {}
     legs_by_span = {}
@@ -824,11 +841,12 @@ def write_custody(root, look_input, energy, tokens, *, meter_writer=_write_meter
                 spec["leg_type"] = "T"
             turn = leg["turn"]
             g0_timeout = leg["leg_type"] == "A" and turn is None and not inc["g0_released"]
+            bundle = bundle_paths.get(leg["leg_key"], "runs/cadence-leg")
             result = {"leg_status": ("complete" if inc["ran_to_cap"] else
                                      "g0_unreleased" if g0_timeout else "incomplete"),
                       "decode_cap_reached": inc["ran_to_cap"], "g0_released": inc["g0_released"],
                       "ac_powermode": {"value": mode if inc["block_power_mode"] else 1},
-                      "bundle": "runs/cadence-leg" if (turn or g0_timeout) else None,
+                      "bundle": bundle if (turn or g0_timeout) else None,
                       "prefill_tokens": turn["prefill_tokens"] if turn else None}
             with open(os.path.join(ldir, "leg_record.json"), "w") as f:
                 json.dump({"spec": spec, "attempts": [{"attempt": 1,
@@ -841,14 +859,14 @@ def write_custody(root, look_input, energy, tokens, *, meter_writer=_write_meter
                                           "excluded": "reference from an excluded leg" in span["marks"]}
             with open(os.path.join(ldir, "leg_summary.json"), "w") as f:
                 json.dump(summ, f)
+            bdir = os.path.join(ldir, "runtime", bundle)
             if g0_timeout:                           # the bundle exists; it holds the G0 and no turn
-                _write_g0_timeout_bundle(os.path.join(ldir, "runtime", "runs/cadence-leg"),
-                                         span["t0_epoch_s"] + 600.0 + 900.0 * legs.index(leg), leg["leg_id"])
+                _write_g0_timeout_bundle(bdir, span["t0_epoch_s"] + 600.0 + 900.0 * legs.index(leg),
+                                         leg["leg_id"], write_records=write_records)
                 continue
             if not turn:
                 continue
-            bdir = os.path.join(ldir, "runtime", "runs/cadence-leg")
-            _write_bundle(bdir, turn, tokens[leg["leg_key"]], leg["leg_id"])
+            _write_bundle(bdir, turn, tokens[leg["leg_key"]], leg["leg_id"], write_records=write_records)
             if not inc["km003c_clean"]:
                 holes.append((turn["turn_start_s"] + METER_HOLE_S[0], turn["turn_start_s"] + METER_HOLE_S[1]))
             e = energy["legs"].get(leg["leg_key"])
@@ -858,7 +876,7 @@ def write_custody(root, look_input, energy, tokens, *, meter_writer=_write_meter
             else:     # not read by the look: idle power only
                 gp = [(turn["turn_start_s"], turn["last_token_s"], 20.0)]
             _write_power_trace(os.path.join(bdir, "power_trace.csv"), gp, turn["turn_start_s"] - 60.0,
-                               turn["last_token_s"] + 30.0)
+                               turn["last_token_s"] + 30.0, write_records=write_records)
             t_hi = max(t_hi, turn["last_token_s"] + 60.0)
         dc_pieces.sort()
         meter_writer(os.path.join(sdir, "hazards/meter/stream-0001.jsonl"), dc_pieces, t_lo, t_hi,

@@ -22,10 +22,17 @@ def synthetic_pins(span_dirs):
     spans = []
     for index, (sid, root) in enumerate(sorted(span_dirs.items())):
         root = Path(root)
-        files = {path.relative_to(root).as_posix(): quiet_bytes(path)
-                 for path in sorted(root.rglob("*")) if path.is_file()}
-        sums = "".join(f"{hashlib.sha256(data).hexdigest()}  ./{name}\n" for name, data in files.items()).encode()
-        spans.append(custody_pins.span_pins(sid, sums, {name: len(data) for name, data in files.items()},
+        sizes, lines = {}, []
+        for path in sorted(root.rglob("*")):
+            if not path.is_file():
+                continue
+            name = path.relative_to(root).as_posix()
+            with io.FileIO(str(path), "r") as handle:
+                digest = hashlib.file_digest(handle, "sha256").hexdigest()
+            sizes[name] = path.stat().st_size
+            lines.append(f"{digest}  ./{name}\n")
+        sums = "".join(lines).encode()
+        spans.append(custody_pins.span_pins(sid, sums, sizes,
                                             runner_commit="0" * 40, close_item=2 * index + 2, check_item=2 * index + 1))
     return {"schema": custody_pins.SCHEMA, "spans": spans}
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 import builtins
 import contextlib
 import copy
+import csv
 import hashlib
 import importlib.util
 import io
@@ -75,6 +76,62 @@ def wb(p, data):
 
 
 ENERGY_MARKERS = ("power_trace.csv", "segment_energy.json")
+
+
+class CampaignTimingSizes(unittest.TestCase):
+    def test_sizing_leaves_csv_columns_and_literal_stamps_intact(self):
+        from joulewise.cadence_looks import time_fields
+        from tests.cadence import look_campaign_timing as timing
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "fixture.csv"
+            header = b"timestamp_s,power_w,source,rail,interval_start_s,interval_end_s"
+            timing.sized_records(path, [header, b"2,3.5,powermetrics,gpu_power,1,2"], b"\n", 1_000)
+            self.assertEqual(path.stat().st_size, 1_000)
+            with path.open() as handle:
+                row, = csv.DictReader(handle)
+            self.assertEqual(time_fields._stamp(row["timestamp_s"]), 2)
+            self.assertEqual(time_fields._stamp(row["interval_start_s"]), 1)
+            self.assertEqual(time_fields._stamp(row["interval_end_s"]), 2)
+            self.assertEqual(float(row["power_w"]), 3.5)
+
+    def test_generated_campaign_uses_pinned_roster_and_stream_paths(self):
+        from tests.cadence import look_campaign_timing as timing
+
+        span_id, leg_id = "dev-03-s07", "L028"
+        bundle = "runs/fixture-bundle"
+        runtime = f"legs/{leg_id}/runtime/{bundle}"
+        streams = {
+            "hazards/meter/stream-009.jsonl": 3_000_000,
+            f"{runtime}/events.jsonl": 660_000,
+            f"{runtime}/outputs/align_thermal.jsonl": 800_000,
+            f"{runtime}/outputs/align_turns.jsonl": 45_000,
+            f"{runtime}/power_trace.csv": 240_000,
+            f"{runtime}/raw/powermetrics.plist": 800_000,
+            f"{runtime}/rich_telemetry.jsonl": 150_000,
+            f"legs/{leg_id}/runtime.rejected1/runs/first/raw/powermetrics.plist": 42_000,
+            "soak/idle_soak/battery.jsonl": 321,
+        }
+        pins = {"spans": [{"span_id": span_id, "files": [{"path": path, "size": size}
+                                                       for path, size in streams.items()]}]}
+        manifest = {"inputs": {"pins": pins}}
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch("builtins.open", wraps=open) as opened:
+                files, span_dirs = timing.write_campaign(tmp, manifest)
+            self.assertEqual(set(span_dirs), {span_id})
+            span = span_dirs[span_id]
+            self.assertEqual([row["span_id"] for row in rj(files["roster.json"])], [span_id])
+            self.assertEqual(rj(span / "runner_receipt.json")["roster"], [leg_id])
+            self.assertEqual(rj(span / f"legs/{leg_id}/leg_record.json")["result"]["bundle"], bundle)
+            actual = {}
+            for call in opened.call_args_list:
+                path = Path(call.args[0])
+                if path.is_relative_to(span):
+                    rel = path.relative_to(span).as_posix()
+                    if timing.STREAMS.search(rel):
+                        actual[span_id, rel] = path.stat().st_size
+            self.assertEqual(actual.keys(), {(span_id, path) for path in streams})
+            timing.check_sizes(actual, manifest)
 
 
 class AstraPreResponse(unittest.TestCase):
