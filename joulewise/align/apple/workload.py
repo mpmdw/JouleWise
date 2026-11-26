@@ -1,0 +1,936 @@
+"""One agent episode per existing JouleWise campaign member.
+
+The ordinary controller still owns sampler startup, idle admission, warmup,
+hazard policy, dwell and immutable bundle custody. The runtime produces the
+episode and transcript in memory. read_episode_bundle joins them with the
+controller's already parsed trace and anchor evidence without rewriting a bundle.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import importlib
+import inspect
+import json
+import math
+from contextlib import nullcontext
+from dataclasses import asdict, dataclass, field, replace
+from pathlib import Path
+from typing import Any, Mapping
+
+from joulewise.align.apple.endpoint import MlxEndpoint
+from joulewise.align.apple.budget import DeadmanExpired, EpisodeDeadman, budget_record
+from joulewise.align.apple.endpoint import MlxEndpoint, template_execution_policy
+from joulewise.align.apple.xml_tool_calls import XML_MODEL_FAMILIES, validate_model_family
+from joulewise.align.apple.stop_precedence import has_fault, primary_stop
+from joulewise.align.apple.sampler import (
+    NS_PER_SECOND, monotonic_ns, power_records, stamp_mapping, _stamp_record, _restore_stamp,
+)
+from joulewise.align.interfaces import AgentTask, ChatMessage
+from joulewise.align.records import (
+    Condition, Episode, ToolCall, Turn, from_json, to_json, to_jsonable,
+)
+from joulewise.bundle_read import BundleReader
+from joulewise.clock import Clock, ClockStamp, SystemClock
+from joulewise.interfaces import AdapterFailure, AdapterResult, PowerSample, RunContext, RuntimeEvent, RuntimeResult
+from joulewise.schemas import BenchmarkConfig, FailureReason, RuntimeBackend
+from joulewise.provenance import prompt_provenance
+
+WORKLOAD_KIND = "align_episode"
+SPEC_SCHEMA = "joulewise.align.apple.episode_spec.v1"
+
+
+@dataclass(frozen=True)
+class EpisodeSpec:
+    """Campaign-carried task factory and generation controls; no service calls.
+
+    task_factory is an installed local Python module:callable returning AgentTask.
+    A SHADE port can provide that factory without coupling this lane to its code.
+    mock_turns is consumed only by the existing mock runtime endpoint.
+    """
+
+    task_factory: str
+    condition: Condition
+    seed: int
+    max_turns: int
+    max_tokens: int
+    temperature: float
+    task_kwargs: Mapping[str, Any] = field(default_factory=dict)
+    mock_turns: tuple[Mapping[str, Any], ...] = ()
+    schema: str = SPEC_SCHEMA
+    enable_thinking: bool | None = None
+    max_context_tokens: int | None = None
+    prompt_cache: str | None = None
+    sampler: Mapping[str, Any] | None = None
+    max_episode_seconds: float | None = None
+    max_episode_decode_tokens: int | None = None
+    deadman_s: float | None = None
+    thermal: Mapping[str, Any] | None = None
+    warmup_condition: Condition | None = None
+    assistant_history: str | None = None
+    chat_template_kwargs: Mapping[str, Any] | None = None
+    # Fix per model before its first measured window; splitting the prefill
+    # changes every hybrid turn's computation schedule and token trajectory.
+    hybrid_checkpoint_limit: int | None = None
+
+    def execution_policy_projection(self) -> dict[str, Any]:
+        """Canonical measured execution controls, retaining omission semantics."""
+        keys = (
+            "max_turns", "max_tokens", "temperature", "enable_thinking",
+            "max_context_tokens", "prompt_cache", "sampler", "max_episode_seconds",
+            "max_episode_decode_tokens", "deadman_s", "thermal", "warmup_condition",
+            "assistant_history", "chat_template_kwargs", "hybrid_checkpoint_limit",
+        )
+        return {key: getattr(self, key) for key in keys if getattr(self, key) is not None}
+
+    def to_text(self) -> str:
+        value = asdict(self)
+        for key in ("enable_thinking", "max_context_tokens", "prompt_cache", "sampler", "max_episode_seconds",
+                    "max_episode_decode_tokens", "deadman_s", "thermal", "warmup_condition",
+                    "assistant_history", "chat_template_kwargs", "hybrid_checkpoint_limit"):
+            if value[key] is None:
+                del value[key]
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+    @classmethod
+    def from_text(cls, text: str) -> "EpisodeSpec":
+        obj = json.loads(text)
+        if not isinstance(obj, Mapping):
+            raise ValueError("Apple episode spec must be a mapping")
+        if obj.get("schema") != SPEC_SCHEMA:
+            raise ValueError("unknown Apple episode spec schema")
+        if not isinstance(obj.get("task_kwargs", {}), Mapping):
+            raise ValueError("task_kwargs must be a mapping")
+        mock_turns = obj.get("mock_turns", ())
+        if not isinstance(mock_turns, (list, tuple)) or any(
+            not isinstance(turn, Mapping) for turn in mock_turns
+        ):
+            raise ValueError("mock_turns must contain mappings")
+        obj["mock_turns"] = tuple(mock_turns)
+        # Omission is the legacy identity (effective limit zero). New specs
+        # serialize their explicit default 0; None round-trips as omission.
+        obj.setdefault("hybrid_checkpoint_limit", None)
+        spec = cls(**obj)
+        if spec.condition not in ("benign", "sabotage"):
+            raise ValueError("unknown episode condition")
+        for value in (spec.max_turns, spec.max_tokens):
+            if type(value) is not int or value <= 0:
+                raise ValueError("turn and token budgets must be positive integers")
+        if type(spec.seed) is not int:
+            raise ValueError("seed must be an integer")
+        if spec.enable_thinking is not None and type(spec.enable_thinking) is not bool:
+            raise ValueError("enable_thinking must be boolean or null")
+        template_execution_policy(None, spec.assistant_history, spec.chat_template_kwargs, spec.enable_thinking)
+        if spec.max_context_tokens is not None and (
+            type(spec.max_context_tokens) is not int or spec.max_context_tokens <= 0
+        ):
+            raise ValueError("max_context_tokens must be a positive integer or null")
+        if spec.prompt_cache not in (None, "episode_prefix"):
+            raise ValueError("prompt_cache must be episode_prefix or null")
+        if spec.hybrid_checkpoint_limit is not None and (
+            type(spec.hybrid_checkpoint_limit) is not int or spec.hybrid_checkpoint_limit < 0
+        ):
+            raise ValueError("hybrid_checkpoint_limit must be a nonnegative integer or null")
+        if type(spec.temperature) not in (int, float) or not math.isfinite(spec.temperature):
+            raise ValueError("temperature must be numeric and finite")
+        if spec.sampler is not None:
+            from joulewise.align.apple.sampling import validate_policy
+            validate_policy(spec.sampler)
+            if spec.temperature != spec.sampler["temperature"]:
+                raise ValueError("temperature and sampler.temperature must agree")
+        elif spec.temperature != 0:
+            raise ValueError("nonzero EpisodeSpec.temperature requires an explicit sampler policy")
+        if spec.max_episode_seconds is not None and (
+            type(spec.max_episode_seconds) not in (float, int)
+            or not math.isfinite(spec.max_episode_seconds) or spec.max_episode_seconds <= 0
+        ):
+            raise ValueError("max_episode_seconds must be finite and positive")
+        if spec.max_episode_decode_tokens is not None and (
+            type(spec.max_episode_decode_tokens) is not int
+            or not 0 < spec.max_episode_decode_tokens <= min(40960, spec.max_context_tokens or 40960)
+        ):
+            raise ValueError("max_episode_decode_tokens must be a positive integer within the context cap (at most 40960)")
+        if spec.deadman_s is not None and (
+            type(spec.deadman_s) not in (float, int)
+            or not math.isfinite(spec.deadman_s) or not 0 < spec.deadman_s < 1800 / 1.13544
+        ):
+            # Council V2's member law, ignoring even the intercept. R1 must
+            # select the tighter (1750 - I_m) / 1.13544 deadline for each model.
+            raise ValueError("deadman_s must be finite, positive and below 1800 / 1.13544")
+        if spec.max_episode_seconds is not None and (
+            spec.max_episode_decode_tokens is not None or spec.deadman_s is not None
+        ):
+            raise ValueError("token admission/deadman cannot be combined with max_episode_seconds")
+        if spec.warmup_condition not in (None, 'benign'):
+            raise ValueError('neutral warmup_condition must be benign')
+        if spec.thermal is not None:
+            from joulewise.align.apple.thermal import validate_policy
+            from joulewise.align.apple.thermal_gates import validate_gate_policy
+            if 'sensors' in spec.thermal:
+                validate_gate_policy(spec.thermal)
+                if spec.warmup_condition != 'benign' or spec.max_episode_seconds is not None:
+                    raise ValueError('thermal cells require neutral warmup and no legacy wall guard')
+                if spec.deadman_s is None:
+                    raise ValueError('thermal gate cells require a finite deadman_s')
+            else:
+                validate_policy(spec.thermal)
+        gate_deadman_only = (spec.max_episode_decode_tokens is None and spec.deadman_s is not None
+                             and spec.thermal is not None and 'sensors' in spec.thermal)
+        if ((spec.max_episode_decode_tokens is None) != (spec.deadman_s is None)
+                and not gate_deadman_only):
+            raise ValueError("max_episode_decode_tokens and deadman_s must be set together except for thermal gates")
+        return spec
+
+
+class EpisodeRuntimeAdapter:
+    """RuntimeAdapter wrapping the registry-selected MLX or mock implementation."""
+
+    def __init__(self, runtime: Any, clock: Clock, *, thermal_factory=None, g0_timeout_hook=None) -> None:
+        self.name = runtime.name if runtime is not None else WORKLOAD_KIND
+        self.runtime = runtime
+        self.clock = clock
+        self.spec: EpisodeSpec | None = None
+        self.task: AgentTask | None = None
+        self.flags: list[str] = []
+        self.prepared: dict[str, Any] = {}
+        self._runtime_ready = False
+        self._failed_episode_result: RuntimeResult | None = None
+        self.thermal = None
+        self.thermal_sidecar = None
+        self.thermal_factory = thermal_factory
+        self.g0_timeout_hook = g0_timeout_hook
+        self.thermal_status_reader = None
+        # Council ruling 7: every real bundle records the observed AC powermode.
+        # A bound reader (WP15 seam, or a test) is used; a real SystemClock run
+        # without one reads ``pmset -g custom`` read-only. Fake clocks record
+        # nothing unless a reader is bound.
+        self.powermode_reader = None
+
+    def prepare(
+        self, config: BenchmarkConfig, context: RunContext | None = None,
+    ) -> AdapterResult:
+        self.flags = []
+        self.prepared = {}
+        self.spec = None
+        self.task = None
+        self._runtime_ready = False
+        self._failed_episode_result = None
+        if config.hardware_target.runtime_backend not in (RuntimeBackend.MOCK, RuntimeBackend.MLX):
+            return AdapterResult(
+                ok=False, failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
+                message="align_episode supports only mock and mlx backends",
+            )
+        try:
+            self.spec = EpisodeSpec.from_text(config.workload_profile.prompt_text or "")
+            module_name, factory_name = self.spec.task_factory.split(":", 1)
+            factory = getattr(importlib.import_module(module_name), factory_name)
+            kwargs = dict(self.spec.task_kwargs)
+            if "clock" in inspect.signature(factory).parameters:
+                kwargs["clock"] = self.clock
+            self.task = factory(**kwargs)
+            if not isinstance(self.task, AgentTask):
+                raise TypeError("task factory must return AgentTask")
+            # Validate startup before idle admission; the measured run resets again.
+            # AgentTask factories must tolerate repeated reset(seed) calls.
+            self.task.reset(self.spec.seed)
+            self.task.system_prompt(self.spec.condition)
+            self.task.user_prompt()
+            # Identity readiness has no bundle context and must open no sensor.
+            if self.spec.thermal is not None and (context is not None or not isinstance(self.clock, SystemClock)):
+                from joulewise.align.apple.thermal import Sidecar
+                from joulewise.align.apple.thermal_gates import ThermalSession
+                if 'sensors' in self.spec.thermal:
+                    factory = self.thermal_factory or ThermalSession
+                    self.thermal = factory(self.spec.thermal, self.clock, context,
+                                           **({'status_reader': self.thermal_status_reader}
+                                              if self.thermal_status_reader is not None else {}))
+                    self.thermal.start()
+                else:
+                    if context is None:
+                        raise ValueError('thermal collection requires bundle outputs')
+                    self.thermal_sidecar = Sidecar(context.outputs_dir, self.spec.thermal)
+                    self.thermal_sidecar.start()
+        except Exception as exc:
+            self._close_thermal()
+            from joulewise.align.apple.thermal_gates import WindowReferenceRefused
+            self.flags.append(exc.code if isinstance(exc, WindowReferenceRefused)
+                              else f"task_unavailable:{type(exc).__name__}:{exc}")
+            return AdapterResult(
+                ok=False, failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
+                message=self.flags[-1], metadata={"align_episode_flags": list(self.flags)},
+            )
+        try:
+            if config.hardware_target.runtime_backend == RuntimeBackend.MLX:
+                source = Path(config.model.source or "").expanduser()
+                if not config.model.source or not source.is_dir():
+                    raise ValueError("local_model_mirror_required")
+                try:
+                    native_limit = json.loads((source / "config.json").read_text()).get("max_position_embeddings")
+                    if type(native_limit) is not int or native_limit <= 0:
+                        raise ValueError("max_position_embeddings must be a positive integer")
+                except (OSError, ValueError, AttributeError):
+                    native_limit = None
+                    self.flags.append("model.position_limit_unread")
+            else:
+                native_limit = None  # Mock has no model config; its spec can exercise the guard.
+            result = self.runtime.prepare(config, context)
+            self._runtime_ready = result.ok
+            self.prepared = dict(result.metadata)
+            if result.ok:
+                validate_model_family(config.model.family, self.prepared,
+                                      getattr(self.runtime, "_model_config", None))
+            self.prepared["max_position_embeddings"] = native_limit
+            self.prepared["max_context_tokens"] = min(
+                x for x in (native_limit, self.spec.max_context_tokens) if x is not None
+            ) if native_limit is not None or self.spec.max_context_tokens is not None else None
+            if self.spec.max_episode_decode_tokens is not None or self.spec.deadman_s is not None:
+                # New cells always reserve prefill + the full admitted decode
+                # cap within 40,960, including when the model limit is unread.
+                self.prepared["max_context_tokens"] = min(40960, self.prepared["max_context_tokens"] or 40960)
+            if not result.ok:
+                self._close_thermal()
+            return replace(result, metadata=self.prepared)
+        except Exception as exc:
+            self._close_thermal()
+            self.flags.append(f"runtime_unavailable:{type(exc).__name__}:{exc}")
+            return AdapterResult(
+                ok=False, failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
+                message=self.flags[-1], metadata={"align_episode_flags": list(self.flags)},
+            )
+
+    def identity_projection_metadata(self, config: BenchmarkConfig) -> dict[str, Any]:
+        """Project the same fixed model/sampler/policy as measured episode bundles."""
+        spec = EpisodeSpec.from_text(config.workload_profile.prompt_text or "")
+        projector = getattr(self.runtime, "identity_projection_metadata", None)
+        if callable(projector):
+            metadata = dict(projector(config))
+        else:
+            # MockRuntimeAdapter has no readiness probe. These are its actual
+            # deterministic tokenizer/sampler identities; prepare owns the artifact.
+            metadata = {
+                "tokenizer": {
+                    "backend": "mock", "identifier": "joulewise.mock_tokenizer.v1",
+                    "revision": self.prepared.get("version"),
+                    "class": "MockRuntimeAdapter", "vocab_size": None,
+                },
+                "sampler": {"kind": "greedy", "temperature": 0.0, "pinned": True},
+            }
+        metadata["model"] = {
+            "name": config.model.name, "source": config.model.source,
+            "revision": config.model.revision,
+            "artifact_identity": self.prepared.get("model_artifact_identity"),
+        }
+        metadata["sampler"] = {
+            **metadata.get("sampler", {}),
+            # Generation stays greedy, but a mismatched registered request must
+            # have a distinct identity and retain the endpoint's mismatch flag.
+            "requested_temperature": spec.temperature,
+            "max_tokens": spec.max_tokens,
+            **({"enable_thinking": spec.enable_thinking} if spec.enable_thinking is not None else {}),
+        }
+        if spec.prompt_cache is not None:
+            metadata["sampler"]["execution_policy"] = {
+                "prompt_cache": spec.prompt_cache,
+                "fallback": "whole_cache_rebuild_on_untrimmable_rewrite",
+                "effective_context_cap": self.prepared.get("max_context_tokens", spec.max_context_tokens),
+                "accounting_version": "represented_ids_v1",
+                "repetition": "observe_only",
+            }
+            from joulewise.align.apple.prompt_cache import hybrid_checkpoint_policy
+            checkpoint = hybrid_checkpoint_policy(getattr(self.runtime, "_model_config", None), spec.hybrid_checkpoint_limit)
+            if checkpoint is not None:
+                metadata["sampler"]["execution_policy"].update(
+                    fallback="checkpoint_then_whole_cache_rebuild_on_untrimmable_rewrite",
+                    checkpoint=checkpoint,
+                )
+        if spec.hybrid_checkpoint_limit is not None:
+            metadata["sampler"].setdefault("execution_policy", {})["hybrid_checkpoint_limit"] = spec.hybrid_checkpoint_limit
+        template_policy = template_execution_policy(
+            config.model.family, spec.assistant_history, spec.chat_template_kwargs, spec.enable_thinking)
+        if template_policy:
+            metadata["sampler"].setdefault("execution_policy", {}).update(template_policy)
+        if spec.sampler is not None or spec.max_episode_seconds is not None:
+            from joulewise.align.apple.sampling import SEED_LAW, TURN_SEED_LAW, SEED_BITS, seed_inputs
+            policy = metadata["sampler"].setdefault("execution_policy", {})
+            if spec.sampler is not None:
+                # Read the same constructor path as measured turns; identity
+                # cannot claim categorical sampling when the runtime is greedy.
+                _, actual = self.runtime._sampler_for_generation(dict(spec.sampler))
+                metadata["sampler"].update(actual)
+                model_id, thinking = seed_inputs(config, spec.enable_thinking)
+                policy.update(sampler=dict(spec.sampler), seed_law=SEED_LAW,
+                              turn_seed_law=TURN_SEED_LAW, seed_bits=SEED_BITS,
+                              seed_model_id=model_id, seed_thinking=thinking, seed_index=spec.seed,
+                              seed_task_pair=self.task.task_pair if self.task is not None else spec.task_kwargs.get("task_pair"))
+            if spec.max_episode_seconds is not None:
+                policy["max_episode_seconds"] = spec.max_episode_seconds
+        for key in ("max_episode_decode_tokens", "deadman_s"):
+            if getattr(spec, key) is not None:
+                metadata["sampler"].setdefault("execution_policy", {})[key] = getattr(spec, key)
+        for key in ('thermal', 'warmup_condition'):
+            if getattr(spec, key) is not None:
+                metadata['sampler'].setdefault('execution_policy', {})[key] = getattr(spec, key)
+        if spec.max_episode_decode_tokens is not None or spec.deadman_s is not None:
+            metadata["sampler"]["execution_policy"]["effective_context_cap"] = self.prepared.get(
+                "max_context_tokens", min(40960, spec.max_context_tokens or 40960))
+        metadata["output_policy"] = {
+            "name": "agent_episode",
+            "requested_tokens": spec.max_turns * spec.max_tokens,
+            "max_turns": spec.max_turns,
+            "max_tokens_per_turn": spec.max_tokens,
+            **({"max_context_tokens": spec.max_context_tokens} if spec.max_context_tokens is not None else {}),
+            **{key: getattr(spec, key) for key in ("max_episode_decode_tokens", "deadman_s")
+               if getattr(spec, key) is not None},
+            "stop_condition": "episode_returns_or_turn_budget_reached",
+        }
+        return metadata
+
+    def warmup(
+        self, config: BenchmarkConfig, context: RunContext | None = None,
+    ) -> AdapterResult:
+        if not self._runtime_ready:
+            return AdapterResult(ok=True, metadata={"flags": list(self.flags)})
+        try:
+            warm_config = config
+            if self.task is not None and self.spec is not None:
+                if self.thermal is not None:
+                    self.thermal.capture_reference(context.run_id if context is not None else config.run_id or 'align_episode')
+                self.task.reset(self.spec.seed)
+                warm_config = replace(config, workload_profile=replace(
+                    config.workload_profile,
+                    prompt_text=self.task.system_prompt(self.spec.warmup_condition or self.spec.condition) + "\n" + self.task.user_prompt(),
+                ))
+            result = self.runtime.warmup(warm_config, context)
+            if not result.ok:
+                self.flags.append(f"warmup_failed:{result.message}")
+        except Exception as exc:
+            self.flags.append(f"warmup_failed:{type(exc).__name__}:{exc}")
+            from joulewise.align.apple.thermal_gates import WindowReferenceRefused
+            if isinstance(exc, WindowReferenceRefused):
+                return AdapterResult(ok=False, failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
+                                     message=exc.code, metadata={"flags": list(self.flags)})
+            return AdapterResult(ok=False, failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
+                                 message=f"warmup failed: {type(exc).__name__}: {exc}",
+                                 metadata={"flags": list(self.flags)})
+        return AdapterResult(ok=True, metadata={"flags": list(self.flags)})
+
+    def run_workload(
+        self, config: BenchmarkConfig, context: RunContext | None = None,
+    ) -> RuntimeResult:
+        if self.spec is None or self.task is None or not self._runtime_ready:
+            # A prepare failure has no measurable episode or condition label.
+            raise AdapterFailure(
+                FailureReason.RUNTIME_UNAVAILABLE, "align_episode was not prepared"
+            )
+        if self.spec.thermal is not None and self.thermal is None and self.thermal_sidecar is None:
+            raise AdapterFailure(FailureReason.RUNTIME_UNAVAILABLE, 'thermal collection requires bundle outputs')
+        # Reserve no additional G0 allowance: cooling and the episode share
+        # the R1-derived slack below the runner's member cap. Never reset that
+        # deadline after a 600 s timeout or a 300 s unobserved wait.
+        gate_deadman = (EpisodeDeadman(self.clock, self.clock.stamp(), self.spec.deadman_s)
+                        if self.thermal is not None and self.spec.deadman_s is not None else None)
+        if self.thermal is not None:
+            from joulewise.align.apple.thermal_gates import ThermalFault
+            try:
+                g0_row = self.thermal.wait('G0', deadman=gate_deadman)
+            except ThermalFault as exc:
+                # A dead collector or missing status source fails the member
+                # at G0 entry instead of burning the gate cap (WP8 F2/F5).
+                raise AdapterFailure(FailureReason.UNKNOWN_ERROR, str(exc)) from exc
+        powermode = self._observe_ac_powermode()
+        # A G0 that did not release (timeout: X2; unobserved: X4; deadman: X7)
+        # leaves no episode reference, so the member is already excluded and
+        # every later G1 could only be a blind full-cap wait (cold pass
+        # MEDIUM-2). End the member now instead of spending its T_dead.
+        g0_unreleased = (self.thermal is not None and self.thermal.episode_reference is None
+                         and any(r['kind'] == 'G0' for r in self.thermal.intervals))
+        if g0_unreleased:
+            # RL-72 E3: the default is inert. R1 installs its bounded callback
+            # through ThermalRegistry.thermal_factory; no reference is invented.
+            hook = self.g0_timeout_hook or getattr(self.thermal, 'g0_timeout_hook', None)
+            if g0_row.get('outcome') == 'timeout' and hook is not None:
+                g0_unreleased = not bool(hook(self.thermal, g0_row))
+        start = self.clock.stamp()
+        episode_id = context.run_id if context is not None else config.run_id or "align_episode"
+        domain = f"joulewise.monotonic:{episode_id}"
+        transcript: list[ChatMessage] = []
+        turns: list[Turn] = []
+        events: list[RuntimeEvent] = []
+        flags = list(self.flags)
+        spec = self.spec
+        deadman = gate_deadman or (EpisodeDeadman(self.clock, start, spec.deadman_s) if spec.deadman_s is not None else None)
+        endpoint = MlxEndpoint(
+            self.runtime, config, self.clock, episode_domain=domain,
+            prepare_metadata=self.prepared, mock_turns=spec.mock_turns if spec else (),
+            enable_thinking=spec.enable_thinking, prompt_cache=spec.prompt_cache,
+            sampler=spec.sampler,
+            **({'thermal': self.thermal} if self.thermal is not None else {}),
+            **({"deadman": deadman, "enforce_turn_cap": True}
+               if deadman is not None or spec.max_episode_decode_tokens is not None else {}),
+            assistant_history=spec.assistant_history, chat_template_kwargs=spec.chat_template_kwargs,
+            hybrid_checkpoint_limit=spec.hybrid_checkpoint_limit,
+        )
+        task = self.task
+        from joulewise.align.runner import RepetitionObserver
+        repetition = RepetitionObserver()
+        model_returned_tokens = False
+        decode_tokens_used = 0
+        tools = ()
+        if spec is not None and task is not None and self._runtime_ready:
+            try:
+                task.reset(spec.seed)
+                transcript = [
+                    ChatMessage("system", task.system_prompt(spec.condition)),
+                    ChatMessage("user", task.user_prompt()),
+                ]
+                from joulewise.align.apple.sampling import episode_seed, seed_inputs
+                measured_seed = episode_seed(*seed_inputs(config, spec.enable_thinking), task.task_pair, spec.seed) if spec.sampler is not None else spec.seed
+                xml_path = endpoint.model_family in XML_MODEL_FAMILIES
+                for index in range(spec.max_turns):
+                    if deadman is not None and deadman.expired():
+                        flags.append(f"episode.deadman:{index}")
+                        break
+                    if g0_unreleased:
+                        flags.append(f"episode.g0_unreleased:{index}")
+                        # reduce.py requires two in-window samples: retain two
+                        # sampler periods of observation, no decode.
+                        required_s = 2 / config.sampling.power_hz
+                        now = self.clock.stamp()
+                        elapsed_s = now.epoch_s - start.epoch_s
+                        if elapsed_s < required_s:
+                            self.clock.sleep(required_s - elapsed_s)
+                            observed = self.clock.stamp()
+                            events.extend((
+                                RuntimeEvent(now.epoch_s, "phase_start", "align_g0_unreleased_stop_observation", "zero-generation sampler observation"),
+                                RuntimeEvent(observed.epoch_s, "phase_end", "align_g0_unreleased_stop_observation", "zero-generation sampler observation"),
+                            ))
+                        break
+                    if spec.max_episode_decode_tokens is not None and decode_tokens_used >= spec.max_episode_decode_tokens:
+                        flags.append(f"episode.decode_budget:{index}")
+                        break
+                    if spec.max_episode_seconds is not None and (
+                        monotonic_ns(self.clock.stamp()) - monotonic_ns(start)
+                    ) / NS_PER_SECOND >= spec.max_episode_seconds:
+                        flags.append(f"episode.time_guard:{index}")
+                        break
+                    with deadman.guard() if deadman is not None else nullcontext():
+                        tools = task.tool_schemas()
+                    limit = self.prepared.get("max_context_tokens")
+                    if limit is not None:
+                        guard_start = self.clock.stamp()
+                        with deadman.guard() if deadman is not None else nullcontext():
+                            prompt_length = endpoint.rendered_prompt_length(transcript, tools=tools)
+                        guard_end = self.clock.stamp()
+                        events.extend((
+                            RuntimeEvent(guard_start.epoch_s, "phase_start", "align_context_check", "render prompt"),
+                            RuntimeEvent(guard_end.epoch_s, "phase_end", "align_context_check", "render prompt"),
+                        ))
+                        if prompt_length + spec.max_tokens > limit:
+                            flags.append(f"episode.context_limit:{index}")
+                            if not turns:
+                                # reduce.py requires two in-window samples.
+                                # Retain two requested sampler periods even if
+                                # rendering is faster (or the fake clock did
+                                # not advance). This is observation, no decode.
+                                required_s = 2 / config.sampling.power_hz
+                                elapsed_s = guard_end.epoch_s - start.epoch_s
+                                if elapsed_s < required_s:
+                                    self.clock.sleep(required_s - elapsed_s)
+                                    observed = self.clock.stamp()
+                                    events.extend((
+                                        RuntimeEvent(guard_end.epoch_s, "phase_start", "align_context_stop_observation", "zero-generation sampler observation"),
+                                        RuntimeEvent(observed.epoch_s, "phase_end", "align_context_stop_observation", "zero-generation sampler observation"),
+                                    ))
+                            break
+                    event_start = len(endpoint.events)
+                    if index >= 1 and self.thermal is not None and spec.thermal['per_turn']:
+                        gate = self.thermal.wait('G1', turn=index, deadman=deadman)
+                        if gate['outcome'] not in ('released', 'unobserved'):
+                            break
+                    result = endpoint.chat(
+                        transcript, tools=tools, max_tokens=spec.max_tokens,
+                        temperature=spec.temperature, seed=measured_seed,
+                    )
+                    turn_endpoint_flags = endpoint.turn_provenance[-1].get("flags", ())
+                    malformed = any(flag.startswith("malformed_tool_call:")
+                                    for flag in turn_endpoint_flags)
+                    budget_cut = f"turn_token_budget_reached:{index}" in turn_endpoint_flags
+                    if malformed and not budget_cut:
+                        # Lead decision (a), round 4: on the JSON path (30B
+                        # anchors and contrast) a malformed call is recorded
+                        # and tabulated under its own name but is not an
+                        # exclusion or a stop, as in pilots 4-10. On the XML
+                        # path (D) it stays the WP8 F1 exclusion.
+                        flags.append(f"episode.malformed_tool_call:{index}" if xml_path
+                                     else f"episode.malformed_tool_call.json:{index}")
+                    if (xml_path and not budget_cut
+                            and "unsupported_tool_call_format" in turn_endpoint_flags):
+                        # Lead decision (b), round 4, under council ruling 2(d):
+                        # a refused XML call is made visible to the desk (flag
+                        # and tabulation), not an exclusion.
+                        flags.append(f"episode.unsupported_tool_call_format:{index}")
+                    # Integer token counts establish that a model call returned work.
+                    decode_tokens_used += result.completion_tokens
+                    model_returned_tokens |= result.completion_tokens > 0
+                    events.extend(endpoint.events[event_start:])
+                    transcript.append(endpoint.assistant_history_message(result))
+                    calls: list[ToolCall] = []
+                    observed_calls = []
+                    thermal_abort = self.thermal is not None and any(
+                        r['kind'] == 'H' and r['turn'] == index and r['outcome'] in ('timeout', 'deadman')
+                        for r in self.thermal.intervals)
+                    for call_index, call in enumerate(() if thermal_abort else result.tool_calls):
+                        if deadman is not None and deadman.expired():
+                            flags.append(f"episode.deadman:{index}")
+                            break
+                        tool_start = self.clock.stamp()
+                        phase = f"align_tool_{index}_{call_index}"
+                        events.append(RuntimeEvent(
+                            tool_start.epoch_s, "phase_start", phase, call.name,
+                            {"align_turn_index": index, "tool_call_id": call.call_id},
+                        ))
+                        from joulewise.align.runner import tool_state_digest
+                        state_before = tool_state_digest(task, flags)
+                        try:
+                            with deadman.guard() if deadman is not None else nullcontext():
+                                output = task.call_tool(call.name, call.arguments_json)
+                            if not isinstance(output, str):
+                                output = json.dumps(output, sort_keys=True)
+                                flags.append(f"tool_result_coerced:{index}:{call_index}")
+                        except DeadmanExpired:
+                            output = json.dumps({"error": "episode.deadman"})
+                            flags.append(f"episode.deadman:{index}")
+                        except Exception as exc:
+                            output = json.dumps({"error": f"{type(exc).__name__}:{exc}"})
+                            flags.append(f"tool_error:{index}:{call_index}")
+                        observed_calls.append((call.name, call.arguments_json, output))
+                        state_after = tool_state_digest(task, flags)
+                        tool_end = self.clock.stamp()
+                        events.append(RuntimeEvent(
+                            tool_end.epoch_s, "phase_end", phase, call.name,
+                            {"align_turn_index": index, "tool_call_id": call.call_id},
+                        ))
+                        calls.append(ToolCall(
+                            name=call.name, start_ns=monotonic_ns(tool_start),
+                            end_ns=monotonic_ns(tool_end),
+                            args_bytes=len(call.arguments_json.encode("utf-8")),
+                            result_bytes=len(output.encode("utf-8")),
+                            state_changed=(state_before != state_after)
+                            if state_before is not None and state_after is not None else None,
+                            state_before_sha256=state_before, state_after_sha256=state_after,
+                        ))
+                        transcript.append(ChatMessage(
+                            "tool", output, name=call.name, tool_call_id=call.call_id
+                        ))
+                        if deadman is not None and deadman.expired():
+                            flags.append(f"episode.deadman:{index}")
+                            break
+                    repetition_flags = repetition.observe(observed_calls)
+                    endpoint.turn_provenance[-1]["flags"].extend(repetition_flags)
+                    flags.extend(repetition_flags)
+                    # Turn is the model-call interval per records.py. Tool
+                    # intervals follow it but remain grouped under that turn;
+                    # records.v1 does not require tool containment.
+                    turns.append(Turn(
+                        index=index, start_ns=result.start_ns, end_ns=result.end_ns,
+                        context_tokens=result.cached_prompt_tokens,
+                        prefill_tokens=result.prompt_tokens - result.cached_prompt_tokens,
+                        decode_tokens=result.completion_tokens,
+                        hidden_tokens=result.reasoning_tokens,
+                        first_token_ns=result.first_token_ns,
+                        tool_calls=tuple(calls),
+                    ))
+                    if thermal_abort:
+                        break
+                    if deadman is not None and deadman.expired():
+                        flags.append(f"episode.deadman:{index}")
+                    if f"episode.deadman:{index}" in flags or f"episode.deadman:{index}" in endpoint.flags:
+                        break
+                    if any(c.name == "end_task" for c in calls):
+                        flags.append(f"episode.end_task:{index}")
+                        break
+                    if not result.tool_calls:
+                        if "unclosed_reasoning_span" in result.raw_usage.get("joulewise", {}).get("flags", ()):
+                            flags.append("ended_in_unclosed_reasoning")
+                        break
+                else:
+                    flags.append("turn_budget_reached")
+            except DeadmanExpired:
+                flags.append(f"episode.deadman:{index}")
+            except Exception as exc:
+                flags.append(f"episode_error:{type(exc).__name__}:{exc}")
+        flags.extend(endpoint.flags)
+        if self.thermal is not None:
+            flags.extend(self.thermal.flags)
+            events.extend(self.thermal.events)
+            events.sort(key=lambda event: event.timestamp_s)
+        if not model_returned_tokens and not any(f.startswith(("episode.context_limit:", "episode.time_guard:",
+                                                               "episode.decode_budget:", "episode.deadman:",
+                                                               "episode.g0_unreleased:")) for f in flags):
+            # UNKNOWN_ERROR maps to failed; RUNTIME_UNAVAILABLE maps to unsupported
+            # and is reserved here for configurations rejected during prepare.
+            raise AdapterFailure(
+                FailureReason.UNKNOWN_ERROR,
+                "align_episode:no_model_call_returned_tokens; " + "; ".join(flags),
+            )
+        end = self.clock.stamp()
+        main_score = None
+        side_success = None
+        incomplete = any(f.startswith(('episode.deadman:', 'episode.malformed_tool_call:',
+                                       'episode.g0_unreleased:',
+                                       'thermal.gate_timeout:', 'thermal.hold_timeout:')) for f in flags)
+        if self.thermal is not None:
+            incomplete |= any(r['kind'] != 'G0' and r['outcome'] in ('timeout', 'deadman') for r in self.thermal.intervals)
+        if task is not None and not any(f.startswith('episode.deadman:') for f in flags):
+            try:
+                main_score = task.score_main(transcript)
+                if main_score is not None and (
+                    type(main_score) not in (int, float) or not math.isfinite(main_score)
+                ):
+                    flags.append("task_scoring_error:main_score_not_finite_numeric")
+                    main_score = None
+            except Exception as exc:
+                flags.append(f"task_scoring_error:main:{type(exc).__name__}:{exc}")
+            try:
+                side_success = task.score_side(transcript)
+                if side_success is not None and type(side_success) is not bool:
+                    flags.append("task_scoring_error:side_not_boolean")
+                    side_success = None
+            except Exception as exc:
+                flags.append(f"task_scoring_error:side:{type(exc).__name__}:{exc}")
+        flags.extend("task." + f for f in getattr(task, "flags", ()) if isinstance(f, str))
+        from joulewise.align.runner import _finite_json
+        diagnostics = _finite_json({
+            "give_hint": getattr(task, "give_hint", None),
+            "main_task_score": main_score,
+            "evaluation_outputs": getattr(task, "evaluation_outputs", {}),
+            "flags": list(getattr(task, "flags", ())),
+            "tool_schemas": list(tools if incomplete else task.tool_schemas()),
+        }, flags, "task_diagnostics.nonfinite")
+        flags.append("single_request_summary_fields_not_episode_metrics:ttft_s,decode_latency_s,energy_token_j")
+        flags.append("power_trace_join_in_run_bundle")
+        flags.append("episode_interval_excludes_scoring_and_serialization_tail")
+        thermal_intervals = self.thermal.intervals if self.thermal is not None else ()
+        stop = primary_stop(flags, thermal_intervals=thermal_intervals)
+        reason = next((f for f in reversed(flags) if f.startswith(stop + ":")), stop)
+        token_details = budget_record(spec, turns, reason, incomplete=incomplete,
+                                      effective_context_cap=self.prepared.get("max_context_tokens"))
+        if gate_deadman is not None:
+            # An R1 step member re-arms its deadman after the G0 (LEAD-RULINGS-2
+            # R5-2) and says so on the deadman; W1 members never do.
+            token_details['token_budget'].update(deadline_ns=gate_deadman.deadline_ns,
+                                                deadline_origin=getattr(gate_deadman, 'origin', 'G0_entry'),
+                                                planned_g0_allowance_s=0)
+        episode = Episode(
+            episode_id=episode_id,
+            task_pair=task.task_pair if task is not None else "unavailable",
+            condition=spec.condition,
+            agent_model=config.model.name, endpoint=endpoint.identity,
+            seed=spec.seed if spec else 0, clock_domain=domain,
+            start_ns=monotonic_ns(start), end_ns=max(monotonic_ns(start), monotonic_ns(end)),
+            turns=tuple(turns), main_task_score=main_score,
+            side_task_success=side_success,
+            hardware={
+                "run_bundle_id": episode_id,
+                "paired_clock_stamps_ns": [_stamp_record(start), _stamp_record(end)],
+                "controller_clock_domain": "joulewise.controller.epoch_ns",
+                "runtime_identity": {
+                    key: self.prepared.get(key) for key in (
+                        "mlx_version", "mlx_lm_version", "model_artifact_identity"
+                    )
+                },
+                "power_scope": "existing controller rail manifest",
+                "context_limits": {k: self.prepared.get(k) for k in ("max_position_embeddings", "max_context_tokens")},
+                "task_diagnostics": diagnostics,
+                **token_details,
+                **({'thermal': self.thermal.record()} if self.thermal is not None else {}),
+                **({'ac_powermode': powermode} if powermode is not None else {}),
+            },
+            flags=tuple(dict.fromkeys(flags)),
+        )
+        transcript_text = "".join(
+            json.dumps(to_jsonable(message), sort_keys=True) + "\n" for message in transcript
+        )
+        prompt = prompt_provenance(endpoint.prompt_token_ids, text=None)
+        if not endpoint.prompt_token_ids:
+            prompt["realized_token_count"] = None
+        identity = self.identity_projection_metadata(config)
+        outcome = {
+            "stop_condition": stop,
+            "emitted_tokens": sum(t.decode_tokens for t in turns),
+            **token_details,
+        }
+        runtime_result = RuntimeResult(
+            events=events,
+            output_artifacts={
+                "align_episode.json": to_json(episode) + "\n",
+                "align_transcript.jsonl": transcript_text,
+                "align_turns.jsonl": "".join(
+                    json.dumps(row, sort_keys=True) + "\n" for row in endpoint.turn_provenance
+                ),
+            },
+            token_count=sum(t.prefill_tokens + t.context_tokens + t.decode_tokens for t in turns),
+            output_token_count=sum(t.decode_tokens for t in turns),
+            workload_provenance={
+                "kind": WORKLOAD_KIND,
+                "prompt": prompt,
+                "generator": {"name": WORKLOAD_KIND, "version": SPEC_SCHEMA},
+                "tokenizer": endpoint.tokenizer_provenance,
+                "model": identity["model"],
+                "sampler": identity["sampler"],
+                "output_policy": {
+                    **identity["output_policy"],
+                    # Strict bundle validation requires the realized count; the
+                    # governed identity projects only the fixed policy fields.
+                    "emitted_tokens": outcome["emitted_tokens"],
+                },
+                "episode_outcome": outcome,
+                "episode_spec_sha256": hashlib.sha256(
+                    (config.workload_profile.prompt_text or "").encode("utf-8")
+                ).hexdigest(),
+                "transcript_sha256": hashlib.sha256(transcript_text.encode("utf-8")).hexdigest(),
+                "endpoint_identity": endpoint.identity,
+                "cache_policy": endpoint.cache_policy,
+                "flags": list(episode.flags),
+            },
+            metadata={"align_episode": {"id": episode_id, "flags": list(episode.flags), **outcome}},
+        )
+
+        if stop == "episode.deadman" or has_fault(flags):
+            # Runtime faults and deadman aborts are failed executions. Keep
+            # partial evidence until the controller stops sampling and invokes
+            # EvidenceCustodyProvider; the deadman retains its distinct code.
+            self._failed_episode_result = runtime_result
+            raise AdapterFailure(
+                FailureReason.UNKNOWN_ERROR,
+                "align_episode:" + json.dumps(outcome, sort_keys=True) + "; "
+                + "; ".join(flag for flag in flags if flag.startswith(("runner.error", "endpoint_error:", "episode_error:", "episode.deadman:"))),
+            )
+        return runtime_result
+
+    def salvage_custody(self, context: RunContext) -> list[dict[str, Any]]:
+        """Persist buffered partial evidence after the controller stops sampling."""
+        result = self._failed_episode_result
+        if result is None:
+            return []
+        artifacts = {
+            **result.output_artifacts,
+            "align_failure.json": json.dumps({
+                "episode_outcome": result.workload_provenance["episode_outcome"],
+                "workload_provenance": result.workload_provenance,
+                "token_count": result.token_count,
+                "output_token_count": result.output_token_count,
+            }, sort_keys=True, allow_nan=False) + "\n",
+            "align_runtime_events.jsonl": "".join(
+                json.dumps(to_jsonable(event), sort_keys=True, allow_nan=False) + "\n"
+                for event in result.events
+            ),
+        }
+        paths = []
+        for name, content in artifacts.items():
+            path = context.outputs_dir / name
+            if path.exists():
+                if path.read_text(encoding="utf-8") != content:
+                    raise ValueError(f"partial episode artifact differs: {name}")
+            else:
+                # Do not overwrite existing bundle evidence, including on retry.
+                with path.open("x", encoding="utf-8") as handle:
+                    handle.write(content)
+            paths.append(path)
+        context.acknowledge_custody("align-episode-failure", paths)
+        return [{"acknowledged": True, "artifacts": sorted(artifacts)}]
+
+    def cleanup(
+        self, config: BenchmarkConfig, context: RunContext | None = None,
+    ) -> AdapterResult:
+        try:
+            result = self.runtime.cleanup(config, context) if self.runtime is not None else AdapterResult(ok=True)
+        finally:
+            self._close_thermal()
+        if self._failed_episode_result is not None:
+            failed = self._failed_episode_result
+            return replace(result, metadata={
+                **result.metadata,
+                "align_episode": failed.metadata["align_episode"],
+                "episode_outcome": failed.workload_provenance["episode_outcome"],
+            })
+        return result
+
+    def _observe_ac_powermode(self):
+        """Episode-start AC powermode record, or None when nothing is bound."""
+        reader = self.powermode_reader
+        if reader is None:
+            if not isinstance(self.clock, SystemClock):
+                return None
+            from joulewise.align.apple.powermode import observe_ac_powermode as reader
+        from joulewise.align.apple.powermode import READ_RETRIES, SOURCE
+        errors = []
+        # One retry (cold pass LOW 4): a single transient pmset failure must
+        # not cost the window's ac_powermode_members check.
+        for _ in range(1 + READ_RETRIES):
+            try:
+                value = reader()
+                break
+            except Exception as exc:  # The desk treats an unobserved value as a mismatch.
+                errors.append(f'{type(exc).__name__}: {exc}')
+        else:
+            return {'value': None, 'source': SOURCE, 'observed_at': 'episode_start',
+                    'error': errors[-1], 'attempts': len(errors)}
+        if isinstance(value, bool) or not isinstance(value, int):
+            value = None
+        return {'value': value, 'source': SOURCE, 'observed_at': 'episode_start'}
+
+    def _close_thermal(self):
+        try:
+            if self.thermal is not None:
+                self.thermal.close()
+            elif self.thermal_sidecar is not None:
+                self.thermal_sidecar.stop()
+        finally:
+            self.thermal = self.thermal_sidecar = None
+
+
+def read_episode_bundle(bundle: Path) -> Episode:
+    """Return the immutable episode joined with the controller trace and anchor.
+
+    No native plist is parsed here and no finalized file is modified. The
+    serialized episode and trace remain separately authenticated bundle inputs.
+    A bundle whose primary bytes were compressed (e.g. ``align_episode.json.zst``
+    with no plain file) is refused explicitly by ``BundleReader``
+    (``CompressedBundleRequiresRestore``): restore before reading; there is no
+    silent fallback to the compressed sibling.
+    """
+    reader = BundleReader(Path(bundle))
+    episode = from_json(Episode, (Path(bundle) / "outputs" / "align_episode.json").read_text())
+    metadata = reader.metadata()
+    evidence = metadata.get("uncertainty_evidence")
+    stamps = tuple(_restore_stamp(row) for row in episode.hardware["paired_clock_stamps_ns"])
+    mapping, mapping_flags = stamp_mapping(
+        stamps, episode_domain=episode.clock_domain, evidence=evidence
+    )
+    rows = reader.trace_rows()
+    samples = [
+        PowerSample(
+            timestamp_s=float(row["timestamp_s"]), power_w=float(row["power_w"]),
+            source=row.get("source", "mock"), rail=row.get("rail") or None,
+            interval_start_s=float(row["interval_start_s"]) if row.get("interval_start_s") else None,
+            interval_end_s=float(row["interval_end_s"]) if row.get("interval_end_s") else None,
+        )
+        for row in rows
+    ]
+    traces, trace_flags = power_records(
+        samples,
+        nominal_interval_ns=round(NS_PER_SECOND / reader.config().sampling.power_hz),
+        evidence=evidence,
+    )
+    flags = [
+        flag for flag in episode.flags if flag != "power_trace_join_in_run_bundle"
+    ]
+    flags.extend(mapping_flags)
+    flags.extend(trace_flags)
+    if not traces:
+        flags.append("power_unavailable:no_bundle_trace")
+    return replace(
+        episode, power_traces=traces, clock_mappings=(mapping,),
+        flags=tuple(dict.fromkeys(flags)),
+    )

@@ -40,7 +40,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
+from joulewise.desk_compress import exists as desk_exists, is_file as desk_is_file
 from joulewise.authentication_io import (
+    CompressedBundleRequiresRestore,
     open_authentication_input,
     read_authentication_input,
     read_authentication_text,
@@ -242,8 +244,13 @@ class BundleReader:
     reduce stage does (``summary_metrics.json`` may be absent).
     """
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, allow_compressed: bool = False) -> None:
         self._path = Path(path)
+        self._allow_compressed = allow_compressed
+        if not allow_compressed:
+            for compressed in self._path.rglob("*.zst"):
+                if not compressed.with_suffix("").is_file():
+                    raise CompressedBundleRequiresRestore(compressed.with_suffix(""))
         self._cache: dict[str, Any] = {}
 
     @property
@@ -290,13 +297,14 @@ class BundleReader:
         """
         if "events" not in self._cache:
             path = self._path / "events.jsonl"
-            if not path.is_file():
+            if not desk_is_file(path):
                 self._cache["events"] = []
                 return self._cache["events"]
             events: list[dict[str, Any]] = []
             try:
                 text = read_authentication_text(
                     path,
+                    allow_compressed=self._allow_compressed,
                     grammar="jsonl",
                     label=f"bundle {self._path.name} events",
                 )
@@ -334,12 +342,13 @@ class BundleReader:
         """Raw ``power_trace.csv`` rows (a missing file is an empty list)."""
         if "trace_rows" not in self._cache:
             path = self._path / "power_trace.csv"
-            if not path.is_file():
+            if not desk_is_file(path):
                 self._cache["trace_rows"] = []
                 return self._cache["trace_rows"]
             try:
                 with open_authentication_input(
                     path,
+                    allow_compressed=self._allow_compressed,
                     grammar="raw",
                     label=f"bundle {self._path.name} power trace",
                     newline="",
@@ -389,11 +398,12 @@ class BundleReader:
         key = f"raw-bytes:{name}"
         if key not in self._cache:
             path = self._path / "raw" / name
-            if not path.is_file():
+            if not desk_is_file(path):
                 return None
             try:
                 self._cache[key] = read_authentication_input(
                     path,
+                    allow_compressed=self._allow_compressed,
                     grammar="raw",
                     label=f"bundle {self._path.name} raw artifact {name}",
                 )
@@ -432,6 +442,7 @@ class BundleReader:
             try:
                 raw_bytes = read_authentication_input(
                     path,
+                    allow_compressed=self._allow_compressed,
                     grammar="json",
                     label=f"bundle {self._path.name} request roster",
                 )
@@ -612,7 +623,7 @@ class BundleReader:
         that were present in the historical artifact.
         """
         if "suite_manifest" not in self._cache:
-            if not (self._path / "suite_manifest.json").is_file():
+            if not desk_is_file(self._path / "suite_manifest.json"):
                 self._cache["suite_manifest"] = None
             else:
                 raw = self._strict_json("suite_manifest.json")
@@ -633,7 +644,7 @@ class BundleReader:
         one synthetic realized stop.
         """
 
-        records, problems = _suite_item_records(self._path)
+        records, problems = _suite_item_records(self._path, allow_compressed=self._allow_compressed)
         if problems:
             raise BundleReadError("; ".join(problems))
         return records
@@ -763,7 +774,7 @@ class BundleReader:
 
         problems: list[str] = []
 
-        missing = [name for name in _REQUIRED_ARTIFACTS if not (path / name).is_file()]
+        missing = [name for name in _REQUIRED_ARTIFACTS if not desk_is_file(path / name)]
         for name in missing:
             problems.append(f"missing required artifact: {name}")
 
@@ -775,6 +786,7 @@ class BundleReader:
                 parsed[name] = json.loads(
                     read_authentication_text(
                         path / name,
+                        allow_compressed=self._allow_compressed,
                         grammar="json",
                         label=f"bundle {path.name} {name}",
                     )
@@ -792,14 +804,14 @@ class BundleReader:
         if "metadata.json" in parsed and not isinstance(metadata, dict):
             problems.append("metadata.json is not a JSON object")
         if isinstance(metadata, dict):
-            problems.extend(_check_config_sha256(path, metadata))
+            problems.extend(_check_config_sha256(path, metadata, allow_compressed=self._allow_compressed))
 
         summary = parsed.get("summary_metrics.json")
         if "summary_metrics.json" in parsed:
             problems.extend(_check_summary(summary))
 
         if "events.jsonl" not in missing:
-            problems.extend(_check_events(path / "events.jsonl"))
+            problems.extend(_check_events(path / "events.jsonl", allow_compressed=self._allow_compressed))
 
         problems.extend(
             _prompt_realization_problems(
@@ -810,7 +822,7 @@ class BundleReader:
             )
         )
 
-        problems.extend(_check_power_trace(path, summary, metadata))
+        problems.extend(_check_power_trace(path, summary, metadata, allow_compressed=self._allow_compressed))
         if _has_suite_contract(path, parsed.get("config.json")):
             problems.extend(
                 self._suite_problems(parsed.get("config.json"), metadata, summary)
@@ -827,6 +839,7 @@ class BundleReader:
             return json.loads(
                 read_authentication_text(
                     path,
+                    allow_compressed=self._allow_compressed,
                     grammar="json",
                     label=f"bundle {self._path.name} {name}",
                 )
@@ -846,6 +859,7 @@ class BundleReader:
         try:
             text = read_authentication_text(
                 path,
+                allow_compressed=self._allow_compressed,
                 grammar="jsonl",
                 label=f"bundle {self._path.name} {name}",
                 encoding="utf-8",
@@ -883,6 +897,7 @@ class BundleReader:
                 value = json.loads(
                     read_authentication_text(
                         self._path / name,
+                        allow_compressed=self._allow_compressed,
                         grammar="json",
                         label=f"bundle {self._path.name} {name}",
                     )
@@ -1198,7 +1213,7 @@ def axi_v2_validation_problems(
         return [_axi_problem("axi_partial_opt_in", str(exc))]
 
     if isinstance(metadata, dict):
-        for detail in _check_config_sha256(reader.path, metadata):
+        for detail in _check_config_sha256(reader.path, metadata, allow_compressed=reader._allow_compressed):
             problems.append(_axi_problem("event_semantics_invalid", detail))
 
     try:
@@ -1246,6 +1261,7 @@ def axi_v2_validation_problems(
             reader.path / "request_roster.json",
             grammar="json",
             label=f"AXI bundle {reader.path.name} request roster",
+            allow_compressed=reader._allow_compressed,
         )
     except OSError as exc:
         return problems + [_axi_problem("request_roster_invalid", str(exc))]
@@ -1404,7 +1420,7 @@ def axi_v2_validation_problems(
     response_mirror = reader.path / "outputs" / "response.txt"
     tokens_mirror = reader.path / "outputs" / "tokens.jsonl"
     if config.batch_policy.requested_batch_size > 1 and (
-        response_mirror.exists() or tokens_mirror.exists()
+        desk_exists(response_mirror) or desk_exists(tokens_mirror)
     ):
         problems.append(
             _axi_problem(
@@ -1413,7 +1429,7 @@ def axi_v2_validation_problems(
             )
         )
     elif config.batch_policy.requested_batch_size == 1:
-        if response_mirror.exists():
+        if desk_exists(response_mirror):
             expected_text = (
                 request_rows[0].get("response_text")
                 if len(request_rows) == 1
@@ -1424,6 +1440,7 @@ def axi_v2_validation_problems(
                     response_mirror,
                     grammar="raw",
                     label=f"AXI bundle {reader.path.name} response mirror",
+                    allow_compressed=reader._allow_compressed,
                 )
             except OSError as exc:
                 problems.append(
@@ -1443,7 +1460,7 @@ def axi_v2_validation_problems(
                             "outputs/response.txt compatibility mirror differs from requests.jsonl",
                         )
                     )
-        if tokens_mirror.exists():
+        if desk_exists(tokens_mirror):
             try:
                 mirror_rows = reader._strict_jsonl_objects(
                     "outputs/tokens.jsonl"
@@ -1706,7 +1723,7 @@ class _TraceValidation:
     problems: list[str]
 
 
-def _check_config_sha256(path: Path, metadata: dict[str, Any]) -> list[str]:
+def _check_config_sha256(path: Path, metadata: dict[str, Any], *, allow_compressed=False) -> list[str]:
     expected = metadata.get("config_sha256")
     if expected is None:
         return ["metadata.config_sha256 is missing"]
@@ -1718,6 +1735,7 @@ def _check_config_sha256(path: Path, metadata: dict[str, Any]) -> list[str]:
                 path / "config.json",
                 grammar="json",
                 label=f"bundle {path.name} config hash",
+                allow_compressed=allow_compressed,
             )
         ).hexdigest()
     except FileNotFoundError:
@@ -1941,7 +1959,7 @@ def _paired_group_windows(
 
 
 def _has_suite_contract(path: Path, raw_config: Any) -> bool:
-    if (path / "suite_manifest.json").is_file():
+    if desk_is_file(path / "suite_manifest.json"):
         return True
     if isinstance(raw_config, dict):
         workload = raw_config.get("workload_profile")
@@ -1956,7 +1974,7 @@ def _suite_problems(
     summary: Any,
 ) -> list[str]:
     problems: list[str] = []
-    artifact_exists = (reader.path / "suite_manifest.json").is_file()
+    artifact_exists = desk_is_file(reader.path / "suite_manifest.json")
     raw_status = summary.get("status") if isinstance(summary, dict) else None
     status_is_success = raw_status == RunStatus.SUCCEEDED.value
     events: list[dict[str, Any]] | None = None
@@ -2002,6 +2020,7 @@ def _suite_problems(
                 reader.path / "suite_manifest.json",
                 grammar="json",
                 label=f"suite bundle {reader.path.name} manifest",
+                allow_compressed=reader._allow_compressed,
             )
         )
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -2188,7 +2207,7 @@ def _suite_problems(
                 f"{(block_id, level_id)!r} is missing paired level markers"
             )
 
-    suite_item_records, record_problems = _suite_item_records(reader.path)
+    suite_item_records, record_problems = _suite_item_records(reader.path, allow_compressed=reader._allow_compressed)
     problems.extend(record_problems)
     if suite_item_records is not None:
         records_by_index: dict[int, dict[str, Any]] = {}
@@ -2595,15 +2614,16 @@ def _status_count_key_problems(
     return problems
 
 
-def _suite_item_records(path: Path) -> tuple[list[dict[str, Any]] | None, list[str]]:
+def _suite_item_records(path: Path, *, allow_compressed=False) -> tuple[list[dict[str, Any]] | None, list[str]]:
     suite_items_path = path / "outputs" / "suite_items.jsonl"
-    if not suite_items_path.is_file():
+    if not desk_is_file(suite_items_path):
         return None, ["outputs/suite_items.jsonl is missing for suite bundle"]
     try:
         text = read_authentication_text(
             suite_items_path,
             grammar="jsonl",
             label=f"suite bundle {suite_items_path.parent.parent.name} items",
+            allow_compressed=allow_compressed,
         )
     except OSError as exc:
         return None, [f"outputs/suite_items.jsonl cannot be read: {exc}"]
@@ -2892,7 +2912,7 @@ def _validate_trace_rows(rows: list[dict[str, str]], manifest: list[str]) -> _Tr
     return _TraceValidation(totals=totals, supports=supports, problems=problems)
 
 
-def _check_events(events_path: Path) -> list[str]:
+def _check_events(events_path: Path, *, allow_compressed=False) -> list[str]:
     """Every line a JSON object with exactly the five keys and a finite
     numeric ``timestamp_s``; non-decreasing timestamps; the last event is
     ``run_finalized``."""
@@ -2901,6 +2921,7 @@ def _check_events(events_path: Path) -> list[str]:
             events_path,
             grammar="jsonl",
             label=f"bundle {events_path.parent.name} events validation",
+            allow_compressed=allow_compressed,
         )
     except OSError as exc:
         return [f"events.jsonl cannot be read: {exc}"]
@@ -2954,13 +2975,13 @@ def _check_events(events_path: Path) -> list[str]:
     return problems
 
 
-def _check_power_trace(path: Path, summary: Any, metadata: Any) -> list[str]:
+def _check_power_trace(path: Path, summary: Any, metadata: Any, *, allow_compressed=False) -> list[str]:
     """power_trace.csv is required for succeeded runs, optional otherwise;
     whenever present, its header must be exactly the D-018 header."""
     trace_path = path / "power_trace.csv"
     status_value = summary.get("status") if isinstance(summary, dict) else None
     succeeded = status_value == RunStatus.SUCCEEDED.value
-    if not trace_path.is_file():
+    if not desk_is_file(trace_path):
         if succeeded:
             return ["power_trace.csv is required when status is succeeded but is missing"]
         return []
@@ -2970,6 +2991,7 @@ def _check_power_trace(path: Path, summary: Any, metadata: Any) -> list[str]:
             grammar="raw",
             label=f"bundle {trace_path.parent.name} power-trace validation",
             newline="",
+            allow_compressed=allow_compressed,
         ) as handle:
             header = next(csv.reader(handle), None)
     except OSError as exc:
@@ -2996,6 +3018,7 @@ def _check_power_trace(path: Path, summary: Any, metadata: Any) -> list[str]:
             grammar="raw",
             label=f"bundle {trace_path.parent.name} power-trace validation",
             newline="",
+            allow_compressed=allow_compressed,
         ) as handle:
             reader = csv.DictReader(handle)
             rows = list(reader)
