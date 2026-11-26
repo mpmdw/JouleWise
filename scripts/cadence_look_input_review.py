@@ -154,9 +154,9 @@ def template(pin_list, pin_list_sha256, manifest_sha256):
             **{key: span[key] for key in custody_pins.SPAN_KEYS},
             "check": {"item": span["check_item"], "offload_manifest_sha256": span["offload_manifest_sha256"],
                       "as_printed": None, "form": None, "second_record": None},
-            "receipt": {"path": admission.RECEIPT, "writer_pin": admission.PINS.get(span["runner_commit"]),
+            "receipt": {"path": admission.RECEIPT, "writer_pin": admission.writer_pin(span["runner_commit"]),
                         "kit_frozen_commit": None, "kit_frozen_commit_is_runner_commit": None,
-                        "shapes": {rule: {"shape": None, "writer": _writer(rule, admission.PINS.get(span["runner_commit"])),
+                        "shapes": {rule: {"shape": None, "writer": _writer(rule, admission.writer_pin(span["runner_commit"])),
                                           "verdict": None} for rule in RULES}},
             "verdicts": {"desk": None, "executing_seat": None, "executing_seat_refusal": None},
         } for span in pin_list["spans"]],
@@ -193,7 +193,7 @@ def review(pin_list, pin_list_sha256, manifest_sha256, sdir_of, *, seat_model, s
             frozen = (receipt.get("kit") or {}).get("frozen_commit") if isinstance(receipt.get("kit"), dict) else None
             # The writer is the span's pinned runner revision, never the receipt's own claim (audit 2, MED): a
             # runner commit with no pinned writer leaves every citation empty and the checker refuses the record
-            pin = admission.PINS.get(span["runner_commit"])
+            pin = admission.writer_pin(span["runner_commit"])
             row["receipt"].update(writer_pin=pin, kit_frozen_commit=frozen,
                                   kit_frozen_commit_is_runner_commit=frozen == span["runner_commit"])
             for rule, found in receipt_shapes(receipt, records, pin).items():
@@ -260,7 +260,7 @@ def record_problems(record, pin_list, pin_list_sha256, manifest_sha256, run_stat
         if check.get("second_record") is not None and not (isinstance(check["second_record"], str) and check["second_record"]):
             problems.append(f"{sid}: check.second_record is a citation or null")
         receipt = row.get("receipt") or {}
-        writer = admission.PINS.get(span["runner_commit"])
+        writer = admission.writer_pin(span["runner_commit"])
         if writer is None or receipt.get("writer_pin") != writer:
             problems.append(f"{sid}: the receipt's writer is not the pinned writer of the span's runner commit")
         if receipt.get("kit_frozen_commit_is_runner_commit") is not True:

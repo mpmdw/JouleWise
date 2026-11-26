@@ -552,7 +552,7 @@
       },
       {
         "path": "joulewise/cadence_looks/admission.py",
-        "sha256": "8398e00821d11c0eb34224e1a0afdc35f751d88c77b23c87b911ed30cd34ba52"
+        "sha256": "7704a003d26b4118482c564463f276e4653591cc069fdf098e14701a6336f24b"
       },
       {
         "path": "joulewise/cadence_looks/admission_shape.py",
