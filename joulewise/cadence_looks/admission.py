@@ -58,6 +58,13 @@ _DEADLINE_REFUSALS = re.compile(
 _RETURNED_RC = re.compile(r"(.+): rc (-?(?:0|[1-9][0-9]*))", re.DOTALL)
 
 
+def writer_pin(runner_commit):
+    """Return the commit's writer pin, or None for an unknown revision."""
+    if runner_commit == HP01_KIT["frozen_commit"]:
+        return "A"
+    return PINS.get(runner_commit)
+
+
 # ================================================================================================ span sources
 class SpanFiles:
     """The operational files of one span directory, opened by their literal paths."""
@@ -473,8 +480,9 @@ def _receipt(receipt, where):
     kit = receipt.get("kit")
     obj({"campaign_id": STR, "sha256": DIGEST, "frozen_commit": REVISION})(kit, f"{where}.kit")
     hp01 = kit == HP01_KIT
-    pin = "A" if hp01 else PINS.get(kit["frozen_commit"])
-    if pin is None:
+    pin = writer_pin(kit["frozen_commit"])
+    # The writer pin does not admit another kit that claims the hp-01 revision.
+    if pin is None or (kit["frozen_commit"] == HP01_KIT["frozen_commit"] and not hp01):
         refuse(f"{where}.kit.frozen_commit", "not a rostered writer revision")
     registered = kits.KITS.get(kit["sha256"])
     if registered is None and (hp01 or kit["sha256"] not in kits.FILLERS):
