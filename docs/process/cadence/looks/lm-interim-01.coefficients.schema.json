@@ -1,0 +1,569 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "joulewise.cadence_look_coefficients.v1",
+ "title": "Interim look, freeze 2's coefficient file (lm-interim-01): no energy",
+ "description": "RL-173 section E; the manifest's freeze2 block; interface section 4.2. Written by fit_interim.write_coefficients from stage 1's output and the fit's output (both in memory, both by hash); its sha256 (of fit_interim.dump's canonical bytes) is freeze 2. fit_interim.predict reads the frozen full-fit or held-out-day parameters for any type-A leg with a valid start reading. Closed at every level; it carries no energy, power or meter value and no per-leg value.",
+ "type": "object",
+ "additionalProperties": false,
+ "required": [
+  "active_readings",
+  "block_tokens",
+  "calibrated_range",
+  "centring",
+  "channels",
+  "code_sha256",
+  "delta_column",
+  "fit_sha256",
+  "look_id",
+  "manifest_sha256",
+  "numpy_version",
+  "onset",
+  "prefix",
+  "qualified_interim_half",
+  "rates",
+  "schema",
+  "stage1_sha256",
+  "synthetic"
+ ],
+ "properties": {
+  "schema": {
+   "const": "joulewise.cadence_look_coefficients.v1"
+  },
+  "look_id": {
+   "const": "lm-interim-01"
+  },
+  "synthetic": {
+   "type": "boolean",
+   "description": "copied from stage 1; true only on the generator's data"
+  },
+  "manifest_sha256": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{64}$"
+  },
+  "stage1_sha256": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{64}$"
+  },
+  "fit_sha256": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{64}$",
+   "description": "sha256 of fit_interim.dump(fit output)"
+  },
+  "code_sha256": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "string",
+    "pattern": "^[0-9a-f]{64}$"
+   },
+   "propertyNames": {
+    "pattern": "^(input:[a-z0-9_]+|(joulewise|scripts)/[A-Za-z0-9_./]+\\.py)$"
+   },
+   "description": "the fit's: the code that ran"
+  },
+  "numpy_version": {
+   "type": "string",
+   "description": "the fit's"
+  },
+  "block_tokens": {
+   "const": 256
+  },
+  "prefix": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "1.10",
+    "1.30",
+    "1.374"
+   ],
+   "properties": {
+    "1.10": {
+     "const": 3724
+    },
+    "1.30": {
+     "const": 3151
+    },
+    "1.374": {
+     "const": 2981
+    }
+   }
+  },
+  "rates": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "r_d",
+    "r_p"
+   ],
+   "properties": {
+    "r_p": {
+     "type": "number",
+     "exclusiveMinimum": 0
+    },
+    "r_d": {
+     "type": "number",
+     "exclusiveMinimum": 0
+    }
+   },
+   "description": "stage 1's pooled rates, tokens/s (Q5)"
+  },
+  "centring": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "fan_rpm",
+    "tf08_c",
+    "tv0h_excess_c"
+   ],
+   "properties": {
+    "tf08_c": {
+     "type": "number"
+    },
+    "fan_rpm": {
+     "type": "number"
+    },
+    "tv0h_excess_c": {
+     "type": "number"
+    }
+   },
+   "description": "stage 1's start-reading medians (Q1)"
+  },
+  "calibrated_range": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "fan_rpm",
+    "tf08_c",
+    "tv0h_excess_c"
+   ],
+   "properties": {
+    "tf08_c": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     },
+     "minItems": 2,
+     "maxItems": 2
+    },
+    "fan_rpm": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     },
+     "minItems": 2,
+     "maxItems": 2
+    },
+    "tv0h_excess_c": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     },
+     "minItems": 2,
+     "maxItems": 2
+    }
+   },
+   "description": "stage 1's [min, max] per reading; outside = extrapolated"
+  },
+  "active_readings": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "fan_rpm",
+    "tf08_c",
+    "tv0h_excess_c"
+   ],
+   "properties": {
+    "tf08_c": {
+     "type": "boolean"
+    },
+    "fan_rpm": {
+     "type": "boolean"
+    },
+    "tv0h_excess_c": {
+     "type": "boolean"
+    }
+   },
+   "description": "stage 1's active flags (RL-166b B-2)"
+  },
+  "onset": {
+   "oneOf": [
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "coefficients",
+      "count_only_cut",
+      "folds",
+      "lodo_rms_s",
+      "predictors",
+      "sigma_s",
+      "status"
+     ],
+     "properties": {
+      "status": {
+       "const": "estimable"
+      },
+      "folds": {
+       "type": "object",
+       "propertyNames": {"pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+       "additionalProperties": {
+        "oneOf": [
+         {"type": "null"},
+         {"$ref": "#/$defs/fold_onset"}
+        ]
+       }
+      },
+      "predictors": {
+       "$ref": "#/$defs/onset_predictors"
+      },
+      "coefficients": {
+       "type": "object",
+       "additionalProperties": {
+        "type": "number"
+       },
+       "propertyNames": {
+        "enum": [
+         "intercept",
+         "tf08_c",
+         "fan_rpm",
+         "tv0h_excess_c",
+         "t_p_s"
+        ]
+       },
+       "minProperties": 2
+      },
+      "sigma_s": {
+       "type": "number",
+       "exclusiveMinimum": 0
+      },
+      "lodo_rms_s": {
+       "type": [
+        "number",
+        "null"
+       ],
+       "description": "stage 1's onset.lodo.rms_s: the onset model's leave-one-day-out RMS error, seconds; null when no held-out uncensored leg (RL-167 row 10)"
+      },
+      "count_only_cut": {
+       "oneOf": [
+        {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "fixed_s",
+          "form",
+          "offset_s"
+         ],
+         "properties": {
+          "form": {
+           "const": "tau_hat_minus_2rms"
+          },
+          "offset_s": {
+           "type": "number"
+          },
+          "fixed_s": {
+           "type": "null"
+          }
+         }
+        },
+        {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "fixed_s",
+          "form",
+          "offset_s"
+         ],
+         "properties": {
+          "form": {
+           "const": "fixed_116_s"
+          },
+          "offset_s": {
+           "type": "null"
+          },
+          "fixed_s": {
+           "const": 116.0
+          }
+         }
+        }
+       ]
+      }
+     }
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "coefficients",
+      "count_only_cut",
+      "folds",
+      "lodo_rms_s",
+      "predictors",
+      "sigma_s",
+      "status"
+     ],
+     "properties": {
+      "status": {
+       "const": "not_estimable"
+      },
+      "folds": {
+       "type": "object",
+       "propertyNames": {"pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+       "additionalProperties": {"type": "null"}
+      },
+      "predictors": {
+       "$ref": "#/$defs/onset_predictors"
+      },
+      "coefficients": {
+       "type": "null"
+      },
+      "sigma_s": {
+       "type": "null"
+      },
+      "lodo_rms_s": {
+       "type": "null"
+      },
+      "count_only_cut": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "fixed_s",
+        "form",
+        "offset_s"
+       ],
+       "properties": {
+        "form": {
+         "const": "fixed_116_s"
+        },
+        "offset_s": {
+         "type": "null"
+        },
+        "fixed_s": {
+         "const": 116.0
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  "delta_column": {
+   "enum": [
+    "kept",
+    "dropped_onset_not_estimable"
+   ]
+  },
+  "channels": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "dc_in",
+    "gpu_rail"
+   ],
+   "properties": {
+    "gpu_rail": {
+     "$ref": "#/$defs/channel"
+    },
+    "dc_in": {
+     "$ref": "#/$defs/channel"
+    }
+   }
+  },
+  "qualified_interim_half": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "statistic",
+    "threshold",
+    "value",
+    "verdict"
+   ],
+   "properties": {
+    "statistic": {
+     "const": "gpu_rail.lodo.hot.max_abs"
+    },
+    "value": {
+     "type": [
+      "number",
+      "null"
+     ]
+    },
+    "threshold": {
+     "const": 0.02
+    },
+    "verdict": {
+     "enum": [
+      "passes",
+      "fails",
+      "not_evaluable"
+     ]
+    }
+   }
+  }
+ },
+ "oneOf": [
+  {
+   "properties": {
+    "onset": {
+     "properties": {
+      "status": {
+       "const": "estimable"
+      }
+     }
+    },
+    "delta_column": {
+     "const": "kept"
+    }
+   }
+  },
+  {
+   "properties": {
+    "onset": {
+     "properties": {
+      "status": {
+       "const": "not_estimable"
+      }
+     }
+    },
+    "delta_column": {
+     "const": "dropped_onset_not_estimable"
+    }
+   }
+  }
+ ],
+ "$defs": {
+  "fold_onset": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["coefficients", "sigma_s"],
+   "properties": {
+    "coefficients": {
+     "type": "object",
+     "propertyNames": {"enum": ["intercept", "tf08_c", "fan_rpm", "tv0h_excess_c", "t_p_s"]},
+     "additionalProperties": {"type": "number"},
+     "required": ["intercept", "t_p_s"]
+    },
+    "sigma_s": {"type": "number", "exclusiveMinimum": 0}
+   }
+  },
+  "onset_predictors": {
+   "type": "array",
+   "items": {
+    "enum": [
+     "intercept",
+     "tf08_c",
+     "fan_rpm",
+     "tv0h_excess_c",
+     "t_p_s"
+    ]
+   },
+   "minItems": 2,
+   "maxItems": 5,
+   "uniqueItems": true,
+   "description": "intercept, the ACTIVE readings in the order tf08_c, fan_rpm, tv0h_excess_c, then t_p_s (B-2)"
+  },
+  "channel": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "coefficients",
+    "columns",
+    "covariance",
+    "fold_coefficients",
+    "hot_rms_over_legs",
+    "model_sha256"
+   ],
+   "properties": {
+    "columns": {
+     "type": "array",
+     "items": {
+      "enum": [
+       "p1",
+       "p2",
+       "a0",
+       "a1",
+       "a2",
+       "k_tf08",
+       "k_fan",
+       "k_tv0h",
+       "delta"
+      ]
+     },
+     "minItems": 5,
+     "maxItems": 9,
+     "uniqueItems": true,
+     "description": "the main fit's design columns in order (interface 4.1); predict forms exactly these"
+    },
+    "coefficients": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "number"
+     },
+     "propertyNames": {
+      "enum": [
+       "p1",
+       "p2",
+       "a0",
+       "a1",
+       "a2",
+       "k_tf08",
+       "k_fan",
+       "k_tv0h",
+       "delta"
+      ]
+     },
+     "minProperties": 5
+    },
+    "covariance": {
+     "type": "array",
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      },
+      "minItems": 5,
+      "maxItems": 9
+     },
+     "minItems": 5,
+     "maxItems": 9,
+     "description": "cluster-by-leg, column order as columns"
+    },
+    "hot_rms_over_legs": {
+     "type": [
+      "number",
+      "null"
+     ],
+     "description": "the fit's lodo.hot_rms_over_legs: THE frozen holdout relative error S_w's SD_j takes (RL-167 R-14)"
+    },
+    "fold_coefficients": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "number"
+      },
+      "propertyNames": {
+       "enum": [
+        "p1",
+        "p2",
+        "a0",
+        "a1",
+        "a2",
+        "k_tf08",
+        "k_fan",
+        "k_tv0h",
+        "delta"
+       ]
+      }
+     },
+     "propertyNames": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+     },
+     "description": "RL-166b P-1: each LODO fold's coefficient vector, by held-out day"
+    },
+    "model_sha256": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{64}$"
+    }
+   }
+  }
+ }
+}

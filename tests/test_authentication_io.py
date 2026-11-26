@@ -3,14 +3,18 @@ from __future__ import annotations
 import ast
 import builtins
 import hashlib
+import io
 import inspect
 import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from joulewise.authentication_io import (
+    CompressedBundleRequiresRestore,
+    GRAMMAR_VERDICT_MEMO,
     V2_AUTHENTICATION_INPUT_CHANGED,
     V2_AUTHENTICATION_INPUT_DIGEST_MISMATCH,
     V2AuthenticationInputError,
@@ -20,6 +24,7 @@ from joulewise.authentication_io import (
     paper_supplier_signature_violations,
     read_authentication_input,
     read_authentication_input_nofollow,
+    recording_authentication_reads,
     sha256_authentication_input,
     v2_authentication_path,
 )
@@ -109,6 +114,47 @@ ISSUED_REDUCE_DIRECT_READS = (
 
 
 class V2AuthenticationReadSessionTests(unittest.TestCase):
+    def test_grammar_memo_belongs_to_the_analysis_driver(self):
+        from joulewise import analysis_run_cache
+
+        module_name = analysis_run_cache.__name__
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "input.json"
+            raw = b'{"value":1}\n'
+            path.write_bytes(raw)
+            with mock.patch.dict(sys.modules):
+                del sys.modules[module_name]
+                with V2AuthenticationReadSession():
+                    self.assertEqual(read_authentication_input(path, grammar="json", label="generated"), raw)
+                self.assertNotIn(module_name, sys.modules)
+            with analysis_run_cache.analysis_run_caches() as run, V2AuthenticationReadSession():
+                self.assertEqual(read_authentication_input(path, grammar="json", label="generated"), raw)
+                self.assertEqual(run.memos[GRAMMAR_VERDICT_MEMO], {(hashlib.sha256(raw).hexdigest(), "json", False): True})
+            self.assertIsNone(analysis_run_cache.memo(GRAMMAR_VERDICT_MEMO))
+
+    def test_explicit_compressed_input_preserves_main_read_recording(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "input.json"
+            path.with_suffix(".json.zst").touch()  # generated marker, decompression is supplied by the test
+            raw = b'{"value":1}\n'
+            with V2AuthenticationReadSession() as session, recording_authentication_reads() as reads, \
+                    mock.patch("joulewise.desk_compress.open_bytes", side_effect=lambda _: io.BytesIO(raw)) as open_stream:
+                with self.assertRaises(CompressedBundleRequiresRestore):
+                    read_authentication_input(path, grammar="json", label="generated")
+                self.assertEqual(read_authentication_input(path, grammar="json", label="generated", allow_compressed=True), raw)
+            open_stream.assert_called_once_with(path)
+            self.assertEqual(len(reads), 1)
+            self.assertEqual(reads[0].identity, str(path.resolve()))
+            self.assertEqual(reads[0].sha256, hashlib.sha256(raw).hexdigest())
+            self.assertEqual(session.records[str(path.resolve())].sha256, reads[0].sha256)
+
+    def test_default_read_refuses_a_nonfile_compressed_sibling(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "input.json"
+            path.with_suffix(".json.zst").mkdir()
+            with self.assertRaises(CompressedBundleRequiresRestore):
+                read_authentication_input(path, grammar="json", label="generated")
+
     def test_registration_is_complete_before_bytes_are_returned(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "input.json"
