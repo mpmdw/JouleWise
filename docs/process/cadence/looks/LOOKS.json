@@ -7,7 +7,8 @@
       "sha256": "908a6fc91bb788e625195f638e43178d4ca70f2e22bffe29fa399f368b33d58a",
       "status": "draft",
       "roster_sha256": "93cdec23e36c3b717e34a7865601f02d9e6135cafd26637849030fe0ef89b0bf",
-      "execution_host": "hw1:26e2f18dbe994c43b56a0e0e66c0d6e504d29f38c6e9cfa3e9d66316f2d0d3c2"
+      "execution_host": "hw1:26e2f18dbe994c43b56a0e0e66c0d6e504d29f38c6e9cfa3e9d66316f2d0d3c2",
+      "verdicts_sha256": "d23219409746a809fcbb95b1d3ef4cf1d65c8ee6ed46131e01f822bb01009f0a"
     },
     {
       "look_id": "lm-qual-01",
