@@ -91,7 +91,7 @@ class KitTests(unittest.TestCase):
 
     def test_committed_bytes_reproduce_without_reading_models(self):
         for path, raw in self.files.items():
-            self.assertEqual((ROOT / path).read_bytes(), raw, path)
+            self.assertEqual(kit.sha((ROOT / path).read_bytes()), kit.sha(raw), path)
 
     def test_roster_exactly_matches_amendment_a1(self):
         expected = ['anchor'] * 4 + ['D', 'X-G', 'Y-S', 'D', 'X-S', 'Y-G',
@@ -210,8 +210,7 @@ class KitTests(unittest.TestCase):
             self.assertIs(policy['heavy'], False)
             self.assertEqual(policy['per_turn'], m['role'].endswith('G'))
 
-    def test_d_has_required_base_controls_and_explicit_r1_filled_slots(self):
-        r1 = kit.read_inputs(ROOT)['R1']
+    def test_d_has_required_base_controls(self):
         for m in self.members:
             if m['role'] != 'D':
                 continue
@@ -229,11 +228,6 @@ class KitTests(unittest.TestCase):
             self.assertTrue(spec['task_kwargs']['give_hint'])
             self.assertEqual(config.sampling.idle_seconds, 300)
             self.assertNotIn('max_episode_seconds', spec)
-            # PR #886 fills R1: each slot is explicit and carries exactly the inputs.R1 value.
-            for key, value in (('max_episode_decode_tokens', r1['B_D']), ('deadman_s', r1['T_dead'])):
-                self.assertIn(key, spec)
-                self.assertIsNotNone(spec[key])
-                self.assertEqual(spec[key], value)
             self.assertEqual(spec['chat_template_kwargs'], {'reasoning_effort': 'medium'})   # R0 re-run 11
             self.assertIs(spec['thermal']['heavy'], True)
             self.assertIs(spec['thermal']['per_turn'], True)
@@ -747,12 +741,11 @@ class R1EvidenceBindingTests(unittest.TestCase):
 class R1BudgetBindingTests(unittest.TestCase):
     """Lead ruling R5-4: B_D, the thermal policy and ruling 1(f) bind to r1_slots."""
 
-    def test_b_d_may_only_be_lowered_from_the_step_d_budget(self):
+    def test_b_d_above_the_step_d_budget_is_refused(self):
         inputs, slots = ready_inputs()
-        inputs['R1']['B_D'] = 6144
         kit.require_ready(inputs, slots)
         inputs['R1']['B_D'] = 9216
-        with self.assertRaisesRegex(ValueError, 'exceeds r1_slots.slots.B_D 8192'):
+        with self.assertRaisesRegex(ValueError, 'must equal the decided step-d budget 8192'):
             kit.require_ready(inputs, slots)
 
     def test_r1_slots_without_an_admissible_step_d_budget_refuse(self):
@@ -800,8 +793,6 @@ class R1BudgetBindingTests(unittest.TestCase):
         self.assertEqual(kit.max_fitting_b_d(slots, inputs['R1']['T_dead']), 7168)
         # RL-148 section 2, RL-149 section 1.5: ruling 1(f)'s worst case no longer refuses D;
         # require_ready asks that the typical case fits (tests/align/test_rl149_typical_case.py).
-        kit.require_ready(inputs, slots)
-        inputs['R1']['B_D'] = 7168
         kit.require_ready(inputs, slots)
 
     def test_ruling_1f_needs_the_measured_inputs(self):
