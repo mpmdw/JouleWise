@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+from copy import deepcopy
 from dataclasses import asdict, replace
 from functools import cache
 from io import BytesIO
@@ -22,6 +23,7 @@ from joulewise.hazards.base import Stamp
 from scripts import align_r1_rehearsal, run_align_r1_smoke, run_night
 from tests.align.test_cache_checkpoint import HybridAPI, fake_core, hybrid_endpoint
 from tests.align.test_pilot3_cache import CacheAPI, chat, fake_endpoint
+from tests.cadence import test_interim_admission_closure as frozen
 
 ROOT = Path(__file__).resolve().parents[2]
 POLICY = {"s_fast": "TZ00", "s_slow": "TA00", "r0_sha256": "a" * 64, "fan_keys": []}
@@ -102,6 +104,25 @@ class PinnedWriters(unittest.TestCase):
                 self.assertIsNone(projected["g0_reference_source"])
                 A._result_leg(label, mock=False)(projected, "leg_record.result")
 
+    def test_g0_reference_source_and_digest_follow_the_leg_role_and_release(self):
+        for pin, label in A.PINS.items():
+            if label == "A":
+                continue
+            capture = leg_projection(pin)
+            consume = {**capture, "g0_shape": "span", "g0_role": "consume",
+                       "g0_reference_source": "fixture", "g0_reference_record_sha256": "e" * 64}
+            released = {**capture, "g0_released": True, "g0_outcome": "released", "g0_reference_source": "fixture"}
+            check = A._result_leg(label, mock=False)
+            for valid in (capture, consume, released):
+                check(valid, "leg_record.result")
+            for invalid in ({**consume, "g0_reference_source": None},
+                            {**consume, "g0_reference_source": None, "g0_reference_record_sha256": None},
+                            {**consume, "g0_reference_record_sha256": None},
+                            {**released, "g0_reference_source": None},
+                            {**capture, "g0_reference_record_sha256": "e" * 64}):
+                with self.subTest(pin=pin, result=invalid), self.assertRaises(A.Refusal):
+                    check(invalid, "leg_record.result")
+
     def test_aborted_ac_mode_observation_can_report_null_without_an_exception(self):
         for pin, label in A.PINS.items():
             with self.subTest(pin=pin):
@@ -121,6 +142,14 @@ class PinnedWriters(unittest.TestCase):
         turn, = endpoint.turn_provenance
         self.assertEqual(turn["generation"]["cache_represented_tokens_after"], 5)
         J._turns([turn], J.TURNS)
+        for changed in (
+            {"cache_checkpoint_count_after_prefill": 0, "cache_checkpoint_bytes_after_prefill": 0,
+             "cache_checkpoint_retained_bytes_after_prefill": 0},
+            {"cache_offsets_after_generation": [5, 6]},
+            {"cache_represented_tokens_after": 99},
+        ):
+            with self.subTest(changed=changed), self.assertRaises(A.Refusal):
+                J._turns([{**turn, "generation": {**turn["generation"], **changed}}], J.TURNS)
 
     def test_checkpoint_config_size_is_an_object_in_events_and_turns(self):
         self.same_sources("joulewise/align/apple/endpoint.py", "joulewise/align/apple/prompt_cache.py")
@@ -139,6 +168,15 @@ class PinnedWriters(unittest.TestCase):
         self.assertIsInstance(setup["metadata"]["cache_checkpoint_config_size"], dict)
         J._mlx_metadata(setup, J.EVENTS)
         J._turns(endpoint.turn_provenance, J.TURNS)
+        turn, = endpoint.turn_provenance
+        for removed in (set(J._CHECKPOINT), {"cache_checkpoint_count"}):
+            generation = {key: value for key, value in turn["generation"].items() if key not in removed}
+            self.assertIn("cache_checkpoint_count_after_prefill", generation)
+            with self.subTest(removed=removed), self.assertRaises(A.Refusal):
+                J._turns([{**turn, "generation": generation}], J.TURNS)
+        generation = {**turn["generation"], "cache_checkpoint_config_size_unavailable": True}
+        with self.assertRaises(A.Refusal):
+            J._turns([{**turn, "generation": generation}], J.TURNS)
 
     def test_gate_with_null_entry_and_exit_values_and_observed_clock(self):
         self.same_sources("joulewise/align/apple/thermal.py", "joulewise/align/apple/thermal_gates.py")
@@ -200,6 +238,49 @@ class PinnedWriters(unittest.TestCase):
         self.assertEqual(rows[-1]["values"]["collector_error"], "synthetic collector failure")
         J._thermal(rows, J.THERMAL)
 
+    def test_collector_error_allows_only_a_terminal_open_g0(self):
+        for pin in frozen.PINS:
+            complete, open_gate, gate_begin, gate_end = collector_fault_bundle(pin)
+            J.validate_bundle(open_gate, "bundle", {})
+            J.validate_bundle(complete, "bundle", {})
+            following_begin = {**gate_begin, "values": {**gate_begin["values"], "gate_kind": "G1"}}
+            following_end = {**gate_end, "values": {"state": "end", "gate": {
+                **gate_end["values"]["gate"], "kind": "G1", "reference": {"fast_c": 56, "slow_c": 52},
+            }}}
+            cases = {
+                "two open gates": (open_gate, [following_begin]),
+                "later complete gate": (open_gate, [following_begin, following_end]),
+                "second open G0": ({**open_gate, J.THERMAL: complete[J.THERMAL]}, [gate_begin]),
+                "only an open G1": ({**open_gate, J.THERMAL: [
+                    row for row in open_gate[J.THERMAL] if row["kind"] != "align_thermal_gate"]}, [following_begin]),
+            }
+            for label, (bundle, added) in cases.items():
+                rows = bundle[J.THERMAL]
+                mutated = {**bundle, J.THERMAL: numbered([*rows[:-1], *added, rows[-1]])}
+                with self.subTest(pin=pin, case=label), self.assertRaises(A.Refusal):
+                    J.validate_bundle(mutated, "bundle", {})
+
+            phase_events = [row for row in complete[J.EVENTS]
+                            if row["event_type"] in ("phase_start", "phase_end", "token")]
+            gate_events = [row for row in phase_events if row["phase"] == "align_thermal_gate"]
+            later_phase = [{"timestamp_s": gate_events[-1]["timestamp_s"], "event_type": kind,
+                            "phase": "align_context_check", "message": "render prompt", "metadata": {}}
+                           for kind in ("phase_start", "phase_end")]
+            cases = {
+                "completed G0 and turn in events": {**open_gate, J.EVENTS: complete[J.EVENTS],
+                                                    J.TURNS: complete[J.TURNS]},
+                "open G0 replayed in events": {**open_gate, J.EVENTS: sorted(
+                    [*open_gate[J.EVENTS], *gate_events], key=lambda row: row["timestamp_s"])},
+                "open G0 replayed in salvage": {**open_gate, J.SALVAGE: gate_events},
+                "later phase in salvage": {**open_gate, J.SALVAGE: later_phase},
+                "later phase in events": {**open_gate, J.EVENTS: sorted(
+                    [*open_gate[J.EVENTS], *later_phase], key=lambda row: row["timestamp_s"])},
+                "turn without runtime events": {**open_gate, J.TURNS: complete[J.TURNS]},
+            }
+            for label, mutated in cases.items():
+                with self.subTest(pin=pin, case=label), self.assertRaises(A.Refusal):
+                    J.validate_bundle(mutated, "bundle", {})
+
     def test_status_can_stamp_a_frame_without_pressure_state(self):
         self.same_sources("joulewise/align/apple/thermal_gates.py")
         capture = SimpleNamespace(open=lambda _: BytesIO(plistlib.dumps({})))
@@ -218,6 +299,20 @@ class PinnedWriters(unittest.TestCase):
             summary = monitor.stop()
         self.assertNotIn("returncode", summary["stop"])
         A._SUPERVISOR(summary, "runner_receipt.steps.result.supervisor")
+
+    def test_monitor_summary_refuses_exit_modes_cadence_does_not_use(self):
+        with patch.object(driver, "_append_line"):
+            monitor = driver.MonitorSupervisor([], night_dir=Path("unused"), popen=Mock())
+            summary = monitor.stop()
+        at = summary["stop"]["requested"]
+        ordinary = {"pid": 100, "at": at, "returncode": 0, "lived_s": 1.5}
+        final = {**ordinary, "final": True}
+        discard = {"pid": 100, "at": at, "returncode": None, "discarded": "not ready"}
+        A._SUPERVISOR({**summary, "starts": 1, "exits": [ordinary]}, "supervisor")
+        for changes in ({"exits": [final]}, {"exits": [discard]}, {"final_exit": None}, {"final_exit": final},
+                        {"exits": [final], "final_exit": final}, {"starts": 1}):
+            with self.subTest(changes=changes), self.assertRaises(A.Refusal):
+                A._SUPERVISOR({**summary, **changes}, "supervisor")
 
     def test_monitor_exit_and_restart_keep_their_structured_records(self):
         self.same_sources("joulewise/b5/driver.py")
@@ -288,3 +383,22 @@ def sidecar_at(folder, *, reader=None):
 
 def journal_rows(folder):
     return A.decode_lines((Path(folder) / "align_thermal.jsonl").read_bytes(), J.THERMAL)
+
+
+def numbered(rows):
+    return [{**row, "seq": index} for index, row in enumerate(rows, start=1)]
+
+
+def collector_fault_bundle(pin):
+    complete = {key.removeprefix(frozen.BUNDLE + "/"): deepcopy(value)
+                for key, value in frozen.journals(pin, "controller").items()}
+    for row in complete[J.EVENTS]:
+        if (row["event_type"], row["phase"]) == ("stage_completed", "cleanup"):
+            row["metadata"] = {"cleanup_ok": False, "message": "runtime cleanup raised RuntimeError"}
+    rows = complete[J.THERMAL]
+    rows[-1]["values"]["collector_error"] = "synthetic read fault"
+    gate_begin, gate_end = (row for row in rows if row["kind"] == "align_thermal_gate")
+    open_gate = {J.CONFIG: complete[J.CONFIG], J.THERMAL: numbered(row for row in rows if row is not gate_end),
+                 J.EVENTS: [row for row in complete[J.EVENTS]
+                            if row["event_type"] not in ("phase_start", "phase_end", "token")]}
+    return complete, open_gate, gate_begin, gate_end
