@@ -77,6 +77,46 @@ def wb(p, data):
 ENERGY_MARKERS = ("power_trace.csv", "segment_energy.json")
 
 
+class CampaignTimingSizes(unittest.TestCase):
+    def test_generated_campaign_uses_pinned_roster_and_stream_paths(self):
+        from tests.cadence import look_campaign_timing as timing
+
+        span_id, leg_id = "dev-03-s07", "L028"
+        bundle = "runs/fixture-bundle"
+        runtime = f"legs/{leg_id}/runtime/{bundle}"
+        streams = {
+            "hazards/meter/stream-009.jsonl": 3_000_000,
+            f"{runtime}/events.jsonl": 660_000,
+            f"{runtime}/outputs/align_thermal.jsonl": 800_000,
+            f"{runtime}/outputs/align_turns.jsonl": 45_000,
+            f"{runtime}/power_trace.csv": 240_000,
+            f"{runtime}/raw/powermetrics.plist": 800_000,
+            f"{runtime}/rich_telemetry.jsonl": 150_000,
+            f"legs/{leg_id}/runtime.rejected1/runs/first/raw/powermetrics.plist": 42_000,
+            "soak/idle_soak/battery.jsonl": 321,
+        }
+        pins = {"spans": [{"span_id": span_id, "files": [{"path": path, "size": size}
+                                                       for path, size in streams.items()]}]}
+        manifest = {"inputs": {"pins": pins}}
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch("builtins.open", wraps=open) as opened:
+                files, span_dirs = timing.write_campaign(tmp, manifest)
+            self.assertEqual(set(span_dirs), {span_id})
+            span = span_dirs[span_id]
+            self.assertEqual([row["span_id"] for row in rj(files["roster.json"])], [span_id])
+            self.assertEqual(rj(span / "runner_receipt.json")["roster"], [leg_id])
+            self.assertEqual(rj(span / f"legs/{leg_id}/leg_record.json")["result"]["bundle"], bundle)
+            actual = {}
+            for call in opened.call_args_list:
+                path = Path(call.args[0])
+                if path.is_relative_to(span):
+                    rel = path.relative_to(span).as_posix()
+                    if timing.STREAMS.search(rel):
+                        actual[span_id, rel] = path.stat().st_size
+            self.assertEqual(actual.keys(), {(span_id, path) for path in streams})
+            timing.check_sizes(actual, manifest)
+
+
 class AstraPreResponse(unittest.TestCase):
     def test_singular_onset_keeps_rank_refusal_before_responses(self):
         li, _, _ = synth.build("noisy", seed=3)
