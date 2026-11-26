@@ -71,3 +71,19 @@ A = `b4b6aeb19`, B = `2d347f721`, C = `6e9d42f1d`. Line references are to those 
 - The frozen synthetic mutation probe checked 1,808 cases targeting the changed paths. Sidecar and event copies preserve the refusal of one-sided interval mutations. The existing correction ledger changes exactly six expected refusals to admissions, three missing pressure states with a timestamp and three unavailable raw clocks. The published case IDs, original oracle and frozen bytes remain intact.
 - Refreshed the two admission code digests in the draft manifest and the manifest digest in `LOOKS.json` using the PR #974 procedure. The lead's execution host and verdict binding retain their registered values.
 - Hosted CI owns the whole suite under the builder test budget. The PR's full-tier ledger records CI and review evidence. The lead routes the cold pass and the next literal rehearsal on the registered inputs.
+
+## Round 2 narrowing
+
+The Opus executing re-check of PR #975 at `d6d8c3735` found four admission rules wider than the registered writers and one stale manifest test. The lead ruled on findings 1–5 and the stop relation below. These rulings supersede the corresponding first-round entries.
+
+| Finding | Disposition |
+| --- | --- |
+| 1. Supervisor exits | Accept the process exit fields from the supervisor configured by `MeterFeed` at the pins. Refuse discard records, final-mode exit records and either shape of `final_exit`. |
+| 2. G0 source | Require text for a released G0 or a consuming leg. A consumer also requires a digest. An unreleased capture can have a null source, and capture always writes a null digest. |
+| 3. Checkpoint prefill counters | Require all three counters together with the checkpoint accounting block. The size object and the unavailable flag are mutually exclusive. |
+| 4. Collector fault during G0 | With a collector error, permit one open G0 begin as the only gate row. Refuse runtime events for that G0 or runtime phases at or after its start in either journal, and refuse any turn. Controller timing and cleanup can still finish. |
+| 5. Manifest fixture | Remove the populated verdict digest from the copied row before testing the missing-digest refusal. |
+| 10. Supervisor stop relation | A previously started supervisor must have a recorded exit if the stop has no return code. |
+| 11. Final cache offsets | Every final offset equals the represented token count, as required by the cache writer. |
+
+Commit `cc434e93c` is test-only. Its 52 negative subcases reproduced at the prior head, and the manifest regression also reproduced separately. All 66 focused checks passed after the repair. The requested `FreezeCommit.test_the_look_s_tests_pass_on_the_frozen_tree` started against the repinned tree. The PR verification records the result. Round 2 refreshes the two code digests and the draft's manifest digest.

@@ -98,19 +98,27 @@ _CACHE_SETUP = {                                        # prompt_cache.py:266-27
 _CHECKPOINT_SIZE = obj({key: NAT for key in (
     "linear_layers", "attention_layers", "conv_bytes_per_layer", "recurrent_bytes_per_layer", "state_bytes",
     "offset_bytes", "checkpoint_bytes", "state_itemsize", "conv_itemsize")})
-_CHECKPOINT = {                                         # prompt_cache.py:286-297, a hybrid model with checkpoints
+_CHECKPOINT_ACCOUNTING = {                              # prompt_cache.py:286-297, a hybrid model with checkpoints
     "cache_checkpoint_policy": STR, "cache_checkpoint_limit": NAT, "cache_checkpoint_boundary_tokens": nullable(NAT),
     "cache_checkpoint_byte_accounting": STR, "cache_checkpoint_count": NAT, "cache_checkpoint_bytes": NAT,
     "cache_checkpoint_retained_bytes": NAT, "cache_checkpoint_restore_count": NAT,
     "cache_checkpoint_restore_bytes": NAT, "cache_checkpoint_restored_tokens": NAT,
-    "cache_prefill_tokens_saved": NAT, "cache_checkpoint_config_size": _CHECKPOINT_SIZE,
-    "cache_checkpoint_config_size_unavailable": const(True)}
+    "cache_prefill_tokens_saved": NAT}
+_CHECKPOINT_CONFIG = {"cache_checkpoint_config_size": _CHECKPOINT_SIZE,
+                      "cache_checkpoint_config_size_unavailable": const(True)}
+_CHECKPOINT = {**_CHECKPOINT_ACCOUNTING, **_CHECKPOINT_CONFIG}
+
+
+def _check_checkpoint_config(metadata, where):
+    if _CHECKPOINT_CONFIG.keys() <= metadata.keys():
+        refuse(f"{where}.cache_checkpoint_config_size", "both a size and its unavailable flag")
 
 
 def _setup(metadata, where, extra):
     """generation_setup carries the episode cache's observation on the registered cache path, else nothing."""
     if any(key in metadata for key in _CACHE_SETUP):
         obj({**_TURN, **extra, **_CACHE_SETUP}, _CHECKPOINT)(metadata, where)
+        _check_checkpoint_config(metadata, where)
     else:
         obj({**_TURN, **extra})(metadata, where)
 
@@ -206,7 +214,7 @@ class _Stack:
         return self.open.pop()[1]
 
 
-def _runtime_events(rows, where, *, controller, selected=None):
+def _runtime_events(rows, where, *, controller, selected=None, open_g0_ns=None):
     """The episode's runtime events in order: thermal intervals, the turn's MLX phases and tokens and the zero-
     generation observations; with ``controller``, the controller's lifecycle rows too (events.jsonl)."""
     stack = _Stack(where)
@@ -219,6 +227,10 @@ def _runtime_events(rows, where, *, controller, selected=None):
         at = f"{where}[{index}]"
         _event_row(row, at)
         kind, phase, metadata = row["event_type"], row["phase"], row["metadata"]
+        if open_g0_ns is not None and kind in ("phase_start", "phase_end", "token") and (
+                row["timestamp_s"] * 1e9 >= open_g0_ns
+                or (phase == "align_thermal_gate" and metadata.get("kind") == "G0")):
+            refuse(at, "runtime phase at or after an open G0")
         if controller:
             if previous is not None and row["timestamp_s"] < previous:
                 refuse(f"{at}.timestamp_s", "before the previous row; the controller flushes in time order")
@@ -475,13 +487,19 @@ def _generation(value, where):
         return None
     cache = _CACHE_TURN if type(value) is dict and "cache_policy" in value else {}
     finished = _CACHE_FINISH if cache and any(key in value for key in _CACHE_FINISH) else {}
-    checkpointed = _CHECKPOINT_PREFILL if cache and any(key in value for key in _CHECKPOINT_PREFILL) else {}
+    after_prefill = cache and any(key in value for key in _CHECKPOINT_PREFILL)
+    checkpointed = {**_CHECKPOINT_ACCOUNTING, **_CHECKPOINT_PREFILL} if after_prefill else {}
+    optional = (_CHECKPOINT_CONFIG if after_prefill else _CHECKPOINT) if cache else None
     # finish_reason is whatever text the runtime's last response carried (mlx_runtime.py:911-913, endpoint.py:275-302),
     # or the episode deadman's, or null; the writer stores no other (endpoint.py:770-771)
     obj({"finish_reason": nullable(TEXT), "output_token_ids": arr(INT), "prior_hidden_prefill_method": _PREFILL_METHOD,
          "prior_hidden_prefill_tokens": NAT, "prompt_token_ids": arr(INT), "prompt_token_ids_sha256": DIGEST,
          "reasoning_token_accounting": STR, "runtime_stop_condition": STR, "sampler": _SAMPLER,
-         "stop_condition": STR, **cache, **finished, **checkpointed}, _CHECKPOINT if cache else None)(value, where)
+         "stop_condition": STR, **cache, **finished, **checkpointed}, optional)(value, where)
+    _check_checkpoint_config(value, where)
+    if finished and any(offset != value["cache_represented_tokens_after"]
+                        for offset in value["cache_offsets_after_generation"]):
+        refuse(f"{where}.cache_offsets_after_generation", "not the final represented token count")
     digest = hashlib.sha256(json.dumps(value["prompt_token_ids"], separators=(",", ":")).encode()).hexdigest()
     if value["prompt_token_ids_sha256"] != digest:
         refuse(f"{where}.prompt_token_ids_sha256", "not the digest of its prompt ids")
@@ -583,6 +601,7 @@ def _thermal(rows, where, *, complete=True):
     if not rows:
         refuse(where, "an empty journal; the collector opens its session first")
     selected, order, gates = None, (), []
+    gate_rows = 0
     for index, row in enumerate(rows):
         at = f"{where}[{index}]"
         row_check(row, at)
@@ -609,6 +628,7 @@ def _thermal(rows, where, *, complete=True):
             if set(values["coverage"]["per_key"]) != selected:
                 refuse(f"{at}.values.coverage.per_key", "not the policy's selected keys")
         else:
+            gate_rows += 1
             hold = kind == "align_thermal_hold"
             if type(values) is dict and values.get("state") == "begin":
                 obj({"state": const("begin"), "gate_kind": enum("H") if hold else enum("G0", "G1"), "turn": const(0),
@@ -630,9 +650,14 @@ def _thermal(rows, where, *, complete=True):
         joined = "; ".join(errors[key] for key in order if key in errors)
         if (row["error"] or "") != joined:
             refuse(f"{at}.error", "not the joined reasons of its failed reads")
-    if complete and gates and rows[-1]["values"]["collector_error"] is None:
-        refuse(where, "a gate begun and never ended")
-    return selected
+    open_g0_ns = None
+    if complete and gates:
+        if rows[-1]["values"]["collector_error"] is None:
+            refuse(where, "a gate begun and never ended")
+        if gate_rows != 1 or gates[0][0] != "G0":
+            refuse(where, "a collector fault can leave only its first G0 begin")
+        open_g0_ns = gates[0][1]["entry_stamp"]["epoch_ns"]
+    return selected, open_g0_ns
 
 
 # ======================================================================================================= config
@@ -694,8 +719,8 @@ def validate_bundle(files, where, context):
         refuse(f"{where}/{TURNS}", "absent for a leg with a turn")
     _config(files[CONFIG], f"{where}/{CONFIG}")
     thermal_rows, event_rows = files[THERMAL], files[EVENTS]
-    selected = _thermal(thermal_rows, f"{where}/{THERMAL}")
-    events = _runtime_events(event_rows, f"{where}/{EVENTS}", controller=True, selected=selected)
+    selected, open_g0_ns = _thermal(thermal_rows, f"{where}/{THERMAL}")
+    events = _runtime_events(event_rows, f"{where}/{EVENTS}", controller=True, selected=selected, open_g0_ns=open_g0_ns)
     _check_interval_copies(thermal_rows, event_rows, f"{where}/{EVENTS}")
     # Sidecar.stop raises after writing the error. The controller records it
     # in cleanup metadata unless best-effort cleanup follows a run failure.
@@ -704,11 +729,15 @@ def validate_bundle(files, where, context):
             (row["event_type"], row["phase"]) == ("stage_completed", "cleanup")
             and row["metadata"].get("cleanup_ok") is False for row in event_rows):
         refuse(f"{where}/{THERMAL}[-1].values.collector_error", "no failed cleanup or run in the event journal")
-    generated = _turns(files.get(TURNS, []), f"{where}/{TURNS}")
+    turns = files.get(TURNS, [])
+    if open_g0_ns is not None and (turns or turned):
+        refuse(f"{where}/{TURNS}", "a turn after an open G0")
+    generated = _turns(turns, f"{where}/{TURNS}")
     if SALVAGE in files:
         if not files[SALVAGE]:
             refuse(f"{where}/{SALVAGE}", "an empty salvage journal")
-        _runtime_events(files[SALVAGE], f"{where}/{SALVAGE}", controller=False, selected=selected)
+        _runtime_events(files[SALVAGE], f"{where}/{SALVAGE}", controller=False, selected=selected,
+                        open_g0_ns=open_g0_ns)
         _check_interval_copies(thermal_rows, files[SALVAGE], f"{where}/{SALVAGE}")
     if events["mlx"]:
         if len(generated) != 1 or generated[0] is None:

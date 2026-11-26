@@ -165,25 +165,23 @@ def _result_leg(pin, mock):
         if pin != "A":
             enum("own", "span")(value["g0_shape"], f"{where}.g0_shape")
             enum("capture", "consume")(value["g0_role"], f"{where}.g0_role")
-            nullable(STR)(value["g0_reference_source"], f"{where}.g0_reference_source")
-            nullable(DIGEST)(value["g0_reference_record_sha256"], f"{where}.g0_reference_record_sha256")
+            consumes = value["g0_role"] == "consume"
+            released = value["g0_released"] or value["g0_outcome"] == "released"
+            (STR if consumes or released else nullable(STR))(
+                value["g0_reference_source"], f"{where}.g0_reference_source")
+            (DIGEST if consumes else const(None))(
+                value["g0_reference_record_sha256"], f"{where}.g0_reference_record_sha256")
     return check
 
 
 _SUPERVISOR_STAMP = obj({"wall_s": FLOAT, "monotonic_ns": INT, "monotonic_raw_ns": nullable(INT)})
-_SUPERVISOR_EXIT = {"pid": POS, "at": _SUPERVISOR_STAMP}
-_SUPERVISOR_FINAL_EXIT = obj({**_SUPERVISOR_EXIT, "returncode": const(0), "lived_s": FLOAT, "final": const(True)})
-# joulewise/b5/driver.py:948-987,1026-1084, the monitor supervisor's stop summary
-_SUPERVISOR = obj(
+# Gate on the supervisor configured by MeterFeed (scripts/run_align_r1_smoke.py:234-243).
+_SUPERVISOR_FIELDS = obj(
     {"schema": const("joulewise.b5_monitor_supervision.v1"), "argv": arr(STR), "starts": NAT, "restarts": NAT,
-     "start_failures": NAT, "exits": arr(either(
-         obj({**_SUPERVISOR_EXIT, "returncode": INT, "lived_s": FLOAT}),
-         obj({**_SUPERVISOR_EXIT, "returncode": nullable(INT), "discarded": STR}),
-         _SUPERVISOR_FINAL_EXIT)),
+     "start_failures": NAT, "exits": arr(obj({"pid": POS, "at": _SUPERVISOR_STAMP, "returncode": INT, "lived_s": FLOAT})),
      "gaps": arr(obj({"down_from": _SUPERVISOR_STAMP, "up_at": _SUPERVISOR_STAMP})),
      "stop": lambda value, where: _supervisor_stop(value, where),
-     "journal": STR, "errors": arr(STR), "crash_loop": BOOL},
-    {"final_exit": nullable(_SUPERVISOR_FINAL_EXIT)})
+     "journal": STR, "errors": arr(STR), "crash_loop": BOOL})
 _GROUP = obj({"group_census": arr(STR), "reaped": BOOL})
 
 
@@ -204,6 +202,14 @@ def _supervisor_stop(value, where):
         proven = True
     if value["proven_stopped"] != proven:
         refuse(f"{where}.proven_stopped", "not what its stop proved")
+
+
+def _SUPERVISOR(value, where):
+    _SUPERVISOR_FIELDS(value, where)
+    if "returncode" not in value["stop"] and value["starts"] and not value["exits"]:
+        refuse(f"{where}.stop", "a started supervisor cleared its process without an exit")
+
+
 _RESTORE = either(
     obj({"rc": const(0), "action": enum("no_power_read", "foreign_marker_left")}),
     # joulewise/align/apple/powermode.py:519-535 with the smoke's rc (scripts/run_align_r1_smoke.py:138-152)
