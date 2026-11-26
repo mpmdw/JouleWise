@@ -440,11 +440,24 @@ class PortedSolTests(_Ctx):
 
 class SizingTests(_Ctx):
     def test_window_max_paths_agree_and_the_committed_plan_is_pending_before_w1(self):
-        row = self.probe('w1-window-max', next='r1')
+        from scripts import align_v4_kit as kit
+
+        row = self.probe('w1-window-max', next='w1')
         self.assertEqual(row['status'], wp.PASS, row['detail'])
         self.assertEqual(row['evidence']['validator_window_max_s'], row['evidence']['writer_window_max_s'])
         self.assertEqual(row['evidence']['unplanned_wait_sources'], [])
-        at_gate = self.probe('w1-window-max', next='w1')
+        self.assertIn('committed_w1_plan', row['evidence'])
+
+        pending = self.tmp / 'pending-kit'
+        for relative in (kit.KIT / 'collection_plan.json', kit.KIT / 'registration/sizing_preview.json'):
+            path = pending / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / relative, path)
+        with mock.patch.object(wp, 'executed_closure', return_value=set()):
+            before_gate = self.probe('w1-window-max', repo=pending, next='r1')
+            at_gate = self.probe('w1-window-max', repo=pending, next='w1')
+        self.assertEqual(before_gate['status'], wp.PASS, before_gate['detail'])
+        self.assertNotIn('committed_w1_plan', before_gate['evidence'])
         self.assertEqual(at_gate['status'], wp.FAIL)        # PENDING at its own gate fails
         self.assertIn('not committed yet', at_gate['detail'])
 
