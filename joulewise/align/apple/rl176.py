@@ -1,4 +1,4 @@
-"""ALIGN v4 series analysis under RL-176 through RL-182.
+"""ALIGN v4 series analysis under RL-176 through RL-182 and RL-223.
 
 The release caller supplies the finalized fresh C/T roster, A9 eligibility
 and the reference-state rows selected by RL-149. RL-177 changes S's score
@@ -297,9 +297,9 @@ def _prefill_rows(member):
     return tuple((_sequence_design(row), row.energy_j, row.query_half_width_j) for row in rows)
 
 
-def _s_rank(strata, *, decide=False):
+def _s_rank(strata, *, registered=False):
     """B2 inference common to the decode score and its descriptive splits."""
-    rank, upper = _tail_test([(value, benign) for _, value, benign in strata], one_sided=True)
+    rank, _ = _tail_test([(value, benign) for _, value, benign in strata], one_sided=True)
     count = rank["strata"]
     theta = rank["theta"]
     windows = defaultdict(list)
@@ -319,14 +319,9 @@ def _s_rank(strata, *, decide=False):
     clustered = interval(t_quantile * se_w) if se_w is not None else None
     report = {**rank, "windows": w, "se0": se0, "se_window": se_w,
               "student_t95": t_quantile, "design_interval": design, "window_interval": clustered}
-    if decide:
-        words = []
-        if upper is not None and upper <= S_SUPERIORITY_ALPHA:
-            words.append("S SIGNATURE")
-        if w >= 8 and all(S_EQ_LOWER < limits[0] <= limits[1] < S_EQ_UPPER
-                          for limits in (design, clustered)):
-            words.append("S EQUIVALENT")
-        report["words"] = words or ["S INCONCLUSIVE" if count else "S NOT EVALUABLE"]
+    if registered:
+        report["equivalence_region"] = [S_EQ_LOWER, S_EQ_UPPER]
+        report["words"] = [] if count else ["S NOT EVALUABLE"]
     return report
 
 
@@ -357,10 +352,10 @@ def _s_release(groups, roster):
     def outcome(member):
         return scores.get(member.episode.episode_id)
 
-    def splits(group, *, condition=None, decide=False):
-        return _s_rank(_entering_strata(group, outcome, condition=condition), decide=decide)
+    def splits(group, *, condition=None, registered=False):
+        return _s_rank(_entering_strata(group, outcome, condition=condition), registered=registered)
 
-    s = splits(groups.values(), decide=True)
+    s = splits(groups.values(), registered=True)
     s["score"] = "decode_only_reference_state_rows"
     s["per_pair"] = {pair: splits([group for (_, task), group in groups.items() if task == pair])
                      for pair in PAIRS}
@@ -612,8 +607,9 @@ def series_release_prints(state, *, load_members, load_ctl01=None, load_benign_d
                           q_words_frozen=False, registration_receipt=None):
     """Compute S, Q and their prints under the series desk release guard.
 
-    Callers may enable words only with the pre-C1 code freeze or re-signed
+    Callers may enable Q's words only with the pre-C1 code freeze or re-signed
     receipt in RL-176 F. The default prints Q's exact p without outcome words.
+    RL-223 withdraws S's outcome words. With no evaluable strata, S reports S NOT EVALUABLE.
     The caller keys its DC provider by the manifest's benign ordinals.
     For the side-transfer print, the caller supplies the validated binding
     receipt. Its optional side_transfer_field names a single key in the

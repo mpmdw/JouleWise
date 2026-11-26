@@ -5,8 +5,6 @@ from itertools import product
 from math import comb, sqrt
 from statistics import mean
 
-from joulewise.align.apple.rl176 import S_SUPERIORITY_ALPHA
-
 
 def exact_tails(populations, assigned):
     def rank_value(candidate, alternatives):
@@ -101,13 +99,14 @@ def q_by_second(episode, watts, ns):
     return q, total, prefill
 
 
-def complete_strata_signature(wins, strata):
-    """Count bounded compositions of the null support by inclusion-exclusion."""
+def complete_strata_print(wins, strata):
+    """Count bounded compositions of the null support for S's printed upper tail."""
+    if strata == 0:
+        return None, ["S NOT EVALUABLE"]
     misses = 7 * strata - wins
     count = sum((-1) ** j * comb(strata, j) * comb(misses - 8 * j + strata, strata)
                 for j in range(min(strata, misses // 8) + 1))
-    p = Fraction(count, 8 ** strata)
-    return p, p <= S_SUPERIORITY_ALPHA
+    return Fraction(count, 8 ** strata), []
 
 
 def decode_length_ratio(instructed, benign):
