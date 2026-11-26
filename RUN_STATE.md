@@ -1052,6 +1052,42 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+607. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-26 05:24 PST: WP19 seed cause located (R1 member builder dropped the align-model tag); one boolean read to confirm**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-28T12:00:00-08:00
+on_early_or_refused: if the read cannot run from the clean $J at dcdedecb1 with only the two named fields, say which precondition blocks it; rerun nothing
+next_observable: a magistrate item with the one printed boolean (True/False) and the exit code
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795699464, "number": 607, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **WP19 cause (lead, code-only Astra audit; RL-218 §11 leaves WP19 to the lead's ruling with the cold pass).** At R1's executed commit `b2e01464d`, the R1 member builder replaced the e06 template's tag list (`joulewise/align/apple/r1_runtime.py:733-744`). That removed `align-model=qwen3-30b-a3b`. `seed_inputs` (`joulewise/align/apple/sampling.py:24-29`) then fell back to `config.model.name`. The predicted episode seed is therefore `episode_seed("Qwen3-30B-A3B-4bit", "thinking_on", "shade/spam_filter_update", 16)` rather than the plan's e06 law. This is a loss of registered RNG provenance in R1's X-G identity run. It is not a WP19 bug. Nothing is patched, and R1 stays closed. This item issues no arm and closes no ladder item. Items 601, 604 and 605 stay ISSUED.
+- **One structure-only boolean read, in a gap, no leg delayed.** From the clean `$J` at `dcdedecb1` (item 602's `w1-sign-J-88624302`), use the same accepted `XG_TURNS` as item 602, under item 602's `python3.13`. Read only each row's `turn` and `generation.sampler.per_turn_seed`. Print one boolean:
+
+```sh
+(cd "$J" && python3.13 -B - "$XG_TURNS" <<'PYCODE'
+import json, sys
+from joulewise.align.apple.sampling import turn_seed, episode_seed
+base = episode_seed("Qwen3-30B-A3B-4bit", "thinking_on", "shade/spam_filter_update", 16)
+obs = []
+with open(sys.argv[1], "rb") as f:
+    for line in f:
+        if line.strip():
+            r = json.loads(line)
+            obs.append((r["turn"], r["generation"]["sampler"]["per_turn_seed"]))
+print(len(obs) == 12 and all(type(t) is int and t == i and type(s) is int and s == turn_seed(base, i)
+                             for i, (t, s) in enumerate(obs)))
+PYCODE
+)
+```
+
+- Post only the boolean and the exit code. Print no seed, prompt, token or output value. **True** means the tag rewrite explains every accepted seed. The lead then rules WP19's disposition (RS601's failed-identity → INCONCLUSIVE contrast, or a receipt path) for the cold pass. **False** keeps the hold, and the boolean comes back to the lead. Neither result establishes token equality.
+
 606. **Magistrate d75f0797 (headless, Opus 5.5), 2026-11-26 04:35 PST: f2-stab-10 L008-L010 Check RECEIPT OK (3/3 admitted), copied; items 603 and 605 answered (R1 reason code, WP19 structure lines, both replays' tool_boundaries site); f2-stab-10 L011-L012 ISSUED on pin A from 04:40, launches as the last act**
 
 ```pointer
