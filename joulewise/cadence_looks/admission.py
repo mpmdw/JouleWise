@@ -153,7 +153,7 @@ def _result_leg(pin, mock):
             obj({"value": INT})(value["ac_powermode"], f"{where}.ac_powermode")
         else:
             # joulewise/align/apple/workload.py:859-881: the episode-start record, or its failed-probe form
-            nullable(either(obj({"value": INT, "source": STR, "observed_at": const("episode_start")}),
+            nullable(either(obj({"value": nullable(INT), "source": STR, "observed_at": const("episode_start")}),
                             obj({"value": const(None), "source": STR, "observed_at": const("episode_start"),
                                  "error": STR, "attempts": POS})))(value["ac_powermode"], f"{where}.ac_powermode")
             DIGEST(value["config_sha256"], f"{where}.config_sha256")
@@ -165,27 +165,31 @@ def _result_leg(pin, mock):
         if pin != "A":
             enum("own", "span")(value["g0_shape"], f"{where}.g0_shape")
             enum("capture", "consume")(value["g0_role"], f"{where}.g0_role")
-            STR(value["g0_reference_source"], f"{where}.g0_reference_source")
+            nullable(STR)(value["g0_reference_source"], f"{where}.g0_reference_source")
             nullable(DIGEST)(value["g0_reference_record_sha256"], f"{where}.g0_reference_record_sha256")
     return check
 
 
-_SUPERVISOR_STAMP = obj({"wall_s": FLOAT, "monotonic_ns": INT, "monotonic_raw_ns": INT})
-# joulewise/b5/driver.py:1034-1085, the monitor supervisor's stop summary
+_SUPERVISOR_STAMP = obj({"wall_s": FLOAT, "monotonic_ns": INT, "monotonic_raw_ns": nullable(INT)})
+_SUPERVISOR_EXIT = {"pid": POS, "at": _SUPERVISOR_STAMP}
+_SUPERVISOR_FINAL_EXIT = obj({**_SUPERVISOR_EXIT, "returncode": const(0), "lived_s": FLOAT, "final": const(True)})
+# joulewise/b5/driver.py:948-987,1026-1084, the monitor supervisor's stop summary
 _SUPERVISOR = obj(
     {"schema": const("joulewise.b5_monitor_supervision.v1"), "argv": arr(STR), "starts": NAT, "restarts": NAT,
-     "start_failures": NAT, "exits": arr(obj({}, {"returncode": nullable(INT), "at": _SUPERVISOR_STAMP,
-                                                  "restarted": BOOL, "clean": BOOL})),
-     "gaps": arr(obj({}, {"from": _SUPERVISOR_STAMP, "to": _SUPERVISOR_STAMP, "seconds": NUM})),
+     "start_failures": NAT, "exits": arr(either(
+         obj({**_SUPERVISOR_EXIT, "returncode": INT, "lived_s": FLOAT}),
+         obj({**_SUPERVISOR_EXIT, "returncode": nullable(INT), "discarded": STR}),
+         _SUPERVISOR_FINAL_EXIT)),
+     "gaps": arr(obj({"down_from": _SUPERVISOR_STAMP, "up_at": _SUPERVISOR_STAMP})),
      "stop": lambda value, where: _supervisor_stop(value, where),
      "journal": STR, "errors": arr(STR), "crash_loop": BOOL},
-    {"final_exit": nullable(INT)})
+    {"final_exit": nullable(_SUPERVISOR_FINAL_EXIT)})
 _GROUP = obj({"group_census": arr(STR), "reaped": BOOL})
 
 
 def _supervisor_stop(value, where):
     """MonitorSupervisor.stop (joulewise/b5/driver.py:1034-1072): a running monitor is signalled and its group
-    censused; an exited one only polled. Either way a started monitor has a polled return code."""
+    censused. A process that already exited is only polled, and a cleared process has no returncode."""
     running = type(value) is dict and value.get("was_running") is True
     if running:
         obj({"requested": _SUPERVISOR_STAMP, "was_running": const(True), "proven_stopped": BOOL,
@@ -195,8 +199,8 @@ def _supervisor_stop(value, where):
             refuse(where, "a group census and its verdict together")
         proven = value.get("group_absent", value["returncode"] is not None)
     else:
-        obj({"requested": _SUPERVISOR_STAMP, "was_running": const(False), "proven_stopped": BOOL,
-             "returncode": INT})(value, where)
+        obj({"requested": _SUPERVISOR_STAMP, "was_running": const(False), "proven_stopped": BOOL},
+            {"returncode": INT})(value, where)
         proven = True
     if value["proven_stopped"] != proven:
         refuse(f"{where}.proven_stopped", "not what its stop proved")
@@ -209,9 +213,9 @@ _RESTORE = either(
 
 def _stopped(check, supervised=False):
     """The meter's stop: rc 0 on proof, 2 on failed proof. A supervised meter with a started monitor also reports the
-    monitor's process-group proof (scripts/run_align_r1_smoke.py:226-276; scripts/run_night.py:536-594). The record
-    starts as a proof and ``stop`` changes it only together with the group evidence (MeterFeed.stop, 251-270), so a
-    failed proof always carries its supervisor and group."""
+    remaining monitor process's group proof (scripts/run_align_r1_smoke.py:226-269; scripts/run_night.py:536-595).
+    The record starts as a proof and ``stop`` changes it together with the group evidence, so a failed proof always
+    carries its supervisor and group."""
     def stopped(value, where):
         check(value, where)
         if value["rc"] != (0 if value["proven_stopped"] else 2):
@@ -219,11 +223,13 @@ def _stopped(check, supervised=False):
         if not value["proven_stopped"] and not ("group" in value and "supervisor" in value):
             refuse(where, "a failed proof without the process-group evidence that failed it")
         if supervised and ("group" in value or "supervisor" in value):
-            started = "supervisor" in value and value["supervisor"]["starts"] > 0
-            if "supervisor" not in value or ("group" in value) != started:
-                refuse(where, "a process-group proof exactly when the supervised monitor started")
-            if "group" in value and value["proven_stopped"] != (not value["group"]["group_census"]):
-                refuse(f"{where}.proven_stopped", "not what its group census proved")
+            has_process = "supervisor" in value and "returncode" in value["supervisor"]["stop"]
+            if "supervisor" not in value or ("group" in value) != has_process:
+                refuse(where, "a process-group proof exactly when the supervisor still has a process")
+            if has_process:
+                group = value["group"]
+                if value["proven_stopped"] != (group["reaped"] and not group["group_census"]):
+                    refuse(f"{where}.proven_stopped", "not what its process-group evidence proved")
     return stopped
 
 
@@ -888,7 +894,7 @@ def _soak_reference(doc, where, mock):
         obj({"schema": const(SOAK_SCHEMA), "mock": const(True)})(doc, where)
         return
     obj({"schema": const(SOAK_SCHEMA), "source_segment": STR, "source_output": STR, "attempt": NAT, "window_s": NAT,
-         "sensors_c": mapping(NUM), "detrended": mapping(_DETRENDED), "sensor_roles": nullable(mapping(STR))})(
+         "sensors_c": mapping(NUM), "detrended": mapping(_DETRENDED), "sensor_roles": nullable(journals._POLICY)})(
         doc, where)
     if doc["sensors_c"].keys() != doc["detrended"].keys() or not doc["sensors_c"] or any(
             not same(doc["sensors_c"][name], doc["detrended"][name]["mean_c"]) for name in doc["sensors_c"]):

@@ -189,7 +189,8 @@ class FrozenCorpus(unittest.TestCase):
     def test_every_unmodified_production_is_admitted(self):
         admits = [case for case in self.cases if admitted_as_ruled(case)]
         self.assertEqual({case.family for case in admits},
-                         {"admit", "F1", "F2", "F3", "F5", "missing-key", "type-number-text", "type-unicode-digit"})
+                         {"admit", "F1", "F2", "F3", "F5", "missing-key", "type-null", "type-number-text",
+                          "type-unicode-digit"})
         for case in admits:
             with self.subTest(case.name):
                 self.assertIsNone(verdict(self.files(case)))
