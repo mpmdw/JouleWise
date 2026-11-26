@@ -560,15 +560,30 @@ class ReceiptTests(_Ctx):
 
 class ChainTests(_Ctx):
     def test_chain_runs_every_cli_step_on_a_lane_shaped_record(self):
-        # PR #886: the committed registration/r1_slots.json is the R1 record, not the S6
-        # registration the synthetic rehearsal reads; pin the synthetic one for the chain.
-        from tests.align.test_r1_rehearsal import synthetic_s6_registration
-        with synthetic_s6_registration():
-            row = self.probe('r1-w1-chain')
+        from joulewise.align.apple import r1_runtime
+        from scripts import align_v4_kit as kit
+        from tests.align.test_v4_kit import ready_inputs
+
+        source = self.tmp / 's6-registration.json'
+        source.write_bytes(kit.raw_json({'slots': {'S6': 1.5}, 's6_tuning': {'status': 'adopted'}}))
+        scratch_clone = wp.scratch_clone
+
+        def synthetic_clone(ctx, name):
+            clone = scratch_clone(ctx, name)
+            inputs, _ = ready_inputs()
+            inputs['R0']['record_sha256'] = None
+            (clone / kit.INPUTS).write_bytes(kit.raw_json(inputs))
+            (clone / kit.R1_PLANNING_RELEASE).unlink(missing_ok=True)
+            return clone
+
+        with mock.patch.object(r1_runtime, 'R1_REGISTRATION', source), \
+                mock.patch.object(wp, 'scratch_clone', side_effect=synthetic_clone):
+            row = wp.probe('r1-w1-chain', self.ctx)
         steps = {s['step']: s for s in row['evidence'].get('steps', [])}
-        for name in ('export', 'backfill-x-g', 'backfill-turn-counts', 'derive-contrast', 'decide'):
-            self.assertEqual(steps[name]['rc'], 0, (name, row['detail']))
-        self.assertIn('kit.require_ready(backfilled record)', steps)
+        for name in ('export', 'backfill-x-g', 'backfill-turn-counts', 'derive-contrast', 'decide',
+                     'kit.require_ready(backfilled record)'):
+            self.assertIn(name, steps, row['detail'])
+            self.assertEqual(steps[name]['rc'], 0, name)
         self.assertIn(row['status'], (wp.PASS, wp.FAIL))
         if row['status'] == wp.FAIL:      # only the runbook-drift finding or a pending refusal may remain
             self.assertIn('R1-TO-W1-CHAIN.md as written', row['detail'])
