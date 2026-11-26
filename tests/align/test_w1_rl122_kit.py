@@ -288,6 +288,37 @@ class PlanningReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r'R1\.B_D .* must equal .*RL-189'):
             kit.require_ready(inputs, slots, planning_release=release)
 
+    def test_output_root_carries_and_checks_the_canonical_planning_release(self):
+        names = ['planning_turn_R_plus_2C', 'planning_turn_R_plus_4C']
+        inputs, slots = planning_slots(names)
+        raw = kit.raw_json(release_for(slots, names))
+        frozen = kit.frozen
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(kit, 'frozen', side_effect=lambda root, commit, path: frozen(ROOT, commit, path)), \
+                patch.object(kit, 'require_w1_ready') as ready:
+            source, destination = Path(tmp) / 'source', Path(tmp) / 'output'
+            for path, contents in ((kit.INPUTS, kit.raw_json(inputs)), (kit.R1_SLOTS, kit.raw_json(slots)),
+                                   (kit.R1_PLANNING_RELEASE, raw), (CONFIG.relative_to(ROOT), CONFIG.read_bytes())):
+                target = source / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(contents)
+            kit.generate(destination, source_root=source)
+            target = destination / kit.R1_PLANNING_RELEASE
+            self.assertTrue(target.is_file(), 'generated planning release missing from output root')
+            self.assertEqual(target.read_bytes(), raw)
+            for changed in (None, raw + b' '):
+                with self.subTest(missing=changed is None):
+                    if changed is None:
+                        target.unlink()
+                    else:
+                        target.write_bytes(changed)
+                    with self.assertRaisesRegex(ValueError, r'generated v4 kit drifted: .*r1_planning_release\.json'):
+                        kit.generate(destination, check=True, source_root=source)
+            ready.assert_not_called()
+            target.write_bytes(raw)
+            kit.generate(destination, check=True, source_root=source)
+            ready.assert_called_once_with(destination)
+
     def test_record_file_is_read_canonically(self):
         # PR #886 commits the lead's RL-122 3(a) release: it reads canonically and is in force
         # for the committed R1 record's INCONCLUSIVE planning segments.
