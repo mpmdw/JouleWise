@@ -2120,9 +2120,9 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
                 "member_cut", episode_name)
     stop = primary_stop(episode["flags"], thermal_intervals=intervals)
     require(outcome.get("stop_condition") == stop, "stop_evidence", metadata_name, peer=episode_name)
-    # F7: the stop summary agrees with the classification. An own stop is a returned episode or end_task;
-    # otherwise the turn budget, or the last turn's token budget, ended it.
-    require(stop in (("episode_returned", "episode.end_task") if own_stop
+    # F7: the stop summary agrees with the classification. An own stop is a returned episode or end_task,
+    # or names a turn's token budget when one was cut; otherwise the turn budget ended it.
+    require(stop in (("episode_returned", "episode.end_task", "turn_token_budget_reached") if own_stop
                      else ("turn_budget_reached", "turn_token_budget_reached")),
             "stop_evidence", metadata_name, field="stop_condition", peer=episode_name)
     budget = hardware.get("token_budget")
@@ -2701,6 +2701,10 @@ def _replay_frozen_workload(kind, config_doc, witnessed, events, meta, raw_episo
         budget = hardware.get("token_budget") or {}
         meta_flags = meta["workload_provenance"]["flags"]
         clock = SimpleNamespace(ns=gates[0]["start_ns"] if gates else episode.start_ns)
+        if gates and budget.get("deadline_origin") == "G0_entry":
+            # WL:430 arms the deadman on a stamp of its own, before the session stamps G0's entry (TG:522).
+            clock.ns = budget["deadline_ns"] - round(spec.deadman_s * NS)
+            check(clock.ns <= gates[0]["start_ns"], "g0-entry arm")
         clock.stamp = lambda: stamp(clock.ns)
         clock.sleep = lambda seconds: setattr(clock, "ns", clock.ns + round(seconds * NS))
         task_flags = hardware.get("task_diagnostics", {}).get("flags", [])
@@ -2902,7 +2906,7 @@ def _recompute_continuation(kind, episode, witnessed, execution, family):
     source = "outputs/align_turns.jsonl"
     terminal_tools, budget_cuts = set(), set()
     xml_path = normalize_model_family(family) in XML_MODEL_FAMILIES
-    protocol_stops, finishes = set(), []
+    protocol_stops = set()
     for turn, record in zip(episode.turns, witnessed, strict=True):
         index = turn.index
         generation = record["generation"]
@@ -2915,7 +2919,6 @@ def _recompute_continuation(kind, episode, witnessed, execution, family):
         cut = finish in BUDGET_FINISH or finish is None
         _required(finish is not None or turn.decode_tokens == execution.max_tokens, "stop_evidence", kind,
                   source, field="finish_reason", index=index)
-        finishes.append(finish)
         flag = f"turn_token_budget_reached:{index}"
         _required((flag in record["flags"]) == cut, "stop_evidence", kind, source, field="finish_reason", index=index)
         if cut:
@@ -2933,8 +2936,9 @@ def _recompute_continuation(kind, episode, witnessed, execution, family):
         _required(not more or turn.tool_calls and not end_task, "stop_evidence", kind, source,
                   field="continuation", index=index)
     last = episode.turns[-1]
-    # The own-stop exception is granted only for an allow-listed clean finish of the last generation.
-    own_stop = finishes[-1] in CLEAN_FINISH and (not last.tool_calls or bool(terminal_tools))
+    # WL:649-657: the frozen loop ends a member at its first turn with an end_task call or with no tool
+    # call, whatever that generation's finish. Only a last turn that asks for more needs the turn budget.
+    own_stop = not last.tool_calls or bool(terminal_tools)
     _required(own_stop or len(episode.turns) == execution.max_turns,
               "stop_evidence", kind, source, field="terminal_admission")
     # EI ``turn-parse``: a protocol stop is the frozen parser's classification of the raw turn, which the
