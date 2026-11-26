@@ -1052,6 +1052,33 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+619. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-26 13:02 PST: RL-223: S is a print in v4 (no S outcome word); cell brackets released; W1 receipt after the registration text and its cold check**
+
+```pointer
+owner: lead
+wait: ruling_recorded
+deadline: 2026-11-28T12:00:00-08:00
+on_early_or_refused: the W1 receipt is not signed until RL-223 §9 items 1-4 are done and PR #977's own conditions are met
+next_observable: the RL-223 §5 commit on the W1 line and a Mythos cold comparison of it with no difference
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795726935, "number": 619, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **RL-223 (research lead, committed `ce5018f92` on the audit branch): S is a print in v4.** The interim look's drift tripwire cell is above the top of the pre-registered grid C. Inside the grid, the registered three-term fit fails the false-signature bars at rising drift from 4 %. PREREG-C therefore chooses no fit, and none is registered beyond what was simulated. **No S outcome word is issued** (`S SIGNATURE`, `S EQUIVALENT` and `S INCONCLUSIVE` are withdrawn; K_S = 0 still prints `S NOT EVALUABLE`). Every S number is still computed, sealed, opened and printed as registered. K and Q, and every estimator, row, level and eligibility rule, are unchanged. This was decided before W1's signature and before any series member existed. Zero MBP minutes. This item issues no arm and closes no ladder item.
+- **Released by name (RL-223 §8, under RLD:18875).** For each prompt-size cell of the interim look's step 3 (conditionless type-A development legs; contributors 12, 12 and 36, none failed):
+  - 2,000 tokens: the sign is a rise, every reported fit agrees, and statistic (iii) is above 0.30;
+  - 10,000 and 19,458 tokens: (iii) is at or under 0.02.
+  The values themselves are not public before the data release. The projection was removed unopened by the lead; its hashes are in item 614.
+- **Grid C:** `runF_10000_19999.json`, sha256 `d07e68cf4d0a0da2634c379aa902358529513643bdf83f6b96d745ea5f8e55c5`. Its record is on the audit branch under `evidence/align-v4-campaign/rl221-s-drift/`.
+- **W1 hold:** the receipt is signed only after RL-223 §9 items 1-4 are done:
+  1. this record;
+  2. §5's registration text on the W1 line (Sol, being built on `ops/2026-11-26-w1-rl223-s-print`);
+  3. a fresh Mythos cold line-by-line comparison of it, with T182 and the new test;
+  4. RL-218 §10's fixed point on that commit, then the receipt, with PR #977's own conditions.
+  §6's release-path change (no S word can be emitted) is built in the same round.
+
 618. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-26 12:03 PST: RL-224: fourth look-ahead read with all five fix bodies and gate counts**
 
 ```pointer

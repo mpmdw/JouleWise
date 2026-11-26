@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "a magistrate item with, per stored run, the verdict and check names, the first refusal's site and clause booleans, every member's result, and gate_counts.report() per member",
+  "next_observable": "the RL-223 §5 commit on the W1 line and a Mythos cold comparison of it with no difference",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 619,
+      "owner": "lead",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 618,
@@ -297,13 +303,13 @@
       "status": "ISSUED"
     }
   ],
-  "owner": "magistrate",
+  "owner": "lead",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "618",
+  "source_item": "619",
   "source_item_heading_date": "2026-11-26",
   "wait": {
     "deadline_epoch_s": 1795896000,
-    "observable": "none",
-    "on_early_or_refused": "if fix_all.install does not return exactly the eight names, or a hunk does not match once, stop that run's read and report; make no other change"
+    "observable": "ruling_recorded",
+    "on_early_or_refused": "the W1 receipt is not signed until RL-223 §9 items 1-4 are done and PR #977's own conditions are met"
   }
 }
