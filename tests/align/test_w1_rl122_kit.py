@@ -273,6 +273,22 @@ class PlanningReleaseTests(unittest.TestCase):
         _, clean = ready_inputs()
         self.assertEqual(released['step'], procedure.decide(clean, 12)['step'])
 
+    def test_w1_step_one_completes_role_flags_and_fan_keys_after_r0(self):
+        names = ['planning_turn_R_plus_2C', 'planning_turn_R_plus_4C']
+        inputs, slots = planning_slots(names)
+        release = release_for(slots, names)
+        policy = inputs['R1']['thermal_policy']
+        del policy['heavy'], policy['per_turn'], policy['sensors']['fan_keys']
+        # Both R0 digest fields are already bound. The missing role flags
+        # refuse at the outer gate-policy check, before sensor validation.
+        with self.assertRaisesRegex(ValueError, '^thermal policy has missing or unknown fields$'):
+            kit.require_ready(inputs, slots, planning_release=release)
+        policy.update(heavy=True, per_turn=True)
+        with self.assertRaisesRegex(ValueError, r'^smc_temperature must have .*fan_keys'):
+            kit.require_ready(inputs, slots, planning_release=release)
+        policy['sensors']['fan_keys'] = []
+        kit.require_ready(inputs, slots, planning_release=release)
+
     def test_readiness_requires_the_budget_selected_by_decide(self):
         names = ['planning_turn_R_plus_2C', 'planning_turn_R_plus_4C']
         inputs, slots = planning_slots(names)
