@@ -1038,6 +1038,7 @@ class ColdSeatFixes(Base):
             lm.validate_look_ledger(led)
         self.assertTrue(any("needs stage1_sha256" in p for p in ctx.exception.problems))
         row.update(stage1_sha256="2" * 64, roster_sha256="3" * 64)
+        row.pop("verdicts_sha256", None)
         self.refused(lambda: lm.validate_look_ledger(led), "needs verdicts_sha256")        # Mythos round-3 N8
         row.update(verdicts_sha256="5" * 64)
         lm.validate_look_ledger(led)
