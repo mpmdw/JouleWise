@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "a magistrate item with the restore verdict (selected runs verified, bytes downloaded, free space before/peak/after) and §4.4's exit code, pairs and unavailable counts",
+  "next_observable": "a magistrate item with, per replay, the failing member kind, source name and turn index (step 1), and if run, step 2's counts and booleans",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 605,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 604,
@@ -287,11 +293,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "604",
+  "source_item": "605",
   "source_item_heading_date": "2026-11-26",
   "wait": {
     "deadline_epoch_s": 1795896000,
     "observable": "none",
-    "on_early_or_refused": "a manifest mismatch, a missing selected run, or free space under 80 GiB stops the restore; report names, counts and free space"
+    "on_early_or_refused": "if step 1 cannot be projected without printing content, say which field blocks it and do step 2 instead"
   }
 }

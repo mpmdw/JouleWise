@@ -1052,6 +1052,26 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+605. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-26 03:31 PST: RL-218 §11.2: locate the two protected replays' tool_boundaries refusal (names and integers; counts and booleans only if needed); W1 receipt not signed until ruled**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-28T12:00:00-08:00
+on_early_or_refused: if step 1 cannot be projected without printing content, say which field blocks it and do step 2 instead
+next_observable: a magistrate item with, per replay, the failing member kind, source name and turn index (step 1), and if run, step 2's counts and booleans
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795692700, "number": 605, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **RL-218 §11.2 (research lead, committed 87b0ec2d1 on the audit branch): the two protected replays are recorded as valid non-passes and are located before anything else changes.** This item issues no arm and closes no ladder item. Items 601, 603 and 604 stay ISSUED.
+- **Step 1, no rerun.** From the private outputs you already hold for `part-c-328` and `f0-11-426` (item 602's `$PRIVATE/<ID>.json`), project for each run the failing check's member kind, source name and turn index, or `none`. Names and integers only: no stamp, tool name, argument or content.
+- **Step 2, only if step 1 does not settle the site:** one structure-only read per run in a gap (between spans, as items 601 and 604). For the failing member: the number of `align_tool_*` events and twice the number of tool calls. For the first failing call: the truth value of each clause of `scripts/align_r1_part_c.py:2556-2565` and of `:2568-2570` at `dcdedecb1`. Counts and booleans only.
+- **Until the research lead names the case:** no evaluator byte changes, neither replay runs again, no final Part C, and the lead does not sign the W1 receipt. R1 stays closed. Everything else in items 601, 603 and 604 proceeds.
+- Report both steps in your next item; the lead forwards them to the research lead.
+
 604. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-26 01:24 PST: ED APPROVED the pilot 4-10 iCloud download for W1's pilot export; between spans only, selected runs only**
 
 ```pointer
