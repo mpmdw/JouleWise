@@ -1052,6 +1052,421 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+618. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-26 12:03 PST: RL-224: fourth look-ahead read with all five fix bodies and gate counts**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-28T12:00:00-08:00
+on_early_or_refused: if fix_all.install does not return exactly the eight names, or a hunk does not match once, stop that run's read and report; make no other change
+next_observable: a magistrate item with, per stored run, the verdict and check names, the first refusal's site and clause booleans, every member's result, and gate_counts.report() per member
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795723398, "number": 618, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **RL-224 (research lead, committed `8681f2e34` on the audit branch): `N5.exit_slope` is case (a).** The frozen gate computes its final slope at a poll instant it does not record. The evaluator asked for the same double bits at a finite set of instants. A second writer-produced shape, a gate entered during a row's read (`N5.entry`), is fixed in the same commit. The 91 % and 97 % tool margins stay passes. RL-219 §6's rule is now needed: a tool boundary agrees within the mapping's bound plus its distance to the nearer recorded instant. This is a fourth commit on PR #977, under the single audit. This item issues no arm and closes no ladder item. Items 601 and 605 stay ISSUED.
+- **RL-224 §6: fourth look-ahead read, once per stored run (`part-c-328`, `f0-11-426`), in a gap, no leg delayed, before the audit.** Run it as item 616 was run. Import the pinned evaluator unchanged from the clean `w1-sign-Jfull-88624302` at `dcdedecb1`, then, in this order:
+  1. `fix_all.install(pc, fix_body, fix_body_flags, fix_body_stop, fix_body_slope, fix_body_pair)`. The first three modules are items 608, 611 and 615's. It applies all five bodies to the pin's own text, asserts each hunk matches once, and must return exactly `_ReplayClocks`, `_check_member_records`, `_gate_exit_slope`, `_gate_witnesses`, `_recompute_continuation`, `_recompute_controller_phases`, `_replay_frozen_workload`, `_tool_neighbours`.
+  2. `gate_counts.install(pc)`.
+  3. `_judge_members`, by item 613's per-member copy. RL-222 §4 item 4's further change stays allowed.
+  Write nothing under either OUT. Print only:
+  1. The verdict word and the failing check names, to the first refusal.
+  2. If not `pass`: the first refusal's member kind, source, index and field, and the truth of each clause.
+  3. Every member, as item 616 did it.
+  4. Per member, `gate_counts.report()`: the gate intervals judged; how many were entered during a row's read; the exit-slope checks; how many the pin's own function passes; how many pass by rounding only; how many both refuse; and, for each that passes by rounding only, the number of doubles between the claim and the nearest tried value (capped at 9).
+  It is a diagnostic: not a replay, no record, not evidence for the receipt. The audit starts when both runs print `pass` and no member shows an exit-slope check that both functions refuse. Anything else goes back to the research lead.
+- **Files** (the research lead's; sha256): `fix_all.py` `253c495bceb813763e851c89e2fd7b90e61a092a7f4a9e80094171f6fad728aa`, `fix_body_slope.py` `93c10ce998fd1a9c908a80764f3e24d5e2f8d6a72ea47eb10e58f1b16d226895`, `fix_body_pair.py` `2a0a2999f5e7720210428a877969d5a0f506c3fd9a056529f6e8032239471904`, `gate_counts.py` `72e682f100e868e069ddf28afb63a5280da37100b390acdc092d0cdeeb183c0b`.
+
+- **`fix_all.py`:**
+
+```python
+"""One installer for the fourth look-ahead read (RL-224 section 5): every ruled fix body, composed on the pin.
+
+`install(pc, body219, flags220, stop222, slope224, pair224)` takes the pinned evaluator module, imported
+unchanged from a clean `dcdedecb1` tree, and the five body modules:
+
+    body219   fix_body.py        sha256 7760e3e4...1bee   RL-219, `_recompute_controller_phases`
+    flags220  fix_body_flags.py  sha256 ffae8395...ecf0   RL-220, `_replay_frozen_workload`
+    stop222   fix_body_stop.py   sha256 187da900...c726   RL-222, three functions
+    slope224  fix_body_slope.py                           RL-224, `_gate_exit_slope`, `_gate_witnesses`
+    pair224   fix_body_pair.py                            RL-224, `_tool_neighbours`, `_ReplayClocks`, two sites
+
+It reads each definition's text from the module's own file, applies every body's hunks to it in ruling order
+(each old text must occur exactly once in its definition), compiles the results in the module's namespace and
+sets them on the module. It returns the sorted names it set. It replaces nothing else and writes nothing.
+
+`composed(pc, ...)` returns the texts without installing. `check(pc, candidate_path, ...)` asserts that each
+composed text equals the same definition in a candidate file, for example PR #977's head once the builder has
+committed, and returns the names compared."""
+import ast
+import inspect
+
+
+def _definition(text, name):
+    node, = (node for node in ast.parse(text).body
+             if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name == name)
+    return "".join(text.splitlines(True)[node.lineno - 1:node.end_lineno])
+
+
+def _apply(source, hunks):
+    for old, new in hunks:
+        assert source.count(old) == 1, old
+        source = source.replace(old, new)
+    return source
+
+
+def composed(pc, body219, flags220, stop222, slope224, pair224=None):
+    text = inspect.getsource(pc)
+    sources = {}
+
+    def edit(name, hunks):
+        sources[name] = _apply(sources[name] if name in sources else _definition(text, name), hunks)
+
+    edit("_recompute_controller_phases", body219.OLD_NEW)
+    edit("_replay_frozen_workload", (*flags220.TASK, *flags220.REPETITION))
+    for part in ("stop", "summary", "origin"):
+        edit(*stop222.HUNKS[part])
+    for part in ("slope", "entry"):
+        edit(*slope224.HUNKS[part])
+    if pair224 is not None:
+        for part in ("bound", "record", "replay"):
+            edit(*pair224.HUNKS[part])
+        sources["_tool_neighbours"] = pair224.HELPER.rstrip("\n") + "\n"
+    return sources
+
+
+def install(pc, body219, flags220, stop222, slope224, pair224=None):
+    sources = composed(pc, body219, flags220, stop222, slope224, pair224)
+    for name, source in sources.items():
+        scope = {}
+        exec(compile(source, f"<w1-fix-{name}>", "exec"), vars(pc), scope)
+        setattr(pc, name, scope[name])
+    return sorted(sources)
+
+
+def check(pc, candidate_path, body219, flags220, stop222, slope224, pair224=None):
+    from pathlib import Path
+    candidate = Path(candidate_path).read_text()
+    sources = composed(pc, body219, flags220, stop222, slope224, pair224)
+    for name, source in sources.items():
+        assert _definition(candidate, name) == source, name
+    return sorted(sources)
+```
+
+- **`fix_body_slope.py`:**
+
+```python
+"""RL-224 fix body, applied in memory to `scripts/align_r1_part_c.py` at the W1 pin `dcdedecb1`, at PR #977's
+head `dffc5bfd2`, or at that head with RL-222's body (the text of both functions is the same in all three).
+
+Two changes, in two functions:
+
+1. SLOPE, `_gate_exit_slope`: a gate's final slope agrees with the frozen `slow_slope` on the same rows at a
+   witnessed instant within the reducer's rounding, 1e-9 C/min. The frozen wait computes the slope at its final
+   poll's instant (thermal_gates.py:558, 566) and does not record that instant. `slow_slope` forms
+   `(t - end_ns) / NS` per row (thermal_gates.py:289), so the double it returns changes in its last bits from one
+   instant to the next while the rows stay the same. The pin tried a finite set of instants and asked for the same
+   bits, so it refused about one clean released gate in two hundred. A null still agrees only with a null.
+2. ENTRY, `_gate_witnesses`: the entry view may also be every row whose read had begun at the entry stamp. The
+   collector holds its lock from before a row's first stamp until the row is appended (thermal.py:144-158), and
+   the gate takes that lock after its entry stamp and before it snapshots (thermal_gates.py:522-540;
+   thermal.py:109-125). So a row whose read began at or before the entry stamp is always in the entry view, even
+   when it finished after it, and `_entry_values` (thermal_gates.py:643, 671-673) selects by the row's start.
+   The pin counted a row only from its finish stamp, so it refused a gate entered during a read.
+
+Nothing else changes. Each replacement asserts its old text occurs exactly once in its function. The function text
+is read from the module's own file. `install(pc)` sets both functions on the module (the patched
+`_gate_witnesses` finds `_gate_exit_slope` there). `patch_text(text)` returns the whole file with the hunks
+applied, for a candidate checkout. Neither function is one that RL-219's, RL-220's or RL-222's body replaces, so
+this body installs before or after them."""
+import inspect
+
+HUNKS = {
+    "slope": ("_gate_exit_slope", (
+        ("        return sure <= required <= possible and claim == readings.slope(instant, required)\n",
+         "        if not sure <= required <= possible:\n"
+         "            return False\n"
+         "        value = readings.slope(instant, required)\n"
+         "        # TG:289-293 rounds per instant, and the final poll's instant is not recorded: the claim agrees\n"
+         "        # with the reducer on the same rows at a witnessed instant within its rounding (RL-224).\n"
+         "        return claim == value or (_finite(claim) and _finite(value) and abs(claim - value) <= 1e-9)\n"),
+    )),
+    "entry": ("_gate_witnesses", (
+        ("    check(any(entry(count) for count in dict.fromkeys((sure, possible))), \"N5.entry\", "
+         "\"evidence_unverifiable\")\n",
+         "    # thermal.py:144-158 holds the collector's lock from before a row's first stamp until it is appended,\n"
+         "    # and TG:532-540 takes that lock after the entry stamp: a row whose read had begun is in the view.\n"
+         "    begun = bisect_right(readings.starts, start)\n"
+         "    check(any(entry(count) for count in dict.fromkeys((sure, possible, begun))), \"N5.entry\",\n"
+         "          \"evidence_unverifiable\")\n"),
+    )),
+}
+
+
+def _apply(source, hunks):
+    for old, new in hunks:
+        assert source.count(old) == 1, old
+        source = source.replace(old, new)
+    return source
+
+
+def _function_source(pc, name):
+    """The function's text in the module's own file, whatever has been set on the module in memory since."""
+    import ast
+    text = inspect.getsource(pc)
+    node, = (node for node in ast.parse(text).body if isinstance(node, ast.FunctionDef) and node.name == name)
+    return "".join(text.splitlines(True)[node.lineno - 1:node.end_lineno])
+
+
+def patched(pc, parts=("slope", "entry")):
+    functions = {}
+    for part in parts:
+        name, hunks = HUNKS[part]
+        scope = {}
+        exec(compile(_apply(_function_source(pc, name), hunks), f"<rl224-{part}>", "exec"), vars(pc), scope)
+        functions[name] = scope[name]
+    return functions
+
+
+def install(pc, parts=("slope", "entry")):
+    functions = patched(pc, parts)
+    for name, function in functions.items():
+        setattr(pc, name, function)
+    return sorted(functions)
+
+
+def patch_text(text, parts=("slope", "entry")):
+    for part in parts:
+        text = _apply(text, HUNKS[part][1])
+    return text
+
+
+if __name__ == "__main__":
+    import difflib, sys
+    from pathlib import Path
+    old = Path(sys.argv[1]).read_text()
+    new = patch_text(old)
+    if len(sys.argv) > 2:
+        Path(sys.argv[2]).write_text(new)
+    sys.stdout.writelines(difflib.unified_diff(old.splitlines(True), new.splitlines(True),
+                                               "a/scripts/align_r1_part_c.py", "b/scripts/align_r1_part_c.py"))
+```
+
+- **`fix_body_pair.py`:**
+
+```python
+"""RL-224 fix body for the tool pair, applied to `scripts/align_r1_part_c.py` at PR #977's head with RL-222's
+body (sha256 fa5a230e...f9aa), or in memory at the pin after RL-219's, RL-220's and RL-222's bodies (fix_all.py).
+
+The rule (RL-219 section 6's "order between recorded neighbours", made an agreement with a bound):
+
+    A tool stamp's two monotonic reads are not recorded; the call carries their midpoint (workload.py:586, 608,
+    613-614). Both reads lie after the instant recorded before the stamp and before the instant recorded after
+    it. So the midpoint sits within its distance to the nearer of those two instants of the instant the event's
+    epoch was read. The call's value agrees with its event within the frozen mapping's bound plus that distance.
+
+The recorded instants around a turn's tool boundaries, in the writer's order: the turn's end, each call's start
+and end, then the next turn's G1 entry if it has one, else the next turn's start, else the episode's end.
+
+Three changes:
+
+1. NEIGHBOURS, a new function `_tool_neighbours(episode, intervals, index)` placed before `_ReplayClocks`.
+2. BOUND, `_ReplayClocks.matches_after` takes the two instants and widens the mapping's bound by the distance from
+   the value to the nearer one (never by less than zero).
+3. SITES, the two places that judge a tool pair pass them: `_recompute_controller_phases` (reason
+   `tool_boundaries`) and `_replay_frozen_workload` (reason `workload_replay`, field
+   "tool order, identity or time"). Both use the same function, so they cannot disagree.
+
+Nothing else changes: the counts, identities, orders (`work_end <= call.start_ns`, the closing bound), the guard
+clause, and every other use of the mapping. Each replacement asserts its old text occurs exactly once.
+
+`patch_text(text)` returns the whole file with the hunks applied."""
+
+HELPER = '''def _tool_neighbours(episode, intervals, index):
+    """RL-224: the recorded monotonic instants either side of each tool boundary of one turn.
+
+    A tool stamp's two monotonic reads are not recorded (WL:586, 608, 613-614). They lie after the instant
+    recorded before the stamp and before the one recorded after it: the turn's end, the calls' own values, then
+    the next turn's G1 entry or start, or the episode's end.
+    """
+    turn = episode.turns[index]
+    if index + 1 < len(episode.turns):
+        entries = [row["start_ns"] for row in intervals if row["kind"] == "G1" and row["turn"] == index + 1]
+        closing = min(entries) if entries else episode.turns[index + 1].start_ns
+    else:
+        closing = episode.end_ns
+    instants = [turn.end_ns, *(value for call in turn.tool_calls for value in (call.start_ns, call.end_ns)), closing]
+    return [(instants[at - 1], instants[at + 1]) for at in range(1, len(instants) - 1)]
+
+
+'''
+
+HUNKS = {
+    "neighbours": (None, (
+        ("class _ReplayClocks:\n", HELPER + "class _ReplayClocks:\n"),
+    )),
+    "bound": ("_ReplayClocks", (
+        ("    def matches_after(self, turn, epoch_s, monotonic):\n"
+         "        mapping = self._after[turn]\n"
+         "        return abs(self._convert(mapping, epoch_s) - monotonic) <= mapping.uncertainty_ns\n",
+         "    def matches_after(self, turn, epoch_s, monotonic, before, after):\n"
+         "        # RL-224: the value is the midpoint of two unrecorded reads that lie between ``before`` and\n"
+         "        # ``after``, so it sits within its distance to the nearer of them of the event's instant.\n"
+         "        mapping = self._after[turn]\n"
+         "        slack = max(0, min(monotonic - before, after - monotonic))\n"
+         "        return abs(self._convert(mapping, epoch_s) - monotonic) <= mapping.uncertainty_ns + slack\n"),
+    )),
+    "record": ("_recompute_controller_phases", (
+        ("        prior_position = decode_end[index]\n"
+         "        for call_index, call in enumerate(turn.tool_calls):\n",
+         "        prior_position = decode_end[index]\n"
+         "        near = _tool_neighbours(episode, intervals, index)\n"
+         "        for call_index, call in enumerate(turn.tool_calls):\n"),
+        ("                      and clocks.matches_after(index, begin[\"timestamp_s\"], call.start_ns)\n"
+         "                      and clocks.matches_after(index, close[\"timestamp_s\"], call.end_ns),\n",
+         "                      and clocks.matches_after(index, begin[\"timestamp_s\"], call.start_ns,\n"
+         "                                               *near[2 * call_index])\n"
+         "                      and clocks.matches_after(index, close[\"timestamp_s\"], call.end_ns,\n"
+         "                                               *near[2 * call_index + 1]),\n"),
+    )),
+    "replay": ("_replay_frozen_workload", (
+        ("                calls = []\n"
+         "                for i, call in enumerate(turn.tool_calls):\n",
+         "                calls = []\n"
+         "                near = _tool_neighbours(episode, gates, position)\n"
+         "                for i, call in enumerate(turn.tool_calls):\n"),
+        ("                          and clocks.matches_after(position, begin[\"timestamp_s\"], call.start_ns)\n"
+         "                          and clocks.matches_after(position, close[\"timestamp_s\"], call.end_ns),\n",
+         "                          and clocks.matches_after(position, begin[\"timestamp_s\"], call.start_ns,\n"
+         "                                                   *near[2 * i])\n"
+         "                          and clocks.matches_after(position, close[\"timestamp_s\"], call.end_ns,\n"
+         "                                                   *near[2 * i + 1]),\n"),
+    )),
+}
+PARTS = ("neighbours", "bound", "record", "replay")
+
+
+def _apply(source, hunks):
+    for old, new in hunks:
+        assert source.count(old) == 1, old
+        source = source.replace(old, new)
+    return source
+
+
+def patch_text(text, parts=PARTS):
+    for part in parts:
+        text = _apply(text, HUNKS[part][1])
+    return text
+
+
+if __name__ == "__main__":
+    import difflib, sys
+    from pathlib import Path
+    old = Path(sys.argv[1]).read_text()
+    new = patch_text(old)
+    if len(sys.argv) > 2:
+        Path(sys.argv[2]).write_text(new)
+    sys.stdout.writelines(difflib.unified_diff(old.splitlines(True), new.splitlines(True),
+                                               "a/scripts/align_r1_part_c.py", "b/scripts/align_r1_part_c.py"))
+```
+
+- **`gate_counts.py`:**
+
+```python
+"""RL-224 section 5, counts for the fourth look-ahead read. Code only. It decides nothing.
+
+`install(pc)` is called after `fix_all.install(pc, ...)`. It wraps the two gate functions the read uses and keeps
+integers. `report()` returns them and starts them again from zero, so it is called once after each member. Every
+verdict is the wrapped function's own.
+
+Per judged gate interval (`_gate_witnesses`):
+- "gate intervals judged";
+- "entered during a row's read": the gate's entry stamp is at or after a row's start stamp and before that row's
+  finish stamp (the shape RL-224's entry hunk admits).
+
+Per exit-slope check (`_gate_exit_slope`):
+- "exit slope checks";
+- "the pin's function agrees": the pin's own text, rebuilt from the module's file, finds the claim's exact double
+  at one of its instants;
+- "passes by rounding only": the pin's function does not, and the installed one does;
+- "refused by both";
+- "doubles from the nearest tried value": for each check that passes by rounding only, how many doubles lie between
+  the claim and the nearest value the pin's own instants give (1 = adjacent doubles), capped at 9.
+
+It prints no stamp, temperature or slope."""
+import ast
+import inspect
+import math
+from bisect import bisect_right
+
+COUNTS = {"gate intervals judged": 0, "entered during a row's read": 0, "exit slope checks": 0,
+          "the pin's function agrees": 0, "passes by rounding only": 0, "refused by both": 0,
+          "doubles from the nearest tried value": []}
+
+
+def _pinned(pc, name):
+    text = inspect.getsource(pc)
+    node, = (node for node in ast.parse(text).body if isinstance(node, ast.FunctionDef) and node.name == name)
+    scope = {}
+    exec(compile("".join(text.splitlines(True)[node.lineno - 1:node.end_lineno]), f"<pin-{name}>", "exec"),
+         vars(pc), scope)
+    return scope[name]
+
+
+def _doubles(pc, claim, readings, start, end, required):
+    points = readings.instants(start, end)
+    tried = list(points) + [left + (right - left) * part // 32
+                            for left, right in zip(points, points[1:]) if right - left > 1 for part in range(1, 32)]
+    values = set()
+    for instant in tried:
+        if readings.visible_count(instant, pc.GATE_VISIBILITY_NS) <= required <= readings.visible_count(instant):
+            values.add(readings.slope(instant, required))
+    values.discard(None)
+    if not values or not pc._finite(claim):
+        return 9
+    value, count = min(values, key=lambda value: abs(value - claim)), 0
+    while value != claim and count < 9:
+        value, count = math.nextafter(value, claim), count + 1
+    return count
+
+
+def install(pc):
+    pinned, fixed, witnesses = _pinned(pc, "_gate_exit_slope"), pc._gate_exit_slope, pc._gate_witnesses
+
+    def exit_slope(claim, readings, start, end, required):
+        COUNTS["exit slope checks"] += 1
+        exact, verdict = pinned(claim, readings, start, end, required), fixed(claim, readings, start, end, required)
+        if exact:
+            COUNTS["the pin's function agrees"] += 1
+        elif verdict:
+            COUNTS["passes by rounding only"] += 1
+            COUNTS["doubles from the nearest tried value"].append(_doubles(pc, claim, readings, start, end, required))
+        else:
+            COUNTS["refused by both"] += 1
+        return verdict
+
+    def gate_witnesses(kind, index, interval, readings, *args, **kwargs):
+        COUNTS["gate intervals judged"] += 1
+        start = interval.get("start_ns") if isinstance(interval, dict) else None
+        if type(start) is int:
+            COUNTS["entered during a row's read"] += bisect_right(readings.starts, start) > readings.visible_count(start)
+        return witnesses(kind, index, interval, readings, *args, **kwargs)
+
+    pc._gate_exit_slope, pc._gate_witnesses = exit_slope, gate_witnesses
+    return COUNTS
+
+
+def report(reset=True):
+    """The counts since the last report. With `reset`, they start again from zero (one call per member)."""
+    result = {name: list(value) if isinstance(value, list) else value for name, value in COUNTS.items()}
+    if reset:
+        for name, value in COUNTS.items():
+            COUNTS[name] = [] if isinstance(value, list) else 0
+    return result
+```
+
 617. **Magistrate 379ee33f (headless, Opus 5.5), 2026-11-26 12:00 PST: f2-stab-16 L002 Check RECEIPT OK (1/1 admitted), copied; f2-stab-11 L004-L006 ISSUED on pin A from 13:15:00, launches as the last act**
 
 ```pointer
