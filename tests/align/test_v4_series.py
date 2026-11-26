@@ -168,8 +168,15 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual({seconds[str(i)] for i in range(5, 23)}, {1518.0})
 
     def test_kit_has_real_scaffold_configs_reference_custody_identity_and_sizing(self):
-        f = self.files
         directory = s.kit_path('C1')
+        sizing_path = directory / 'registration/sizing_b5.json'
+        sizing = json.loads(self.files[sizing_path])
+        self.assertEqual(sizing['sources']['w1_plan_sha256'],
+                         hashlib.sha256((ROOT / w1.W1_PLAN).read_bytes()).hexdigest())
+        self.assertEqual(sizing['packs']['align-v4-c1']['flags'], [])
+
+        with patch.object(w1, 'read_w1_plan_bytes', return_value=None):
+            f = s.build_files(ROOT, self.manifest, 'C1')
         collection = json.loads(f[directory / 'collection_plan.json'])
         tree = json.loads(f[directory / 'plan_tree.json'])
         w1.check_window_reference_roles(collection)

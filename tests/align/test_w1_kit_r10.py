@@ -176,7 +176,8 @@ class RetiredReceiptTests(unittest.TestCase):
         slots['g0_cap_w1'] = kit.w1_g0_cap(slots)
         inputs['R1']['thermal_policy']['g0_cap_s'] = 625
         with patch.object(kit, 'read_inputs', lambda root=kit.ROOT: deepcopy(inputs)), \
-                patch.object(kit, 'read_r1_slots', lambda root=kit.ROOT: deepcopy(slots)):
+                patch.object(kit, 'read_r1_slots', lambda root=kit.ROOT: deepcopy(slots)), \
+                patch.object(kit, 'read_w1_plan_bytes', return_value=None):
             files = kit.build_files(kit.ROOT)
         plan = json.loads(files[kit.KIT / 'collection_plan.json'])
         caps = {m['role']: m['spec']['thermal']['g0_cap_s'] for m in plan['members'] if m['role'] != 'anchor'}

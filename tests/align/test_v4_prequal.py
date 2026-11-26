@@ -22,8 +22,8 @@ from joulewise.align import prequal
 REPO = Path(__file__).resolve().parents[2]
 
 
-def ctx(tmp, **kwargs):
-    return prequal.Context(repo=REPO, work=Path(tmp) / "work", **kwargs)
+def ctx(tmp, *, repo=REPO, **kwargs):
+    return prequal.Context(repo=repo, work=Path(tmp) / "work", **kwargs)
 
 
 class FakeApi:
@@ -139,24 +139,22 @@ class ConfigPinKitChecks(unittest.TestCase):
         self.assertEqual(row["hf_cache_bookkeeping_counted"], [".cache/huggingface/download/x.metadata"])
 
     def test_kit_check_r0_passes_w1_needs_ready(self):
+        from scripts import align_v4_kit as kit
+        from tests.align.test_v4_kit import PENDING_RECEIPT, ready_inputs
         with tempfile.TemporaryDirectory() as tmp:
             row = prequal.check_kit(ctx(tmp))
             self.assertEqual(row["status"], "pass", row["problems"])
-            # R0 passed and its rung is filled (RUN_STATE 218); PR #886 fills R1, so nothing is pending
-            # and readiness first stops at the R0 record binding (a separate owner), not at R1.
             self.assertNotIn("R0.reasoning_effort", row["pending_inputs"])
             self.assertEqual(row["pending_inputs"], [])
-            self.assertTrue(row["require_ready"].startswith(
-                "ValueError: R0.record_sha256 must bind thermal_policy.sensors.r0_sha256"))
+            self.assertEqual(row["require_ready"], f"ValueError: {PENDING_RECEIPT}")
             self.assertFalse([p for p in row["pending_inputs"] if p.startswith("WP11.")])
             self.assertEqual(row["d_identity_folded_sha256"],
                              "a8d1c5c963787dd9dc524912e05d409172124da773d196e8f5123820b4c36b30")
             self.assertEqual(prequal.check_kit(ctx(tmp, stage="w1"))["status"], "fail")
-        # A synthetic blanked R1 leaf is still reported pending.
-        from scripts import align_v4_kit as kit
-        inputs = kit.read_inputs(REPO)
+        inputs, slots = ready_inputs()
         inputs["R1"]["B_D"] = None
         with tempfile.TemporaryDirectory() as tmp, patch.object(kit, "read_inputs", return_value=inputs), \
+                patch.object(kit, "read_r1_slots", return_value=slots), \
                 patch.object(kit, "build_files", return_value={}):
             row = prequal.check_kit(ctx(tmp))
         self.assertIn("R1.B_D", row["pending_inputs"])
@@ -174,7 +172,8 @@ class ConfigPinKitChecks(unittest.TestCase):
 
     def test_kit_check_w1_readiness_includes_r1_sizing(self):
         from scripts import align_v4_kit as kit
-        with tempfile.TemporaryDirectory() as tmp, patch.object(kit, "require_ready"):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(kit, "require_ready"), \
+                patch.object(kit, "read_w1_plan_bytes", return_value=None):
             row = prequal.check_kit(ctx(tmp, stage="w1"))
         self.assertEqual(row["status"], "fail")
         self.assertIn("sizing_b5.json is not derivable yet", row["require_ready"])
@@ -184,16 +183,21 @@ class W1PlanCheck(unittest.TestCase):
     """The R1 kit checks (validate_align_v4_w1_plan.py, L1, fit rule) in the prequal."""
 
     def test_w1_plan_is_in_the_runner_and_r0_stage_passes_while_the_w1_plan_is_pending(self):
-        # PR #886 fills the R1 inputs; registration/w1_plan.json (the R1-filled template) is not committed yet.
+        from scripts import align_v4_kit as kit
         self.assertIn("w1-plan", dict(prequal.AIR_CHECKS))
         with tempfile.TemporaryDirectory() as tmp:
             row = prequal.check_w1_plan(ctx(tmp))
+            self.assertEqual(row["status"], "pass", row["problems"])
+            self.assertEqual(row["w1_plan"]["status"], "VALID")
+            with patch.object(kit, "read_w1_plan_bytes", return_value=None):
+                row = prequal.check_w1_plan(ctx(tmp))
         self.assertEqual(row["status"], "pass", row["problems"])
         self.assertTrue(row["w1_plan"].startswith("pending"))
         self.assertEqual(row["fit_rule_planning_span_s"], 26927)
 
     def test_stage_w1_requires_the_filled_plan(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        from scripts import align_v4_kit as kit
+        with tempfile.TemporaryDirectory() as tmp, patch.object(kit, "read_w1_plan_bytes", return_value=None):
             row = prequal.check_w1_plan(ctx(tmp, stage="w1"))
         self.assertEqual(row["status"], "fail")
         self.assertIn("W1 requires the R1-filled", row["problems"][0])
@@ -207,7 +211,7 @@ class W1PlanCheck(unittest.TestCase):
                 self.assertIn("accepted the PENDING_R1 template", prequal.check_w1_plan(ctx(tmp))["problems"][0])
 
     def test_a_filled_plan_is_validated_against_inputs_and_r1_slots(self):
-        from scripts import align_v4_kit as kit
+        from scripts import align_v4_kit as kit, validate_align_v4_w1_plan as validator
         from tests.align.test_v4_kit import filled_w1_plan, ready_inputs
         inputs, slots = ready_inputs()
         with patch.object(kit, "read_inputs", return_value=inputs), \
@@ -215,26 +219,24 @@ class W1PlanCheck(unittest.TestCase):
                 patch.object(kit, "read_w1_plan_bytes", return_value=None):
             plan = json.loads(kit.build_files(REPO)[kit.KIT / "collection_plan.json"])
         filled = filled_w1_plan(inputs, slots, collection_plan=plan)
-        from scripts import validate_align_v4_w1_plan as validator
-        with tempfile.TemporaryDirectory() as tmp, \
-                patch.object(kit, "read_inputs", return_value=inputs), \
-                patch.object(kit, "read_r1_slots", return_value=slots), \
-                patch.object(kit, "read_w1_plan", return_value=filled), \
-                patch.object(validator, "template_bytes", side_effect=lambda p: (REPO / kit.KIT / "night_plan.template.json").read_bytes()):
-            # The collection plan on disk is the committed one; bind to the ready roster instead.
-            real = Path.read_bytes
-            def read_bytes(path):
-                if path == REPO / kit.KIT / "collection_plan.json":
-                    return json.dumps(plan).encode()
-                return real(path)
-            with patch.object(Path, "read_bytes", read_bytes):
-                row = prequal.check_w1_plan(ctx(tmp, stage="w1"))
-                self.assertEqual(row["w1_plan"]["status"], "VALID", row)
-                self.assertEqual(row["w1_plan"]["programmed_span_s"], 26927)
-                self.assertTrue(any("sizing_b5.json missing" in p for p in row["problems"]), row["problems"])
-                filled["align_v4"]["B_D"] = 7168
-                row = prequal.check_w1_plan(ctx(tmp, stage="w1"))
-                self.assertTrue(row["w1_plan"].startswith("REFUSED"), row["w1_plan"])
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            for path, value in ((kit.INPUTS, inputs), (kit.R1_SLOTS, slots), (kit.W1_PLAN, filled),
+                                (kit.KIT / "collection_plan.json", plan)):
+                target = repo / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(json.dumps(value))
+            (repo / kit.KIT / "night_plan.template.json").write_bytes(validator.template_bytes(plan))
+            context = ctx(tmp, repo=repo, stage="w1")
+            row = prequal.check_w1_plan(context)
+            self.assertEqual(row["w1_plan"]["status"], "VALID", row)
+            self.assertEqual(row["w1_plan"]["programmed_span_s"], 26927)
+            self.assertEqual(row["problems"], [f"{kit.SIZING} missing beside {kit.W1_PLAN} (regenerate the kit)"])
+
+            filled["align_v4"]["B_D"] = 7168
+            (repo / kit.W1_PLAN).write_text(json.dumps(filled))
+            row = prequal.check_w1_plan(context)
+            self.assertTrue(row["w1_plan"].startswith("REFUSED"), row["w1_plan"])
 
 
 class SiblingLoadReference(unittest.TestCase):

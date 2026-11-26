@@ -59,7 +59,9 @@ def mirror(target):
         for p in (ROOT / relative).iterdir():
             if p.name not in omitted and not p.name.startswith('align_v4_'):
                 (target / relative / p.name).symlink_to(p, target_is_directory=p.is_dir())
-    shutil.copytree(ROOT / kit.KIT, target / kit.KIT)
+    # The replay generates its own roster from synthetic inputs before W1 sizing.
+    shutil.copytree(ROOT / kit.KIT, target / kit.KIT,
+                    ignore=shutil.ignore_patterns(kit.W1_PLAN.name, kit.SIZING.name))
     # These checked-in templates provide the auxiliary stage manifests in
     # both the rendered kit and the actual linked launch view.
     for name in ('neg8_reference_corpus_v5', 'window_references_v5'):
