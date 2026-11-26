@@ -336,12 +336,14 @@ class PlanningReleaseTests(unittest.TestCase):
             ready.assert_called_once_with(destination)
 
     def assert_planning_segment_keys(self, release_keys, inconclusive_keys):
-        self.assertTrue(release_keys)
-        self.assertLessEqual(release_keys, set(kit.PLANNING_SEGMENTS))
-        self.assertEqual(release_keys, inconclusive_keys)
+        expected = {'planning_turn_R_plus_2C', 'planning_turn_R_plus_4C'}
+        self.assertEqual(release_keys, expected)
+        self.assertEqual(inconclusive_keys, expected)
 
     def test_committed_planning_segment_keys(self):
-        release_keys = set(json.loads((ROOT / kit.R1_PLANNING_RELEASE).read_bytes())['segments'])
+        raw = (ROOT / kit.R1_PLANNING_RELEASE).read_bytes()
+        self.assertEqual(kit.sha(raw), '171b2a3bd28ada24f832e1deafc5d526bd47ff60d55388859220a12ddd5ddf6a')
+        release_keys = set(json.loads(raw)['segments'])
         inconclusive_keys = set(json.loads((ROOT / kit.R1_SLOTS).read_bytes())['inconclusive_segments'])
         self.assert_planning_segment_keys(release_keys, inconclusive_keys)
 
