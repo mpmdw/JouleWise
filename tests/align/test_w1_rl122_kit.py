@@ -273,6 +273,21 @@ class PlanningReleaseTests(unittest.TestCase):
         _, clean = ready_inputs()
         self.assertEqual(released['step'], procedure.decide(clean, 12)['step'])
 
+    def test_readiness_requires_the_budget_selected_by_decide(self):
+        names = ['planning_turn_R_plus_2C', 'planning_turn_R_plus_4C']
+        inputs, slots = planning_slots(names)
+        release = release_for(slots, names)
+        decision = procedure.decide(slots, inputs['WP18']['X']['max_turns'], planning_release=release)
+        self.assertEqual(decision['step'], 'TYPICAL-CASE')
+        chosen = decision['set_inputs']['R1.B_D']
+        inputs['R1']['B_D'] = chosen
+        kit.require_ready(inputs, slots, planning_release=release)
+
+        inputs['R1']['B_D'] = chosen - 1024
+        self.assertEqual(kit.turn_opportunity(slots, inputs['R1']['B_D'])['status'], 'pass')
+        with self.assertRaisesRegex(ValueError, r'R1\.B_D .* must equal .*RL-189'):
+            kit.require_ready(inputs, slots, planning_release=release)
+
     def test_record_file_is_read_canonically(self):
         # PR #886 commits the lead's RL-122 3(a) release: it reads canonically and is in force
         # for the committed R1 record's INCONCLUSIVE planning segments.
