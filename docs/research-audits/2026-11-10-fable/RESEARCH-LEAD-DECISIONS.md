@@ -26610,3 +26610,256 @@ One correction to RS606's wording. `thermal.powermetrics_non_nominal` is a calib
 **Blind status.** Blind. I read rulings, RUN_STATE on public main, and W1 source and suite files at the pin. RS606's public text carries the magistrate's Check figures for kit 10 and one collection-plan seed; I used neither. My probes ran the pin's clock and evaluator code against this Air's own clocks and built their inputs in memory. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened, listed or hashed, nothing under the registered root or any `night-*` or `campaign-out` path, and no registration value. This ruling changes how a smoke's evaluator compares two clock values and what is owed before a signature. No estimator, inclusion rule, threshold, population or word of any registered read changes.
 
 **Lead note (Opus 5.5, 2026-11-26 05:40 PST).** Recorded verbatim from seat `fable-replay-case-1126` (sha256 e02a2b7084d5b6ceb225eaf290dadb7bdf8497d8420f3a7a06799c47ea1eb4a7). Probes stay in that seat directory.
+
+
+# RL-220. The `episode flags` refusal is case (a): the replay's stand-in task carries no task flags, and the frozen writer puts at least two in every SHADE episode, so the evaluator refuses every clean predecessor, D_bank and X_G. The fix goes into PR #977 as a second commit, with a second part for repetition flags that the same stand-ins get wrong. A second look-ahead read over every member comes before the one audit. On the look ledger, the lead's hold is right and is a hold on the file; afterwards a freeze-2 reader reads its own row on current main, one statement changed, due before the first freeze-2 read after ctl-01 registers
+
+Research lead (Fable 5.2), Thu Nov 26 07:37 PST 2026 (from `date`). Answers the two returns the laptop lead brings: RUN_STATE item 609's look-ahead read (RL-219 §5), and finding F2 of the Opus review of PR #978. RL-166 to RL-219 stand except where "Amends" says otherwise.
+
+**Cites.**
+- `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `645441434`. `RS609` and `RS610` are RUN_STATE items 609 and 610 on `origin/main` at `56113d9d7`.
+- Part A code is the W1 pin `dcdedecb1`, read in `/Volumes/JW-EXT/jw-wt/w1-pin-dcdedecb1-ro`. `PC` is `scripts/align_r1_part_c.py`. `WL`, `EP`, `TG`, `RT` are `workload.py`, `endpoint.py`, `thermal_gates.py`, `r1_runtime.py` under `joulewise/align/apple/`. `RN` is `joulewise/align/runner.py`. `ST` is `joulewise/align/shade/task.py`. `V4` is `tests/frozen/partc-v4/suite-v4/tests/align/test_partc_writer_v4.py`. `FX` is `tests/align/test_rl145_part_c.py` at the suite's fixture pin `2d02a6f0e`.
+- Part B code: `MF` is `joulewise/cadence_looks/manifest.py` at PR #978's execution commit `0586dae28`. `CB` is `joulewise/cadence_looks/controls_book.py` on `origin/main` at `56113d9d7`. `OR` is `opus-review-978.md` in my seat directory.
+- My probes and logs are in `/Volumes/JW-EXT/scratch/fable-rl219-return-1126/probes/`. Their digests are at the end.
+
+**Read.** RL-218 §11; RL-219; RS608 to RS610; RLD:15917, 20196-20210, 21061-21079. PC:1400-1410, 2026-2160, 2575-2600, 2603-2884, 4607-4647, 4862-4888; WL:185-415, 417-809, 893-936; EP:380-421, 534-823; RN:184-240; ST:108-438; `stop_precedence.py`; `pilot.py:40-46`; RT:180-198, 733-827, 1838-1861, 2046-2061; TG:361-372, 449-455, 492-496, 590-678; `interfaces.py:18-122`; V4:1-190, 430-647, 738-965, 3641-3705; FX:1122-1401; the v4 README. PR #977's diff to the pin. MF:54-55, 331-340, 1503-1597, 1650-1989; `fit_interim.py:1624-1628`; CB:1-30, 136-262; OR in full.
+
+**Checked myself.**
+- **RL-219 is the latest entry** (RLD:26443). The ledger copy I read is byte-equal to the audit branch at `645441434`, and the RUN_STATE copy to `origin/main` at `56113d9d7`.
+- **The four member templates,** from `configs/align/v4/r1_runtime.json` and the four stage files it names. All four name the task factory `pilot:offline_shade_task`. The predecessor's is benign, twelve turns, model revision set, sampler set. D_bank's is benign. X_G's is sabotage. Step D replaces the task with `StepTask` (RT:820-827).
+- **`flags_probe.log`.** Twelve members written by the pin's frozen workload, unchanged, on the predecessor's template. Seven use the template's own factory and a real `ShadeTask` over the repository's test SHADE source, with its real tools. One uses `StepTask`. Four use a probe task that holds no flags, and two of those are edited to the control's shape. The pin's `_replay_frozen_workload` then judged each, unchanged and with my fix body. Results are in sections 1, 3 and 7. The log is the last run. Earlier runs, against two earlier bodies, were overwritten and are not cited; section 3 says why those bodies were dropped.
+- **`control_shape.log`.** The v4 suite's own control, built by the issued suite. No member has a task flag or a `task_diagnostics` field. D_bank's episode lists `repetition.identical_call_and_output:2` and no turn record carries it.
+- **The suite's clean proof** (`JW_V4_PROOF=1`), run twice in this seat: at the pin, and on PR #977's head plus my fix body (`fix_body_flags.diff`). Both print the five PROOF rows and "native and archive: pass", exit 0.
+- **The 1,550 v4 cases,** once, on the same candidate (`scripts/align_r1_part_c.py` sha256 `d68bed2a…531d`). The 1,472 generated cases print 1,082 REFUSED and 390 AGREES_PASS, with no WRONG_VERDICT, FALSE_PASS or HARNESS_ERROR. The 78 history cases exit 0. It is my run in this seat and is not the audit's.
+- **`ledger_probe.log`.** The interim look's pinned `validate_look_ledger`, run on the ledger PR #978 installs and five edits of it. Results are in part B.
+- **PR #977's head `49bfe3489`** differs from the pin in RL-219's four hunks only. `_replay_frozen_workload` is the same text in both, and my fix body applies to both with each hunk matching once.
+- **The pin tree is clean** before and after my runs.
+
+**Not checked.**
+- **The two flag names.** I did not see them. Section 1 says what the code predicts and asks one boolean.
+- **The stored records.** I opened none. What I know of them is RS609's names, counts and booleans.
+- **The real SHADE source.** It is not in the repository. Whether its tools or environments can raise the flags of class W (section 2) is unknown to me.
+- **The 25,300 legacy operands.** Not run.
+- **Members other than the predecessor on a real record.** Nothing has judged them. Section 5 is for that.
+- **Part B:** I ran no stage and no CLI of the look, and read ctl-01's Authority only as far as its ledger reader. PR #978's CI and landing are the lead's.
+
+**Not done.** No commit, push, merge or SSH. I wrote this file, `probes/`, `work/` and `tmp/` in my seat directory. `tmp/` holds a shared clone of `mythos-repo` at `49bfe3489` with the fix body applied, which the suite needs as its candidate, and an extract of `0586dae28`'s `joulewise/`.
+
+---
+
+# A. RL-219's look-ahead read
+
+## 1. The case (RL-218 §11.2 step 3)
+
+**Ruling. Case (a): the evaluator refuses a record the frozen writer produces. It is not (b) and not (c).**
+
+- **What the writer does.** After scoring, the frozen workload copies every flag the task holds into the episode as `task.<flag>` (WL:701; the task interface says so, `interfaces.py:106-107`). It records the same list in `hardware.task_diagnostics.flags` (WL:707). A `ShadeTask` holds two from the moment it loads, in every run: `scratchpad_rule:upstream_closed_pairs:thinking,system_instructions` and `upstream_fixed_initial_state` (ST:178, 213). Under sabotage it holds a third (ST:241).
+- **What the evaluator does.** It replays the frozen workload with a stand-in task that has no `flags` (PC:2707-2711). So its list never holds a `task.` flag. It then requires the two lists to be equal (PC:2679-2687, 2883).
+- **So it refuses every member whose task is a loaded `ShadeTask`:** the predecessor, D_bank and X_G. Step D's task holds none and is not touched.
+- **Measured.** The pin refuses `workload_replay` / `episode flags` for 7 of 7 members with a `ShadeTask`, and the recorded-only flags are exactly the `task.` flags. It passes the `StepTask` member, whose task holds none.
+- **It fits RS609 exactly.** The predecessor's template is benign with twelve turns, and RS609 reports twelve turns. For twelve turns that each end in a tool call the code gives six flags: `turn_budget_reached`, the two above, and the three constants of WL:710-712. The replay gives four. Recorded-only two, replay-only none.
+- **Not (b).** A healthy record fails the same way every time.
+- **Not (c).** The replay is called from `_check_member_records` (PC:2147), inside the one member predicate both paths call.
+- **Why no test saw it.** The suite's control does not get its flags from a task. The suite replays the frozen workload itself, with the same flagless stand-in, and writes that list into the control (V4:484-486, 639-643, 921). The two could not differ.
+
+**The two names.** The code predicts `task.scratchpad_rule:upstream_closed_pairs:thinking,system_instructions` and `task.upstream_fixed_initial_state`.
+- **Magistrate, with item 610's answer:** one boolean per run, "the two recorded-only names are exactly these two strings".
+- **RS610's test needs one correction.** A whole-name `git grep -F` will say "not code literals", because the `task.` prefix is added at WL:701. A name is code vocabulary when it is `task.` followed by a string literal of ST at the pin. Such a name may be posted.
+- The builder does not wait for the boolean. If it is False, it comes to me before the audit.
+
+## 2. Flags the frozen writer adds that the replay does not reproduce
+
+| Class | Flags | Written at | Why the replay differs | This fix |
+|---|---|---|---|---|
+| **T** task | `task.` + each flag the task holds. Always the two of section 1. `sabotage_hint:on` or `:off`. `tool_error:<tool or exception type>`. `tool_arguments_error:<tool>:bytes=<n>:sha256=<16 hex>`, `tool_arguments_not_object`. `llm_judge_endpoint_missing`, `main_evaluation_error:<type>`, `side_evaluation_error:<type>`, `side_evaluation_not_boolean`, `judge_score_tag_missing`, `judge_score_unparseable`, `main_evaluation_nonfinite`. With a judge: `llm_judge:<identity>`, `judge_reply_text_adapter`, `judge_generation_cap_reached` and the judge endpoint's own. On a load fault: `unknown_condition`, `system_prompt_error:<type>`, `task_not_ready`, and the source's `upstream_…` flags | WL:701; ST:118-138, 171, 178, 213, 225, 239-244, 309-315, 333, 338, 397-429 | The stand-in task has no `flags` | Part 1 |
+| **R** repetition | `repetition.identical_call_and_output:<n>`, `repetition.identical_output:<n>` | WL:628-630; RN:199-228 | The stand-in tools take `{}` and return `{}` (PC:2709, 2816). The frozen observer then sees tool names alone. It invents `identical_call_and_output` whenever two turns running call the same tools, and it puts a recorded flag in the wrong place | Part 2 |
+| **E** endpoint | `model_revision_unpinned`, `mlx_version_unavailable`, `mlx_lm_version_unavailable` | EP:404-409; WL:662 | They sit in the endpoint's list and in no turn record. The stand-in endpoint starts empty (PC:2753) | Left |
+| **W** workload | `tool_error:<turn>:<call>`, `tool_result_coerced:<turn>:<call>`, `tool_state_unavailable:<type>:<message>`, `task_scoring_error:…` (four forms), `task_diagnostics.nonfinite`, `warmup_failed:<message>` | WL:405, 599, 605, 690-700, 709; RN:189, 239 | The stand-in tools never raise or return a non-string, the stand-in has no state observer, its scores are `None`, and the stand-in warm-up always succeeds | Left |
+
+- **Class R is not this refusal.** RS609 has no replay-only flag. I found it reading the same stand-ins, and the probe confirms it: with part 1 alone, the replay still refuses 4 of 4 members in which the same tool is called on two turns running with different arguments or outputs.
+- **Class E** is not expected under the four committed templates: each sets a model revision, and the MLX runtime's prepare metadata carries both version keys (`joulewise/adapters/mlx_runtime.py:305-306`).
+- **Class W** is not written by `ShadeTask` or `StepTask` as far as the repository's code decides. Both catch their own tool and scoring errors (ST:327-341, 426-430; RT:802-813). `tool_state_unavailable` and `task_diagnostics.nonfinite` depend on the real SHADE environments, which I cannot read.
+- **A gated member meets `thermal flags` first** (PC:2882). The replay rebuilds a session's flags from gate exits only (PC:2596-2598; TG:615-627). A session flag written anywhere else is not rebuilt: TG:371, 453, 495 and `r1.preheat_cap_reached` (RT:1861). I rule nothing on these. They are the first thing section 5's read can show on Step D, D_bank and X_G.
+
+## 3. The fix
+
+**Ruling. Folded into PR #977: one more commit on `ops/2026-11-26-w1-rl219-fix`, the same builder round, one head, one audit. Not a second PR.** Nothing has been audited yet, the receipt binds the evaluator's bytes, and an audit of #977 alone would audit an evaluator known to refuse every clean run.
+
+**Builder.** In `_replay_frozen_workload` only:
+
+1. **Part 1, task flags.** The task stand-in (PC:2707-2711) gains `flags`: the list at `hardware["task_diagnostics"]["flags"]`, or an empty list when the record has no `task_diagnostics`. A value that is not a list of non-empty strings refuses `workload_replay`. The frozen line WL:701 then writes the `task.` flags itself, in its own place and order.
+2. **Part 2, repetition flags.** At PC:2883-2884:
+   - `repetition.` flags are taken out of the episode's list and out of the replay's list before the `episode flags` agreement. The rest must be equal, in order, as now.
+   - The episode's `repetition.` flags must include every one a turn record carries, and each must be one the replay's list holds. The replay's list holds the turn records' (PC:2836) and the ones the frozen observer gives on tool names.
+   - `provenance flags` becomes: the provenance list equals the episode's list, whole.
+3. Nothing else changes: reason and field names, the stand-in tools, endpoint and thermal session, and the ten frozen paths.
+
+- **A tested body exists:** `probes/fix_body_flags.py` and `fix_body_flags.diff`, three replacements, 15 lines added and 3 removed. It passes all 12 probe members. It refuses 14 of 14 damaged records (`flags_probe.log`): a `task.` flag removed from or added to the episode's and provenance lists, `task_diagnostics.flags` edited, reordered, mistyped or removed alone, a flag moved, an unknown flag, and six edits of a repetition flag. The suite's clean proof and its 1,550 cases pass on it. The builder may write its own. The clauses are the ruling.
+- **Why part 2 is an inclusion and not an equality with the turn records.** My first body fed the observer from the turn records. The suite's D_bank control lists the names-only flag in its episode and in no turn record (`control_shape.log`). No frozen run writes that shape, because WL:629 always extends the turn record. An equality refuses the control, and with it the 1,550 cases. The inclusion admits both shapes. Section 7 states what it gives up.
+- **Why the provenance list is compared with the episode's list.** My second body judged each list against the replay separately. A names-only flag could then sit in one list and not the other. The writer makes the two lists from one value (WL:749, 794).
+- **Why the record without `task_diagnostics` is read as no task flags.** The control has none. Such a record still refuses any `task.` flag in its episode, as the pin does.
+- **Legacy operands.** I ran none. An ID whose verdict moves is listed. One whose operand is on `task_diagnostics` or on a `repetition.` flag is settled as RL-215 Q5 has it. Any other comes to me.
+
+## 4. The table classes
+
+**Issuer,** before the audit, with RL-219 §4's class. One second control may serve all three.
+
+- **Two rows in `writer_rules.tsv`,** family `member`, group `agreement`, reason `workload_replay`:
+  - `task-flag-record`, roles predecessor, D_bank and X_G, producer WL:701, 707 and ST:178, 213, 241. Predicate: "The episode's `task.` flags are the flags its own `task_diagnostics` records, in that order, where the frozen workload puts them."
+  - `repetition-flag-record`, every role whose control has two tool turns running, producer WL:628-630 and RN:199-228. Predicate: "The episode lists every repetition flag a turn record carries, and lists none that neither a turn record carries nor the tool names allow."
+- **The writer-produced shape.** The member's flags are written by the frozen workload with a task that holds flags as `ShadeTask` does, and with tools whose output depends on their arguments. The existing control has neither.
+- **Cases that pass:**
+  - `task-two`: the two flags of section 1.
+  - `task-three`: a third, on the X_G role.
+  - `task-repeated`: one flag twice in `task_diagnostics`, once in the episode.
+  - `same-tool`: the same tool on two turns running, different arguments, no repetition flag recorded.
+  - `identical`: an identical call and output, flagged in the episode and the turn record.
+  - `same-output`: `identical_output` recorded.
+  - `three-running`: different, then identical.
+- **Cases that must refuse `workload_replay`:** the fourteen damage rows of `flags_probe.log`.
+- **Its proof.** At `dcdedecb1` every passing case prints WRONG_VERDICT. At the fix head every case prints as expected.
+- No existing row or case changes. The builder edits no suite byte.
+
+## 5. The second look-ahead read
+
+**Ruling. Yes, before the audit, and over every member.** The first read stopped at the predecessor. D_bank and X_G are gated SHADE members, Step D is the only member with a deadline re-arm, and no check has judged any of them on a real record.
+
+**Magistrate,** in a gap, once per stored run, in the manner of item 608: the pinned evaluator imported unchanged from a clean `dcdedecb1` tree, with two functions replaced in memory.
+- `_recompute_controller_phases`, by RL-219's `fix_body.py` (sha256 `7760e3e4…1bee`, the body item 608 carried).
+- `_replay_frozen_workload`, by `probes/fix_body_flags.py` (sha256 `ffae839528aa78268d87af580c3126e90467f8aecfda9074d96c5d290991ecf0`). `patched(pc)` asserts each hunk matches once.
+
+Nothing is written under either OUT. It prints:
+
+1. The verdict word and the failing check names, run as written to the first refusal.
+2. If not `pass`, for the first refusal: member kind, source, index, field, and the truth of each clause. For a flags field: the two lengths, the recorded-only and replay-only counts, and for each such flag its class letter from section 2 or "other". A name is posted only under section 1's rule.
+3. **For every member, not only the first refused.** When a member is refused, the read records it and goes on to the next member in the loop at PC:4876-4888, carrying the last passing member's close and the step binding as they stand. A later refusal that names member order or the step binding is marked "follows an earlier refusal". This is the one further in-memory change allowed. If it cannot be made without touching anything else, the read stops at the first refusal as before and says so.
+4. Per member reached:
+   - RL-219 §5's two counts.
+   - The number of `task.` flags, and whether every one is `task.` plus an ST literal or literal prefix.
+   - The number of turn records that carry a `repetition.` flag.
+   - The number of `repetition.` flags the replay produced that the episode does not list.
+
+- **It is a diagnostic.** It is not a replay, makes no record, and is not evidence for the receipt.
+- It runs while the issuer and the builder work.
+- **The audit does not start until both runs print `pass`, or I have ruled on what the read found.** That keeps it to one audit.
+
+## 6. The rest, in order
+
+RL-219 §7 stands with these changes.
+
+1. The issuer's three classes, the builder's two commits, and section 5's read beside them.
+2. **One audit,** when section 5 allows it, by one executing seat of neither family. RL-219 §7's five checks, read as follows:
+   - Check 1: the diff to PC is RL-219's conjunct and mapping line, and section 3's two parts.
+   - Check 2: the three classes at `dcdedecb1` and at the fix head, the 1,550 cases, the clean proof and the legacy gate, with any moved ID listed.
+   - Check 4 gains a second question, by reading PC:2659-2884: does any stand-in (task, tools, endpoint, thermal session, runtime, power mode, identity projection) drop or invent a value the frozen writer records and a check compares? A yes is HIGH. Classes E and W and section 7's limits are ruled and are not findings.
+   - Check 5: its own writer-produced members, with a task that holds flags.
+3. CI, each replay once more, the receipt and the one Part C, as RL-219 §7 has them.
+
+## 7. What the fix leaves
+
+- **A names-only repetition flag** in the episode with none in a turn record is admitted, and a repetition flag's position in the list is not judged (`flags_probe.log`, the three admitted edits). That is the control's shape. Repetition flags are counts and never stops (RN:200).
+- **Classes E and W** are not reproduced. A refusal that shows one comes to me with its class letter.
+- **Task flags are taken from the record.** The replay checks that the episode's two copies agree and sit where the frozen line puts them. It cannot check that a tool ran. A member whose task reports a fault of its own (`task.task_not_ready`, `task.system_prompt_error:…`, `task.unknown_condition`) is not refused for it by this evaluator, before or after the fix. Whether Part C should refuse one is a new rule and is not made here. The second count of section 5, item 4, shows whether any stored member has such a flag.
+- It is left, and it is not waived.
+
+---
+
+# B. The shared look ledger (OR §6, F2)
+
+**Checked.** `ledger_probe.log`, at the pinned bytes of `0586dae28`:
+
+| Ledger | Interim's pinned validator | Main's ctl-01 reader |
+|---|---|---|
+| As PR #978 installs it (interim `committed`, qual `registered`) | accepts | reads it |
+| Interim row `frozen`, with synthetic hashes | accepts | reads it |
+| Plus a top-level `events` list | **refuses** (`unknown key 'events'`) | reads it |
+| Plus an `lm-ctl-01` row, status `registered` | **refuses** (`looks[2].status`) | row valid |
+| Plus an `lm-inst-01` row with a v1 status | accepts | reads it |
+
+- OR's finding is right on both counts (MF:54-55, 1508, 1529-1530, 1562-1563; CB:143-148, 158-160, 224).
+- **Three readers bind the interim to main's ledger:**
+  - Every stage and `row` go through `committed_ledger`. It requires the checkout's ledger to be byte-equal to main's (MF:1753-1756) and to validate (MF:1761).
+  - `freeze2_authority` validates the whole of current main's ledger before it reads the interim's row (MF:1831-1840).
+  - `predict_frozen` goes through that function (`fit_interim.py:1624-1628`; MF:1892-1894).
+- `origin/main` is at `56113d9d7` and its ledger holds `lm-qual-01` only. PR #978 has not landed. Main has moved twice since OR was written (items 609 and 610), so OR §5's rebuild on the new tip applies. That is the lead's operation.
+
+## B.1 The hold
+
+**Ruling. The lead's hold is right, and it is a hold on the file.**
+
+- From PR #978's landing until the hold ends, the only commits on main that change `docs/process/cadence/looks/LOOKS.json` are the interim's own row commits. That covers ctl-01's row, an `lm-inst-01` row, an `events` key and any other edit.
+- **Why the file and not ctl alone.** An `lm-inst-01` row validates, yet it still breaks the byte-equality for an execution checkout cut before it.
+- **The hold ends** when the interim's report row is on main and `authorize-freeze2` has exited 0 against that main, from the execution checkout. The command reads and prints; it writes no row (`scripts/cadence_look_manifest.py:501-512`).
+  - If `twin_agrees` is not `yes`, the command refuses until my naming ruling is on main (RL-184 §2). The hold lasts through that.
+  - If the look ends `failed` or `interrupted`, it comes to me before the hold is lifted.
+- **When it ends, the lead records** in RUN_STATE the evidence the command printed: `main_commit`, `public_sha256`, `coefficients_sha256`, `decision_source`.
+- Commits that do not touch the file are free. ctl-01's registration PR may be built, reviewed and left unmerged. ctl's reader accepts the interim's rows (CB:143-148, 196-222), so the order costs ctl only the wait.
+
+## B.2 After the freeze
+
+**Ruling. The compatibility path is a row-scoped read of current main, not a read at an old commit.**
+
+- **The rule freeze 2 was given** is that the reader takes that look's ledger row and public report from `origin/main` (RL-183 §2.3, RLD:20200; RL-184 §2.3, RLD:21063). The pinned function does more. It judges every row and key of main's ledger by the interim's own closed schema (MF:1840). That extra is what ctl's registration breaks, and it was never the rule.
+- **The successor reader differs from the pinned `freeze2_authority` in one statement.** In place of MF:1840 it:
+  1. requires the document to be an object with the v1 schema and a `looks` list of objects, exactly one of which has the interim's id;
+  2. refuses if an entry of any other top-level list names that id, so that a change to the look cannot sit in a key the interim's schema does not know;
+  3. runs the pinned validator, unchanged, on `{schema, looks: [that row]}`.
+  
+  Everything after it is unchanged: the row's status, the manifest and schema pins, the execution row in main's history, the report's hash, the twin word or the naming record, and the coefficient hash. `execution_row_at` already returns `None` for a ledger it cannot validate (MF:1807-1818), so the history walk needs no change.
+- **Why not the commit that recorded the freeze.** Reading current main is what lets a scorer see a row that was later superseded or changed (MF:1751-1752). A read pinned to an old commit loses that and needs a second rule to get it back. The row-scoped read keeps RL-183 §2.3 as written.
+- **It changes a pinned file, so it is not made at the execution commit.** The 46 pins and the manifest hash stand for the look's stages. The reader is a successor commit, made after the freeze, whose diff to the execution tree's `manifest.py` is that statement and its tests.
+- **One builder round and one audit:**
+  - The diff is that statement.
+  - RL-183 §2.3's four negative tests still refuse.
+  - A ledger with `events` and a ctl row reads.
+  - An `events` entry naming the interim refuses. Two interim rows refuse. An interim row `superseded` on main refuses.
+  - RL-183 §2.3's census: every opener of the coefficient file goes through it.
+  
+  The design comes to me only if it needs more than that statement.
+- **When.** It is not needed for the interim's run or for ctl to register. It is needed before the first freeze-2 read made on a main that holds ctl's row: `predict_frozen` and any re-verification. So it is needed before the paper and cannot wait for it. It should be built while ctl waits.
+  - Until it is audited, no freeze-2 read runs on a main that holds ctl's row.
+  - A frozen scoring due before the reader is ready runs before ctl registers.
+- **Re-executing a stage later** is an audit, not a registered read, and needs no rule. The auditor uses a scratch clone whose `origin/main` is the `main_commit` recorded under B.1, and checks separately that it is on public main's first-parent history.
+- **Not ruled: moving ctl's registration to a file of its own.** It would also work. It changes ctl's audited Authority and splits the one ledger RL-166 Q18 set up (RLD:15917), to protect a reader that needs one statement.
+
+---
+
+## Amends
+
+- **RL-218 §11.2 step 3 (a):** for the `episode flags` refusal, "one named fix" is section 3 and "the real shape" is section 4. It shares PR #977, its audit and its replays with RL-219's.
+- **RL-219 §5:** the first read is answered by RS609. Section 5 here is the second. **RL-219 §7:** read with section 6.
+- **RS610, "flag names":** the test is section 1's. The whole-name grep is replaced.
+- **RL-183 §2.3 and RL-184 §2.3** stand as written. B.2 changes how one function meets them.
+- **Stand unchanged:** RL-166 Q18; RL-183 §1.3; RL-215 Q2 and Q5; RL-216; RL-218 §11.1 and §11.2 steps 4 and 5; RL-219 §§1-4 and 6.
+
+**Comes back.**
+- Item 610's boolean, if False.
+- Section 5's read, if either run is not `pass`, if a flag's class is E, W or "other", or if a member's `task.` flags include one that is not an ST literal.
+- A legacy ID that moves and is not on `task_diagnostics` or a `repetition.` flag.
+- An audit HIGH under check 4.
+- A replay at the fix head that is not `pass`.
+- A second control the issuer cannot write without changing an existing case.
+- The interim look ending without a freeze, or `twin_agrees` other than `yes`.
+- A successor freeze-2 reader that needs more than the one statement, or a freeze-2 read wanted on a main that holds ctl's row before the reader is audited.
+
+**Probe digests** (sha256, first eight and last four hex digits).
+
+| File | Digest |
+|---|---|
+| `fix_body_flags.py` | `ffae8395…ecf0` |
+| `fix_body_flags.diff` | `776c7cce…4152` |
+| `flags_probe.py` | `6ac062d4…76ee` |
+| `flags_probe.log` | `31640f8a…3311` |
+| `probe_tasks.py` | `14152379…423e` |
+| `control_shape.py` | `928a3c2e…0dea` |
+| `control_shape.log` | `2c739440…b9e5` |
+| `suite_proof_pin.log` | `c369ae1b…04c0` |
+| `suite_proof_fix.log` | `6dba4942…84de` |
+| `suite_v4_fix_generated.log` | `e1305839…da13` |
+| `suite_v4_fix_history.log` | `1e74372c…4909` |
+| `ledger_probe.py` | `a210c51b…7b24` |
+| `ledger_probe.log` | `692640ab…01cd` |
+
+**Blind status.** Blind. I read rulings, RUN_STATE on public main, W1 source and suite files at the pin, the look's source at PR #978's execution commit, main's ctl-01 ledger reader, the public look ledger, and the task factory, task pair, condition, turn count and model family of the four committed stage templates the R1 runtime config names. RS609's public text carries the magistrate's Check figures for kit 10; I used none. My probes ran the pin's workload and evaluator on members built in memory from the repository's synthetic SHADE test source, and the issued suite on its own synthetic control. The candidate checkout in `tmp/` holds the repository's `configs/` as files; I opened nothing under `registration/`. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened, listed or hashed, nothing under the registered root or any `night-*` or `campaign-out` path, and no registration value. Part A changes how a smoke's evaluator compares two flag lists and what is owed before a signature. Part B fixes an order of commits and how a later reader finds one ledger row. No estimator, inclusion rule, threshold, population or word of any registered read changes.
+
+**Lead note (Opus 5.5, 2026-11-26 07:38 PST).** Recorded verbatim from seat `fable-rl219-return-1126` (sha256 73f4ce4f5aa74fbe79769cef5b210a37bc7c95846f1fd092859186949d2f1742). Probes stay in that seat directory.
