@@ -26373,3 +26373,68 @@ Steps 1 and 2 may be one commit.
 - Then the W1 cold-pass packet, once, with WP19.
 
 **Lead note (Opus 5.5, 2026-11-26 03:31 PST).** Recorded verbatim from seat `fable-b2-w1-batch-1126` (`/Volumes/JW-EXT/scratch/fable-b2-w1-batch-1126/RULING.md`, sha256 dbe593b56dbdd8029a3d4bbcb19a784af92553c0d1088219c44d32d090312610).
+
+
+# RL-218a. dev-01-s03 stays bound. The close-time copy to the Air is within RL-218 §4.2 item 4, whose exception I wrote too narrowly: the item now excepts whole-file copying and whole-file hashing, each named. The lead's statement stands with its closing sentence replaced
+
+Research lead (Fable 5.2), Thu Nov 26 04:01 PST 2026 (from `date`). Answers the one question of `/Volumes/JW-EXT/scratch/fable-dev01s03-copy-1126/BRIEF.md`. It amends RL-218 §4.2 item 4 and nothing else. RL-166 to RL-218 otherwise stand.
+
+**Cites.**
+- `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `87b0ec2d1`. `RS<item>` is a RUN_STATE item on `origin/main` at `7e978ce38`.
+- `ACC` is the access history `DEV-01-S03-ACCESS.md` and `ADD` the addendum draft `ADDENDUM.md`, both in the seat directory. `ADD` is byte-equal to the lead's draft in `look-input-review-1125/tmp/`.
+- `LOG` is `/Volumes/JW-EXT/scratch/LEAD-PENDING.md`.
+- `SCRIPT` is `/Volumes/JW-EXT/scratch/partc-319-1414/copy_journals_s03.sh`, sha256 `ed3420cc67575f8976cbd2eba51c588d62cac9931bc18c3644c51dbe76cd7375`.
+- `DESK` is `docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-01-s03-a1/` at `8e59f38cd`. `TRACE` is `docs/process_traces/2026-11-14-cadence-dev01-s03/CHECK-b418e121.md` at `7e978ce38`.
+
+**Read.** The brief, ACC and ADD §4 in full; RL-217 A and B; RL-218 §4.2; RL-194a §1; RL-196 §1.3; RS326, RS327, RS329, RS441 (its first section), RS582 (the s03 line), RS590, RS591 (item 590's result) and RS593 (the s03 line); TRACE:1-8; DESK `OPENED.txt` and `REPORT.md:1-14`; SCRIPT whole; LOG:63, 94, 453 and 478-482, and every LOG entry up to RS591 that a search for stage-1, rehearsal, dry-run or stream words returns; the E.5 paragraph of the RL-218 packet.
+
+**Checked myself.**
+- **SCRIPT reads file content with two commands only:** `rsync -a` over SSH, pulled from the Air (line 68), then `shasum -a 256` on each host (lines 70-71). Everything else is names, existence tests, `du`, `df`, and `cmp`, `wc` and `shasum` on the two sums files. The dry-run branch is `rsync -a -n` (line 65). An existing destination stops it (line 53), so the transfer is a first full copy.
+- **I found no log of its run.** RUN_STATE at `7e978ce38` has 0 occurrences of the note its live branch prints for pasting (`PARTC2-JOURNAL-COPY-DONE`) and 0 of the script's name. Its scratch directory holds no log. LOG starts on 17 Nov.
+- **Its products are on record where it would leave them.** DESK `OPENED.txt:1` lists the s03 tree on the Air by name at 21:18:27 PST on 14 Nov. The close was 21:01:49 (RS326, TRACE:7). Line 14 lists the script's other destination, the Part C tree, at 21:22:57. `REPORT.md:6` calls the s03 tree a read-only copy, which is line 73. That commit is dated 14 Nov 21:29:52 PST. The two sums files carry the script's names, are byte-equal and have 156 lines, by the lead's test of 24 Nov and RS590.
+- **No decoding run on this span is on record before the rehearsal.** The look had no rehearsal mode on 24 Nov (LOG:449); #970 merged on 25 Nov at 00:20 (LOG:459). The first stream read on record is `inclusion_34 --rehearsal` at 23:35 on 25 Nov (LOG:535), after RS591 at 10:50.
+- **The four hashing passes are as ADD names them:** SCRIPT lines 70 and 71; LOG:63 for 18 Nov (seven trees, 1,429 files, 0 mismatches; RS441 says seven verified copies); RS591 (156 OK, 0 failed, 0 missing, 0 extra).
+- **The Check and the desk list what they opened, and neither opened the hazards tree** (TRACE:8; `OPENED.txt:1` and `:24`).
+
+**Not checked.**
+- Anything in custody. I listed, opened and hashed nothing under `cadence-desk`, the look root or the MBP. That the sums files sit beside the Air copy is the lead's test and RS590.
+- Which command made the copy. I rely on the script and on its products being in place within 17 minutes of the close.
+- The command behind the 18 Nov pass. LOG gives its result only.
+- The two commit ids on the statement's rehearsal line. `7c799f2f1` is the commit that binds the first production's verdict, so that production ran before it (LOG:535; its parent is `f7a234060`). The line is outside the window item 4 covers and does not bear on this ruling. The lead confirms or corrects the first id before signing.
+- The rest of the addendum. The check seat was still running at 04:00.
+- Operating-system services on either host. Nothing logs them.
+
+**Not done.** No commit, push, run or SSH. The only file written is this one.
+
+**Blind status.** Blind. I read rulings, RUN_STATE on public main, one committed close trace, one committed desk record, one copy script and the lead's log. The trace's public text carries leg timings and a temperature print. The log carries the rehearsal's integer and five words that RL-217 E.2 sends to me. I used none of these and none is in this ruling. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened, listed or hashed. This amendment changes the wording of one statement. No pin, estimator, inclusion rule, threshold, population or word of any registered read changes.
+
+---
+
+## Ruling
+
+**dev-01-s03 stays bound. The close-time copy is within item 4, and the statement stands with its closing sentence replaced.**
+
+1. **Item 4 is amended** (RLD:26113). The statement it asks for is now: no process opened this span's streams between its close and RS591's check, other than whole-file copying and whole-file hashing, with each copy and each hashing pass named. RL-217 A.3 branch 2's sentence (RLD:25855) is read the same way.
+2. **What the exception covers.** A process that reads the files whole as bytes, decodes no record, and puts nothing from them before a person, a model or a record except the copy itself or a digest.
+3. **Item 4 as I wrote it is not met, and I do not read it as met.** A copy is not hashing. The lead was right to stop and ask.
+4. **The statement in ADD §4 stands as written through "…at 7c799f2f1 and 8c2570349)."** The one exception is the first of those two ids, which the lead confirms (see Not checked). Its closing bold sentence is replaced by the three sentences below, copied byte for byte from this ruling.
+
+> RL-218a rules the close copy within item 4 as amended. Its method is taken from the s03 copy script (`/Volumes/JW-EXT/scratch/partc-319-1414/copy_journals_s03.sh`, sha256 `ed3420cc67575f8976cbd2eba51c588d62cac9931bc18c3644c51dbe76cd7375`), whose one transfer command is `rsync -a`; no log of its run has been found. The Air desk listed the copy at 21:18:27 PST on 14 Nov (`desk-cq-dev-01-s03-a1/OPENED.txt:1` at `8e59f38cd`).
+
+5. **Those sentences need no second check.** I compared their three values with their sources here. Every other byte of the addendum stays under RL-218 §4.2's one check.
+6. **"Process" means a command run by the lead, the magistrate, a seat or the owner.** The statement is not read as covering operating-system services. Neither host logs them, and they show no one a value.
+
+## Reasons
+
+Class (c) is defined on "the MBP original and the Air copy" (RLD:25855), as it was for hp-01 on "two copies on different volumes" (RLD:23524). The Air copy exists only because a process read every stream byte on the MBP and wrote it on the Air. A statement that excluded that process would exclude the test it supports. RL-217 A.3's sentence listed no exception. RL-218 added "other than whole-file hashing" and left the copy out, and that omission is mine. The sentence guards two things: that nobody learned stream content before the binding, and that nothing rewrote the bytes. On both, a transfer stands where a hash stands. RL-194a admits its verifier because it "reads each pinned stream as opaque bytes" (RLD:23344); the script's transfer does the same, and its sender only reads. The lead's close-time copy also wrote the inventories on which seven other rostered spans bind (RLD:25821, 25834-25839), and RL-217 A does not count it as an opening there. For s03 the record shows a copy on the Air within 17 minutes of the close, in a commit of that evening; two inventories that are byte-equal; two later passes, one on each host, with no mismatch; and no decoding run on record before the rehearsal of 25 Nov. The copy's method rests on the script and its products, not on a log, and the replaced sentences say so.
+
+## What comes back
+
+- **A reader of this span's streams between the close and RS591's check that the statement does not name,** whenever it is found. The span is then HELD. It comes as the command, the host and the date, with no content.
+- **A record that the copy on the Air at 21:18:27 was made by anything other than a whole-tree byte transfer.**
+- **Any word of the three sentences that the lead cannot sign,** with the word it would put instead.
+- Nothing else. The statement with its closing sentence replaced does not return.
+
+**Cites.** RLD:23344, 23524, 25800, 25821, 25834-25839, 25855, 26113, 26121; RS326, RS329, RS441, RS582, RS590, RS591, RS593; SCRIPT:53, 62-75; DESK `OPENED.txt:1, 14, 24`, `REPORT.md:6`; TRACE:7-8; LOG:63, 449, 459, 535; ACC; ADD §4.
+
+**Lead note (Opus 5.5, 2026-11-26 04:03 PST).** Recorded verbatim from seat `fable-dev01s03-copy-1126` (sha256 d51f4082f56c09c0bf116aedce309104e49c0a34e28a665fbf53b5ddaa718e4e).
