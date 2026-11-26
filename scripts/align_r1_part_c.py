@@ -2703,11 +2703,13 @@ def _replay_frozen_workload(kind, config_doc, witnessed, events, meta, raw_episo
         clock = SimpleNamespace(ns=gates[0]["start_ns"] if gates else episode.start_ns)
         clock.stamp = lambda: stamp(clock.ns)
         clock.sleep = lambda seconds: setattr(clock, "ns", clock.ns + round(seconds * NS))
+        task_flags = hardware.get("task_diagnostics", {}).get("flags", [])
+        check(_strings(task_flags), "task flags")
         task = SimpleNamespace(task_pair=episode.task_pair, reset=lambda seed: None,
                                system_prompt=lambda condition: "", user_prompt=lambda: "", tool_schemas=lambda: [],
                                call_tool=lambda *args: "{}", score_main=lambda messages: None,
                                score_side=lambda messages: None, scratchpad_tags=None,
-                               task_description=lambda: "")
+                               task_description=lambda: "", flags=list(task_flags))
 
         class ReplayThermal(SimpleNamespace):
             holds_suppressed = tg.ThermalSession.holds_suppressed
@@ -2879,8 +2881,18 @@ def _replay_frozen_workload(kind, config_doc, witnessed, events, meta, raw_episo
     flags = result.workload_provenance["flags"]
     if gates:
         agree(hardware["thermal"]["flags"], thermal.flags, "thermal flags")
-    agree(raw_episode["flags"], flags, "episode flags")
-    agree(meta_flags, flags, "provenance flags")
+
+    def split(values):
+        return ([flag for flag in values if not flag.startswith("repetition.")],
+                {flag for flag in values if flag.startswith("repetition.")})
+
+    replayed, allowed = split(flags)
+    carried = {flag for record in witnessed for flag in record["flags"] if flag.startswith("repetition.")}
+    check(_strings(raw_episode["flags"]), "episode flags")
+    kept, repetition = split(raw_episode["flags"])
+    agree(kept, replayed, "episode flags")
+    check(carried <= repetition <= allowed, "episode flags")
+    agree(meta_flags, raw_episode["flags"], "provenance flags")
 
 
 def _recompute_continuation(kind, episode, witnessed, execution, family):
