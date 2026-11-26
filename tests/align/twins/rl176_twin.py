@@ -6,6 +6,7 @@ from math import comb, sqrt
 from statistics import mean
 
 from joulewise.align.apple.rl176 import S_SUPERIORITY_ALPHA
+from tests.align.twins.s_rows_twin import _solve_exact
 
 
 def exact_tails(populations, assigned):
@@ -45,6 +46,36 @@ def held_decode_score(training, held):
     bound = sum(width for _, _, width in held)
     sd = sqrt(variance * (k + leverage) + bound * bound + 3 * k)
     return (sum(joules for _, joules, _ in held) - expected) / sd
+
+
+def held_decode_four_term_score(training, held):
+    """RL-221 oracle on raw ((C, P, D'), joules, bound) rows, with exact normal equations."""
+    if len(training) < 6 or not held:
+        return None
+
+    def design(c, p, d):
+        return (1, d, (2 * c + 2 * p + d) * d, p * d)
+
+    columns = list(zip(*(design(*counts) for counts, _, _ in training)))
+    energies = [Fraction(y) for _, y, _ in training]
+
+    def dot(a, b):
+        return sum(v * w for v, w in zip(a, b))
+
+    gram = [[dot(a, b) for b in columns] for a in columns]
+    beta = _solve_exact(gram, [dot(a, energies) for a in columns])
+    if beta is None:
+        return None
+    rss = sum((y - dot(row, beta)) ** 2 for row, y in zip(zip(*columns), energies))
+    if rss <= Fraction("1e-18") * dot(energies, energies):
+        return None
+
+    summed = list(map(sum, zip(*(design(*counts) for counts, _, _ in held))))
+    leverage = dot(summed, _solve_exact(gram, summed))
+    variance = rss / (len(training) - len(beta))
+    bound = sum(Fraction(width) for _, _, width in held)
+    prediction_sd = sqrt(variance * (len(held) + leverage) + bound ** 2 + 3 * len(held))
+    return (sum(Fraction(y) for _, y, _ in held) - dot(summed, beta)) / prediction_sd
 
 
 def held_prefill_score(training, held):

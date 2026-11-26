@@ -197,7 +197,7 @@ def _decode_design(row):
     return (1.0, d, (row.context_tokens + row.prefill_tokens) * d + d * d / 2)
 
 
-def _decode_rows(member):
+def _decode_rows(member, *, s_four_term=False):
     episode = member.episode
     trace, mapping = selected_trace(episode, GPU)
     if trace is None:
@@ -233,7 +233,10 @@ def _decode_rows(member):
             pieces.append((cursor, row.end_ns))
         estimates = [trace_energy(trace, left, right, mapping=mapping) for left, right in pieces]
         if all(finite(e.joules) and finite(e.half_width_j) for e in estimates):
-            rows.append((_decode_design(row), math.fsum(e.joules for e in estimates),
+            design = _decode_design(row)
+            if s_four_term:
+                design += (row.prefill_tokens * row.decode_tokens,)
+            rows.append((design, math.fsum(e.joules for e in estimates),
                          math.fsum(e.half_width_j for e in estimates)))
         else:
             # Preserve the whole fold's missing outcome, rather than silently shortening the member.
@@ -493,7 +496,7 @@ def _q_energies(episode, owned, trace, mapping):
     return q_j, total, turn0_prefill
 
 
-def _observation(member):
+def _observation(member, *, s_four_term=False):
     episode = with_package(member.episode)
     gpu, mapping = selected_trace(episode, GPU)
     # A2's ownership is a partition of the log, even if the energy trace is missing.
@@ -508,7 +511,8 @@ def _observation(member):
     channels = {**RAILS, "dc_in": DC} if episode.condition == "benign" else RAILS
     phases = {rail: phase_table(episode, channel, attribution if rail == "gpu" else None)
               for rail, channel in channels.items()}
-    return _Observation(member, q_j, work, rows, phases, _decode_rows(member), q_total_j, turn0_prefill_j)
+    return _Observation(member, q_j, work, rows, phases, _decode_rows(member, s_four_term=s_four_term),
+                        q_total_j, turn0_prefill_j)
 
 
 def _prompt_phase_print(group):
@@ -524,7 +528,8 @@ def _prompt_phase_print(group):
                              for condition in ("benign", "sabotage")}}
 
 
-def _series_prints(members, ctl01, *, q_words_frozen, load_benign_dc, side_transfer_field=None):
+def _series_prints(members, ctl01, *, q_words_frozen, load_benign_dc, side_transfer_field=None,
+                   s_four_term=False):
     groups = defaultdict(list)
     ids, assigned = set(), set()
     roster = tuple(members)
@@ -556,7 +561,7 @@ def _series_prints(members, ctl01, *, q_words_frozen, load_benign_dc, side_trans
                     e = replace(e, power_traces=(*e.power_traces, trace),
                                 clock_mappings=(*e.clock_mappings, mapping) if mapping is not None else e.clock_mappings)
                     member = replace(member, episode=e)
-            groups[group].append(_observation(member))
+            groups[group].append(_observation(member, s_four_term=s_four_term))
 
     per_pair = {pair: [group for (_, task), group in sorted(groups.items()) if task == pair]
                 for pair in PAIRS}
@@ -609,7 +614,7 @@ def _series_prints(members, ctl01, *, q_words_frozen, load_benign_dc, side_trans
 
 
 def series_release_prints(state, *, load_members, load_ctl01=None, load_benign_dc=None,
-                          q_words_frozen=False, registration_receipt=None):
+                          q_words_frozen=False, registration_receipt=None, s_four_term=False):
     """Compute S, Q and their prints under the series desk release guard.
 
     Callers may enable words only with the pre-C1 code freeze or re-signed
@@ -618,17 +623,22 @@ def series_release_prints(state, *, load_members, load_ctl01=None, load_benign_d
     For the side-transfer print, the caller supplies the validated binding
     receipt. Its optional side_transfer_field names a single key in the
     frozen evaluator output. Without that key and a number, print null.
+    The explicit s_four_term keyword selects the unregistered RL-221 draft.
     """
     if not v4_desk_seal.released(state):
         return {v4_desk_seal.RL176: dict.fromkeys(RELEASE_LEAVES, v4_desk_seal.WITHHELD)}
     if type(q_words_frozen) is not bool:
         raise TypeError("q_words_frozen must be a documented boolean freeze decision")
+    if type(s_four_term) is not bool:
+        raise TypeError("s_four_term must be an explicit boolean draft selection")
     members = load_members()
     ctl01 = load_ctl01() if load_ctl01 is not None else None
     side_transfer_field = (
         registration_receipt.get("side_transfer_field") if isinstance(registration_receipt, Mapping) else None
     )
     report = _series_prints(members, ctl01, q_words_frozen=q_words_frozen, load_benign_dc=load_benign_dc,
-                            side_transfer_field=side_transfer_field)
+                            side_transfer_field=side_transfer_field, s_four_term=s_four_term)
+    if s_four_term:
+        report["S"]["score"] = "decode_only_reference_state_rows_four_term"
     report["S"]["superiority_alpha"] = float(S_SUPERIORITY_ALPHA)
     return {v4_desk_seal.RL176: report}

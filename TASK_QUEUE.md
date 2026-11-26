@@ -1356,3 +1356,10 @@ the author and integration repairs; later council work orders remain separate.
 
 - [ ] Execute the native/hardware verification checklist in
   `docs/run_reports/2026-11-06-align-v4-wp15.md`; cloud work remains PROVISIONAL.
+
+## ALIGN v4 S fit draft handoff (2026-11-26)
+
+- RL-221 §4.7 [AGENT] draft and synthetic verification are recorded in the
+  [run report](docs/run_reports/2026-11-26-align-v4-s-fourterm-draft.md).
+  The four-term candidate awaits the RL-223 decision and the stored-record
+  rank gate in RL-221 §4.5.

@@ -18,7 +18,8 @@ from joulewise.align.apple import rl145_prints, rl176 as r, rl176_phases as phas
 from joulewise.align.energy_residual import TurnRow
 from joulewise.align.records import ClockMapping, Episode, PowerTrace, ToolCall, Turn
 from tests.align.twins.rl176_twin import (
-    complete_strata_signature, decode_length_ratio, exact_tails, held_decode_score, held_prefill_score, q_by_second,
+    complete_strata_signature, decode_length_ratio, exact_tails, held_decode_four_term_score,
+    held_decode_score, held_prefill_score, q_by_second,
 )
 
 NS = phases.NS
@@ -256,6 +257,98 @@ class DecodeTests(unittest.TestCase):
                     self.assertEqual("held" in r._residual_scores(rows, edges_per_row=3), scored)
 
 
+def four_term_members(*, later_members=range(9), instructed_shift=0):
+    """In-memory decode traces with known coefficients and paired benign residuals."""
+    members, truth = [], []
+    for i in range(9):
+        instructed = i == 0
+        case = (i - 1) // 2 if i else 4
+        ep = episode(f"plant-{i}", condition="sabotage" if instructed else "benign", no_tools=True)
+        p0 = 1800 if instructed else 1200
+        d0 = 64 + 8 * case
+        counts = [(0, p0, d0)]
+        if i in later_members:
+            counts.append((p0 + d0, 96 + 12 * case, 32 + 4 * ((case * 5) % 7)))
+
+        turns, rows, raw = [], [], []
+        sample_watts = {}
+        for turn, (c, p, d) in zip(ep.turns, counts):
+            end = turn.end_ns - turn.index * NS
+            turns.append(replace(turn, first_token_ns=end - 2 * NS, context_tokens=c,
+                                 prefill_tokens=p, decode_tokens=d + turn.index))
+            noise = (1 if i % 2 else -1) * (turn.index + 1) / 4
+            y = 4 + d / 8 + ((c + p) * d + d * d / 2) / 4096 + p * d / 1024
+            y += instructed_shift if instructed else noise
+            # The trailing one-second windows bracketing both row endpoints are flat.
+            for at in range(end - 3 * NS, end + 2 * NS, NS):
+                sample_watts[at] = y / 2
+            rows.append(Row(turn.index, c, p, d, end, y + 1, 0))
+            raw.append(((c, p, d), y, .25))
+        traces = tuple(replace(t, values=tuple(sample_watts.get(at, 1.0) for at in t.t_ns), resolution=.125)
+                       if (t.source, t.channel) == phases.GPU else t for t in ep.power_traces)
+        members.append(r.FreshMember("C1", replace(ep, turns=tuple(turns), hardware={}, power_traces=traces),
+                                     True, tuple(rows)))
+        truth.append(tuple(raw))
+    return members, truth
+
+
+class RL221Tests(unittest.TestCase):
+    def test_four_term_fit_recovers_planted_coefficients_and_agrees_with_twin(self):
+        for shift in (0, 16):
+            with self.subTest(shift=shift):
+                members, truth = four_term_members(instructed_shift=shift)
+                obs = [r._observation(m, s_four_term=True) for m in members]
+                training = [row for m in obs[1:] for row in m.decode_rows]
+                x, y, _ = zip(*training)
+                coef, _, variance = r._ols(x, y)
+                for fitted, planted in zip(coef, (4, 1 / 8, 1 / 4096, 1 / 1024)):
+                    self.assertAlmostEqual(fitted, planted, places=11)
+                self.assertAlmostEqual(variance, 8 * (.25 ** 2 + .50 ** 2) / (16 - 4))
+
+                actual = r._decode_scores(obs)
+                self.assertEqual(set(actual), {m.episode.episode_id for m in members})
+                for i, m in enumerate(members):
+                    other_rows = [row for j, raw in enumerate(truth) if j != i for row in raw]
+                    expected = held_decode_four_term_score(other_rows, truth[i])
+                    self.assertIsNotNone(expected)
+                    self.assertAlmostEqual(actual[m.episode.episode_id], expected, places=10)
+                if shift:
+                    self.assertGreater(actual["plant-0"], 1)
+                else:
+                    self.assertAlmostEqual(actual["plant-0"], 0, places=10)
+
+    def test_only_held_member_has_a_later_turn_so_its_four_term_fit_is_undefined(self):
+        members, truth = four_term_members(later_members={0})
+        roster = [r._observation(m, s_four_term=True) for m in members]
+        for i, m in enumerate(roster):
+            training = [row for j, other in enumerate(roster) if j != i for row in other.decode_rows]
+            x, y, _ = zip(*training)
+            self.assertIsNotNone(r._ols([row[:3] for row in x], y))
+            other_rows = [row for j, raw in enumerate(truth) if j != i for row in raw]
+            expected = held_decode_four_term_score(other_rows, truth[i])
+            if i == 0:
+                self.assertIsNone(r._ols(x, y))
+                self.assertIsNone(expected)
+            else:
+                self.assertIsNotNone(r._ols(x, y))
+                self.assertIsNotNone(expected)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _receipt(root)
+            state = {"source_measurement_root": root}
+            registered = r.series_release_prints(state, load_members=lambda: members)[seal.RL176]
+            draft = r.series_release_prints(state, load_members=lambda: members, s_four_term=True)[seal.RL176]
+        self.assertEqual(registered["S"]["strata"], 1)
+        self.assertEqual(draft["S"]["strata"], 0)
+        self.assertEqual(draft["S"]["score"], "decode_only_reference_state_rows_four_term")
+        self.assertEqual(draft["S"]["superiority_alpha"], registered["S"]["superiority_alpha"])
+        self.assertEqual(draft["S"]["attrition"]["instructed_assignments"][0]["reason"], "s_score_undefined")
+        self.assertEqual(draft["S"]["attrition"]["by_pair_and_condition"][r.PAIRS[0]]["benign"]["with_score"], 8)
+        for leaf in ("S_pf", "q", "aligned_power"):
+            self.assertEqual(draft[leaf], registered[leaf])
+
+
 class RL177Tests(unittest.TestCase):
     def test_s_pf_matches_independent_five_term_twin(self):
         episodes = [episode(f"pf-{i}", seed=i + 1) for i in range(7)]
@@ -475,9 +568,10 @@ class ReleaseTests(unittest.TestCase):
             root = Path(tmp)
             for name, scope in (("W1", "W1"), ("C1", "C"), ("T1", "T")):
                 state = {"source_measurement_root": root, "v4_series": {"window_id": name}}
-                report = r.series_release_prints(state, load_members=do_not_read,
-                                                 load_ctl01=do_not_read, load_benign_dc=do_not_read)
-                self.assertEqual(report[seal.RL176], dict.fromkeys(("S", "S_pf", "q", "aligned_power"), seal.WITHHELD))
+                for s_four_term in (False, True):
+                    report = r.series_release_prints(state, load_members=do_not_read, load_ctl01=do_not_read,
+                                                     load_benign_dc=do_not_read, s_four_term=s_four_term)
+                    self.assertEqual(report[seal.RL176], dict.fromkeys(r.RELEASE_LEAVES, seal.WITHHELD))
                 planted = {"q": {"word": "Q SHIFT", "Q_total": 837457.25,
                                  "turn0_prefill_phase": 645919.25},
                            "S": {"words": ["S SIGNATURE"]},
