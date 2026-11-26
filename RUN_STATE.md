@@ -1052,6 +1052,203 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+615. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-26 09:48 PST: RL-222: third look-ahead read over every member with all three fix bodies, plus tool-margin and wide-stamp counts**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-28T12:00:00-08:00
+on_early_or_refused: if a hunk does not match once or the installer refuses, stop that run's read and report; the one further in-memory change (item 4) is made only if nothing else is touched
+next_observable: a magistrate item with, per stored run, the verdict and check names, the first refusal's site and clause booleans, every member's result, and the margin_counts output per member
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795715306, "number": 615, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **RL-222 (research lead, committed `bcbcb59b6` on the audit branch): item 613's three refusals are all case (a), from two faults.**
+  - Step D and D_bank: the evaluator calls an end the member's own stop only after a clean finish. The frozen loop ends a member at any turn with no tool call, so a last turn cut by its token budget is refused. Step D is that shape by design.
+  - X_G: the replay arms the deadman on G0's entry stamp. The frozen workload arms it on its own stamp, taken just before.
+  - The fix is a third commit on PR #977, under the same single audit. The wide stamps change no verdict, and RL-219 §6 stands. This item issues no arm and closes no ladder item. Items 601, 604 and 605 stay ISSUED. Item 610's pilot work is complete: §4.4 exit 0, pairs 7, unavailable 0.
+- **RL-222 §4: third look-ahead read, once per stored run (`part-c-328`, `f0-11-426`), in a gap, no leg delayed, before the audit.** Run it as item 613 was run. Import the pinned evaluator unchanged from the clean `w1-sign-Jfull-88624302` at `dcdedecb1`, and replace these in memory, in this order:
+  1. `_recompute_controller_phases`, by item 608's `fix_body.py` (sha256 `7760e3e4…1bee`);
+  2. `_replay_frozen_workload`, `_recompute_continuation` and `_check_member_records`, by `fix_body_stop.install(pc, flags=fix_body_flags)`, using item 611's `fix_body_flags.py` (sha256 `ffae8395…ecf0`) and `fix_body_stop.py` below (sha256 `187da9001d3ee32e04706a4c61e9eb7539e4312892982698d46f48dd735fc726`). It applies both rulings' hunks to the pin's own text, asserts each matches once, and sets the three functions on the module;
+  3. `_judge_members`, by item 613's per-member copy.
+  Write nothing under either OUT. Print only:
+  1. The verdict word and the failing check names, run to the first refusal.
+  2. If not `pass`, for the first refusal: the member kind, source, index and field, and the truth of each clause; for a flags field, RL-220 §5 item 2's counts and class letters.
+  3. Every member, as item 613 did it.
+  4. One further in-memory change is allowed. A refusal raised inside `_replay_frozen_workload` may be recorded and that member's remaining checks run, because nothing after PC:2147 reads the replay's result. Mark a later refusal in that member "after a replay refusal". If it cannot be made without touching anything else, it is not made.
+  5. Per member, from `margin_counts.py` below (sha256 `38b3d6d012870a7235e3375ae2355d6d58787f3091f826ad9773cab1d3fdbd56`):
+     - `tool_margins`: the number of tool boundaries; how many sit further than 1 µs from the frozen mapping's value; how many further than 3/4 of the bound; how many outside it; and the largest distance as a whole percent of its bound;
+     - `wide_stamps`: for each paired stamp wider than 1 µs, where it sits and its width in whole µs.
+  It is a diagnostic: not a replay, no record, not evidence for the receipt. The audit starts only when both runs print `pass`, no tool boundary sits further than 3/4 of its bound, and no paired stamp is 10 µs wide or more. Otherwise it goes back to the research lead.
+- **`fix_body_stop.py`:**
+
+```python
+"""RL-222 fix body, applied in memory to `scripts/align_r1_part_c.py` at the W1 pin `dcdedecb1` or at PR #977's
+head `dffc5bfd2` (the text of every hunk is the same in both).
+
+Three changes, in three functions:
+
+1. STOP, `_recompute_continuation`: the member's own stop is the frozen loop's (workload.py:649-655): its last turn
+   has an end_task call or no tool call, whatever that generation's finish reason. The pin also required a clean
+   finish, so a last turn cut by its token budget with no tool call was judged a turn-budget stop, which the
+   frozen loop never writes for it (workload.py:656-657 runs only when no turn broke the loop).
+2. SUMMARY, `_check_member_records` (F7): an own stop may carry the stop word `turn_token_budget_reached`, which
+   the frozen `primary_stop` gives whenever any turn was cut and no end_task was called.
+3. ORIGIN, `_replay_frozen_workload`: for a member whose deadline was armed at G0 entry, the replay clock starts at
+   the recorded deadline less the configured deadman, which must not be after G0's recorded entry. The frozen
+   workload arms the deadman on a stamp of its own (workload.py:430) before the session stamps the gate's entry
+   (thermal_gates.py:522), so the two are never the same stamp on a real clock.
+
+Nothing else changes. Each replacement asserts its old text occurs exactly once in its function.
+`patched(pc)` returns the three functions; `patched(pc, parts=(...))` applies some. `patch_text(text)` returns the
+whole file with the hunks applied, for a candidate checkout.
+
+At the pin, `_replay_frozen_workload` is also the function RL-220's body changes. `patched(pc, flags=module)`, with
+`module` the imported `fix_body_flags.py` (sha256 ffae8395...ecf0), applies that body's hunks to the pin's source
+first and these after, so one function carries both. `install(pc, flags=module)` sets the three functions on the
+module, which is how `_check_member_records` and its callers find them. RL-219's body replaces a fourth function,
+`_recompute_controller_phases`, and is installed as before."""
+import inspect
+
+HUNKS = {
+    "stop": ("_recompute_continuation", (
+        ("    protocol_stops, finishes = set(), []\n",
+         "    protocol_stops = set()\n"),
+        ("        finishes.append(finish)\n", ""),
+        ("    # The own-stop exception is granted only for an allow-listed clean finish of the last generation.\n"
+         "    own_stop = finishes[-1] in CLEAN_FINISH and (not last.tool_calls or bool(terminal_tools))\n",
+         "    # WL:649-657: the frozen loop ends a member at its first turn with an end_task call or with no tool\n"
+         "    # call, whatever that generation's finish. Only a last turn that asks for more needs the turn budget.\n"
+         "    own_stop = not last.tool_calls or bool(terminal_tools)\n"),
+    )),
+    "summary": ("_check_member_records", (
+        ("    # F7: the stop summary agrees with the classification. An own stop is a returned episode or end_task;\n"
+         "    # otherwise the turn budget, or the last turn's token budget, ended it.\n"
+         "    require(stop in ((\"episode_returned\", \"episode.end_task\") if own_stop\n",
+         "    # F7: the stop summary agrees with the classification. An own stop is a returned episode or end_task,\n"
+         "    # or names a turn's token budget when one was cut; otherwise the turn budget ended it.\n"
+         "    require(stop in ((\"episode_returned\", \"episode.end_task\", \"turn_token_budget_reached\") if own_stop\n"),
+    )),
+    "origin": ("_replay_frozen_workload", (
+        ("        clock = SimpleNamespace(ns=gates[0][\"start_ns\"] if gates else episode.start_ns)\n",
+         "        clock = SimpleNamespace(ns=gates[0][\"start_ns\"] if gates else episode.start_ns)\n"
+         "        if gates and budget.get(\"deadline_origin\") == \"G0_entry\":\n"
+         "            # WL:430 arms the deadman on a stamp of its own, before the session stamps G0's entry (TG:522).\n"
+         "            clock.ns = budget[\"deadline_ns\"] - round(spec.deadman_s * NS)\n"
+         "            check(clock.ns <= gates[0][\"start_ns\"], \"g0-entry arm\")\n"),
+    )),
+}
+
+
+def _apply(source, hunks):
+    for old, new in hunks:
+        assert source.count(old) == 1, old
+        source = source.replace(old, new)
+    return source
+
+
+def _function_source(pc, name):
+    """The function's text in the module's own file, whatever has been set on the module in memory since."""
+    import ast
+    text = inspect.getsource(pc)
+    node, = (node for node in ast.parse(text).body if isinstance(node, ast.FunctionDef) and node.name == name)
+    return "".join(text.splitlines(True)[node.lineno - 1:node.end_lineno])
+
+
+def patched(pc, parts=("stop", "summary", "origin"), flags=None):
+    functions = {}
+    for part in parts:
+        name, hunks = HUNKS[part]
+        source = _function_source(pc, name)
+        if flags is not None and name == "_replay_frozen_workload":
+            source = _apply(source, (*flags.TASK, *flags.REPETITION))
+        scope = {}
+        exec(compile(_apply(source, hunks), f"<rl222-{part}>", "exec"), vars(pc), scope)
+        functions[name] = scope[name]
+    return functions
+
+
+def install(pc, flags=None):
+    functions = patched(pc, flags=flags)
+    for name, function in functions.items():
+        setattr(pc, name, function)
+    return sorted(functions)
+
+
+def patch_text(text, parts=("stop", "summary", "origin")):
+    for part in parts:
+        text = _apply(text, HUNKS[part][1])
+    return text
+
+
+if __name__ == "__main__":
+    import difflib, sys
+    from pathlib import Path
+    old = Path(sys.argv[1]).read_text()
+    new = patch_text(old)
+    if len(sys.argv) > 2:
+        Path(sys.argv[2]).write_text(new)
+    sys.stdout.writelines(difflib.unified_diff(old.splitlines(True), new.splitlines(True),
+                                               "a/scripts/align_r1_part_c.py", "b/scripts/align_r1_part_c.py"))
+```
+
+- **`margin_counts.py`:**
+
+```python
+"""RL-222 section 6, a count for the third look-ahead read. Code only.
+
+`tool_margins(pc, episode, witnessed, events)` takes what `_recompute_controller_phases` takes for one member (the
+parsed episode, its turn records, its event rows) and returns integers: how far each tool boundary's recorded
+monotonic value sits from the value the frozen mapping gives its event, against that mapping's own bound
+(`_ReplayClocks.matches_after`, PC:2649-2651, unchanged). It decides nothing and changes nothing.
+
+`wide_stamps(episode, witnessed)` lists the paired stamps wider than 1 microsecond: where each sits and its width
+in whole microseconds.
+
+Both print clock facts only: counts, positions and whole microseconds."""
+
+
+def tool_margins(pc, episode, witnessed, events):
+    clocks = pc._replay_clock_mappings(episode, witnessed)
+    boundaries = over_1us = over_three_quarters = outside = worst_percent = 0
+    for turn in episode.turns:
+        rows = [row for row in events if row.get("metadata", {}).get("align_turn_index") == turn.index
+                and row["phase"].startswith("align_tool_")]
+        mapping = clocks._after[turn.index]
+        for begin, close, call in zip(rows[0::2], rows[1::2], turn.tool_calls):
+            for row, value in ((begin, call.start_ns), (close, call.end_ns)):
+                distance = abs(clocks._convert(mapping, row["timestamp_s"]) - value)
+                boundaries += 1
+                over_1us += distance > 1000
+                over_three_quarters += 4 * distance > 3 * mapping.uncertainty_ns
+                outside += distance > mapping.uncertainty_ns
+                worst_percent = max(worst_percent, int(100 * distance // mapping.uncertainty_ns))
+    return {"tool boundaries": boundaries, "further than 1 microsecond": over_1us,
+            "further than three quarters of the bound": over_three_quarters, "outside the bound": outside,
+            "largest distance, whole percent of its bound": worst_percent}
+
+
+def wide_stamps(episode, witnessed):
+    def width_us(before, after, scale):
+        return int((after - before) * scale // 1000)
+
+    found = []
+    for name, stamp in zip(("episode opening", "episode closing"), episode.hardware["paired_clock_stamps_ns"]):
+        width = width_us(stamp["monotonic_before_ns"], stamp["monotonic_after_ns"], 1)
+        if stamp["monotonic_after_ns"] - stamp["monotonic_before_ns"] > 1000:
+            found.append((name, width))
+    for record in witnessed:
+        for key in ("start_stamp", "end_stamp"):
+            stamp = record[key]
+            nanoseconds = (stamp["monotonic_after_s"] - stamp["monotonic_before_s"]) * 1e9
+            if nanoseconds > 1000:
+                found.append((f"turn {record['turn']} {key}", int(nanoseconds // 1000)))
+    return found
+```
+
 614. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-26 09:22 PST: RL-221: lm-interim-01 accepted, freeze 2 in effect; LOOKS.json hold ENDS; drift tripwire returns S's row (RL-223) before the W1 receipt; projector run, grid C running**
 
 ```pointer

@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "RL-223 (S row) recorded on the audit branch, with grid C's JSON sha256 and the projection's hashes in its packet",
+  "next_observable": "a magistrate item with, per stored run, the verdict and check names, the first refusal's site and clause booleans, every member's result, and the margin_counts output per member",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 615,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 614,
@@ -291,13 +297,13 @@
       "status": "ISSUED"
     }
   ],
-  "owner": "lead",
+  "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "614",
+  "source_item": "615",
   "source_item_heading_date": "2026-11-26",
   "wait": {
     "deadline_epoch_s": 1795896000,
-    "observable": "ruling_recorded",
-    "on_early_or_refused": "the W1 receipt stays unsigned until RL-223 is recorded; everything else in the signing sequence proceeds"
+    "observable": "none",
+    "on_early_or_refused": "if a hunk does not match once or the installer refuses, stop that run's read and report; the one further in-memory change (item 4) is made only if nothing else is touched"
   }
 }
