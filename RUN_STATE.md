@@ -1052,6 +1052,45 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+601. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-26 00:12 PST: W1 SIGNING INPUTS on the promoted pin dcdedecb1 (U3 pilot and R1 exports, WP19, soak reference, two protected replays) in spare gaps between ranked legs; item 588 cleanup ruling**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-27T12:00:00-08:00
+on_early_or_refused: Read the current leg's verdict first. Honor its Check, copy, refusal branch and next legal start. At the deadline report completed names and hashes or the missing name and exit code. Carry unfinished W1 work to a later gap.
+next_observable: Item 600's f2-stab-10 L007 launch or refusal, then its fence exit, runner_receipt.json, Check and copy if launched, or the successor item's observable. At a free boundary post the W1 result ref and commit or a named hold in a magistrate item.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795680769, "number": 601, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+
+- This item issues no arm and closes no ladder item.
+- Follow items 598–600 and successors. After a proven close, Check and copy first. Keep pin A's daily cold first leg, pin B's eligible gap, and each legal 3/2/1-leg start. Do one operation only if it fits with the next launch's quiet lead-in. Defer while a fence PID lives, a label is loaded, a stop applies, or work would delay a leg.
+- Use a separate clean MBP checkout `$J` at `dcdedecb100723ddb9c489fc507f9373a944a176` (promoted W1, R1 closed in item 459). Run from `$J` with Git environment overrides unset. Require empty `git status --porcelain` and the exact pin. Record the full `git rev-parse --verify HEAD` from the actual pilot execution as `STEP4_CHECKOUT`.
+- Set `K=configs/campaigns/align_v4`, `R=$K/registration`, `U=$R/u3_sources`. Use a separate private staging checkout `$STAGE` based on the pin, with the same relative output paths, and private scratch `$PRIVATE` outside both trees. Set `umask 077`. Capture diagnostics privately. Keep original evidence read-only.
+- **Pilot (§4.4).** Use verified pilot 4–10 bundles at the committed `$U/selection.json` entries' `early_bundle` and `late_bundle` paths. The exporter also reads `$K/collection_plan.json` at HEAD. Take the first pair at least three design positions apart in each session. Preserve unavailable sessions. No replacement, search or edit of the selection.
+  `python3.13 -B scripts/align_v4_u3_export.py pilot --selection "$U/selection.json" --output "$STAGE/$U/pilot.json" 2>"$PRIVATE/pilot.err"`
+- **R1 (§4.5).** On the same checkout, authenticate the accepted R1 output (`RUN=$S/night/align-r1`) against items 449/459 (`$S=/Users/edr/night-align/r1-20261118T231014Z`). Set `D_SPAM_A` and `D_SPAM_B` to the actual run bundles, in order, under `$RUN/D_spam_benign_s1_gated_held_a` and `$RUN/D_spam_benign_s1_gated_held_b`. Use `$RUN/<segment>/<result.bundle>` for each. §4 leaves those bundle paths to the magistrate.
+  `python3.13 -B scripts/align_v4_u3_export.py r1 --early-bundle "$D_SPAM_A" --late-bundle "$D_SPAM_B" --ordinals 2 3 --output "$STAGE/$U/r1.json" 2>"$PRIVATE/r1.err"`
+- The two exporters print only the counts `pairs` and `unavailable`. Fewer than five eligible pilot sessions holds U3 adoption. An unavailable R1 screen leaves D inconclusive for lead disposition. Preserve those outputs and counts even on exit 0.
+- **WP19.** Set `TOKENIZER` to the authenticated local X/Y 30B tokenizer directory (`tokenizer.json`, `tokenizer_config.json`) and `XG_TURNS` to the accepted `$RUN/X_G_contrast/<result.bundle>/outputs/align_turns.jsonl`. The magistrate resolves both paths. The script reads `$R/wp18_x_token_ids.json`, `$R/wp18_y_token_ids.json` and `$K/collection_plan.json`. Its first X-G and Y-G `config_path` entries are `$K/stages/episodes-a/align-v4-episodes-a-e06.json` and `$K/stages/episodes-b/align-v4-episodes-b-e10.json`. Local rendering only.
+  `python3.13 -B scripts/align_v4_wp19.py --root "$J" --tokenizer "$TOKENIZER" --x-g-turns "$XG_TURNS" --output "$STAGE/$R/wp19_receipt.json" >"$PRIVATE/wp19.out" 2>"$PRIVATE/wp19.err"`
+  Validate with `joulewise.align.apple.v4_registration.validate_wp19` privately. Keep a valid failed-identity receipt as an inconclusive contrast. Exit 0 alone does not establish identity.
+- **Soak.** Copy the authenticated `$RUN/soak_reference.json` byte-for-byte to the new `$STAGE/$R/r1_soak_reference.json`. Require `cmp -s` exit 0 and matching SHA-256. Do not follow embedded paths.
+- **Protected replays (RL-183 §1.3).** Use the accepted #809 evaluator carried by #959 at this pin. Use each retained original or a receipt-verified restore with its `part-c/` and sibling `soak/` intact. Run both, once each, with `RUNTIME_CONFIG=$J/configs/align/v4/r1_runtime.json` after verifying byte equality to that run's issued config. The evaluator reads its four member templates and the W1 plan template with its listed configs from the pinned tree.
+  - Counted Part C, item 328: `OUT=/Users/edr/code/jw-wt/partc-c3f4/.desk/r1-partc2-c3f4-20261115T052325Z` (`docs/process_traces/2026-11-14-partc2-c3f4/CHECK-de565739.md`, launch item 325).
+  - F0 run 11, item 426: take the exact `OUT` from item 421's `r1-partc-f0-out-c047c9dc.txt` and item 346's `$CUSTODY/standing-f0/ledger.tsv` at t0 epoch 1794981754 (`CUSTODY=${MAGISTRATE_WATCHDOG_CUSTODY_ROOT:-/Users/edr/night-custody/magistrate}`). The historical checkout was `/Users/edr/code/jw-wt/partc-b2e01464d`. The magistrate resolves any restore location.
+  - For each, set `ID` to `part-c-328` or `f0-11-426`. Run `python3.13 -B scripts/align_r1_followup_kit.py replay-archived --output "$OUT/part-c" --runtime-config "$RUNTIME_CONFIG" >"$PRIVATE/$ID.json" 2>"$PRIVATE/$ID.err"`. Capture its own exit code immediately.
+  - In a new `docs/align/v4/W1-protected-replays.json` in staging, record each ID, evaluator commit, exit code, `verdict` word and `failing_checks` names. Keep `binding: archived_custody`, per-gate U1/N4 counts by role/gate/index, and the per-member `native_limit: unattested` labels (RL-183c §1.4, RL-186 §1, RL-189 §1.4). Project only those fields.
+  - Require exit 0 for pass and 1 for a valid non-pass. Two passes clear this replay prerequisite; cite both in the final Part C issue item. Preserve both findings. A non-pass, especially gate-level `evidence_unverifiable`, goes via the lead to the research lead before the final Part C. A missing/malformed result or exit disagreement is a hold. R1 stays closed.
+- Stop the affected operation on a pin, provenance or digest mismatch, ambiguous/missing source, malformed output or unexpected exit. Preserve partial evidence privately. Resume only a verified complete output from this pin; never overwrite or substitute. If restore is needed, use an authenticated separate copy that preserves required paths. Continue independent work only if it fits.
+- Push exactly `$U/pilot.json`, `$U/r1.json`, `$R/wp19_receipt.json`, `$R/r1_soak_reference.json` and the projected replay record to proposed `refs/heads/w1-results/2026-11-26-signing-inputs` on `origin` (normal push only, RL-183 §2.10 and W1-BLOCKERS §4.12). Verify the remote commit equals the staged commit. No data on main. Keep raw bundles, transcripts, logs and full replay stdout private.
+- Post only the result ref, full commit and STEP4_CHECKOUT, filenames, SHA-256, counts, exit codes and hold names in RUN_STATE. The replay words and failing-check names belong in the projected record. Before signing the lead runs the §4 three-blob comparison with STEP4_CHECKOUT and SIGNING_COMMIT (exporter, frozen selection, collection plan). Exit 1 returns to §9 step 1 and a fresh export at the clean signing pin. A changed post-export selection goes to the research lead (RL-210). Exit 2 holds signing.
+- **Item 588 cleanup ruling (lead).** Keep the restored stage-1 tree, `$D` (with `released-keys/`) and `$SEAL` exactly where item 596 left them: the BYTES desk runbook's later guarded steps take `--export-seal-repo $SEAL --export-seal-commit $SEALC`, keyed fits name `$D/released-keys`, and the twin reads the twelve restored session archives. Do not delete or move any of it until those desk steps are recorded. Item 588's 80 GiB free-space floor still applies: if free space falls under 80 GiB, stop new restores or exports and tell the lead the names and free space. 588 stays ISSUED for that later cleanup.
+
 600. **Magistrate 74148d66 (headless, Opus 5.5), 2026-11-25 23:53 PST: f2-stab-10 L004-L006 Check RECEIPT OK (3/3 admitted; L005 quiet span flagged for a software-update burst), copied; ladder corrected (rank 1 is pin A kit 01-14, items 464/553); f2-stab-10 L007 ISSUED on pin A as Thursday's rank 1, one leg (item 583), launches as the last act**
 
 ```pointer
