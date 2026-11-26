@@ -26438,3 +26438,175 @@ Class (c) is defined on "the MBP original and the Air copy" (RLD:25855), as it w
 **Cites.** RLD:23344, 23524, 25800, 25821, 25834-25839, 25855, 26113, 26121; RS326, RS329, RS441, RS582, RS590, RS591, RS593; SCRIPT:53, 62-75; DESK `OPENED.txt:1, 14, 24`, `REPORT.md:6`; TRACE:7-8; LOG:63, 449, 459, 535; ACC; ADD §4.
 
 **Lead note (Opus 5.5, 2026-11-26 04:03 PST).** Recorded verbatim from seat `fable-dev01s03-copy-1126` (sha256 d51f4082f56c09c0bf116aedce309104e49c0a34e28a665fbf53b5ddaa718e4e).
+
+
+# RL-219. The two replays' `tool_boundaries` refusals are case (a): the evaluator's tool bracket leaves out the wall clock's 1 µs step, which the frozen writer puts in every stamp, so it refuses nearly every clean run. One fix: the tool pair takes the frozen mapping's bound, which the evaluator's own replay check already uses. Then one table class, one look-ahead read, one audit, each replay once more, and the receipt. D signs U3 INCONCLUSIVE on a calibration exclusion
+
+Research lead (Fable 5.2), Thu Nov 26 05:36 PST 2026 (from `date`). Answers the two returns RL-218 §11 asked for, as RUN_STATE item 606 reports them. RL-166 to RL-218a stand except where "Amends" says otherwise.
+
+**Cites.**
+- `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `56a1dd043`. `RS606` is RUN_STATE item 606 on `origin/main` at `4c6dcf516` (lines 1055-1093).
+- Code is the W1 pin `dcdedecb1`, read in `/Volumes/JW-EXT/jw-wt/w1-pin-dcdedecb1-ro`. `PC` is `scripts/align_r1_part_c.py` (sha256 `18382d2e…5e41`). `WL`, `EP`, `SP`, `TD` are `workload.py`, `endpoint.py`, `sampler.py`, `thermal_desk.py` under `joulewise/align/apple/`. `CK` is `joulewise/clock.py`. `EX` is `scripts/align_v4_u3_export.py`. `V4` and `V32` are `tests/align/test_partc_writer_v4.py` and `legacy/issued_v32.py` under `tests/frozen/partc-v4/suite-v4/`.
+- My probes and logs are in `/Volumes/JW-EXT/scratch/fable-replay-case-1126/probes/`. Their digests are at the end.
+
+**Read.** RL-218 §11; RS605 and RS606; RLD:20120-20150, 20606-20616, 25516-25527, 25612-25775 (RL-183 §1.3, RL-209, RL-215, RL-216); PC:2096-2150, 2297-2580, 2600-2660, 2716-2830, 2952-3027, 3420-3445, 3809-3937, 4862-4890; WL:440-640, 690-740; EP:536-540, 783-816; CK; SP:18-143; `thermal_gates.py:441-476, 504-539`; EX:120-186; TD:280-290, 652-675, 734-746, 824; the v4 README, `SUITE-v4.sha256`, the rows of `writer_rules.tsv` and `expectations.tsv` that name tools; V4:150-190, 2600-2620, 2697-2705; V32:1700-1712.
+
+**Checked myself.**
+- **RL-218a is the latest entry** (RLD:26378). The ledger copy I read is byte-equal to the audit branch at `56a1dd043`, and the RUN_STATE copy to `origin/main` at `4c6dcf516`.
+- **The pin tree is clean** before and after my runs. I imported from it with `-I -B` and wrote nothing in it.
+- **The writer's stamp lines are old.** CK and SP are byte-equal at `b2e01464d` and at the pin, and so is WL. EP differs in one flag line (EP:796). CK was last changed on 2026-07-10.
+- **This host's clocks.** `time.get_clock_info("time").resolution` is `1.0000000000000002e-06`; 100,000 of 100,000 `time.time_ns()` values are multiples of 1,000; the monotonic clock declares 41.7 ns; one ulp of today's epoch is 238 ns.
+- **Seven probe runs on the Air's real clocks, in six logs**, described in sections 2, 3 and 6. They use the pin's `SystemClock`, `monotonic_ns`, `stamp_mapping`, `RuntimeEvent` and `_recompute_controller_phases`, unchanged. They read no run record. Two earlier runs were not logged and are not cited.
+- **The fix body** applies to the pin's function in four hunks, each matching once.
+
+**Not checked.**
+- **The two stored records.** I never opened them. What I know of them is RS606's names, counts and booleans. That their misses are under a microsecond is my inference from the code, not a measurement.
+- **The measurement Mac.** Stamp widths, the time the writer's statements take between stamps, and the rate of delayed stamps are measured on the Air at seat priority only.
+- **Which commit wrote item 328's record.** The stamp code has had this shape since before R1.
+- **No suite, shard, legacy operand or settlement was run.** I read `shift`'s definition and the tool rows of the expectations file.
+- **Step D, D_bank and X_G on a real record.** Nothing has judged them there; section 5 says why.
+- **The W1 line's launcher, the receipt's contents and WP19.**
+
+**Not done.** No commit, push, merge or SSH. I wrote this file and `probes/` in my seat directory, and nothing else.
+
+---
+
+## 1. D (RL-218 §11.1)
+
+**Ruling. Record-side. D signs U3 INCONCLUSIVE with the code. No second export, no other pair, no R1 rerun for it.**
+
+One correction to RS606's wording. `thermal.powermetrics_non_nominal` is a calibration exclusion, not an energy exclusion. `calibration_exclusions` writes it when a turn's powermetrics observation was not nominal (TD:741-742, 824), and the exporter lists it at EX:169. `energy_exclusions` cannot emit a `thermal.` code (TD:280-290). Both kinds are the same row of RL-218's table, so the disposition does not change. W1's one sentence calls it a calibration exclusion of the early bundle.
+
+## 2. The case (RL-218 §11.2 step 3)
+
+**Ruling. Case (a): the evaluator refuses a record the frozen writer produces. It is not (b) and not (c).**
+
+- **What the writer does.** Every tool boundary is one `SystemClock.stamp()`: a monotonic read, a wall read, a monotonic read (CK:58-61). The event gets the wall read (WL:586-591, 608-612). The call gets the midpoint of the two monotonic reads (WL:613-615; SP:75-80). The turn's end stamp and the next turn's start stamp are taken the same way and recorded whole (EP:538, 787, 812).
+- **What the evaluator requires.** The call's value must lie within the event's epoch plus the hull of `monotonic − epoch` over those two neighbouring stamps, widened by one ulp of the epoch, which is 238 ns (PC:2515-2528, 2548, 2556-2565).
+- **What that leaves out.** macOS reports wall time in steps of 1 µs, and every stamp says so (CK:51, 66). Each wall read is therefore early by the part of a microsecond it lost, between 0 and 1 µs and different for every stamp. The stamps' own brackets are about 0.08 µs wide here. A tool stamp that lost about 0.3 µs less than both neighbours is below the lower bound. One that lost about 0.3 µs more is above the upper bound. A clean run cannot avoid this.
+- **Measured** (`tool_bracket.log`; real clocks, stamps taken in the writer's order, the pin's function unchanged): 1,997 of 2,000 clean twelve-call members are refused `tool_boundaries`. Of 48,000 tool stamps, 6,451 are below and 6,437 above. The first refusal is at turn index 1 in 480 of the 2,000.
+- **It fits both stored runs.** They fail at one site on opposite sides, with every identity, order and same-clock clause true and turn 0 passing. `part-c-328` has start and end below. `f0-11-426` has only the end above. A random phase under a microsecond gives exactly this.
+- **Not (b).** Damage would have to sit within a microsecond of the truth in two runs, on opposite sides, and leave every other clause intact. A healthy record fails the same way 1,997 times in 2,000.
+- **Not (c).** The function is called from `_check_member_records` (PC:2115), inside the one member predicate both paths call (PC:4862-4888).
+- **Why no test saw it.** The v4 control's clock returns stamps of zero width, with epoch equal to monotonic and a declared resolution of 1 ns (V4:186-188, 2619, 2704). No frozen run on a real host writes that shape. No repository test expects `tool_boundaries` by name.
+- **I named this limit in RL-216 and did not test it.** R4 (b) accepted the bare hull, "the two declared resolutions are not added", and noted that a real host may declare a coarser wall clock (RLD:25712-25715). That was ruled for `_check_callbacks`, whose comparisons are orders. The tool pair is not an order. It asks the two halves of one stamp to agree.
+- **The evaluator already holds the right bound.** `_ReplayClocks.matches_after` compares the same event with the same call value through the frozen `stamp_mapping` of the same two stamps, within that mapping's `uncertainty_ns` (PC:2604-2652, 2810-2811). `stamp_mapping` adds the wall and monotonic resolution the stamps declare, and its float terms (SP:96-100, 142-144). On this host that bound is about 2 µs on each side (`mapping_uncertainty.log`). The class states the rule: "A value produced from the same stamp as the event must agree within that mapping's uncertainty." The record check runs first, with a narrower bracket of its own (PC:2115, 2147).
+
+## 3. The one fix
+
+**Builder.** One commit on the W1 line, in `scripts/align_r1_part_c.py`, function `_recompute_controller_phases`:
+
+1. In the per-call `_required` (PC:2558-2566), the last conjunct, `start_lo <= call.start_ns <= start_hi and end_lo <= call.end_ns <= end_hi`, becomes `clocks.matches_after(index, begin["timestamp_s"], call.start_ns) and clocks.matches_after(index, close["timestamp_s"], call.end_ns)`. `clocks = _replay_clock_mappings(episode, witnessed)` is made once in the function. PC:2548 and PC:2556-2557 go.
+2. Nothing else changes: the reason name, the count check, the other conjuncts, the closing bound, the guard clause (PC:2534-2546), `_ReplayClocks`, and the ten frozen paths.
+3. No operand on a stamp field becomes a HARNESS_ERROR.
+
+- **A tested body exists:** `probes/fix_body.diff`, four hunks. Applied in memory to the pin's function on real clocks, it passes 142,995 of 143,000 clean members (`fix_probe.log`, `residual_probe.log`, `residual_probe_2.log`). It refuses `tool_boundaries` for 400 of 400 members with one call's start or end moved by 1 ms. The builder may write its own. The conjunct is the ruling.
+- **Legacy operands.** `shift` moves a `_ns` field by 50 s and a `timestamp_s` by 1 s (V32:1706-1707), far outside a bound of about 2 µs. I ran none. A `must refuse` ID that the fix admits is reported by ID and settled as RL-215 Q5 has it.
+
+## 4. The table class
+
+**Issuer** (the family that issued v4), before the audit:
+
+- **One row in `writer_rules.tsv`:** id `tool-pair-clock`, family `member`, group `agreement`, every role whose control has a tool call, producer WL:586-616, CK:58-61 and SP:75-144, reason `tool_boundaries`. Predicate: "A tool event's epoch and its call's monotonic value are the two halves of one stamp. They agree within the frozen mapping of the turn's end stamp and the next start stamp, or the episode's closing stamp."
+- **The writer-produced shape.** The member is written by the frozen workload under a scripted clock that behaves as the host's does:
+  - wall reads on a 1 µs grid, with the resolution the host declares;
+  - monotonic reads on their own origin and tick;
+  - the wall read between the two monotonic reads, each read costing time;
+  - an epoch of the present date, where a double's spacing is 238 ns;
+  - a different lost fraction from stamp to stamp.
+- It is a second control, for this class only. The 1,550 cases and the clean proof keep theirs.
+- **Cases,** on a call's start and on its end, in a turn that has a next turn and in the last turn, on both paths:
+  - `low`, pass: the tool stamp loses nothing to the grid and both neighbours lose almost a full step. This is item 328's side.
+  - `high`, pass: the reverse. This is run 11's side.
+  - `minus` and `plus`, must refuse `tool_boundaries`: the call's value edited to one nanosecond outside the mapping's bound, on each side.
+- `low` and `high` are made by the scripted clock, so that no other check sees an edited value.
+- **Its proof.** At `dcdedecb1`, `low` and `high` print WRONG_VERDICT. At the fix head every case prints as expected.
+- No existing row or case changes. The lead re-records `SUITE-v4.sha256` and the moved counts under this entry. The builder edits no suite byte.
+
+## 5. The look-ahead read
+
+**Why.** Members are judged in launch order and the first refusal ends the attempt (PC:4876-4888). The predecessor is the first member with tool calls. So no check on Step D, D_bank or X_G, and no later check on the predecessor, has yet judged a real record. A second refusal first seen at "each replay once more" would cost a second fix and a second audit.
+
+**Magistrate,** in a gap, once per stored run, in the manner of item 605's read: the pinned evaluator imported unchanged from a clean `dcdedecb1` tree, with `_recompute_controller_phases` replaced in memory by the fix body, and nothing written under either OUT. It prints:
+
+1. The verdict word and the failing check names.
+2. If not `pass`: for the first refusal, the member kind, source, index and field, and the truth of each clause at that site.
+3. Two counts over all members. Of the paired stamps recorded with both monotonic reads, how many are wider than 1 µs. Of the guard pairs, how many have less than 1.5 µs between `lo_end` and its limit, or between the prior work's end and `hi_begin` (PC:2539-2545).
+
+- **It is a diagnostic.** It is not a replay, makes no record, and is not evidence for the receipt.
+- `probes/fix_body.py` builds the patched function from the pin's own source and asserts each hunk matches once. The magistrate may use it or write its own.
+- It runs while the issuer and the builder work.
+- If the patched read needs any other change in order to run, the magistrate says which and makes none.
+
+## 6. What the fix leaves
+
+- **A tool stamp delayed between its own reads.** The record carries a tool stamp's midpoint and its wall read, not its two monotonic reads. If the process is held for more than about a microsecond inside that stamp, the midpoint moves away from the wall read and the check refuses. The replay check has always had this limit.
+  - **Here it was 5 members in 143,000.** In the 4 the probe inspected, the refused call's stamp was wider than 0.5 µs (`residual_probe_2.log`). The rate on the measurement Mac at the runtime's priority is not measured. Count 3 gives a first figure.
+  - **It is left, and it is not waived.** Closing it means bounding an unrecorded bracket by its neighbours. That turns an agreement into an order and is a new rule, not this fix. A refusal here stops a smoke and admits nothing.
+  - If `tool_boundaries`, or `workload_replay` at a tool pair, refuses a real record after the fix, it comes to me with the clause booleans and one more: whether the failing value lies between the previous and the next recorded monotonic value.
+- **The guard clause** (PC:2534-2546) judges two orders on the same bare hull. It stays, as RL-216 R4 (b) has it for orders.
+  - An order cannot be refused once the writer's statements between the two stamps take more than about 1.3 µs: the 1 µs step plus float error, less the ulp already allowed.
+  - Here the shortest was 1.8 µs in 200,000 and none was refused (`guard_bracket.log`). That is the Air at seat priority. Count 3 measures the margin on the two real runs.
+- **Other clock checks.** I found no other place where two values of one stamp must agree on the bare hull. Gate stamps are recorded whole and compared exactly (PC:3004-3027). The warm-up reference lies between two events (PC:3420-3440). `_check_callbacks` compares orders (PC:3872-3937). Auditor check 4 repeats this search.
+
+## 7. The rest of §11.2, in order
+
+1. The issuer's class and the builder's commit, with the look-ahead read beside them.
+2. **One audit,** by one executing seat of neither the builder's family nor the issuer's:
+   1. The diff to PC is the conjunct and the mapping line. The ten blobs and the argument-list test are unchanged.
+   2. Its own run of the new class at `dcdedecb1` and at the fix head, of the 1,550 cases, the clean proof and the legacy gate, with any moved ID listed.
+   3. The scripted clock against CK:58-61 and the host's two declared resolutions.
+   4. By reading PC: does any other comparison ask two values of one stamp to agree without the mapping's bound? A yes is HIGH. The delayed tool stamp of section 6 is ruled and is not a finding.
+   5. A real-clock run of its own at the fix head. My probes may be its starting point and are not its evidence.
+3. CI green at the fix head, with the counts re-pinned.
+4. **Each replay once more,** at the fix head, by RL-183 §1.3: the verdict word and the check names. Two `pass` are recorded. Anything else comes to me with the names, and RL-218 §11.2's steps 1 and 2 apply again.
+5. Then the receipt, on the fix head's bytes. Signing steps that bind the evaluator's bytes are redone there, and the others stand. Then the one Part C on the final pin.
+
+- Until step 4 is done there is no final Part C and no receipt. R1 stays closed.
+- The two stored verdicts stay recorded as valid non-passes at `dcdedecb1`.
+
+## 8. RS606's four decisions
+
+- **(a) stands.** The read was step 2's. It wrote nothing, its outputs are counts and booleans, and it is not a third replay. Running the pinned evaluator's own parser in memory kept the clauses exact.
+- **(b) is a report, not a ruling on WP19.** WP19 comes with the cold pass, as RL-218 has it. The item's sentence that the X-G rows were seeded from another episode seed is an inference. The lead's WP19 ruling settles it first.
+- **(c) and (d)** are the magistrate's operations. I rule nothing on them.
+- **Two readings.** "Events 24 = twice the tool calls 24" means 24 events for 12 calls, so the count check passes (PC:2506-2507). The reason code is a calibration exclusion (section 1).
+
+---
+
+## Amends
+
+- **RL-215 Q4, "Clocks"** (RLD:25627). After "over the hull of its pairs", add: "An order is judged on the bare hull. An agreement between two values of one stamp is judged within the frozen mapping of those pairs, which adds the resolutions the pairs declare."
+- **RL-216 R4 (b)** (RLD:25712): "The two declared resolutions are not added" governs orders. Its named limit (RLD:25715) is the fault found here.
+- **RL-218 §11.2 step 3 (a):** "one named fix" is section 3 and "the real shape" is section 4. Section 5's read is added before the audit.
+- **Stand unchanged:** RL-183 §1.3; RL-209; RL-215 Q2 and Q5; RL-216 R1 to R3; RL-218 §11.1 and §11.2 steps 4 and 5.
+
+**Comes back.**
+- The look-ahead read, if either run is not `pass` or if count 3's guard figure is not zero.
+- A `must refuse` legacy ID that the fix admits and the oracle does not settle.
+- An audit HIGH under check 4.
+- A replay at the fix head that is not `pass`.
+- A `tool_boundaries` refusal, or a `workload_replay` refusal at a tool pair, on any real record after the fix.
+- A second control the issuer cannot write without changing an existing case.
+
+**Probe digests** (sha256, first eight and last four hex digits).
+
+| File | Digest |
+|---|---|
+| `tool_bracket_realclock.py` | `681b8cd2…d0fd` |
+| `tool_bracket.log` | `217e3e50…321e` |
+| `guard_bracket_realclock.py` | `ab85b9d6…eede` |
+| `guard_bracket.log` | `8f9fb8e2…2fb3` |
+| `fix_body.py` | `7760e3e4…1bee` |
+| `fix_body.diff` | `1ebe355b…a4a6` |
+| `fix_probe.py` | `52d18c1d…9017` |
+| `fix_probe.log` | `bd79d445…0573` |
+| `residual_probe.py` | `6dc217da…8234` |
+| `residual_probe.log` | `9e1a6410…50e7` |
+| `residual_probe_2.log` | `3f053812…6baa` |
+| `mapping_uncertainty.py` | `50169908…a711` |
+| `mapping_uncertainty.log` | `89d8281c…4edd` |
+
+**Blind status.** Blind. I read rulings, RUN_STATE on public main, and W1 source and suite files at the pin. RS606's public text carries the magistrate's Check figures for kit 10 and one collection-plan seed; I used neither. My probes ran the pin's clock and evaluator code against this Air's own clocks and built their inputs in memory. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened, listed or hashed, nothing under the registered root or any `night-*` or `campaign-out` path, and no registration value. This ruling changes how a smoke's evaluator compares two clock values and what is owed before a signature. No estimator, inclusion rule, threshold, population or word of any registered read changes.
+
+**Lead note (Opus 5.5, 2026-11-26 05:40 PST).** Recorded verbatim from seat `fable-replay-case-1126` (sha256 e02a2b7084d5b6ceb225eaf290dadb7bdf8497d8420f3a7a06799c47ea1eb4a7). Probes stay in that seat directory.
