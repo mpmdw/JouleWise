@@ -1,10 +1,10 @@
 {
   "armed": null,
-  "next_observable": "a magistrate RUN_STATE item with item 588's restore verdict for sessions, item 576's results (two name files' membership, driver rc and verdict, two cmp rcs, seal commit and manifest sha256), item 588 cleanup and free space; then the next span from the ladder (pin A, kit 09 L007 onward, fillers-w2/queues-3leg/f2-stab-09-l007-l008-l009.json or the 2-leg/1-leg rows, fence clear of every 02:00-02:35 band).",
+  "next_observable": "f2stab09-be1187cb/run-out.txt shows LAUNCH_RC=0 with the fence (t0 after three quiet minutes from 16:10, expected ~16:15 Wed; expected close t0+7,442 s, worst case t0+11,250 s; read the true deadline and pid from run-out.txt; check the pid, not the deadline). The next activation, after the fence pid is gone and runner_receipt.json exists, Checks attempt cq-f2-stab-09-l007-l008-l009-a1 at /Users/edr/campaign-out/f2-stab-09/cq-f2-stab-09-l007-l008-l009-a1 with f2stab09-check-template-be1187cb/ (copy to f2stab09-check-NEWACT/, replace NEWACT; LEGS L007,L008,L009; kit sha 9a2b863f...5ce8, pin A 2d347f721; asserts batch_windows == ['02:00-02:35']), maps each quiet span to wall time through the receipt's ended pair and counts maintenance lines in it, copies at once with the template's offload-run.sh; then the ladder (items 422, 463, 464, 507, 536, 553, 583): kit 09 L010-L012 (fillers-w2/queues-3leg/f2-stab-09-l010-l011-l012.json, seq 10) if its fence clears Thu 02:00-02:35, else 2-leg/1-leg rows; Thu 26 Nov's first pin-B f2-stab-16 leg (rank 1, L002, queues-1leg/f2-stab-16.json seq 2) from 00:00:00.",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 595,
+      "item": 596,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -16,12 +16,6 @@
     },
     {
       "expires_epoch_s": null,
-      "item": 592,
-      "owner": "magistrate",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": null,
       "item": 588,
       "owner": "magistrate",
       "status": "ISSUED"
@@ -29,12 +23,6 @@
     {
       "expires_epoch_s": null,
       "item": 583,
-      "owner": "magistrate",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": null,
-      "item": 576,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -281,11 +269,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "595",
+  "source_item": "596",
   "source_item_heading_date": "2026-11-25",
   "wait": {
-    "deadline_epoch_s": 1795723200,
+    "deadline_epoch_s": 1795687200,
     "observable": "none",
-    "on_early_or_refused": "If activation be1187cb is gone before a later item records item 576's result: nothing is fenced and no span is launched. The next activation reads restore588-6031f6e8/ (download-be1187cb.txt, the TSVs, verify outputs) and the state of /Users/edr/night-b6 and the iCloud sessions.tar.zst (stat -f %b vs %z; re-issue `brctl download` if not fully local); resumes item 588 from the first unverified tree (loop-bytes subset is verified: verify-loopbytes-subset.txt; a partly extracted sessions tree is deleted and re-extracted), then item 576 from step 1 with refit-1 if $S1/refit-1 does not exist (else the next free N), then item 588 cleanup, then the ladder. Item 588's stops apply (a failed per-file check, free space under 80 GiB, a path outside the three trees); item 592's stops apply to 576 (listing differs, any refusal, a cmp difference: send the lead names or exit codes and continue the ladder)."
+    "on_early_or_refused": "Read the verdict first. If f2stab09-be1187cb/run-out.txt has no LAUNCH_RC line (WAIT/STOP before launch: not quiet by 18:30, or a launcher precondition refusal), nothing launched: L007-L009 stay unrun; the next activation re-selects at its own t0 (pin A, ARG 02:00-02:35 from 13:15:00 or 13:14-13:15 per item 463 by the actual t0, kit 09 L007 onward, 3/2/1 legs with the fence clear of every 02:00-02:35 band; the date's first pin-B f2-stab-16 leg from 00:00:00 at rank 1) and issues a new typed item before launch, staying alive until LAUNCH_RC prints. A launcher refusal on kit or launcher state, or a non-clean close: record it, hold kit f2-stab-09 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, continue down the ladder. A census or soak refusal on a measured contending process with a proven clean close is not a kit hold (items 505, 547). A clean close with a leg not admitted is recorded, not a stop and not a kit hold (items 467, 479, 520). Item 588's cleanup is HELD for the lead (this item): keep /Users/edr/night-b6/{sessions,loop-bytes} and /Users/edr/night-archive/bytes-stage1-20261111 (with refit-2/ and refit-2.seal/) until the lead rules on main."
   }
 }
