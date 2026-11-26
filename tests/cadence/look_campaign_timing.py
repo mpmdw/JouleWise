@@ -7,6 +7,7 @@ span IDs, paths and byte counts to generate the fixture and time one trial.
 from __future__ import annotations
 
 import argparse
+from itertools import chain
 import json
 from pathlib import Path
 import plistlib
@@ -84,9 +85,22 @@ def sized_records(path, records, separator, target):
     if extra < 0 and path.suffix == ".jsonl":
         rows = [json.dumps(json.loads(row), separators=(",", ":")).encode() for row in rows]
         extra = target - sum(len(row) + len(separator) for row in rows)
-    padding, remainder = divmod(max(extra, 0), len(rows))
-    synth._write_records(path, (row + b" " * (padding + (i < remainder))
-                                for i, row in enumerate(rows)), separator)
+    # The stamp reader requires the original CSV header and the writer's literal stamps.
+    # Response readers use float() for the power field, which accepts trailing space.
+    header = rows[:1] if path.suffix == ".csv" else []
+    data = rows[len(header):]
+    padding, remainder = divmod(max(extra, 0), len(data))
+
+    def padded_records():
+        for i, row in enumerate(data):
+            spaces = b" " * (padding + (i < remainder))
+            if header:
+                stamp, power, fields = row.split(b",", 2)
+                yield b",".join((stamp, power + spaces, fields))
+            else:
+                yield row + spaces
+
+    synth._write_records(path, chain(header, padded_records()), separator)
 
 
 def write_auxiliary_stream(path, size):

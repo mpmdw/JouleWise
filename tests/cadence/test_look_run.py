@@ -6,6 +6,7 @@ from __future__ import annotations
 import builtins
 import contextlib
 import copy
+import csv
 import hashlib
 import importlib.util
 import io
@@ -78,6 +79,22 @@ ENERGY_MARKERS = ("power_trace.csv", "segment_energy.json")
 
 
 class CampaignTimingSizes(unittest.TestCase):
+    def test_sizing_leaves_csv_columns_and_literal_stamps_intact(self):
+        from joulewise.cadence_looks import time_fields
+        from tests.cadence import look_campaign_timing as timing
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "fixture.csv"
+            header = b"timestamp_s,power_w,source,rail,interval_start_s,interval_end_s"
+            timing.sized_records(path, [header, b"2,3.5,powermetrics,gpu_power,1,2"], b"\n", 1_000)
+            self.assertEqual(path.stat().st_size, 1_000)
+            with path.open() as handle:
+                row, = csv.DictReader(handle)
+            self.assertEqual(time_fields._stamp(row["timestamp_s"]), 2)
+            self.assertEqual(time_fields._stamp(row["interval_start_s"]), 1)
+            self.assertEqual(time_fields._stamp(row["interval_end_s"]), 2)
+            self.assertEqual(float(row["power_w"]), 3.5)
+
     def test_generated_campaign_uses_pinned_roster_and_stream_paths(self):
         from tests.cadence import look_campaign_timing as timing
 
