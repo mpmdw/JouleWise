@@ -2,8 +2,8 @@
   "schema": "joulewise.cadence_look_manifest.v1",
   "look_id": "lm-interim-01",
   "look_kind": "interim",
-  "status": "draft",
-  "title": "The interim look after development (dev-01 to dev-05; hp-01 is counted in stage 1 and its table is lm-hp-01, RL-167 §3), as RL-166 to RL-167 rule it. Stage 1, which opens no energy file, gives the inclusion verdicts, the roster, the rates, the start-reading medians and the onset model. Stage 2 gives the segment fit (count-only base, start-reading ramp and onset step) on the GPU rail and DC-in, its leave-one-day-out errors, the prefix bias and step 3's drift statistic. Freeze 2 follows. DRAFT: pins are on a draft basis until the cold reviews close.",
+  "status": "committed",
+  "title": "The interim look after development (dev-01 to dev-05; hp-01 is counted in stage 1 and its table is lm-hp-01, RL-167 §3), as RL-166 to RL-167 rule it. Stage 1, which opens no energy file, gives the inclusion verdicts, the roster, the rates, the start-reading medians and the onset model. Stage 2 gives the segment fit (count-only base, start-reading ramp and onset step) on the GPU rail and DC-in, its leave-one-day-out errors, the prefix bias and step 3's drift statistic. Freeze 2 follows.",
   "rulings": [
     "RL-149 §2.6",
     "RL-149 §2.7",
@@ -590,7 +590,7 @@
     "runtime": "Python standard library plus numpy, no scipy, run with -I. Stage 2 refuses, before the first energy read, unless its numpy version equals the one in the committed stage-1 output.",
     "authors": {
       "analyst_seat": "the Opus builder the lead dispatches: writes fit_interim.py and scripts/cadence_look_run.py, and is the one seat that runs the look",
-      "twin": "a Sol seat writes the same arithmetic from RL-166 and the synthetic layout, without sight of the Opus code; its pinned code runs once on campaign data, inside stage 2, and writes only in custody. The twin calls the pinned KM003C decoder km003c_parse.parse on each stream file (RL-183a).",
+      "twin": "a Sol seat writes the same arithmetic from RL-166 and the synthetic layout, without sight of the Opus code; its pinned code runs once on campaign data, inside stage 2, and writes only in custody. The twin calls the pinned KM003C decoder km003c_parse.parse on each stream file for sample times and watts and writes every step above it (RL-183a).",
       "manifest_builder": "writes inclusion_34.py and step3_roster.py; neither reads energy for a verdict",
       "cold_seat": "Mythos 5.2; writes none of it"
     },
@@ -718,7 +718,7 @@
         "sha256": "76eae1c57bd2730aaaaa11de83f343840588c00aa75f3e03673411eea0d36821"
       },
       "statistic": "iii",
-      "method": "The adapter loads the committed module, rebinds LEGS and ORIGINAL_EIGHT to the roster and calls analyse and custody_check, once per prompt-size cell. It contains no arithmetic on energy. Any edit to the step 3 bytes needs a ruling. Custody mode: `python3 -I -B joulewise/cadence_looks/step3_roster.py --manifest M --stage1 S1 --stage1-sha256 H --custody ROOT --out STEP3.json`; the stage-2 CLI does not compute statistic (iii).",
+      "method": "The adapter loads the committed module, rebinds LEGS and ORIGINAL_EIGHT to the roster and calls analyse and custody_check, once per prompt-size cell. It contains no arithmetic on energy. Any edit to the step 3 bytes needs a ruling. Stage 2 calls the adapter inside its one execution, after the primary fit and under the same reservation, and writes RESTRICTED/step3.json (RL-180 amendment 2).",
       "kept": [
         "(ii) gamma",
         "gamma's estimability",

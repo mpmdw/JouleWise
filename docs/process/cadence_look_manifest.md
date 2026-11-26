@@ -361,8 +361,10 @@ including the absence of hp-01. Send the summary only to the lead.
 
 ## 8. Remaining authorization
 
-The manifest remains draft. The research lead confirms the host binding at
-the cold pass. The pinned reader accepts a one-component bundle locator and
-refuses a nested locator under `runs/`. The custody-layout check needs a
-reviewed reader and corresponding pin that support the producer's layout.
+RL-218 passed the manifest at freeze 2 and ordered its commit. The research
+lead confirmed the Air host binding in RL-218 by running `host-id` on the Air.
+The pinned reader accepts nested bundle locators under `runs/`, such as
+`runs/cadence-leg` (section 5): all fourteen roster spans carry them, and the
+stage-1 rehearsal read nine. The custody-layout check uses the reviewed
+reader and pins of the committed manifest.
 The prior round reports preserve the development history.
