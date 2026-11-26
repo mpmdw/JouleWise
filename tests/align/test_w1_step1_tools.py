@@ -10,6 +10,7 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+from tests.git_fixture import init_git_fixture
 
 TOOLS = Path(__file__).resolve().parents[2] / "docs/run_reports/2026-11-24-w1-step1"
 RECEIPT_STOP = "align_v4_kit: registration_receipt is pending or malformed"
@@ -24,7 +25,7 @@ class GitFixture(unittest.TestCase):
         self.root = Path(tmp.name)
         self.repo = self.root / "repo"
         self.repo.mkdir()
-        self.git("init", "--quiet")
+        init_git_fixture(self.repo, "--quiet")
         self.git("config", "user.email", "fixture@example.test")
         self.git("config", "user.name", "Synthetic Fixture")
         self.git("config", "core.autocrlf", "false")
