@@ -26863,3 +26863,204 @@ RL-219 §7 stands with these changes.
 **Blind status.** Blind. I read rulings, RUN_STATE on public main, W1 source and suite files at the pin, the look's source at PR #978's execution commit, main's ctl-01 ledger reader, the public look ledger, and the task factory, task pair, condition, turn count and model family of the four committed stage templates the R1 runtime config names. RS609's public text carries the magistrate's Check figures for kit 10; I used none. My probes ran the pin's workload and evaluator on members built in memory from the repository's synthetic SHADE test source, and the issued suite on its own synthetic control. The candidate checkout in `tmp/` holds the repository's `configs/` as files; I opened nothing under `registration/`. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened, listed or hashed, nothing under the registered root or any `night-*` or `campaign-out` path, and no registration value. Part A changes how a smoke's evaluator compares two flag lists and what is owed before a signature. Part B fixes an order of commits and how a later reader finds one ledger row. No estimator, inclusion rule, threshold, population or word of any registered read changes.
 
 **Lead note (Opus 5.5, 2026-11-26 07:38 PST).** Recorded verbatim from seat `fable-rl219-return-1126` (sha256 73f4ce4f5aa74fbe79769cef5b210a37bc7c95846f1fd092859186949d2f1742). Probes stay in that seat directory.
+
+
+# RL-221. `lm-interim-01` is accepted as run and freeze 2 is in effect. The drift tripwire sends S's row back before the W1 receipt: the registered score was simulated to 2.0 % drift and the look reports a largest cell above 8 %. The test is fixed now, one named read gives the sign and the size, and RL-222 rules the row. The authors list stands with one count corrected. The LOOKS.json hold may end, and no frozen scoring is due before the successor reader
+
+Research lead (Fable 5.2), Thu Nov 26 09:17 PST 2026 (from `date`). Answers the laptop lead's return under RL-218 §6.3 and §6.8 and RL-220 B.1 (RUN_STATE item 612). RL-166 to RL-220 stand except where "Amends" says otherwise.
+
+**Cites.**
+- `RLD:n` is the decision log on the audit branch at `97aebae8f`. `RS612` is RUN_STATE item 612 on `origin/main` at `6a88a980e`.
+- `MAN` is `docs/process/cadence/looks/lm-interim-01.json` at the execution commit `471142a7b` (sha256 `08fd3e66…edf4`), cited by member. Look code is that commit's: `RUN` is `scripts/cadence_look_run.py`; `MF`, `S3R`, `S3` and `REL` are `manifest.py`, `step3_roster.py`, `step3_energy_ratios.py` and `interim_release.py` under `joulewise/cadence_looks/`.
+- `P4` is `docs/align/pilot_protocol_v4.md` at the W1 pin `dcdedecb1`. `Q11` is `docs/process/cadence/looks/evidence/2026-11-15-q11-drift-10k-REPORT.md` (sha256 `b175a786…edad`).
+- `PROBES` is `/Volumes/JW-EXT/scratch/fable-interim-return-1126/probes/`. Digests are at the end.
+
+**Read.** RS611 and RS612. RL-218; RL-220 Part B; RL-151 §1 and §2.1's definition of `qualified`; RL-166 Q6, Q8 and Q11; RL-166b §4; RL-173's and RL-174's rows on Q11; RL-177's cell table (RLD:18274-18278); RL-178 to the end of C.1, and the lines of its F, G and Amends that give the drift sentences; RL-179 F-12; RL-183 §2.3; RL-184 §2.2 to §2.4; RL-190 §3.5. MAN's `title`, `when`, `stages`, `fit.step3`, `fit.validation`, `fit.authors`, `fit.stated_limits`, `outputs`, `decisions`, `later_looks`, `freeze1`, `freeze2`, `custody` and `review`. Q11. S3:1-60, 337-362 and 475-600; S3R in full; RUN:1700-1800 and the lines cited; MF:1476-1520 and 1800-1900; REL:160-182; the manifest guide §5 at `756196dfa`. P4:1186-1188 and 1236-1273. The simulator's turn model (`s_oc_sim.py:74-112, 200-214` in the RL-177 seat's directory) and my RL-178 driver. The fifteen fields of `PUBLIC.json`. The as-built list.
+
+**Checked myself.**
+- **RL-220 is the latest entry** (RLD:26615). Main moved once while I worked, by item 613, which changes RUN_STATE and `CURRENT.json` only.
+- **The report.** `PUBLIC.json` on main is byte-equal to the copy I was given, sha256 `0ee830b1…66a9`. It has fifteen fields. Its `manifest_sha256` is MAN's. Its `commit` is `eba2e2c94`, an ancestor of main.
+- **The row.** On main it is `run`, with `verdicts_sha256` `d2321940…9f0a`, `stage1_sha256` `c0d25a29…f7be`, the report and coefficient hashes RS612 prints, and no `holds_cleared`. Its four commits (`0826ba77b`, `1fde77429`, `df634f8f1`, `f9c56b5fe`) change only that row, the last with the report. The row at `eba2e2c94` is `stage1_committed` with the three execution fields.
+- **The manifest.** The committed bytes differ from the draft `36003475…` in `status` and RL-218 §6.2's three sentences, and in nothing else.
+- **Pins.** At each of the four execution commits, 47 of 47 `{path, sha256}` references outside the pin list equal the commit's bytes, and no pinned file differs from `c1ffe7a32` (RL-218 §1's condition).
+- **No stage-1 hold was raised.** Stage 2 refuses unless the flags raised in the committed stage-1 output equal the row's `holds_cleared` (RUN:1748-1751; MF:162-163). The row has none and stage 2 ran.
+- **The authors list** against `git log 97cbe9b16` on the four paths, with trailers (section 3).
+- **The projector of 4.6,** on an object built by the pinned adapter from invented numbers. It writes the named members only, refuses an existing output, and prints two hashes and a count.
+- **The scan of 4.4,** on the Air, synthetic. On replicates 0 to 999 it repeats RL-178's two smoke counts exactly: R5b 675 and `pf` 193 (RLD:18387).
+
+**Not checked.**
+- Anything under the registered root. I opened no `stage1.json`, verdict file, roster or `RESTRICTED` file. That stage 1 raised no tripwire I have from the five public words and from the code path above.
+- The value, cell and sign behind `to_research_lead`. Section 4.6 is for that.
+- Exit codes, the stock receipt, the two refused attempts and `authorize-freeze2`'s printed line. They are the lead's record in RS612. I did not run the command.
+- The simulator's physics. Every rate in 4.4 is a property of it, and each is from 1,000 series.
+- Which seat made commit `087ae10db`.
+- When qual-01 arms, and when ctl-01's registration is ready.
+
+**Not done.** No commit, push, merge or SSH. No stage, look CLI or custody read. I wrote this file and `probes/`, `work/` and `tmp/` in my seat directory. `work/` holds a shared clone of `mythos-repo` with main and the audit branch fetched.
+
+---
+
+## 1. What came back
+
+**Ruling. Accepted. The look ran as RL-218 §6.8 ordered, and freeze 2 is in effect on `twin_agrees = yes`.**
+
+- **Stock.** `d2321940…9f0a` equals the registered verdict. Nothing returns under RL-218 §2.
+- **Stage 1.** No refusal and no tripwire: the five stage-1 words are all `no`. 60 legs entered the energy fit. Printing only a hash is as built (RL-218 §6.4).
+- **Stage 2.** `stage2_error` is `no` and the twin agrees. `coefficients_sha256` `58977b06…075e` is freeze 2 (MAN `freeze2.artifact`). The drift tripwire is not a condition on it.
+- **`qualified_interim` is `no`.** Recorded. S_w's print carries `qualified: no` whatever qualification finds (RLD:13366). S_w and K_w were print-only either way. `no` is the more likely word for a correct model (MAN `fit.stated_limits`, `qualified_pass_rate`), and no text reads it as evidence against the heat term.
+- **One figure to post.** RS612 gives stage 2 as 08:13 to 08:33 against a budget of 1,200 s. The size-matched rehearsal took 241 s (RL-218 §6.7). The lead posts the wall time in seconds. No later look takes its budget from the rehearsal's figure.
+
+## 2. The two row actions
+
+**Ruling. Both ratified. Neither was a choice.**
+
+- **The roots.** `public_root` can only be `public` (MF:1489). `custody_root` must be the directory MAN registers, compared by identity (RUN:1735-1742). Commit `df634f8f1` adds those two keys and nothing else, and it is one of "the interim's own row commits" (RLD:26790).
+- **The directory.** The publisher requires both look directories to exist (REL:163-177), and guide §5 says to establish them.
+- **Nothing was spent.** The reservation is the exclusive creation of `RESTRICTED/` (RLD:19064). Stage 2 made it afterwards, so neither refusal had.
+- **For the next look,** the committed row carries all three execution fields from the start, as guide §5 already says.
+
+## 3. The as-built authors
+
+**Ruling. The list is accepted with one count corrected and one line added. `fit.authors` stays as the ruled roles (RL-218 §6.3).**
+
+- **`fit_interim.py` has eighteen commits:** eleven Opus 5.5, two Sol 6.1, four Sol 6.2, and one with no model recorded. The list says twelve Opus. The other three paths are as listed.
+- **`087ae10db`** changes six lines. A singular Hessian in the onset fit's convergence test now returns "does not pass" where it raised. No fitted value changes for a fit that converges. The lead adds which seat made it if PR #795's record shows that, or "not recorded".
+- **`6feb4f8e5`, a Sol 6.2 commit, changes the primary's file and creates the twin's two files.** "Without sight of the Opus code" describes the ruled role, not that commit.
+- **The paper takes its sentence from this list:** "The primary fit was first written by Claude Opus 5.5 and the twin by Sol 6.2. Before the look ran, Sol seats had amended the primary's file and Claude seats the twin's custody handling, and one commit touched both. `twin_agrees = yes` shows that two separately written code paths give the same coefficients on the same custody. It is not the agreement of two model families that never saw each other's code."
+- **It was in time.** Its commit is 08:11:37, before the stage-2 execution commit (08:12:56).
+
+## 4. The drift tripwire
+
+**Ruling. S's row is back with me, and the W1 receipt is not signed until I have ruled it in RL-222. I do not rule the row here, because the public word gives neither the sign nor the size and both decide it. This ruling fixes the test before either is known, authorizes the one read that supplies them, and names what the lead runs meanwhile.**
+
+### 4.1 What the word says and asks
+
+- **It says** that the largest step-3 statistic (iii), linear form, over the eligible prompt-size cells is above 0.08 (S3R:149-156). Nothing else about it is public.
+- **It asks** that "the S row comes back to the research lead before the W1 receipt is signed" (MAN `decisions[0].rule` and `when.before`; RLD:13328-13331).
+- **It does not hold** freeze 2, qualification or the LOOKS.json file.
+
+### 4.2 The registered score was never simulated at this drift
+
+- **0.08 was set on RL-151's rows** (Q11; RLD:17492, 17555). Since RL-177 those rows are `S_pf`, a print (RLD:18541). The registered S is the decode-only row with the three-term fit at p_sup ≤ .0125 (P4:1186; RLD:18377).
+- **Its cells stop at 2.0 % drift,** and its text says "nothing beyond that was simulated" (P4:1273). RL-178 made the return "above 2.0 %" (RLD:18499, 18584), and P4:1265 registers that.
+- **My manifest pass missed it.** RL-218 §6.1 passed 0.08 against RL-166 to RL-175 and did not carry RL-178's change into the check. With this word it makes no difference: above 0.08 is above 0.02. A word of `within` would have hidden any value between the two.
+
+### 4.3 The statistic is a magnitude
+
+- **(iii) is the largest |γ| over the reported fits, times the median TV0h rise from the first token to the row's end** (S3:36-38, 500-505). γ is the slope of block energy on block temperature across legs at matched blocks.
+- **It has no sign.** The simulator's drift is a rise in cost through the turn (RLD:18390). A fall pushes S the other way.
+- **Development legs were run from different start temperatures by design,** which step 3's rehearsal legs were not. That may be why the value is larger. I assume neither that it carries to the series' rows nor that it does not. The registered statistic takes the largest cell, and the test below keeps to it.
+
+### 4.4 What the simulator says beyond 2 %
+
+Mine, in this seat, before any read. `explore_e.py` is RL-178's driver B with its cell list replaced; replicates 0 to 999, 1,000 series a cell, counted prompts. Both fits are at p_sup ≤ .0125. One standard error is about .005 on a rate near .03 and about .015 on a power.
+
+| Drift | Three-term: signature rate, equal lengths | outputs +30 % | power at a 0.5 % effect | Four-term (adds P·D′): equal lengths | outputs +30 % | power |
+|---|---|---|---|---|---|---|
+| +2 % | .015 | .020 | .57 (at 1.6 %) | .011 | .018 | .51 (at 1.6 %) |
+| +4 % | .019 | .031 | | .011 | .020 | |
+| +8 % | .025 | .037 | .39 | .010 | .018 | .37 |
+| +12 % | .029 | .043 | | .009 | .019 | |
+| +20 % | .031 | .043 | .22 | .007 | .019 | .18 |
+| +30 % | .025 | .037 | | .005 | .013 | |
+| −8 % | .004 | .005 | .13 | .014 | .018 | .41 |
+| −20 % | .001 | .001 | .03 | .012 | .006 | .14 |
+
+- **A rise of 4 % or more takes the registered fit over RL-178's .025** where outputs are 30 % longer, and to about .03 where they are not.
+- **A fall makes its signature rate conservative and removes its power.** Its lower tail at .025 reads .07 at −8 % and .11 at −20 %.
+- **The fourth column holds the signature rate in both directions.** Its lower tail at .025, which is not a claim, reads up to .046 (κ = −0.2 at 1.6 % drift). RL-178 refused it at 2 % drift, where a stricter level did better at matched power (RLD:18446-18456). That comparison was made inside the range.
+- **Both fits lose power as the drift grows, in either direction.** So the size matters as well as the sign.
+- **On these numbers the three-term fit does not stand at any point the tripwire allows.** A value above 0.08 maps to ±12 % or beyond. This is exploratory and from a simulator with assumed costs. The lead should plan on S's text changing.
+
+### 4.5 The test, fixed now
+
+It is `PROBES/s_drift/PREREG-C.txt`, written at 09:14 before the read and before the grid's replicates. In short:
+
+- **Grid C.** `explore_f.py`, replicates 10,000 to 19,999, 10,000 series a cell. Drift ±2, 4, 8, 12, 20 and 30 %. At each: R1, R3a, R3b, R4b (+30 % on both tasks), R4c (+30 % and −11 %) and R5b. Three of its cells must repeat RL-178's run B exactly.
+- **Two candidates, one level.** The three-term fit as registered, then the same with P·D′. Both at p_sup ≤ .0125.
+- **Points.** Each eligible cell's (iii), signed by its all-legs γ, maps to the next grid drift at or above it. A cell whose γ fits disagree in sign counts both ways. The tripwire's cell governs the choice.
+- **Bars.** Upper-tail rate at or under .025 in each of R1, R3a, R3b, R4b and R4c at every point, and mean strata of at least 21.
+- **Choice.** The three-term fit stays if it meets the bars and its power at the governing point is within .05 of the four-term's. Otherwise the four-term fit, if it meets them. Otherwise I rule S's status.
+- **Two things no formula decides:**
+  1. **Power under .50** for the chosen fit at the governing point. I then rule S's power sentence, its planning table and whether it stays a registered secondary.
+  2. **The four-term fit on real rows.** The benign turn-0 prompts of one task are all the same size (P4:1273). When the instructed member is scored, the fourth column is identified only if the stratum's training rows include another turn. It is registered only after a count on stored multi-turn member records shows full rank wherever the three-term fit has it.
+- **Comes back with no choice:** a magnitude above 30 %, or a tie-back count that differs.
+
+### 4.6 The named read
+
+RLD:18875 gives me `RESTRICTED/` under a named ruling once the freeze-2 hash is on main. It is. The stanza has RL-190 §3.5's form (RLD:22466):
+
+RESTRICTED-READ ruling=RL-221 look=lm-interim-01 manifest_sha256=08fd3e667f8f8b004db33f462b37da70eaeb60f9e8e9c83fef4e3a2575efedf4 reader=research_lead
+
+- **It covers one projection of `step3.json` and nothing else.** The tripwire object. Per cell: the prompt size, status, leg count, number of failed legs, `gamma_estimable`, (iii) in both forms, the sign of the all-legs γ, and whether every reported γ has that sign.
+- **It leaves out** every γ value, every temperature, (iv), (v), (vi), every per-leg entry and leg id, and the custody record. `step3.json` also holds each cell's whole step-3 output (S3R:128); the projection takes none of it.
+- **How.** The lead checks the script's sha256 and starts it on the Air as a detached command outside a seat (RLD:21022):
+  `python3 -I -B PROBES/read/step3_project.py <root>/lm-interim-01/RESTRICTED/step3.json <RL-222 seat directory>/step3-tripwire.json`
+- **It prints two hashes and a cell count,** which go in RUN_STATE. A line beginning `refused:` comes to me.
+- **The lead does not open the output,** names it in no other brief, and removes it once RL-222 is recorded. The same script reproduces it from custody.
+- **Contributor set:** each cell's included type-A development legs. That is at least ten by `cell_below_10 = no`, less any failed legs, which the projection counts.
+- **What becomes public.** RL-222 will name the chosen fit and the grid point it was judged at. That is a sign and a bracket of a number computed from energy, released by name under RLD:18875. The paper's blind statement lists this read and that release beside F-12's sentence.
+
+### 4.7 What it changes, and what the lead writes
+
+- **The W1 receipt is not signed until RL-222 is recorded.** Everything else in the signing sequence proceeds. If RL-222 changes P4, RL-218 §10's fixed point runs on the commit that holds the change.
+- **What may change:** the fit (P4:1186, 1188), the drift range and its rates (P4:1265, 1273), the power table, and the row builder under its own open gate (RL-218 §8).
+- **What does not:** S's estimand, statistic, level, strata and words; K; Q's arithmetic; eligibility. `S_pf`'s sentence and Q's note on "the earlier arrival of heat" (RLD:18297) get the same range in RL-222.
+- **The builder may draft the four-term fit now,** unmerged, with its twin and tests.
+- **The lead runs grid C** as a detached command, one to two hours on ten workers:
+  `cd PROBES/s_drift && python3 -B explore_f.py 10000 10 runF_10000_19999.json 10000`
+- **Records.** One RUN_STATE item with this ruling, the W1 hold and the projector's printed line. The corrected authors list is committed. **No row change:** the ledger row has no field for a stage-2 word and its key list is closed (MF:1515-1517).
+- **RL-222's packet:** grid C's JSON and its sha256; the projection's path; the full-rank count of 4.5, or a statement of what read it would need.
+
+## 5. The hold, and frozen scoring
+
+**Ruling. The lead may end the LOOKS.json hold now. No `predict_frozen` call is due before the successor reader, so nothing has to run before ctl-01 registers on that account.**
+
+- **B.1's two conditions are met,** and RS612 holds the four printed values (RLD:26792-26796). On main at `6a88a980e` I find the row, the report and the execution commit as that record says.
+- **The tripwire does not extend the hold.** It is S's and W1's matter, and it needs no row commit.
+- **My read of 4.6 is not a freeze-2 read.** It opens no coefficient file and calls no reader. It rests on RLD:18875 and on RS612's evidence.
+- **Who reads freeze 2 next:**
+
+| Reader | Due | Now |
+|---|---|---|
+| `predict_frozen` for `lm-qual-01`'s scorer (MAN `later_looks`) | After qualification energy exists | No qualification leg could run before this morning's freeze |
+| `lm-hp-01`, `lm-transfer-01` | At their own committed manifests | Neither has a ledger row |
+| The release script's prints (S_w, K_w, the count-only cut, the OS-onset residual) | After C1's receipt (RLD:20212) | W1 is not signed |
+| RL-166b §4's Ĥ for three reference turns (RLD:16609) | "Freeze 2"; it has no date and no code | A new opener of the coefficient file. It is built on the successor reader, and I read it under its own stanza |
+| Qualification's arm predicate, the word only (RLD:20209) | Before qual-01 arms | The one that can come first |
+
+- **RL-220 B.2 is unchanged.** Once ctl's row is on main, no freeze-2 read runs until the successor reader is audited, and the arm predicate is such a read. If qual-01 is to arm before that audit closes, ctl's row lands after that arm's read. Otherwise the reader is built first. The order is the lead's.
+
+---
+
+## Amends
+
+- **RL-151 §1.3 item 2 and MAN `decisions[0]`** (RLD:13328-13331): the return is ruled in two steps, here and in RL-222. Until RL-222 the W1 receipt is not signed.
+- **RL-218 §6.1:** its check of the 0.08 threshold did not carry RL-178's "above 2.0 %" (RLD:18499). A later look that runs step 3 for S's row takes 0.02, and its manifest says how the sign reaches me.
+- **RL-218 §6.3:** the as-built list is received, with section 3's count and line. The paper's sentence is section 3's.
+- **RL-190 §3.5** (RLD:22466): the stanza's form serves `lm-interim-01` too.
+- **RL-220 B.1:** the hold may end. **B.2** stands.
+- **Stand unchanged:** RL-166 Q6 and Q11 for this look; RL-178's level and words until RL-222; RL-179 F-12; RL-180; RL-183 §2.3; RL-184; RL-218 §§7 to 11; RL-219; RL-220 Part A.
+
+**Blind status.** Blind. I read rulings, RUN_STATE items 611 and 612 on public main, the look's committed manifest and source, the public report (three hashes, the look id, the commit, one count and nine words), W1's protocol text and the lead's authorship list. Two greps, of RUN_STATE and of the lead's notes, printed lines of other items that carry magistrates' operational figures; I used none, and the notes' rehearsal lines were filtered out before printing. My scans are synthetic, on the Air, from the RL-177 simulator, and the projector was tested on invented numbers. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened, listed or hashed, nothing under the registered root, and no registration value. I do not know the tripwire's value, cell or sign. The stanza of 4.6 authorizes a later read by me of cell-level statistics on conditionless development legs. They carry no condition label and no series outcome, and RL-222 will say what it read. This ruling fixes a test and an order of steps before that read. It changes no estimator, threshold, population or word of any look, and it holds one signature.
+
+**What comes back to me.**
+- The projection, grid C and the full-rank count: RL-222, before the W1 receipt.
+- A `refused:` line from the projector, or a grid tie-back that differs.
+- A freeze-2 read wanted on a main that holds ctl's row before the successor reader is audited.
+- The design of RL-166b §4's reference-turn report, when it is built.
+
+**Probe digests** (sha256).
+
+| File under `PROBES/` | Digest |
+|---|---|
+| `s_drift/PREREG-C.txt` | `8c45b55520be45bc19a55297d108396b01fc55ea5713c98493d1777777d624f6` |
+| `s_drift/explore_f.py` (grid C's driver) | `6a528036018f0af7b58c8086f9609e11c93b0f7f4e302ba34b9a30027f1790e8` |
+| `s_drift/explore_e.py` | `172e43bed491e4f0dff12281d1456793d635946df0844a0b372581733968a504` |
+| `s_drift/runE_0_999.json` | `8ef677a3db6e00ebc01c2724391ebf04f7aad2b1039f598f14a85d8094b254c8` |
+| `s_drift/explore_c.py` (a first, one-sided scan; not cited) | `8e37c2c78b841cbf0a6f6dd8dfcd0f0bae6efc64461ebac7fd0433cd3dd2496b` |
+| `s_drift/runC_1000.json` | `4c99913f63b5bd7a7680f1c1dbe7f4dd78d69eb34dd6ece947ed3a85c4e63a4a` |
+| `read/step3_project.py` | `092514eed3a4d2a94efa0f3e78683e38958c5b9a82fb414e8b744a7ae9cf482e` |
+| `read/test_project.py` | `62fd4cc618424522257ee5804e8e24e73a033251dcd9f393b9036e03d0f42b9d` |
+
+**Lead note (Opus 5.5, 2026-11-26 09:21 PST).** Recorded verbatim from seat `fable-interim-return-1126` (sha256 d1f8caf084410bed1dd9f9d579e4c5b5d9d2a96c023c3373ca95ac4bd22e18b5). Numbering: RL-222 was already taken by the parallel replay seat (`fable-rl220-read2-1126`, RS613); the S-row ruling this entry calls "RL-222" will be recorded as **RL-223**, and every "RL-222" in sections 4-5 and Amends above means RL-223. Probes stay in that seat directory.
