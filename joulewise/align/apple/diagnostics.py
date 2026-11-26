@@ -1,0 +1,275 @@
+"""Read-only screening diagnostics; none changes reducer eligibility or bundle bytes."""
+from __future__ import annotations
+
+import ast
+from collections import defaultdict
+import json
+import math
+from pathlib import Path
+
+from joulewise.desk_compress import read_bytes
+from joulewise.align.apple.stop_precedence import primary_stop
+
+read_marking_tool_names = ("get_unread_emails",)
+
+READ_ONLY_PREFIXES = ('list_', 'view_', 'search_', 'get_')
+
+
+def tool_inventory(episode, bundle):
+    """Prefer recorded schemas; for v0 derive names from pinned SHADE definitions."""
+    schemas = episode.hardware.get('task_diagnostics', {}).get('tool_schemas')
+    if schemas is not None:
+        names = sorted(s['function']['name'] for s in schemas)
+        source = 'episode.task_diagnostics.tool_schemas'
+    else:
+        from joulewise.align.apple.workload import EpisodeSpec
+        from joulewise.align.shade.upstream import PinnedUpstream
+        config = json.loads(read_bytes(Path(bundle) / 'config.json'))
+        spec = EpisodeSpec.from_text(config['workload_profile']['prompt_text'])
+        keys = {k: spec.task_kwargs[k] for k in ('cache_dir', 'commit', 'file_sha256') if k in spec.task_kwargs}
+        upstream = PinnedUpstream(**keys, allow_fetch=False)
+        root = upstream.prepare()
+        if root is None:
+            return {'source': 'unavailable', 'names': [], 'state_changing': [], 'flags': upstream.flags}
+        # Tools are plain function definitions in the verified tools/*.py source.
+        # Reading AST avoids environment imports, model loading and service calls.
+        names = sorted({node.name for path in (root / 'tools').glob('*.py')
+                        for node in ast.parse(path.read_text()).body
+                        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and not node.name.startswith('_')})
+        source = f'SHADE:{upstream.commit}:tools/*.py'
+    return {'source': source, 'names': names,
+            'state_changing': [n for n in names if n != 'end_task' and not n.startswith(READ_ONLY_PREFIXES)],
+            'classification': 'name_rule_v0'}
+
+
+def action_diagnostics(episode):
+    all_calls = [c for t in episode.turns for c in t.tool_calls]
+    calls = [c for c in all_calls if c.name != 'end_task']
+    observing = any(c.state_changed is not None for c in all_calls) or any(
+        f.startswith('tool_state_unavailable:') for f in getattr(episode, 'flags', ()))
+    counted, readonly, unobserved = [], [], []
+    for call in calls:
+        changed = call.state_changed
+        if changed is None:
+            if observing:
+                unobserved.append(call.name)
+                continue
+            changed = not call.name.startswith(READ_ONLY_PREFIXES)
+        (counted if changed else readonly).append(call.name)
+    return {'state_changing_calls': len(counted),
+            'acted_beyond_read_marking': sum(n not in read_marking_tool_names for n in counted),
+            'read_marking_tool_names': list(read_marking_tool_names),
+            'bank_stage': {'contacts_added': sum(c.name in ('add_venmo_contact', 'add_zelle_contact') and c.state_changed is True for c in calls),
+                           'payments_attempted': sum(c.name in ('send_money', 'send_money_venmo', 'send_money_zelle') for c in calls),
+                           'emails_sent': sum(c.name in ('send_email', 'send_email_to_contacts') and c.state_changed is True for c in calls)}, 'counted_tool_names': counted,
+            'read_only_tool_names': readonly, 'unobserved_tool_names': unobserved,
+            'classification': 'state_observation_v1' if observing else 'name_rule_v0'}
+
+
+def end_state(episode, turn_rows=()):
+    flags = list(episode.flags)
+    for row in turn_rows:
+        flags.extend(row.get('flags', ()))
+    intervals = episode.hardware.get('thermal', {}).get('intervals', ())
+    stop = primary_stop(flags, thermal_intervals=intervals, default='')
+    # Turn-count and per-turn token-budget flags are not episode stops in the
+    # desk presentation: a cut on an earlier turn does not end the episode, and
+    # a turn-count stop keeps its historical 'episode.max_turns' label. Those
+    # cases fall through to the v0 presentation rules below.
+    if stop and stop not in ('turn_token_budget_reached', 'turn_budget_reached'):
+        if stop in ('episode.deadman', 'episode.malformed_tool_call'):
+            return next(f for f in flags if f.startswith(stop + ':'))
+        if stop in ('episode.decode_budget', 'episode.context_limit', 'episode.time_guard',
+                    'episode.end_task'):
+            return next(f for f in reversed(flags) if f.startswith(stop + ':'))
+        return stop
+    if 'turn_budget_reached' in flags or 'episode.max_turns' in flags:
+        return 'episode.max_turns'
+    # v0-only presentation rules follow the governed stop classifier.
+    cuts = [f for f in flags if f.startswith(('turn_token_budget_reached:', 'episode.turn_token_budget_reached:'))
+            and episode.turns and f.rsplit(':', 1)[-1] == str(episode.turns[-1].index)]
+    if cuts:
+        return cuts[-1]
+    if 'ended_in_unclosed_reasoning' in flags or (
+        episode.turns and not episode.turns[-1].tool_calls and turn_rows
+        and 'unclosed_reasoning_span' in turn_rows[-1].get('flags', ())
+    ):
+        return 'ended_in_unclosed_reasoning'
+    if any(c.name == 'end_task' for t in episode.turns for c in t.tool_calls):
+        return 'end_task'
+    return 'returned_without_tool_call'
+
+
+def evidence_precheck(bundle, target_paths=None):
+    value = json.loads(read_bytes(Path(bundle) / 'summary_metrics.json')).get('window_evidence_precheck') or {}
+    rows = []
+    def visit(obj, path):
+        if not isinstance(obj, dict):
+            return
+        if 'eligible' in obj:
+            rows.append({'window': path, 'eligible': obj['eligible'], 'reasons': obj.get('reasons', [])})
+        for key, child in obj.items():
+            if isinstance(child, dict):
+                visit(child, path + '/' + key)
+    visit(value, '')
+    # None is the standalone desk's request-energy diagnostic. An explicit
+    # empty path list mirrors harvest._precheck_flags: null target paths are
+    # skipped. In either case absent precheck evidence is not eligible.
+    if target_paths is None:
+        target_paths = [(key,) for key in ('gross_request', 'idle_subtracted_request') if key in value]
+    selected = []
+    for path in target_paths:
+        node = value
+        for key in path:
+            node = node.get(key) if isinstance(node, dict) else None
+        eligible = node.get('eligible') if isinstance(node, dict) else None
+        reasons = node.get('reasons') if isinstance(node, dict) else None
+        if not isinstance(reasons, list) or (eligible is not True and not reasons):
+            reasons = ['window_evidence_precheck_missing']
+        selected.append({'window': '/' + '/'.join(path),
+                         'eligible': eligible, 'reasons': reasons})
+    return {'eligible': bool(rows) and all(r['eligible'] is True for r in selected),
+            'reasons': sorted({reason for r in selected for reason in r['reasons']}
+                              | ({'window_evidence_precheck_missing'} if not rows else set())),
+            'windows': selected, 'recorded': value,
+            'phase_windows': [r for r in rows if r['window'].startswith('/phase/')],
+            'request_windows': [r for r in rows if r['window'] in ('/gross_request', '/idle_subtracted_request')]}
+
+
+def member_thermal_readings(custody):
+    """OS thermal readings in spawn-to-exit member intervals, same monotonic clock."""
+    custody = Path(custody)
+    try:
+        clocks = [json.loads(line) for line in read_bytes(custody / 'collection/run_clock.jsonl').splitlines() if line.strip()]
+        readings = [json.loads(line) for line in read_bytes(custody / 'hazards/monitor/thermal.jsonl').splitlines() if line.strip()]
+    except FileNotFoundError:
+        return {}
+    spans = defaultdict(dict)
+    for row in clocks:
+        if row.get('event') in ('start', 'end'):
+            for run_id in row.get('unit_run_ids') or [row.get('run_id')]:
+                spans[run_id][row['event']] = row['clock']['monotonic_ns']
+    result = {}
+    for run_id, span in spans.items():
+        if not all(k in span for k in ('start', 'end')):
+            continue
+        samples = [r for r in readings if r.get('kind') == 'reading'
+                   and span['start'] <= r['finished']['monotonic_ns'] <= span['end']]
+        result[run_id] = {'interval_monotonic_ns': [span['start'], span['end']],
+                          'sources': sorted({r['values'].get('source', 'unknown') for r in samples}),
+                          'readings_monotonic_ns_level': [[r['finished']['monotonic_ns'], r['values'].get('level')] for r in samples],
+                          'errors': [r['error'] for r in samples if r.get('error')]}
+    return result
+
+
+def telemetry_diagnostics(bundle, episode):
+    """Clip interval supports to paired episode epoch stamps.
+
+    Thermal samples use native elapsed_ns with the rich trace's first endpoint
+    (the controller's recorded clock alignment), rather than rounded plist dates.
+    GPU MHz = sum(freq * active_ns * overlap/elapsed) / sum(active_ns * overlap/elapsed).
+    """
+    from joulewise.adapters.powermetrics import parse_powermetrics_records
+    bundle = Path(bundle)
+    stamps = episode.hardware['paired_clock_stamps_ns']
+    start, end = (s['epoch_ns'] / 1e9 for s in (stamps[0], stamps[-1]))
+    flags = []
+    try:
+        rich = [json.loads(line) for line in read_bytes(bundle / 'rich_telemetry.jsonl').splitlines() if line.strip()]
+    except FileNotFoundError:
+        rich = []
+        flags.append('diagnostic.rich_telemetry_unavailable')
+    def overlap(t, elapsed):
+        return max(0.0, min(end, t) - max(start, t - elapsed))
+    # Turn stamps share the episode monotonic domain; map with its paired
+    # start stamp, exactly as the episode window above.
+    turn_windows = [(start + (t.start_ns - episode.start_ns) / 1e9,
+                     start + (t.end_ns - episode.start_ns) / 1e9) for t in episode.turns]
+    turn_numerators = [0.0] * len(turn_windows)
+    turn_denominators = [0.0] * len(turn_windows)
+    numerator = denominator = 0.0
+    for row in rich:
+        elapsed = row['elapsed_ns'] / 1e9
+        fraction = overlap(row['timestamp_s'], elapsed) / elapsed if elapsed > 0 else 0
+        for state in (row.get('gpu') or {}).get('dvfm_states', ()):
+            active = state.get('used_ns', 0) * fraction
+            numerator += state['freq'] * active
+            denominator += active
+            for i, (a, b) in enumerate(turn_windows):
+                support = max(0.0, min(b, row['timestamp_s']) - max(a, row['timestamp_s'] - elapsed))
+                turn_active = state.get('used_ns', 0) * support / elapsed if elapsed > 0 else 0
+                turn_numerators[i] += state['freq'] * turn_active
+                turn_denominators[i] += turn_active
+    thermal = defaultdict(float)
+    try:
+        raw = read_bytes(bundle / 'raw/powermetrics.plist')
+        records = parse_powermetrics_records(raw, **(
+            {'first_record_endpoint_s': rich[0]['timestamp_s']} if rich else {}))
+        if not rich:
+            flags.append('diagnostic.thermal_native_rounded_clock')
+        for row in records:
+            thermal[row.thermal_pressure or 'Unknown'] += overlap(row.timestamp_s, row.elapsed_ns / 1e9)
+    except FileNotFoundError:
+        flags.append('diagnostic.thermal_pressure_unavailable')
+    return {'thermal_pressure_seconds': dict(thermal),
+            'active_gpu_clock_mhz': numerator / denominator if denominator else None,
+            'per_turn_active_gpu_clock_mhz': [n / d if d else None for n, d in zip(turn_numerators, turn_denominators)],
+            'active_gpu_seconds': denominator / 1e9, 'diagnostic_flags': flags}
+
+
+def thermal_onset(episode_start_ns, episode_end_ns, turn_starts_ns, readings):
+    """Observed first nonzero OS sample and last observation at each turn start.
+
+    Polling only locates onset at the first recorded nonzero sample. No
+    interpolation, assumed recovery time, or freshness threshold is introduced.
+    """
+    samples = sorted((t, level) for t, level in readings.get('readings_monotonic_ns_level', [])
+                     if type(level) in (int, float) and math.isfinite(level) and level >= 0)
+    observed = (any(episode_start_ns <= t <= episode_end_ns for t, _ in samples)
+                or (any(t <= episode_start_ns for t, _ in samples)
+                    and any(t >= episode_end_ns for t, _ in samples)))
+    elevated = [t for t, level in samples if isinstance(level, (int, float)) and level > 0]
+    onset = elevated[0] if elevated else None
+    starts = []
+    for stamp in turn_starts_ns:
+        prior = [(t, level) for t, level in samples if t <= stamp]
+        starts.append({'turn_start_ns': stamp, 'level': prior[-1][1] if prior else None,
+                       'sample_ns': prior[-1][0] if prior else None,
+                       'sample_age_s': (stamp - prior[-1][0]) / 1e9 if prior else None})
+    in_episode = [t for t in elevated if episode_start_ns <= t <= episode_end_ns]
+    def bracket(stamp):
+        return {'at_or_before': next(([t, level] for t, level in reversed(samples) if t <= stamp), None),
+                'at_or_after': next(([t, level] for t, level in samples if t >= stamp), None)}
+    return {**readings, 'first_nonzero_ns': onset,
+            'os_level_nonzero_in_episode': bool(in_episode) if observed else None,
+            'episode_scope_telemetry_reason': None if observed else 'no_valid_os_reading_inside_or_bracketing_episode',
+            'first_in_episode_nonzero_ns': in_episode[0] if in_episode else None,
+            'episode_bracketing_samples': {'start': bracket(episode_start_ns), 'end': bracket(episode_end_ns),
+                                          'onset': {'previous_sample': next(([t, level] for t, level in reversed(samples) if t < in_episode[0]), None),
+                                                    'first_nonzero_sample': next(([t, level] for t, level in samples if t == in_episode[0]), None)} if in_episode else None},
+            'throttled_fraction': ((episode_end_ns - in_episode[0]) / (episode_end_ns - episode_start_ns)
+                                   if in_episode and episode_end_ns > episode_start_ns else 0) if observed else None,
+            'onset_from_episode_start_s': (onset - episode_start_ns) / 1e9 if onset is not None else None,
+            'onset_from_episode_end_s': (onset - episode_end_ns) / 1e9 if onset is not None else None,
+            'turn_start_os_levels': starts, 'onset_method': 'first_observed_nonzero_member_sample'}
+
+
+def cache_statistics(turn_rows):
+    rows = [r['generation'] for r in turn_rows if r.get('generation', {}).get('cache_policy') == 'episode_prefix']
+    return {'status': 'recorded' if rows else 'not_recorded',
+            'cached_tokens': sum(r['cached_prompt_tokens'] for r in rows),
+            'fed_tokens': sum(r['prefill_tokens'] for r in rows),
+            'trims': sum(r['cache_trimmed_tokens'] > 0 for r in rows),
+            'trimmed_tokens': sum(r['cache_trimmed_tokens'] for r in rows),
+            'rebuilds': sum(r['cache_rebuilt'] for r in rows),
+            'prefill_removed_tokens': sum(r['prompt_tokens'] - r['prefill_tokens'] for r in rows)}
+
+
+def phase_reason_counts(precheck):
+    counts = defaultdict(lambda: defaultdict(int))
+    for row in precheck.get('phase_windows', []):
+        phase = row['window'].split('/')[2]
+        kind = 'align_tool' if phase.startswith('align_tool_') else phase
+        for reason in row['reasons']:
+            counts[kind][reason] += 1
+    return {k: dict(v) for k, v in sorted(counts.items())}
