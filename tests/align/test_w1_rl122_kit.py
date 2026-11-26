@@ -360,7 +360,7 @@ class PlanningReleaseTests(unittest.TestCase):
             ready.assert_not_called()
             target.write_bytes(raw)
             kit.generate(destination, check=True, source_root=source)
-            ready.assert_called_once_with(destination)
+            ready.assert_called_once_with(source)
 
     def assert_planning_segment_keys(self, release_keys, inconclusive_keys):
         expected = {'planning_turn_R_plus_2C', 'planning_turn_R_plus_4C'}

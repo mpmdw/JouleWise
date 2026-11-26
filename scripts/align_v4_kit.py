@@ -1786,7 +1786,9 @@ def generate(output_root=ROOT, *, check=False, source_root=ROOT):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(raw)
     if check:
-        require_w1_ready(output_root)
+        # Every generated file (the planning release included) was byte-compared at output_root above;
+        # readiness also reads non-kit sources (r1_runtime.json, frozen pins), which live only in the source tree.
+        require_w1_ready(source_root)
     return files
 
 
