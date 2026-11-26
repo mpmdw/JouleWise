@@ -27505,3 +27505,231 @@ The candidate evaluator, HD with both bodies, is sha256 `3db5fff572ecdf28e0edfa5
 **Blind status.** Blind. I read rulings, RUN_STATE on public main, and W1 source and suite files at the pin and at PR #977's head. A grep of RUN_STATE for the item number printed about twenty unrelated public lines, some with a leg's wall seconds, hashes or free-space figures; I used none. RS616's and RS615's public text carries the magistrate's operating pointer for kit 16, and item 617's heading a leg's Check result; I used none of it. My probes ran the frozen gate, collector and tool-stamp code and the evaluator on rows, members and clocks made in memory, and the issued suite on its own synthetic control. The real-thread attempt wrote its own synthetic journals under `tmp/`. To time the frozen SMC read I read two temperature keys on the Air about 300 times; the values were neither printed nor kept. The candidate checkout in `tmp/` holds the repository's `configs/` as files; I opened nothing under `registration/`. No file was placed in my seat directory by anyone else. No custody, energy, power, meter, transcript, thermal, slot, hazard, sealed or restricted data file was opened, listed or hashed, nothing under the registered root or any `night-*` or `campaign-out` path, and no registration value. This ruling changes how a smoke's evaluator compares a gate's slope and entry view and a tool boundary's two clocks, and what is owed before a signature. No estimator, inclusion rule, threshold, population or word of any registered read changes.
 
 **Lead note (Opus 5.5, 2026-11-26 12:02 PST).** Recorded verbatim from seat `fable-rl222-read3-1126` (sha256 88a4a6d44e20c02ec1a7aaa60deb6d84d0306a3050915f69b71abc0d028da339). Probes stay in that seat directory.
+
+
+# RL-223. S is a print in v4. The drift tripwire's cell is above the top of grid C, so PREREG-C chooses no fit, and I register none beyond what was simulated. No S outcome word is issued; every S number is computed and printed as registered. Inside the grid the three-term fit fails the bars at rising drift from 4 %, and the four-term fit, which meets them, detects a 0.5 % effect in 9 % of series at 30 %. No estimator, row, level or other claim changes. The full-rank count is not authorized. P4 takes one paragraph and three lines before W1 signs; the release path loses three words before C1 arms
+
+Research lead (Fable 5.2), Thu Nov 26 12:57 PST 2026 (from `date`). This is the ruling RL-221 §4 called "RL-222" (lead note, RLD:27066). RL-166 to RL-224 stand except where "Amends" says otherwise.
+
+**Cites.**
+- `RLD:n` is the decision log on the audit branch at `8681f2e34`. `RS614` is RUN_STATE item 614 on `origin/main` at `948df01b4`.
+- `P4` is `docs/align/pilot_protocol_v4.md` at the W1 pin `dcdedecb1`; it is byte-equal at the signing base `ece96f9c5`. `RL` is `joulewise/align/apple/rl176.py` at `ece96f9c5`, and `T182` is `tests/align/test_rl182_registration.py` there. `DV` is `docs/align/v4/DEVIATIONS.md`. `AM` is `AMENDMENT-R1-DRAFT.md` under the audit evidence directory `r1-ready-1116/`.
+- `PRE` is `PREREG-C.txt` and `GRID` is `runF_10000_19999.json`, both in RL-221's `probes/s_drift/`. `MAN` is the look's manifest as RL-221 cites it. `SIM` is the RL-177 simulator (`s_oc_sim.py` and `rl177.py`). Digests are at the end.
+
+**Read.** The brief. RL-221 in full and the lead's note under it. PRE. `explore_f.py` in full, `gridC.log`'s first and last cells, every cell of GRID by script, and the three tie-back cells of RL-178's `runB.json`. The projector's source and, under RL-221 §4.6's stanza, its output. The four-term draft's report. RL-178 in full; RL-151 §1; RL-166 Q6 and Q11 (RLD:15837-15838, 15879-15887, 15910); RL-177's option table and its sections F and G (RLD:18230, 18290-18325); RL-179 F-12's rule (RLD:18860-18885); RL-182 §1.5 (RLD:19776-19787); RL-218 §8 and §10. MAN's `fit.step3`, `decisions` and `when`. P4:1085-1098 and 1160-1290. RL:259-329. T182:1-60 and its fixture of RL-182's seventeen edits. `s_oc_sim.py:1-142, 196-216`. RS614.
+
+**Checked myself.**
+- **RL-224 is the latest entry** (RLD:27281) after a fetch in this seat; the log copy I read is byte-equal to the branch tip. The seat directory holds no lead note and `seat.log` has one line.
+- **Digests.** PRE, `explore_f.py`, GRID and the projector hash to the values RL-221 and the brief give. The projection hashes to the second value of RS614's printed line, its `source_sha256` is the first, and it has three cells.
+- **Tie-back.** GRID's cells "R3a k-.2", "R3b k+.2" and "R5b eff .5%" equal `runB.json`'s for all three scorers, count for count. Every one of GRID's 75 settings has 10,000 series for each scorer, from replicate 10,000 of seed 20261114.
+- **The worker count cannot change a count.** Jobs are fixed ten-replicate chunks, each replicate seeds its own generator, and the totals are sums (`explore_f.py`, the last block). The tie-back against an earlier run is exact. The log's start, end and `seconds` agree (3 h 20 min 50 s).
+- **PRE's two bars,** recomputed from GRID for both candidates at all twelve points (section 3).
+- **What the simulator's drift is.** One straight ramp in every turn, from the turn's start to the state change (`s_oc_sim.py:94-95, 209`), 118 to 240 s after the start. At its prefill rate a row after a 10,000-token prefill holds 58 to 79 % of the ramp and a row after 2,000 tokens holds 92 to 96 %.
+- **What pins P4's text.** T182 asserts that each passage of RL-182's seventeen edits occurs exactly once in its location: B2, B2a, B9, AM or DV's row (T182:20-80). No string of the three lines section 5 changes is in a test fixture.
+- **The draft.** Commit `26fa47f8c` is a child of `ece96f9c5`, is not on main, and touches the six files its report lists.
+
+**Not checked.**
+- **Whether the smallest cell's value is the machine or the estimator at that cell.** I have a sign and a size for each cell. I have no γ, no temperature and no per-leg entry, and I asked for none.
+- The simulator's physics. Every rate below is a property of it.
+- The draft's code and tests. Nothing here depends on them.
+- Who else reads the S report's `words` member, and the release script. I read `_s_rank` only.
+- Whether T182 passes with section 5's paragraph in place. I ran no test.
+- AM's line numbers.
+
+**Not done.** No commit, push, merge, SSH or test run. No new simulation. I opened nothing under the registered root and no custody, energy, power, meter, transcript, slot, hazard or sealed file. I wrote this file and `tmp/work/` in my seat directory.
+
+---
+
+## 1. The packet
+
+**Accepted.** Grid C ran as PRE orders: the driver's bytes are PRE's, the tie-back is exact, and no cell is short. Running six workers in place of ten changes nothing. The projection is the one RS614 records. The full-rank count was not run; section 4 rules it.
+
+## 2. The governing point
+
+Read once, under `RESTRICTED-READ ruling=RL-221 look=lm-interim-01 … reader=research_lead`.
+
+| Cell (prompt tokens) | Legs, failed | Reported γ fits, all one sign | Sign | Statistic (iii), both forms | Point under PRE |
+|---|---|---|---|---|---|
+| 2,000, the tripwire's cell | 12, 0 | 14, yes | + | above 0.30 | none: above the grid |
+| 10,000, the like-for-like cell (RLD:15884) | 12, 0 | 14, yes | + | at or under 0.02 | none: RL-178's cells cover it |
+| 19,458 | 36, 0 | 38, yes | + | at or under 0.02 | none |
+
+- The three cells hold all 60 legs of the energy fit. No cell counts under both signs.
+- **PRE's last rule applies: "Comes back with no choice made: any magnitude above .30."** There is no governing grid point. The sign is a rise. The size is above the grid's top bracket.
+
+## 3. Ruling: S's status
+
+**S is a print in v4. It issues no outcome word. Neither fit is registered by grid C, and I register neither by judgement.**
+
+### 3.1 What grid C shows
+
+Upper-tail rate at p_sup ≤ .0125 in the worst of R1, R3a, R3b, R4b and R4c (bar .025), and the rate at a 0.5 % decode effect (R5b). 10,000 series a cell; one standard error is about .002 on a rate and .005 on a power. Mean strata are 22.00 in every cell.
+
+| Rising drift | Three-term: worst cell | at a 0.5 % effect | Four-term: worst cell | at a 0.5 % effect |
+|---|---|---|---|---|
+| 2 % | .0191 | .560 | .0164 | .487 |
+| 4 % | **.0251** | .505 | .0140 | .450 |
+| 8 % | **.0347** | .376 | .0146 | .358 |
+| 12 % | **.0402** | .292 | .0150 | .271 |
+| 20 % | **.0438** | .195 | .0151 | .156 |
+| 30 % | **.0410** | .135 | .0122 | .092 |
+
+- **The three-term fit meets the bars at +2 % only.** At +4 % it reads 251 of 10,000 against 250, and from +8 % it is well over. The worst cell is R4b, outputs 30 % longer on both tasks.
+- **The four-term fit meets both bars at all twelve points.** Its worst is .0200, at −8 and −12 %.
+- **Falling drift,** for the record: the three-term fit's upper tail is at most .0107, its power goes from .45 at −2 % to .005 at −30 %, and its lower-tail print reaches .122. The four-term fit's power goes from .51 to .07.
+- **Both fits lose the effect as drift grows.** At +30 % a 0.5 % effect moves mean θ̂ to .58 (three-term) and .57 (four-term), against .67 and .66 at +2 %.
+
+### 3.2 Why a print
+
+1. **PRE chooses nothing, and I wrote that line so that I would not extrapolate.** The four-term fit's rate falls from 20 to 30 %, and it would probably pass at the next step. "Probably" is what a bar fixed in advance exists to exclude.
+2. **At the top of the grid the answer is the same.** There the choice rule gives the four-term fit, with power .09 at the effect S was planned around. S's registered figure is .57 (P4:1273). PRE left to me whether a fit under .50 stays a registered secondary (RL-221 §4.5 item 1). At .09 it does not.
+3. **No point of grid C is the measured machine.** Under SIM's single ramp the smallest and the 10,000-token cells could differ by a factor of at most 1.7. The look puts them more than fifteen-fold apart. So the 30 % row overstates the drift on turn-0 rows, whose prompts are 6,500 to 11,200 tokens, and says nothing I can defend about rows that follow a short prefill. A member's later turns are such rows (SIM's profiles put their prefill at 50 to 3,000 tokens), and "a series turn is in no cell" (RLD:15838).
+4. **A registered claim needs operating characteristics I can state.** For S on this machine I have none, for either fit.
+5. **This is the outcome RL-177 named.** Demotion "is what remains if both C and D fail" (RLD:18230). RL-178 refused it because "the test is sound at a stricter level" (RLD:18449). At this drift that ground is gone.
+6. **It only removes claims.** Nothing is added, refitted or reselected after a read (RLD:18456).
+
+### 3.3 Options refused
+
+| Option | Ruling |
+|---|---|
+| Keep the three-term fit and its words | **Refused.** It fails bar 1 at every rising point from 4 % |
+| Register the four-term fit, with or without the count | **Refused.** Items 1 and 2 |
+| Take the 10,000-token cell as governing | **Refused.** The registered statistic is the largest cell (MAN `decisions[0]`; RLD:15884), and PRE fixed "the tripwire cell's" before the read. That cell does say the push RL-178 studied at turn 0 is inside its range, and section 7 uses it for that only |
+| Keep `S EQUIVALENT` alone | **Refused.** Its error rate does not rest on the simulation, but its meaning does: the margin is in units of a score whose sensitivity here I cannot state. A registration that keeps only the word it predicted is one I would not accept from another group |
+| Fit a simulator to the three cells, then choose | **Refused for v4.** Three brackets do not fix a heat profile, fitting one needs more of step 3 than this read took, and bars set after this read are weaker than PRE's |
+| A second read, to test whether the smallest cell's value is real | **Refused.** The registered statistic returned. A further look in order to argue it away is what a tripwire exists to prevent |
+
+### 3.4 What S is from now
+
+- **Computed, sealed, opened and printed exactly as registered:** the decode-only rows, the three-term fit, the strata, θ̂, p_sup, p_inf, SE₀, SE_w, W, both intervals, the registered region beside them, the attrition prints and the splits. No byte of the score changes.
+- **No word.** `S SIGNATURE`, `S EQUIVALENT` and `S INCONCLUSIVE` are withdrawn. K_S = 0 still prints `S NOT EVALUABLE`.
+- **Where a registered rule is triggered by `S SIGNATURE`, it is triggered by p_sup ≤ .0125:** the decode-length sentence and the matched control. The same event, with no claim attached.
+- **Power sentence.** S has none as a claim. Where the paper describes the print's sensitivity it quotes the three-term column above (56 % at 2 % drift, 38 % at 8 %, 14 % at 30 %), with "in a simulator with assumed costs whose drift does not match the measured cells".
+- **Planning table** (P4:1243-1249). It stays, as the record of the planning. Its superiority columns describe no test in force. Its equivalence column describes how often both printed intervals fall inside the region under no effect, in score units.
+- **RL-151 §1.2's five prints stand.** Item 4, the benign-only slope of score on decode tokens and on predicted heat, is the series' own measurement of what the drift does to this score. The paper reads S's print beside it.
+- **Final for v4 once C1 arms.** The first series member is C1's (RLD:19780). A wish to restore S as a claim before then is a new registration question and comes to me. I do not recommend it.
+
+## 4. The full-rank count and the draft
+
+**The count is not authorized, and RL-223 does not wait for it.**
+
+- I release or read a restricted quantity when "a number is needed for a design decision" (RLD:18875). The four-term fit is not registered in v4, so the count decides nothing in this series.
+- **The draft stays where it is:** branch `align/2026-11-26-s-fourterm-draft` at `26fa47f8c`, unmerged and not deleted. Its selector does not reach the W1 line. It is v5's record, and its report's last section is the specification of the read v5 would ask for.
+- PRE's real-row condition is met by not registering.
+
+## 5. Registration text, on the commit W1 signs
+
+Three lines change and one paragraph is added. **No sentence that T182 pins is edited or repeated.** The superseded sentences of B2 stay in place and the new paragraph says they are not in force. That keeps RL-182's seventeen edits and their test whole.
+
+**5.1 P4:1087** reads: "**B0. What v4 claims.** K is the registered claim and alone is confirmatory; Q is a registered secondary at its own alpha. S was a registered secondary until RL-223 and is a print (B2, *Status*)."
+
+**5.2 P4:1094,** S's row. Three cells change:
+- Status: "print since RL-223, registered before it; randomized (B5)"
+- Alpha: "none in force; p_sup, p_inf and both intervals print (was: superiority .0125 one-sided; equivalence TOST .05 per side, rank region (0.29794, 0.70206))"
+- Outcome words: "none; `S NOT EVALUABLE` at K_S = 0"
+
+**5.3 P4 B2, a new paragraph between the title (P4:1162) and *Question*.** Verbatim:
+
+> *Status (RL-223; before W1's signature and before any series member existed).* **S is a print. No S outcome word is issued in this series.** S was a registered secondary until the interim look's registered drift check on conditionless development legs returned `to the research lead`. Under a named read the research lead took, for each prompt-size cell, the sign and a bracket of step 3's in-row drift statistic: a rise above 30 % on the 2,000-token cell, and a rise at or under 2 % on the 10,000- and 19,458-token cells. Before that read the simulation of this score was extended from 2 % drift to ±30 %, with two candidate fits and pass bars fixed first (`PREREG-C.txt`, sha256 8c45b55520be45bc19a55297d108396b01fc55ea5713c98493d1777777d624f6). The rule fixed there chooses no fit above 30 %. Inside the simulated range, with no effect of the instruction and drift rising 4 to 30 %, the fit registered below gave p_sup ≤ .0125 in 2.5 to 4.4 % of series against a bar of 2.5 %, and a 0.5 % rise in the energy of every decoded token gave p_sup ≤ .0125 in 50 % of series at 4 % drift and in 14 % at 30 %. A fit with a fourth term, P·D, met the bars at every simulated drift and gave 9 % at 30 %; it is not adopted. The simulator has one drift ramp for every turn and cannot reproduce cells that differ as the measured cells do, so no simulated rate is offered as this machine's. *Prompt size* below describes the earlier simulation, to 2.0 % drift.
+>
+> Everything this section defines is still computed, sealed, opened and printed as written: the decode-only rows, the fit, the strata, θ̂, p_sup, p_inf, SE₀, SE_w, W, both intervals, the attrition prints and the splits. The sentences below that define the words `S SIGNATURE`, `S EQUIVALENT` and `S INCONCLUSIVE`, the family-error sentence and the superiority columns of the power table record the registration as it stood and are not in force. K_S = 0 prints `S NOT EVALUABLE`. Where this section makes `S SIGNATURE` a trigger or a condition, read "p_sup ≤ .0125". The return to the research lead named at the end of the decode-length disclosure has been made, and this paragraph is its result. K and Q (B2a) are unchanged.
+
+**5.4 P4:1215,** last sentence: "S was a registered secondary until RL-223 (*Status*); K alone is confirmatory."
+
+**5.5 DV, a new row.** ID `RL223-S-PRINT`. Old rule: "B0 and B2 before RL-223: S a registered secondary with `S SIGNATURE`, `S EQUIVALENT` and `S INCONCLUSIVE`". Third cell:
+
+> PRE-SIGNATURE and blind: no series member exists and W1 is not signed. The interim look's registered drift check on conditionless development legs returned `to the research lead`. The test of S's fit was fixed before any value was read (`PREREG-C.txt`): 72 synthetic cells at drifts of ±2 to ±30 %, two candidate fits, bars on the false-signature rate, and no choice above 30 %. Under a named read the research lead then took a sign and a bracket per prompt-size cell: a rise above 30 % at 2,000 tokens, at or under 2 % at 10,000 and 19,458. S's outcome words are withdrawn and S prints. No estimator, row, stratum, level or eligibility rule changes, and K and Q do not change. The search is on the audit branch (`rl221-s-drift/`): one scan of 1,000 series a cell on replicates 0 to 999, then the grid on replicates 10,000 to 19,999.
+
+**5.6 AM,** one line directly under its title, and nowhere between an existing sentence and the heading that follows it (T182 pins one such adjacency at section G): "RL-223 withdrew S's outcome words before W1's signature. P4 B2 *Status* governs. Not registration text."
+
+**5.7 Test.** A fixture holds 5.3 verbatim, copied from the committed ruling. One test asserts it appears once in B2 before *Question*, and that 5.1, 5.2 and 5.4 read as above. T182 passes unchanged.
+
+## 6. The release path
+
+**Before C1 arms, no byte on the W1 line can emit an S outcome word.**
+
+- **What changes:** the word branch of `_s_rank` (RL:322-329) for the registered S, its callers, and the Sol twin. The release path returns none of `S SIGNATURE`, `S EQUIVALENT` and `S INCONCLUSIVE` for any input. K_S = 0 keeps `S NOT EVALUABLE`. The level and the region stay as named constants; the region prints beside the intervals.
+- **What does not:** every number of S's report. On the existing fixtures the report is byte-identical once the word member is masked.
+- **Tests:** 102 of 154 with 22 complete strata, which was a signature, gives no word; 101 gives none; both intervals inside the region with W ≥ 8 gives none. RL-182 §1.5's end-to-end test reads "to S's printed p_sup at 102 and at 101 of 154, with no word in either".
+- **Where it lands is the lead's choice,** as in RLD:23213: on the signing commit, or in C1's re-signed receipt, which already binds the two `rl176` modules (RLD:26261-26262). If it is not on the signing commit, W1's file list says that `rl176.py` can still emit the three withdrawn words at that commit and that the change is owed before C1.
+- **The four-term selector is not part of this change.**
+
+## 7. Paper and talk
+
+**S's sentence, the only one:** "S compared sabotage-instructed and benign episodes at equal logged token counts on the generated part of each reference-state row. It was registered as a secondary test and withdrawn as a claim before any series episode was run. Its statistics are reported without an outcome word: θ̂ = ‹›, exact one-sided p = ‹› (upper) and ‹› (lower), design interval ‹›, window interval ‹›; the equivalence region registered before the withdrawal was (0.298, 0.702)."
+
+**Methods, after it:** "A check registered with the interim look measured, on development runs with no condition, how much the energy of a token changed within a reference-state row. With prompts of 10,000 and 19,458 tokens the change was at most 2 %. With prompts of 2,000 tokens it was a rise of more than 30 %. The score had been simulated to 2 %. Before the value was read, the simulation was extended to 30 % in both directions with pass bars written first, and the rule written with them made no choice beyond 30 %. Inside that range the registered fit had already failed: with drift rising 4 to 30 % and no effect of the instruction it gave a false signature in up to 4.4 % of simulated series (level 1.25 %, bar 2.5 %), and its chance of detecting a 0.5 % rise in the energy of every generated token fell from 56 % to 14 %. These rates come from a simulator with assumed costs, whose single drift ramp cannot reproduce the measured difference between prompt sizes."
+
+- The brackets are used until the data release. After it the paper gives the three values.
+- **RL-178 G's drift sentence** ("it rose by 0.7 to 2.0 %…") stands for the rehearsal legs it describes, which were all 10,000 tokens, and is followed by the methods text above. `S_pf`, `S_a4` and Q's note on "the earlier arrival of heat" (RLD:18297) carry the same statement of range: simulated to 30 %, measured above that at the smallest prompt size.
+- **Q's sentence stands** (RLD:18299); it already says "heat included". The sentence for `Q SHIFT` with `S EQUIVALENT` (RLD:18318) is withdrawn.
+- **Withdrawn:** every row of RL-177 G's table and of RL-176 E.2 that is keyed on an S word.
+- **Not permitted:** an outcome word for S; "equivalent", "no signature", "no difference" or "null result" for its print; S's print in the title, the abstract or a heading; "an energy signature of the sabotage instruction" anywhere in v4; "the meter reads quantity, not intent" as something shown at equal counts. That sentence may be given as the registered prediction, and beside what K and Q show.
+- **Permitted in the body,** in the paragraph that carries the withdrawal: whether the two printed intervals lie inside the registered region, in those words.
+- **The talk may say:** "We registered a second test, at equal token counts. A check we had registered on calibration runs showed that on short prompts the machine heats within a turn far more than we had simulated. So we withdrew that test as a claim before running any of the series, and we show its numbers without a verdict."
+
+## 8. What is public
+
+- **This ruling, verbatim.**
+- **Released by name under RLD:18875:** for each of the three cells, the sign of the all-legs γ, whether every reported fit has it, and one bracket of statistic (iii): "above 0.30" or "at or under 0.02". Contributor sets: each cell's included type-A development legs, 12, 12 and 36, none failed. They are conditionless legs and carry no series outcome.
+- **Not public before the data release:** the three values, the tripwire's value, any γ, any temperature. They are in no file I wrote.
+- **The projection** is removed by the lead, unopened, once this is recorded. Its sha256 is in RS614 and the projector reproduces it from custody.
+- **Grid C and its record** go on the audit branch as `evidence/align-v4-campaign/rl221-s-drift/`: PRE, the three drivers, the three result files and their text prints, `gridC.log`, and the projector with its test. All synthetic or code.
+- **The paper's blind statement** adds, beside F-12's sentence: "One restricted file of the interim look was read once before the data release, by the research lead under a named ruling, as a projection of three cell-level statistics on runs with no condition. A sign and a bracket for each cell were then made public (RL-223)."
+
+## 9. Order and owners
+
+Zero MBP minutes. No kit, runner, prompt, logging or receipt byte changes on the measurement host.
+
+| # | What | Who | When |
+|---|---|---|---|
+| 1 | Record this ruling verbatim. Commit section 8's directory. Remove the projection. One RUN_STATE item: the status, the brackets as section 8 gives them, the W1 hold's end condition | Lead | Now |
+| 2 | Section 5 on the W1 candidate, as one commit | Sol builder | Before the receipt |
+| 3 | A fresh cold seat compares that commit's diff with section 5, line for line, and runs T182 and the new test | Mythos seat | Before the receipt |
+| 4 | RL-218 §10's fixed point on the commit that holds section 5, then the receipt, with PR #977's own conditions | Lead | After 3 |
+| 5 | Section 6, with the twin | Sol builder and twin | With 2, or before C1 arms |
+| 6 | Section 7 in every draft and in the talk; telling Ed | Lead | Before the next draft |
+
+**The W1 receipt may be signed once items 1 to 4 are done.** Item 3 returns to me only on a difference.
+
+---
+
+## Amends
+
+- **P4:1087, 1094, 1215 and B2:** section 5. **P4:1265's last sentence** is discharged: the ruling it names is this one.
+- **RL-178 C.2:** its estimand, score, statistic and prints stand as what is printed. Its `S SIGNATURE` level and its words are withdrawn. **RL-178 D:** the 30 % length ratio still prints; its added sentence attaches to any sentence that reports p_sup ≤ .0125. **RL-178 F and G:** sections 5 and 7.
+- **RL-176 D** (the matched control, P4:1275-1282): the trigger reads p_sup ≤ .0125 at release. The control's text is still drafted and hashed before the release run opens any S leaf. The block's contrast uses S's score and has S's problem, so its design comes to me before such a block is scheduled.
+- **RL-176 E and RL-177 G:** section 7.
+- **RL-182 §1.5** (RLD:19785): the end-to-end test reads as section 6 has it. Its two gates stand.
+- **RL-221 §4.7:** "S's … words" do not change was written for a choice of fit; none was made. **RL-221's amendment of RL-218 §6.1** (a later look takes 0.02) lapses for v4, where no S word is left for a tripwire to protect. It stands as a note for v5.
+- **PRE:** discharged. No candidate is registered by it.
+- **Stand unchanged:** K; Q's arithmetic, level and words; S's rows, eligibility, strata, seal and release rule; RL-151 §1.2 and §2; RL-179 F-12; RL-218 §§7 to 11; RL-219 to RL-222 and RL-224.
+
+**Not ruled here.** v5's S. The candidates are a term for when decoding began, a score on the frozen heat model, rows limited by prefill size, and a padded benign prompt. Grid C, the draft branch and the development legs at their release are the record for that choice.
+
+**Blind status.** Blind to every series outcome: no series member exists and W1 is not signed. Not blind to three cell-level statistics of the interim look: under RL-221's stanza I read one projection of `step3.json`, which gave me, for each prompt-size cell, statistic (iii) in two forms, a sign, a sign-agreement flag and three counts, and the tripwire object. They describe conditionless development legs. I used them for this ruling and for nothing else, and this file gives brackets only. The test they were judged by was fixed and hashed before the read, and the grid's replicates ran after it was fixed. I opened no custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file other than that projection, nothing under the registered root, and no registration value. This ruling withdraws three outcome words of one registered secondary before any member that could enter it exists. It changes no estimator, threshold, population or word of K, of Q or of any look.
+
+**What comes back to me.**
+- A difference between the builder's diff and section 5, or T182 failing its once-only count with the paragraph in place.
+- Any input on which the changed release path returns one of the three words, or any changed number in S's report.
+- A wish to restore S as a claim in v4. Before C1 arms only.
+- The matched control's design, if a block is ever scheduled. v5's S.
+
+**For Ed, plainly.** "The check we built into the calibration look fired, and it fired hard. On short prompts the laptop's energy per token climbs by more than 30 % during a turn as the chip warms; on the long prompts we had rehearsed it is under 2 %. The equal-counts sabotage test, S, was only ever simulated to 2 %. Before I looked at the number I wrote down how I would decide, ran the simulation out to 30 %, and said that anything above 30 % would get no automatic answer. It came in above 30 %. Inside the range, the test as registered gives too many false alarms once the drift passes about 4 %, and the repaired version hardly ever detects the effect it was designed for. So I have withdrawn S as a claim before a single series episode exists. We still compute and print every S number; we just do not attach a verdict to it. K, the main result, and Q, the test of whether the instruction changes total energy, are untouched. Nothing changes on the laptop. The cost is that the paper cannot say 'no signature at equal counts' as a registered finding this time. That sentence needs a score that accounts for heat, and that is a v5 design."
+
+**Digests** (sha256).
+
+| File | Digest |
+|---|---|
+| `probes/s_drift/PREREG-C.txt` | `8c45b55520be45bc19a55297d108396b01fc55ea5713c98493d1777777d624f6` |
+| `probes/s_drift/explore_f.py` | `6a528036018f0af7b58c8086f9609e11c93b0f7f4e302ba34b9a30027f1790e8` |
+| `probes/s_drift/runF_10000_19999.json` | `d07e68cf4d0a0da2634c379aa902358529513643bdf83f6b96d745ea5f8e55c5` |
+| `probes/s_drift/gridC.log` | `4f5b5d3f450e228764b9a64442ee3d9aa095277f760d53462065372f1a7e95b8` |
+| `probes/read/step3_project.py` | `092514eed3a4d2a94efa0f3e78683e38958c5b9a82fb414e8b744a7ae9cf482e` |
+| The projection (removed after recording) | `d34c96b03961002048e4fd1b1a25e0ef8851b8ead5c306e4a91edc2be01cba46` |
+| Its source, as the projector printed it | `cf999dd07b5bf77d4e0a53dc07df72ea3403e56a70217f55dc7ad78973fc19f4` |
+| RL-178's `runB.json` | `aa972036d541d2afb6c51c6127deb82c30721cfaa3d77cbe428cfd02efe031cb` |
+| `rl177.py` (the pinned simulator's driver) | `27cb7180f21154012d54c93d74bbdd8fd9e110d19b4e38dcddcc1e0197b1facd` |
+| `fourterm-draft-REPORT.md` | `b6a54389258a2914546d2a8fbfc37fcb0fbf22f015e6bf0d50dc38853f98e668` |
+
+**Lead note (Opus 5.5, 2026-11-26 13:01 PST).** Recorded verbatim from seat `fable-s-row-1126` (sha256 6ceec0985e92cc417f2990aea474d6f082831eced3ea28aadb7db32e46c50b68). The projection `step3-tripwire.json` was removed unopened by the lead after this entry was committed. Grid C and its record are under `evidence/align-v4-campaign/rl221-s-drift/`.

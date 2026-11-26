@@ -1,0 +1,48 @@
+RL-221 confirmatory grid C. Written before the grid runs and before any member of RESTRICTED/step3.json is read.
+Research lead (Fable 5.2). Thu Nov 26 09:14:47 PST 2026
+
+What is known: lm-interim-01's public word drift_tripwire = to_research_lead (the largest step-3 statistic (iii),
+linear form, over eligible prompt-size cells is above 0.08). Its value, cell and sign are not known to me.
+What was explored: explore_e.py, replicates 0-999 of seed 20261114 (runE_0_999.json). Nothing else.
+
+Grid C: explore_f.py, replicates 10,000-19,999 of seed 20261114 (Random(seed*1000003+rep)), 10,000 series a cell,
+synthetic. Drift +/- 2, 4, 8, 12, 20, 30 %. Cells at each drift: R1 (counted prompts, equal lengths), R3a (kappa -0.2),
+R3b (kappa +0.2), R4b (outputs +30 % on both tasks), R4c (bank +30 %, spam -11 %), R5b (0.5 % decode effect).
+Command: python3 -B explore_f.py 10000 <workers> runF_10000_19999.json 10000
+Tie-back: its cells "R3a k-.2", "R3b k+.2" and "R5b eff .5%" must equal RL-178 runB.json's d3 counts exactly.
+
+Candidates, in this order: d3, the three-term fit W1's text registers; d4p, the same with the column P*D' added.
+Level: S SIGNATURE iff p_sup <= .0125 for both. No other level and no other design is a candidate.
+
+Points. From the named read, for each cell with status ok, gamma_estimable true and a numeric linear (iii):
+magnitude = (iii) linear; sign = the sign of the all-legs gamma; a cell whose reported gamma fits disagree in
+sign counts under both signs. A cell's point is its sign times the smallest grid drift at or above its magnitude.
+A magnitude at or under .02 with a + sign has no point (RL-178's cells cover it). The governing point is the
+tripwire cell's.
+
+Bars, fixed now, on replicates 10,000-19,999:
+ 1. Upper-tail rate at p_sup <= .0125 at or under .025 in each of R1, R3a, R3b, R4b, R4c, at every point.
+ 2. Mean strata at least 21 in each of those cells, at every point.
+Choice: d3 stays if it meets 1 and 2 and its R5b rate at the governing point is not more than .05 below d4p's.
+Otherwise d4p, if it meets 1 and 2. Otherwise neither is registered by this grid and I rule S's status.
+Reported with no bar: the lower tail (p_inf <= .025); the R5b rate of the chosen candidate at every point.
+An R5b rate under .50 for the chosen candidate at the governing point changes S's power sentence and planning
+table, and I rule whether S stays a registered secondary; that is not decided by a formula here.
+A real-row condition on d4p, outside this grid: d4p is registered only after a count on stored multi-turn member
+records shows that its design has full rank in the strata where d3's has (training rows with more than one value
+of P). If it does not, neither is registered by this grid.
+Comes back with no choice made: any magnitude above .30; a tie-back count that differs; fewer than 10,000 series
+in a cell.
+
+sha256
+6a528036018f0af7b58c8086f9609e11c93b0f7f4e302ba34b9a30027f1790e8  explore_f.py
+172e43bed491e4f0dff12281d1456793d635946df0844a0b372581733968a504  explore_e.py
+8ef677a3db6e00ebc01c2724391ebf04f7aad2b1039f598f14a85d8094b254c8  runE_0_999.json
+02c9f4648d8689a5ffbce3f62fd91d4e87d70a4e4e922e17fa472c676586fc7a  runE_0_999.txt
+8e37c2c78b841cbf0a6f6dd8dfcd0f0bae6efc64461ebac7fd0433cd3dd2496b  explore_c.py
+4c99913f63b5bd7a7680f1c1dbe7f4dd78d69eb34dd6ece947ed3a85c4e63a4a  runC_1000.json
+092514eed3a4d2a94efa0f3e78683e38958c5b9a82fb414e8b744a7ae9cf482e  ../read/step3_project.py
+62fd4cc618424522257ee5804e8e24e73a033251dcd9f393b9036e03d0f42b9d  ../read/test_project.py
+cc6d72804b346c408baf6edc06a1732f6d318ae525d6cc1aa6f9c119857da7f1  /Volumes/JW-EXT/scratch/fable-rl178-cells/explore_b.py
+aa972036d541d2afb6c51c6127deb82c30721cfaa3d77cbe428cfd02efe031cb  /Volumes/JW-EXT/scratch/fable-rl178-cells/runB.json
+27cb7180f21154012d54c93d74bbdd8fd9e110d19b4e38dcddcc1e0197b1facd  /Volumes/JW-EXT/scratch/astra-rl177-cells/tmp/rl177.py
