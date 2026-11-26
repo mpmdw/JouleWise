@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "a magistrate item with p8-p10 restore results (archive sha256 vs receipt, stream_manifest match or none, file counts), the §4.4 pilot export's pairs/unavailable counts and exit code, and the item-608 flag-name answer",
+  "next_observable": "a magistrate item with, per stored run, the verdict and check names, the first refusal's site and clause booleans, the per-member counts of RL-220 §5 item 4, and the item-610/RL-220 §1 name boolean",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 611,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 610,
@@ -293,11 +299,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "610",
+  "source_item": "611",
   "source_item_heading_date": "2026-11-26",
   "wait": {
-    "deadline_epoch_s": 1795813200,
+    "deadline_epoch_s": 1795896000,
     "observable": "none",
-    "on_early_or_refused": "restore only between spans, never inside a quiet lead-in; if free space would fall below 75 GiB or an archive sha256 differs from its receipt, stop that session and report; §4.4 runs once only with all seven on disk"
+    "on_early_or_refused": "if the per-member continuation cannot be made without touching anything else, stop at the first refusal and say so; if a hunk does not match once, stop that run's read; make no other change"
   }
 }

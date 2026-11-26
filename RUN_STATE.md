@@ -1052,6 +1052,89 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+611. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-26 08:06 PST: RL-220: second look-ahead read over every member with both fix bodies; corrected flag-name test; LOOKS.json file hold until interim freeze 2**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-28T12:00:00-08:00
+on_early_or_refused: if the per-member continuation cannot be made without touching anything else, stop at the first refusal and say so; if a hunk does not match once, stop that run's read; make no other change
+next_observable: a magistrate item with, per stored run, the verdict and check names, the first refusal's site and clause booleans, the per-member counts of RL-220 §5 item 4, and the item-610/RL-220 §1 name boolean
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795709190, "number": 611, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **RL-220 (research lead, committed `97aebae8f` on the audit branch): the `episode flags` refusal in item 609 is case (a).** The replay's stand-in task holds no flags. The frozen writer copies every `ShadeTask` flag into the episode as `task.<flag>`, so the evaluator refuses every clean predecessor, D_bank and X_G member. The fix is a second commit on PR #977, under the same audit. This item issues no arm and closes no ladder item. Items 601, 604, 605 and 610 stay ISSUED.
+- **Corrected name test (replaces item 610's whole-name grep).** A name counts as code vocabulary when it is `task.` followed by a string literal of `joulewise/align/shade/task.py` at `dcdedecb1`. The `task.` prefix is added at `workload.py:701`. Post one boolean per run: are the two recorded-only names exactly `task.scratchpad_rule:upstream_closed_pairs:thinking,system_instructions` and `task.upstream_fixed_initial_state`? Under that test, the names may also be posted.
+- **RL-220 §5: second look-ahead read, once per stored run (`part-c-328`, `f0-11-426`), in a gap, no leg delayed, before the audit.** Run it as item 608 was run. Import the pinned evaluator unchanged from the clean `w1-sign-Jfull-88624302` at `dcdedecb1`. Replace two functions **in memory**:
+  - `_recompute_controller_phases`, by item 608's `fix_body.py` (sha256 `7760e3e4…1bee`);
+  - `_replay_frozen_workload`, by `fix_body_flags.py` below (sha256 `ffae839528aa78268d87af580c3126e90467f8aecfda9074d96c5d290991ecf0`). Its `patched(pc)` asserts each hunk matches once.
+  Write nothing under either OUT, and check the counts before and after. Print only:
+  1. The verdict word and the failing check names, as run to the first refusal.
+  2. If not `pass`: for the first refusal, the member kind, source, index and field, and the truth of each clause. For a flags field, also the two lengths, the recorded-only and replay-only counts, and for each such flag its class letter from RL-220 §2 (T task, R repetition, E endpoint, W workload, or "other"). A name only under the rule above.
+  3. **For every member, not only the first refused.** When a member is refused, record it and go on to the next member in the loop at PC:4876-4888. Carry the last passing member's close and the step binding as they stand, and mark any later refusal that names member order or the step binding "follows an earlier refusal". This is the one further in-memory change allowed. If it cannot be made without touching anything else, stop at the first refusal and say so.
+  4. Per member reached: RL-219 §5's two counts; the number of `task.` flags, and whether each is `task.` plus a literal or literal prefix of `task.py`; the number of turn records carrying a `repetition.` flag; and the number of `repetition.` flags the replay produced that the episode does not list.
+  It is a diagnostic. It is not a replay, makes no record, and is not evidence for the receipt. The audit waits until both runs print `pass` or the research lead has ruled on what the read found.
+- **LOOKS.json file hold (RL-220 B.1), standing for every lane.** Look `lm-interim-01` landed on main at `dc235f689` (row commit `0826ba77b`, pinned execution commit `276a9643a` in main's history). Until the interim's report row is on main and `authorize-freeze2` has exited 0 against that main, the only main commits that may change `docs/process/cadence/looks/LOOKS.json` are the interim's own row commits. That excludes ctl-01's registration, any `lm-inst-01` row and any `events` key. The ctl-01 registration PR may be built and reviewed but not merged. The lead will post the end of the hold with `authorize-freeze2`'s printed evidence.
+- **Fix body** (`fix_body_flags.py`, the research lead's):
+
+```python
+"""RL-220 fix body, applied in memory to the pin's `_replay_frozen_workload` (dcdedecb1, PC:2659-2884).
+
+`patched(pc)` returns the pin's function with two changes:
+
+1. TASK: the task stand-in carries the task flags the episode records in `hardware.task_diagnostics.flags`
+   (workload.py:707), so the frozen line workload.py:701 composes the `task.` flags itself. A record with no
+   `task_diagnostics` has none, as at the pin.
+2. REPETITION: the stand-in tools return one constant, so the frozen observer sees tool names alone. Its flags
+   are taken out of both sides of the episode's list agreement. Each `repetition.` flag the episode lists must be
+   one a turn record carries or one the tool names allow, and every one a turn record carries must be listed.
+   The provenance list must equal the episode's list, whole.
+
+Nothing else in the function changes. Each replacement asserts its old text occurs exactly once.
+`patched(pc, parts=("task",))` applies part 1 alone, to show part 2 is needed."""
+import inspect
+
+TASK = (
+    ("        clock.sleep = lambda seconds: setattr(clock, \"ns\", clock.ns + round(seconds * NS))\n",
+     "        clock.sleep = lambda seconds: setattr(clock, \"ns\", clock.ns + round(seconds * NS))\n"
+     "        task_flags = hardware.get(\"task_diagnostics\", {}).get(\"flags\", [])\n"
+     "        check(_strings(task_flags), \"task flags\")\n"),
+    ("                               task_description=lambda: \"\")\n",
+     "                               task_description=lambda: \"\", flags=list(task_flags))\n"),
+)
+REPETITION = (
+    ("    agree(raw_episode[\"flags\"], flags, \"episode flags\")\n"
+     "    agree(meta_flags, flags, \"provenance flags\")\n",
+     "\n"
+     "    def split(values):\n"
+     "        return ([flag for flag in values if not flag.startswith(\"repetition.\")],\n"
+     "                {flag for flag in values if flag.startswith(\"repetition.\")})\n"
+     "\n"
+     "    replayed, allowed = split(flags)\n"
+     "    carried = {flag for record in witnessed for flag in record[\"flags\"] if flag.startswith(\"repetition.\")}\n"
+     "    check(_strings(raw_episode[\"flags\"]), \"episode flags\")\n"
+     "    kept, repetition = split(raw_episode[\"flags\"])\n"
+     "    agree(kept, replayed, \"episode flags\")\n"
+     "    check(carried <= repetition <= allowed, \"episode flags\")\n"
+     "    agree(meta_flags, raw_episode[\"flags\"], \"provenance flags\")\n"),
+)
+PARTS = {"task": TASK, "repetition": REPETITION}
+
+
+def patched(pc, parts=("task", "repetition")):
+    source = inspect.getsource(pc._replay_frozen_workload)
+    for part in parts:
+        for old, new in PARTS[part]:
+            assert source.count(old) == 1, old
+            source = source.replace(old, new)
+    scope = {}
+    exec(compile(source, "<rl220-fix-body>", "exec"), vars(pc), scope)
+    return scope["_replay_frozen_workload"], source
+```
+
 610. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-26 06:50 PST: item 609 rulings: pilot restore floor 75 GiB for p8-p10 and §4.4 only; archive sha256 authenticates; flag names only if code literals**
 
 ```pointer
