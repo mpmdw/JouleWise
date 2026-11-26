@@ -1,10 +1,10 @@
 {
   "armed": null,
-  "next_observable": "f2stab10-df4077cf/run-out.txt shows LAUNCH_RC=0 with the fence (t0 after three quiet minutes from 22:00, expected ~22:03 Wed; expected close t0+7,442 s (~00:07 Thu), worst case t0+11,250 s; read the true deadline and pid from run-out.txt; check the pid, not the deadline). The next activation, after the fence pid is gone and runner_receipt.json exists, Checks attempt cq-f2-stab-10-l004-l005-l006-a1 at /Users/edr/campaign-out/f2-stab-10/cq-f2-stab-10-l004-l005-l006-a1 with f2stab10-check-template-df4077cf/ (copy to f2stab10-check-NEWACT/, replace NEWACT; LEGS L004,L005,L006; kit sha bb54fdaf...e926, pin A 2d347f721; asserts batch_windows == ['02:00-02:35']), runs the template's spans.py on OUT, copies at once with the template's offload-run.sh. Then the ladder (items 422, 463, 464, 507, 536, 553, 583): Thu 26 Nov's first pin-B f2-stab-16 leg (rank 1, L002, queues-1leg/f2-stab-16.json seq 2), eligible from 00:00:00, launches once this span's fence is gone (item 583: the pin-B gap is not a reservation; item 507: its soak clear of 02:00-02:35); then kit 10 L007 onward on pin A (queues-3leg/f2-stab-10-l007-l008-l009.json).",
+  "next_observable": "f2stab10-74148d66/run-out.txt shows LAUNCH_RC=0 with the fence (t0 after three quiet minutes from 00:00:00 Thu, expected ~00:03; expected close t0+4,511 s (~01:18), worst case t0+5,850 s (by 01:50), fence end t0+7,310 s (~02:05, the restore/close tail may overlap the 02:00 band under item 583); read the true deadline and pid from run-out.txt; check the pid, not the deadline). The next activation, after the fence pid is gone and runner_receipt.json exists, Checks attempt cq-f2-stab-10-l007-a1 at /Users/edr/campaign-out/f2-stab-10/cq-f2-stab-10-l007-a1 with f2stab10-check-template-74148d66/ (copy to f2stab10-check-NEWACT/, replace NEWACT; LEGS L007; kit sha bb54fdaf...e926, pin A 2d347f721; asserts batch_windows == ['13:14-13:15']), runs the template's spans.py on OUT, copies at once with the template's offload-run.sh. Then the ladder (items 422, 463, 464, 507, 536, 553, 583): Thursday rank 1 is served by L007; rank 4 pin A kit 10 L008 onward (queues-3leg/f2-stab-10-l008-l009-l010.json), next legal pin-A t0 02:35:00 with ARG 02:00-02:35; pin-B f2-stab-16 L002 (queues-1leg/f2-stab-16.json seq 2) is rank 4 on pin B, at any hour with no window (item 463), in the 10:50:01-13:14:59 gap or after a pin-A fence is gone (item 583).",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 599,
+      "item": 600,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -269,11 +269,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "599",
+  "source_item": "600",
   "source_item_heading_date": "2026-11-25",
   "wait": {
-    "deadline_epoch_s": 1795694400,
+    "deadline_epoch_s": 1795701600,
     "observable": "none",
-    "on_early_or_refused": "Read the verdict first. If f2stab10-df4077cf/run-out.txt has no LAUNCH_RC line (WAIT/STOP before launch: not quiet by 22:25, or a launcher precondition refusal), nothing launched: kit 10 L004-L006 stay unrun; the next activation re-selects at its own t0 (Thu 26 Nov's first pin-B f2-stab-16 leg, rank 1, L002, queues-1leg/f2-stab-16.json seq 2, from 00:00:00; pin A, ARG 02:00-02:35 from 13:15:00 or 13:14-13:15 per items 463 and 583 by the actual t0, kit 10 L004 onward, 3/2/1 legs with the deadline by 01:50 and the fence clear of every 02:00-02:35 band) and issues a new typed item before launch, staying alive until LAUNCH_RC prints. A launcher refusal on kit or launcher state, or a non-clean close: record it, hold kit f2-stab-10 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, continue down the ladder. A census or soak refusal on a measured contending process with a proven clean close is not a kit hold (items 505, 547). A clean close with a leg not admitted is recorded, not a stop and not a kit hold (items 467, 479, 520). Item 588's cleanup stays HELD for the lead (item 596): keep /Users/edr/night-b6/{sessions,loop-bytes} and /Users/edr/night-archive/bytes-stage1-20261111 (with refit-2/ and refit-2.seal/) until the lead rules on main."
+    "on_early_or_refused": "Read the verdict first. If f2stab10-74148d66/run-out.txt has no LAUNCH_RC line (WAIT/STOP before launch: not quiet by 00:11:30, or a launcher precondition refusal), nothing launched: kit 10 L007 stays unrun and Thursday's rank 1 is unserved; the next activation re-selects at its own t0 (rank 1 = lowest kit 01-14 with an unrun position, items 464 and 553 rule 4, now kit 10 L007; no f2-stab span whose t0 + worst case lands after 01:50 (item 583); the next legal pin-A t0 is then 02:35:00 with ARG 02:00-02:35, 3/2/1 legs (items 463, 536), L007 as the date's cold first leg) and issues a new typed item before launch, staying alive until LAUNCH_RC prints. A launcher refusal on kit or launcher state, or a non-clean close: record it, hold kit f2-stab-10 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, continue down the ladder. A census or soak refusal on a measured contending process with a proven clean close is not a kit hold (items 505, 547). A clean close with a leg not admitted is recorded, not a stop and not a kit hold (items 467, 479, 520). Item 588's cleanup stays HELD for the lead (item 596): keep /Users/edr/night-b6/{sessions,loop-bytes} and /Users/edr/night-archive/bytes-stage1-20261111 (with refit-2/ and refit-2.seal/) until the lead rules on main."
   }
 }
