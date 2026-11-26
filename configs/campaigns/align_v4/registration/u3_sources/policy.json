@@ -1,0 +1,94 @@
+{
+  "checks_by_window": {
+    "C1": {
+      "30B": 0,
+      "D": 1
+    },
+    "C10": {
+      "30B": 0,
+      "D": 1
+    },
+    "C11": {
+      "30B": 0,
+      "D": 1
+    },
+    "C12": {
+      "30B": 0,
+      "D": 1
+    },
+    "C13": {
+      "30B": 0,
+      "D": 1
+    },
+    "C14": {
+      "30B": 0,
+      "D": 1
+    },
+    "C2": {
+      "30B": 0,
+      "D": 1
+    },
+    "C3": {
+      "30B": 0,
+      "D": 1
+    },
+    "C4": {
+      "30B": 0,
+      "D": 1
+    },
+    "C5": {
+      "30B": 0,
+      "D": 1
+    },
+    "C6": {
+      "30B": 0,
+      "D": 1
+    },
+    "C7": {
+      "30B": 0,
+      "D": 1
+    },
+    "C8": {
+      "30B": 0,
+      "D": 1
+    },
+    "C9": {
+      "30B": 0,
+      "D": 1
+    },
+    "T1": {
+      "30B": 0,
+      "D": 1
+    },
+    "T2": {
+      "30B": 0,
+      "D": 1
+    },
+    "T3": {
+      "30B": 0,
+      "D": 1
+    },
+    "T4": {
+      "30B": 0,
+      "D": 1
+    },
+    "T5": {
+      "30B": 0,
+      "D": 1
+    },
+    "W1": {
+      "30B": 4,
+      "D": 1
+    }
+  },
+  "d_configuration_sha256": "FILL_SHA256",
+  "d_transfer_factor": 1.5,
+  "method": "session_zero_rms_series_exact_v1",
+  "r1_D_qualification": "adjacent_matched_predecessor_screen_only",
+  "r1_configuration_sha256": "FILL_SHA256",
+  "seed": 20261108,
+  "selection": "one_prespecified_pair_per_session",
+  "series_alpha": 0.05,
+  "simulations": 20000,
+  "transfer_justification_sha256": "602150f4c57de313bcd73e6a0e755cb1bbdd907f0e7db40734132a459a95ccb3"
+}
