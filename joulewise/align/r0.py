@@ -728,17 +728,32 @@ def memory_peak(backend, tag):
             "note": "R1 freezes B_m; this is the council budget floor, with prompt+decode exactly at context cap."}
 
 
+def host_aggregate_line(report):
+    """Quiet-guard windows whose host aggregate exceeded 0.05 CPU-s/s.
+
+    Journaled, never judged. It is the one signal that sees a contaminant
+    born and gone between two guard snapshots, so it is shown here.
+    """
+    windows = [window for receipt in report.get("census") or () if isinstance(receipt, dict)
+               for window in receipt.get("cpu_intervals") or ()]
+    above = sum(1 for window in windows if window.get("aggregate_above_0_05"))
+    return (f"Quiet-guard host aggregate above 0.05 CPU-s/s (journaled, never judged): "
+            f"{above} of {len(windows)} judged windows.")
+
+
 def markdown(report):
     lines = ["# ALIGN R0 desk checks", "", f"Status: **{report['status']}**. Selection data; no R1/hardware-control claim.",
              f"Complete R0: **{report.get('complete_r0', False)}**. Evidence: {report.get('evidence_kind', 'unspecified')}.",
              f"Total wall duration: {report.get('total_seconds', 0):.3f} seconds.",
+             f"Software update scan forecast (advisory): `{json.dumps(report.get('softwareupdate_scan_forecast', {'status': 'unknown'}), sort_keys=True)}`.",
+             host_aggregate_line(report),
              "", "| Check | Model | Status | Wall seconds |", "|---|---|---|---|"]
     for row in report["checks"]:
         lines.append(f"| {row['check']} | {row.get('model', 'host')} | {row['status']} | {row.get('check_seconds', 0):.3f} |")
     contention = report.get("contention")
     if contention:
-        # R0-L3: background CPU contention is recorded and flagged, not fatal.
-        lines.extend(["", "## Contention (R0-L3: recorded, not fatal)", "",
+        # Guard flags block publication. SMC keeps its own capture policy.
+        lines.extend(["", "## Contention (R0-L3 guard flags block publication)", "",
                       f"SMC capture contended: **{contention['smc_contended']}**. "
                       f"SMC redos for sustained contention (largest single process >=0.5 cores for 60 s): {contention['smc_redo']}. "
                       f"SMC intervals flagged: {contention['smc_flagged_intervals']}.",

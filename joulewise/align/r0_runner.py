@@ -1,9 +1,9 @@
-"""Unattended R0 CLI: bounded checks, exclusive output, incremental receipts."""
+"""Unattended R0 CLI: bounded checks, working receipts, exclusive publication."""
 from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import fcntl
 import hashlib
 import json
@@ -11,12 +11,13 @@ import os
 from pathlib import Path
 import signal
 import sys
+import tempfile
 import time
 
 from joulewise.align import r0
 from joulewise.align.r0_host import (
     QuietGuard, Refused, command, disk_census, display_census, host_snapshot, host_identity, inventory,
-    smc_enumeration,
+    smc_enumeration, softwareupdate_scan_forecast,
     ProfileRefused, profile_config, step_budget,
 )
 
@@ -107,6 +108,63 @@ def save_report(output, report):
         temp.replace(output / name)
 
 
+def _end_guard(guard, *, admitted):
+    finish = getattr(guard, "finish", None) if admitted else None
+    end = finish if finish is not None else getattr(guard, "close", None)
+    if end is not None:
+        end()
+
+
+def _verify_publication(guard):
+    verify = getattr(guard, "verify_publication", None)
+    if verify is not None:
+        verify()
+    _reject_contention(guard)
+
+
+def _reject_contention(guard):
+    flags = getattr(guard, "contention_flags", ())
+    if flags:
+        raise Refused(f"R0-L3 contention flagged: {flags[0]['flag']}")
+
+
+def _contention_summary(report, guard):
+    smc = [row for row in report["checks"] if row["check"] == "smc"]
+    report["contention"] = {
+        "rule": "docs/align/r0/R0-L3-contention-rule.md",
+        "guard_flags": len(getattr(guard, "contention_flags", ())),
+        "flagged_checks": [{"check": row["check"], "model": row.get("model"), "flags": len(row["contention_flags"])}
+                           for row in report["checks"] if row.get("contention_flags")],
+        "smc_contended": any(row.get("contended") for row in smc),
+        "smc_redo": sum(len(row.get("contention_redo") or ()) for row in smc),
+        "smc_flagged_intervals": sum(len((row.get("contention") or {}).get("flags", ())) for row in smc)}
+
+
+def _record_final_flags(report, guard, start):
+    flags = getattr(guard, "contention_flags", ())[start:]
+    if flags and report["checks"]:
+        report["checks"][-1].setdefault("contention_flags", []).extend(flags)
+    _contention_summary(report, guard)
+
+
+def _record_guard_refusal(report, error):
+    if report["status"] == "pass":
+        report.update(status="refused", refusal=str(error), complete_r0=False)
+        if report["checks"]:
+            report["checks"][-1].update(status="refused", refusal=str(error))
+    else:
+        report.setdefault("refusal", str(error))
+
+
+def _save_terminal_report(output, report):
+    try:
+        save_report(output, report)
+    except OSError as exc:
+        if "refusal" in report:
+            raise Refused(report["refusal"]) from exc
+        raise
+
+
 DISPLAY_PREP_ENV = "JOULEWISE_R0_DISPLAY_PREP"
 
 
@@ -161,19 +219,12 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
               "limitations": ["Selection data, not R1 thermal or arm validation.",
                               "R1 must freeze token budgets, intercepts and thermal slots.",
                               "Local inventories do not independently authenticate the remote revision."]}
-    def contention_summary():
-        # R0-L3: contention is recorded, never fatal. Guard flags (every check)
-        # and the SMC capture's ruling-8 flag are collected for report.md.
-        flags = getattr(guard, "contention_flags", [])
-        smc = [r for r in report["checks"] if r["check"] == "smc"]
-        report["contention"] = {
-            "rule": "docs/align/r0/R0-L3-contention-rule.md",
-            "guard_flags": len(flags),
-            "flagged_checks": [{"check": r["check"], "model": r.get("model"), "flags": len(r["contention_flags"])}
-                               for r in report["checks"] if r.get("contention_flags")],
-            "smc_contended": any(r.get("contended") for r in smc),
-            "smc_redo": sum(len(r.get("contention_redo") or ()) for r in smc),
-            "smc_flagged_intervals": sum(len((r.get("contention") or {}).get("flags", ())) for r in smc)}
+    # Forecast softwareupdated scans through one per-check timeout per
+    # selected check. The result is advisory.
+    forecast_start = datetime.now(timezone.utc)
+    report["softwareupdate_scan_forecast"] = softwareupdate_scan_forecast(
+        forecast_start, forecast_start + timedelta(seconds=per_check_timeout * max(1, len(checks))))
+
     def receipt(name, model, fn, *, incremental=False):
         started = time.monotonic()
         row = {"check": name, **({"model": model} if model else {}), "status": "running"}
@@ -187,7 +238,7 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
             flags = getattr(guard, "contention_flags", [])[flags_before:]
             if flags:
                 row["contention_flags"] = list(flags)
-            contention_summary()
+            _contention_summary(report, guard)
             report["total_seconds"] = time.monotonic() - started_run
             report["census"] = guard.receipts
             if not unserializable:
@@ -239,6 +290,8 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
             report["stopped_after"] = {"check": name, "model": model, "outcome": row["status"]}
             raise _StopChecks
         return row
+
+    guard_admitted = False
     try:
         if long_decode_attempts not in (1, 2):
             raise ValueError("long_decode_attempts must be 1 or 2")
@@ -248,6 +301,7 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
         # This guard precedes host probes, file inventories, optional SMC and
         # lazy imports. No model can be opened after a refused initial census.
         guard.check(force=True)
+        guard_admitted = True
         report["implementation_sha256"] = {
             path.name: hashlib.sha256(path.read_bytes()).hexdigest()
             for path in (Path(__file__), Path(r0.__file__), REPO / "joulewise/align/r0_host.py",
@@ -322,15 +376,30 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
     except Exception as exc:
         report.update(status="fail", error=f"{type(exc).__name__}: {exc}")
     finally:
+        flags_before = len(getattr(guard, "contention_flags", []))
+        try:
+            # Retain the final sampler evidence even when a check failed.
+            # A completed run still owes the terminal admission, including
+            # when an earlier flag already bars publication.
+            _end_guard(guard, admitted=guard_admitted)
+            if guard_admitted and report["status"] != "pass":
+                _reject_contention(guard)
+        except Refused as exc:
+            _record_guard_refusal(report, exc)
         report["decisions_pending_lead_action"] = [
             {"check": row["check"], "model": row.get("model"), "outcome": row["status"]}
             for row in report["checks"] if row["status"] in {"required", "fallback"}]
         report["census"] = guard.receipts
-        contention_summary()
         display_summary(report, display_probe, started_epoch, time.time())
+        if report["status"] == "pass":
+            try:
+                _verify_publication(guard)
+            except Refused as exc:
+                _record_guard_refusal(report, exc)
+        _record_final_flags(report, guard, flags_before)
         report["total_seconds"] = time.monotonic() - started_run
         report["finished_utc"] = datetime.now(timezone.utc).isoformat()
-        save_report(output, report)
+        _save_terminal_report(output, report)
     return report
 
 
@@ -339,9 +408,19 @@ MACHINE_LOCK = Path("/private/tmp/joulewise-align-r0.lock")
 
 def main(argv=None, *, backend_factory=None, guard_factory=QuietGuard, lock_path=None,
          display_probe=display_census):
+    try:
+        return _main(argv, backend_factory=backend_factory, guard_factory=guard_factory,
+                     lock_path=lock_path, display_probe=display_probe)
+    except Refused as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 2
+
+
+def _main(argv, *, backend_factory, guard_factory, lock_path, display_probe):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True, help="new exclusive record directory")
+    parser.add_argument("--output", type=Path, required=True,
+                        help="exclusive report directory or inventory file, published after the final census")
     parser.add_argument("--checks", default=",".join(CHECKS), help="comma-separated: " + ",".join(CHECKS))
     parser.add_argument("--models", default="D", help="D only under Amendment 1")
     parser.add_argument("--timeout", type=int, default=7200,
@@ -369,22 +448,64 @@ def main(argv=None, *, backend_factory=None, guard_factory=QuietGuard, lock_path
         except BlockingIOError:
             parser.exit(2, "Another R0 runner owns the machine lock\n")
         if args.inventory:
-            guard.check(force=True)
-            rows = inventory(_path(str(args.inventory)), guard.check)
+            admitted = False
+            scanned = False
+            try:
+                guard.check(force=True)
+                admitted = True
+                rows = inventory(_path(str(args.inventory)), guard.check)
+                scanned = True
+            finally:
+                # A latched census refusal still governs when scanning the
+                # input raises. Verify before propagating an inventory error.
+                _end_guard(guard, admitted=admitted)
+                if admitted and not scanned:
+                    _reject_contention(guard)
+            payload = json.dumps(rows, indent=2, sort_keys=True) + "\n"
+            _verify_publication(guard)
             with args.output.open("x") as handle:
-                json.dump(rows, handle, indent=2, sort_keys=True)
-                handle.write("\n")
+                handle.write(payload)
             return 0
-        args.output.mkdir(parents=True, exist_ok=False)
+        if os.path.lexists(args.output):
+            raise FileExistsError(f"R0 output already exists: {args.output}")
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        # Receipts and any acquisition artifacts stay private until the
+        # sampler's final verdict. Refusals retain only the working copy.
+        working = Path(tempfile.mkdtemp(prefix=f".{args.output.name}.r0-", dir=args.output.parent))
         if backend_factory is None:
             # Importing this module imports no MLX; the backend loads lazily
             # after the first guard and Stage-1 readiness checks.
             from joulewise.align.r0_mlx import MlxBackend
             backend_factory = MlxBackend
-        report = execute(config, args.output, checks, models, guard=guard,
+        report = execute(config, working, checks, models, guard=guard,
                          backend_factory=backend_factory, per_check_timeout=args.timeout,
                          keep_going=args.keep_going, long_decode_attempts=args.long_decode_attempts,
                          display_probe=display_probe)
+        if "refusal" in report:
+            print(f"unpublished R0 diagnostics: {working}", file=sys.stderr)
+            raise Refused(report["refusal"])
+        # The command line is provenance. The artifact location follows the
+        # directory to its published destination.
+        for check in report["checks"]:
+            for attempt in check.get("contention_redo", ()):
+                if "output_dir" in attempt:
+                    relative = Path(attempt["output_dir"]).relative_to(working)
+                    attempt["output_dir"] = str(args.output / relative)
+        save_report(working, report)
+        if report["status"] == "pass":
+            flags_before = len(getattr(guard, "contention_flags", ()))
+            try:
+                _verify_publication(guard)
+            except Refused as exc:
+                _record_guard_refusal(report, exc)
+                _record_final_flags(report, guard, flags_before)
+                print(f"unpublished R0 diagnostics: {working}", file=sys.stderr)
+                _save_terminal_report(working, report)
+                raise
+        # Preserve exclusive-output semantics before replacing our own empty
+        # reservation with the completed working directory.
+        args.output.mkdir(exist_ok=False)
+        working.replace(args.output)
         print(f"{report['status']}: {args.output / 'report.json'}; complete_r0={report['complete_r0']}")
         return 0 if report["status"] == "pass" else 2
 

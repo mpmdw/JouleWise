@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from joulewise import prewindow, quiet_admission
 from joulewise.hazards import base, contention
@@ -477,6 +479,13 @@ class RequestOverlapTests(unittest.TestCase):
 
 
 class PsFormatTests(unittest.TestCase):
+    def setUp(self):
+        if hasattr(time, "tzset"):
+            self.addCleanup(time.tzset)
+            self.enterContext(patch.dict(os.environ, {"TZ": "UTC"}))
+            time.tzset()
+        self.enterContext(patch.multiple(contention, _ROW_CACHE={}, _START_EPOCH_CACHE={}))
+
     def test_ucomm_layout_is_the_parse_ps_layout(self):
         self.assertEqual(contention.PS_ARGV[:2], quiet_admission.PS_ARGV[:2])
         self.assertEqual(contention.PS_ARGV[2].split(",")[:4], quiet_admission.PS_ARGV[2].split(",")[:4])
@@ -851,6 +860,47 @@ class RegressedCounterTests(unittest.TestCase):
                 self.assertEqual(contention.judge(measurement, contention.DEFAULT_THRESHOLDS).status,
                                  base.REFUSE)
                 self.assertEqual(measurement.values['regressed_counter_intervals'], 0)
+
+
+class WallClockStepTests(unittest.TestCase):
+    """S5: a newborn's lstart is read on the wall clock. After a backwards
+    step of more than 1 s it can predate the window's wall start; it is then
+    charged as born inside the window, never skipped as missed."""
+
+    HEADER = "  PID  PPID STARTED                           TIME UCOMM\n"
+    LAUNCHD = "    1     0 Fri Nov  6 17:00:00 2026   0:01.00 launchd         \n"
+
+    def snapshot(self, mono_s, wall_s, extra=""):
+        rows = contention.parse((self.HEADER + self.LAUNCHD + extra).encode())
+        start = base.Stamp(int(wall_s * 1e9), int(mono_s * 1e9), int(mono_s * 1e9))
+        finish = base.Stamp(int((wall_s + 0.1) * 1e9), int((mono_s + 0.1) * 1e9),
+                            int((mono_s + 0.1) * 1e9))
+        return contention.Snapshot(start, finish, rows, None)
+
+    def test_step_back_inside_the_window_charges_newborn_from_zero(self):
+        from datetime import datetime
+        wall0 = datetime(2026, 11, 6, 18, 5, 15).timestamp()
+        # The clock steps back 10 s at 2 s; a process born at 3 s reads
+        # 18:05:08 (7 s before the window's wall start) and uses 1.80 CPU-s
+        # (0.06 over 30 s). The step lands mid-interval: the closing
+        # snapshot's wall time (+20 s) is still after the opening's.
+        born = "   42     1 Fri Nov  6 18:05:08 2026   0:01.80 mdworker_shared \n"
+        before = self.snapshot(0, wall0)
+        for wall_after, charged in ((wall0 + 20, True), (wall0 + 30, False)):
+            with self.subTest(stepped_back=charged):
+                result = contention.interval(before, self.snapshot(30, wall_after, born),
+                                             tree_roots=(), include_kernel_task=True, limit=0.05)
+                listed = [item for item in result["outside_listed"] if item["pid"] == 42]
+                missed = [item for item in result["unaccounted"] if item["pid"] == 42]
+                if charged:
+                    self.assertEqual(missed, [])
+                    self.assertAlmostEqual(listed[0]["cpu_s_per_s"], 0.06, delta=0.01 / 30)
+                    self.assertEqual([item["pid"] for item in result["outside_over_limit"]], [42])
+                else:
+                    # No step: an old process absent from the opening
+                    # snapshot stays "missed", as before.
+                    self.assertEqual(listed, [])
+                    self.assertEqual(missed[0]["reason"], "missed by the first snapshot")
 
 
 if __name__ == "__main__":

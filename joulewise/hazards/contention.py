@@ -86,7 +86,7 @@ import gzip
 import math
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, tzinfo
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
 
@@ -225,31 +225,34 @@ class Snapshot:
         return {"started": self.started.to_json(), "finished": self.finished.to_json()}
 
 
-_START_EPOCH_CACHE: dict[str, float] = {}
+_START_EPOCH_CACHE: dict[tuple[tzinfo | None, str], float] = {}
 # Each row line of the previous snapshot -> its parsed fields.  Most rows of
 # a 10 s snapshot repeat byte for byte (an idle process's TIME does not move),
 # so a row is parsed once and looked up after that.
-_ROW_CACHE: dict[str, tuple[int, int, str, float, str, float]] = {}
+_ROW_CACHE: dict[tuple[tzinfo | None, str], tuple[int, int, str, float, str, float]] = {}
 
 
-def _parse_row(line: str) -> tuple[int, int, str, float, str, float]:
+def _parse_row(line: str, tz: tzinfo | None) -> tuple[int, int, str, float, str, float]:
     parts = line.split(None, 8)
     if len(parts) != 9:
         raise ValueError(f"malformed ps row: {line!r}")
     pid, ppid = int(parts[0]), int(parts[1])
     start = " ".join(parts[2:7])
-    epoch = _START_EPOCH_CACHE.get(start)
+    key = (tz, start)
+    epoch = _START_EPOCH_CACHE.get(key)
     if epoch is None:
-        epoch = datetime.strptime(start, "%a %b %d %H:%M:%S %Y").timestamp()
+        # None keeps the session collector's local-time convention. R0
+        # supplies UTC for both the ps output and this conversion.
+        epoch = datetime.strptime(start, "%a %b %d %H:%M:%S %Y").replace(tzinfo=tz).timestamp()
         if len(_START_EPOCH_CACHE) > 50_000:
             _START_EPOCH_CACHE.clear()
-        _START_EPOCH_CACHE[start] = epoch
+        _START_EPOCH_CACHE[key] = epoch
     if pid < 0 or ppid < 0:
         raise ValueError("duplicate or invalid process identity")
     return (pid, ppid, start, epoch, parts[8].strip(), quiet_admission._cpu_seconds(parts[7]))
 
 
-def parse(stdout: bytes) -> dict[tuple[int, str], dict[str, Any]]:
+def parse(stdout: bytes, *, tz: tzinfo | None = None) -> dict[tuple[int, str], dict[str, Any]]:
     """``quiet_admission.parse_ps`` with the lstart conversion and repeated rows cached.
 
     The same grammar and the same rows (the command stripped of ucomm's
@@ -257,7 +260,8 @@ def parse(stdout: bytes) -> dict[tuple[int, str], dict[str, Any]]:
     monitor's own CPU, and a process's start text never changes.  A row line
     identical to one of the previous snapshot's is not parsed again (10-06:
     0.9 ms of CPU per 680-row snapshot without it).
-    tests/hazards/test_contention.py checks equality with ``parse_ps``.
+    The default interprets lstart in local time, as ``parse_ps`` does.
+    Supply ``tz`` when the process table uses a fixed timezone.
     """
 
     global _ROW_CACHE
@@ -266,13 +270,14 @@ def parse(stdout: bytes) -> dict[tuple[int, str], dict[str, Any]]:
     if not lines or not lines[0].split()[:2] == ["PID", "PPID"]:
         raise ValueError("ps header missing")
     cache = _ROW_CACHE
-    seen: dict[str, tuple[int, int, str, float, str, float]] = {}
+    seen = {}
     result: dict[tuple[int, str], dict[str, Any]] = {}
     for line in lines[1:]:
-        fields = cache.get(line)
+        key = (tz, line)
+        fields = cache.get(key)
         if fields is None:
-            fields = _parse_row(line)
-        seen[line] = fields
+            fields = _parse_row(line, tz)
+        seen[key] = fields
         pid, ppid, start, epoch, command, cpu = fields
         identity = (pid, start)
         if identity in result:
@@ -408,6 +413,12 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
         # cannot give a new process reusing its PID tree membership.
         tree.update(identity for identity in snapshot.rows if identity[0] in pids)
     wall_start_s = before.started.wall_ns / 1e9
+    # S5: a wall clock that stepped back by more than 1 s across the
+    # interval (wall time elapsed short of monotonic time elapsed) makes a
+    # newborn's lstart look older than the window. Charge such a process as
+    # born inside the window (all its CPU) instead of "missed".
+    wall_stepped_back = ((after.started.wall_ns - before.started.wall_ns)
+                         < (after.started.monotonic_ns - before.started.monotonic_ns) - 1_000_000_000)
     outside: list[dict[str, Any]] = []
     unaccounted: list[dict[str, Any]] = []
     exited_over: list[dict[str, Any]] = []
@@ -418,7 +429,8 @@ def interval(before: Snapshot, after: Snapshot, *, tree_roots: Iterable[int],
     for identity in sorted(set(before.rows) | set(after.rows)):
         first, final = before.rows.get(identity), after.rows.get(identity)
         row = final or first
-        if final is None or (first is None and row["start_epoch_s"] < wall_start_s - 1):
+        if final is None or (first is None and not wall_stepped_back
+                             and row["start_epoch_s"] < wall_start_s - 1):
             unaccounted.append({"pid": row["pid"], "command": row["command"],
                                 "start": row["start_identity"],
                                 "reason": "exited" if final is None else "missed by the first snapshot"})
