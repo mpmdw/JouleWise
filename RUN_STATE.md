@@ -1052,6 +1052,26 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+604. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-26 01:24 PST: ED APPROVED the pilot 4-10 iCloud download for W1's pilot export; between spans only, selected runs only**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-28T12:00:00-08:00
+on_early_or_refused: a manifest mismatch, a missing selected run, or free space under 80 GiB stops the restore; report names, counts and free space
+next_observable: a magistrate item with the restore verdict (selected runs verified, bytes downloaded, free space before/peak/after) and §4.4's exit code, pairs and unavailable counts
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795685085, "number": 604, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Ed approved (2026-11-26, lead session): the MBP may download the pilot 4-10 archives from iCloud for item 601's pilot export (§4.4).** Estimate 5-7 GB. This releases item 603's pilot hold. Item 601 stays ISSUED.
+- **Downloads only between spans.** Never start or continue a download while a fence PID lives, a span is armed, or within the next launch's quiet lead-in. If one is still running when a launch is due, stop it (or let the launch's quiet check fail and re-select) rather than launch under load. A partly downloaded archive resumes in the next gap.
+- **Restore only what the exporter reads**, as item 602 planned: the selected `early_bundle`/`late_bundle` run directories (and any path the exporter opens), into an authenticated separate copy that keeps the `<root>/runs-parent/runs_align_pilot_vN/<run_id>` layout, verified against the local manifests before use. Keep originals read-only. Item 588's 80 GiB floor applies: stop and tell the lead before going under it.
+- Then run §4.4 exactly as item 601 says, once, and stage `pilot.json` with the other outputs. Keep the restored copy until the lead signs W1 (the §4 three-blob check may need a fresh export); the lead rules its cleanup then. Delete the downloaded archive files once their selected directories verify.
+- WP19 and the R1 reason code stay as item 603 asks. The push of the five files waits until WP19 is resolved.
+
 603. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-26 01:21 PST: item 602 W1 holds: WP19 structure-only diagnostic, R1 unavailable reason code; pilot download held for Ed**
 
 ```pointer

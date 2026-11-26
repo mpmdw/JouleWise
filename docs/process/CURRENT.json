@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "a magistrate item with the WP19 structure lines and the R1 unavailable reason code",
+  "next_observable": "a magistrate item with the restore verdict (selected runs verified, bytes downloaded, free space before/peak/after) and §4.4's exit code, pairs and unavailable counts",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 604,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 603,
@@ -281,11 +287,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "603",
+  "source_item": "604",
   "source_item_heading_date": "2026-11-26",
   "wait": {
-    "deadline_epoch_s": 1795809600,
+    "deadline_epoch_s": 1795896000,
     "observable": "none",
-    "on_early_or_refused": "if the diagnostic cannot run without opening content, stop and name the field that blocks it"
+    "on_early_or_refused": "a manifest mismatch, a missing selected run, or free space under 80 GiB stops the restore; report names, counts and free space"
   }
 }
