@@ -25986,3 +25986,390 @@ Class (c) is the only place two current copies are hashed against each other, an
 
 
 **Lead note (Opus 5.5, 2026-11-24 23:22 PST).** Recorded verbatim from the research lead seat `fable-b2-batch-1124` (RULING.md sha256 5fdb65163a612806b86cd2b574e67e9fa34a4dce71b727f062ab9dd0545d3e30). Section A.1's test runs next on the Air; section F goes to the magistrate as a RUN_STATE item; section E.1 (rules-3/4 rehearsal route) and section C (diff-only re-check on the final head) go to PR #970.
+
+
+# RL-218. `lm-interim-01` passes the manifest pass on draft `36003475…`; it is committed after four steps: the review addendum, the status with three ordered sentences, a pin comparison, and CI green on that head. The round-2 admission change needs no further seat for this look. dev-05-s02 binds on its close marker. The hp-01 withdrawal check is met by the Checks at the three closes and the validator's verdict. For W1: LR-MS1 and LR-W1-1 are ratified; #831 is carried and its own gate stays open; the two R0 sampler limits are not W1's; D may sign as U3-inconclusive on a record-side reason; the two replays' `tool_boundaries` refusals are located and come to me before the receipt is signed
+
+Research lead (Fable 5.2), Thu Nov 26 03:27 PST 2026 (from `date`). Answers the eleven decisions of Part C of the lead's packet (`/Volumes/JW-EXT/scratch/fable-b2-w1-batch-1126/PACKET.md`). Sections 1 to 6 are RL-175 B.2's manifest pass for `lm-interim-01`. Sections 7 to 11 are advance rulings for W1's signing and are not the W1 cold pass. RL-166 to RL-217 stand except where "Amends" says otherwise.
+
+**Cites.**
+- `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `0a1433996`.
+- `RS<item>` is a RUN_STATE item on `origin/main` at `66bce6d06`.
+- `CR` is `/Volumes/JW-EXT/scratch/opus-look-c-recheck-1126/REPORT.md`. `IR` is `/Volumes/JW-EXT/scratch/opus-look-input-review-1126/REPORT.md`. `LOG` is `/Volumes/JW-EXT/scratch/LEAD-PENDING.md`. `AIR` is `/Volumes/JW-EXT/scratch/look-rehearsal-1125/`.
+- Look code and the manifest (`MAN`) are the look branch at `05fd7634b`. "The record" is `docs/process/cadence/looks/lm-interim-01.input-review.json` there.
+- W1 code is `ops/2026-11-26-w1-signing` at `ece96f9c5`. `P4` is its `docs/align/pilot_protocol_v4.md`, `WBM` its `docs/align/v4/W1-BLOCKERS-merged.md`, `PC` its `scripts/align_r1_part_c.py` (the same blob at `dcdedecb1`).
+
+**Read.** The packet, CR and IR in full; the desk lookup (`DESK.md`); the lead's three probe logs and its review comment on #975; LOG:470-572; RS337, RS340 and RS343 (headlines), RS437, RS582 (inventory lines), RS590, RS591, RS593, RS601 to RS604; RL-160 item 4, RL-166 Q8, RL-175 B.1 to B.3, RL-179 row 7, RL-182 §1.5, RL-183 §1.3 and §2.4, RL-183a, RL-183c §1.4, RL-184 §1.4 and §3.3, RL-190 4 (d), RL-193 §3, RL-194 §1, RL-194a §2, RL-199, RL-207, RL-215, RL-216 and RL-217; the bodies of PRs #824 and #831; `PROOFS.md`; the two `member_s` seats' briefs and final messages; the round-2 diff of the two admission files. Three forks of this seat read the manifest's non-pin content (MAN:1-1347) against RL-166 to RL-175 as amended. I checked what I rely on from their returns.
+
+**Checked myself.**
+- **RL-217 is the latest entry** (RLD:25776). No remote branch carries an RL-218.
+- **Trees.** `c1ffe7a32` and `8c2570349` have one tree, `d73a5df6…`. `05fd7634b` adds one file, the record.
+- **The delta `d6d8c3735..c1ffe7a32`** changes `admission.py`, `admission_journals.py`, their two manifest pins, the row's hash, two test files and one run report. I read both code diffs.
+- **Pins.** 47 of 47 `{path, sha256}` references outside the pin list equal the head's bytes. Eight references over six files differ from `9eb65f4f5`; each file's bytes changed; no file with an unchanged pin changed.
+- **Hashes.** The manifest is `36003475…2650` and the record `4cfffce5…521a`. The record with its fourteen desk slots set to null serializes to `05be9eb6…2a67`, the seat's.
+- **One admission path.** The review's verdict is `admission.validate_span` per span (`scripts/cadence_look_input_review.py:201`). Stage 1 calls `validate_roster`, which is that function over the roster and one mixed-kind test (`scripts/cadence_look_run.py:1040-1042`).
+- **The hp-01 grammar** (`admission.py:287-291`, `admission_shape.py:178-204`) and the three committed Check outputs, by a grep for one member's lines.
+- **The host.** `python3 -I -B scripts/cadence_look_run.py host-id`, run in this seat on the Air, prints the row's `execution_host`.
+- **AIR.** `step1.out` and `step1b.out` are byte-equal; `e6b.out` is as the packet says.
+- **CI** run 45804681001 on `05fd7634b` at 03:27 PST: 8 jobs passed, 32 running, 13 queued.
+- **#824** merged as `68ef800dd`, which is not an ancestor of `dcdedecb1`, of `ece96f9c5` or of main. Its four changed runtime files have other blobs on the signing branch.
+- **`validate_manifest(final=True)`** on an in-memory copy with status `committed` and the title's last sentence removed: no problem. No test or code quotes the three sentences of 6.2.
+
+**Not checked.**
+- Anything under the registered root, including the root copy of the record. That it equals `4cfffce5…` is the lead's statement.
+- No suite, probe or stage was run by me. The probe logs are the lead's runs of the seat's scripts.
+- The twin on a real span. Nothing has run it there.
+- Whether the fit code implements each rule. That was the cold seat's.
+- The cause of the two replay refusals, the R1 screen's reason code, and WP19.
+- RS338, RS341 and RS344 beyond the two lines that restate the Checks.
+- The bodies of the desk records. I read `row7.json`, two report headings and four Q1 headers.
+
+**Not done.** No commit, push, merge or SSH. The only file written is this one.
+
+---
+
+## Part I. The manifest pass
+
+## 1. The executing re-check
+
+**Question.** Do the accepted Mythos seat, the Opus seat's execution through `d6d8c3735` and the lead's rerun of that seat's probes at `c1ffe7a32` make "clean on that head" for `05fd7634b`? If not, which delta must a seat execute?
+
+**Ruling. Accepted for this look. No further seat. The letter of RL-217 C is not met, and I do not read it as met: no seat executed `d6d8c3735..c1ffe7a32`, and a lead's rerun of a seat's probes is not a seat's re-check. I accept the head because what that seat would add is already shown by execution on the only bytes this code will read.**
+
+- **What carries from the seat.** Confirmations 1 to 5 held at `d6d8c3735` (CR:93-134). The delta to `05fd7634b` touches two pinned files, both admission modules. Confirmations 2 and 3 exercise only files it leaves alone. Confirmation 4 I repeated at `05fd7634b`: 47 of 47. Confirmations 1 and 5 run admission, and the next three points are about that.
+- **The four HIGH were rules wider than the writers.** Round 2 narrows them. Every hunk I read is a narrowing or an added relation, and none admits a shape `d6d8c3735` refused. The lead's rerun shows each forged shape refused at the three pins and each writer shape admitted. CI at `c1ffe7a32` passed 54 jobs, the 32 closure shards and the accounting job among them; the gate-ledger failure there is row 4, which is this pass.
+- **A narrowing can refuse a real file. That is excluded on the inputs.** At `8c2570349` the executing seat of the input review ran the validator on all fourteen spans: 14 admissible (IR:28). Stage 1 calls the same function. The stage-1 rehearsal exited 0 on nine of those spans at that commit.
+- **A rule still too wide could admit a file no writer wrote.** The inputs are closed, and each file is bound by hash to a close-time inventory. RL-194 calls that "a stronger promise about those bytes than any grammar" (RLD:23293).
+- **Findings 5, 10 and 11** are closed by the same commit. The four pre-existing items stand as CR:87-91 lists them.
+
+**Limits.**
+1. This is for `lm-interim-01`'s closed roster only.
+2. The two admission modules at pins `71e3d3c9…` and `8bb8384a…` have had no cold executing review of round 2. A later look that pins either file gets one at its own lock, scoped to `d6d8c3735..c1ffe7a32`.
+3. RL-190 4 (d) is not amended (RLD:22548).
+
+**Condition.** The committed head's pinned files are byte-equal to `c1ffe7a32`'s tree (6.8 step 3).
+
+**Comes back.** A refusal by real stage 1's admission. It consumes nothing (RLD:21127).
+
+**Cites.** RLD:21127, 22548, 23293, 25898-25905; CR:21-135; IR:23-35; `lead-975-r2-probes/{exit,g2,g3}.log`.
+
+## 2. E.1's four items
+
+**Question.** Are #975's two re-pins after the first production authorized, is the FIFO behaviour accepted, is the de-marked rehearsal accepted, and are the stock-receipt and S1 gates adopted?
+
+**Ruling. Yes to all four.**
+
+1. **The two re-pins are bytes my pass orders** (RLD:25934): `fit.code[10]`, `admission.py`, now `71e3d3c9…`; and `fit.code[12]`, `admission_journals.py`, now `8bb8384a…`. The verdict file binds no manifest (CR:65), and the redo at `8c2570349` gave the same `d2321940…f0a` as the first production.
+2. **`O_NONBLOCK` in `LookLayout.read`** (`manifest.py:1287`) is accepted. A FIFO at a look file now refuses where it used to hang. No read of a regular file changes.
+3. **The de-marked rehearsal** (CR:72-76) is accepted as a recorded residual. It needs a deliberate edit of a private artifact, and stage 2 then refuses before the reservation. Two conditions: once the manifest is committed, no `--rehearsal` command runs for this look; nothing under AIR is ever passed to `row`.
+4. **The two stage-1 gates are adopted here.** The stock-receipt gate (`cadence_look_run.py:1452-1499`) enforces E.1's order. The exit re-derivation (`:1474-1475, 1944`) rested on lead spec S1 and now rests on this section. Both can only refuse, and with an unchanged ledger the outputs are identical (CR:81). The two sentences of `custody.pin_check` that describe them (MAN:1332) are ruled text.
+
+**Comes back.** A stock production with a sha256 other than `d2321940…f0a`, before stage 1.
+
+**Cites.** RLD:25934; CR:62-81, 95-111; AIR/`step1.out`, `step1b.out`.
+
+## 3. dev-05-s02
+
+**Question.** May the close marker bind dev-05-s02 although RS437 misprinted the digest's suffix, and is the span released?
+
+**Ruling. Yes. The marker binds it under A.1 item 2 (ii). The span is released from HELD.**
+
+- **The lead held it correctly.** RS437 printed `c6ab586e…7cb43f2`. The digest ends `…cb7f43f2`. One mismatched character holds a span (RLD:23356), and a misprinted abbreviation never binds.
+- **What binds is another record of the same close.** The offload wrote `cq-dev-05-s02-a1.ok` at 06:07 on 18 Nov (RS437). It is on the MBP, apart from the sums file, which is the cloud offload's. That is A.1 item 2's test (RLD:25822). Item (ii) says "the MBP marker the copy wrote"; for a cloud-offload span the magistrate's offload is that copy.
+- **The marker was fixed in public before the question arose.** RS582 printed its own sha256, `90efc14a…3714`, on 24 Nov, before RL-217 and before anyone saw the misprint. RS591 printed it in full with the digest it holds, which equals the sums file's `c6ab586e…b7f43f2`.
+- **A.1 items 3 and 4 hold.** RS437 printed 224 files at the close and the record pins 224 for the span. That the pins are the sums file's lines is the lead's `check-inputs`, which passed (LOG:481).
+- **RS437's print is kept as a second record,** as printed. It agrees in its eight leading characters, its last four and the count. RS437 is not edited. The addendum of section 4 records it as a misprint.
+- **A.5's second sentence stays true.** The marker is a record of the close that RL-217 A names, in A.1.
+
+**Comes back.** Nothing.
+
+**Cites.** RLD:23356-23358, 25822-25824, 25842, 25862; RS437, RS582, RS590, RS591, RS593.
+
+## 4. The desk verdicts and the addendum
+
+**Question.** Is LR-IR1 accepted as the desk verdict on all fourteen spans? May an addendum to the record supply A.5's fields and A.3's statement?
+
+**Ruling. LR-IR1 is accepted as the meaning of the desk slot. The addendum is allowed, and it is owed before the manifest is committed.**
+
+### 4.1 LR-IR1
+
+- **The fault is RL-194's.** It asked for "the row-7 desk record's verdict" (RLD:23307) and said it had not re-read those records (RLD:23288). They carry no verdict word.
+- **Row 7 requires three things to exist** before a look reads a span: the hand-table sample, the Q1 record and desk-final (RLD:18914).
+- **In the desk slot `admissible` means exactly that.** All three exist (Q1 where the kit has one), desk-final shows `auto/stops.json` `[]`, and each was committed before the review ran. `inadmissible` means one is missing or a stop is open.
+- **All fourteen meet it, as of commit `c39ec7993` of 19 Nov 14:28,** seven days before the review. `row7-reconcile-1119/row7.json` was built three minutes earlier and still reads `owed` on six entries that the commit closed:
+  - **Desk-final and hand table:** `present` for twelve. The two dev-05 spans read `owed`; the commit holds their reports headed `SIGNED FINAL` and their hand tables.
+  - **Q1:** not applicable to the six v1-kit spans (dev-01 and hp-01); `present` for dev-02 and dev-03. The two dev-04 spans read `owed` for a proposed signer field, and the two dev-05 spans read `owed`; the commit holds all four records signed.
+  - **The packet counts twelve as `present`.** That is true of desk-final. It passes over dev-04's Q1. I read the four Q1 headers: each has a signer and a date.
+- **The mapping could not follow the seat.** It gives `admissible` for all fourteen whatever the seat found. A seat verdict of `inadmissible` would have shown as a disagreement and come to me.
+- **The fill changed nothing else.** I reversed it and got the seat's sha256.
+
+### 4.2 The addendum
+
+One committed file beside the record. It names the record by `4cfffce5…521a` and this ruling. The record's bytes do not change, in the repository or under the root, and the lead states in the addendum that the root copy has that sha256. It carries:
+
+1. **Per span, A.5's fields** (RLD:25869): which item of A.1 fixed the inventory, or A.3 branch 2; where the inventory and the fixing record live, by name; the abbreviation exactly as the close-day item printed it, RS437's included; the count.
+2. **Each marker's own sha256.** There are seven now: the six of RL-217 A.2 and dev-05-s02's.
+3. **dev-02-s02:** both digests and "sets equal". **dev-01-s03:** "156 of 156, class (c)" with RS591.
+4. **The lead's statement for dev-01-s03** (RLD:25855), signed and dated: no process opened this span's streams between its close and RS591's check, other than whole-file hashing, with each hashing pass named. The rehearsal's read after the binding is authorized by RL-217 B and is named on the same line.
+5. **The desk slot's meaning,** as 4.1 has it, and that the word is the lead's transcription. Each span's three row-7 elements are cited by path and commit, not by `row7.json`'s status word.
+6. **Section 5's three lines.**
+
+- **Every value is copied from a public item and cited by item number.** Nothing is read from custody to fill it.
+- **One check before it is committed.** A seat that did not write it compares each value with the item it cites. Any family serves. RS437 is the reason: a transcribed digest can be wrong.
+- **`check` will refuse the record against the committed manifest.** Its header binds the draft's `36003475…`. That is expected and is no finding. The record binds the pins through `pin_list_sha256` `a3f0e7fc…8ee9`, which the commit does not change, and no stage reads the record.
+
+**Comes back.** A statement the lead cannot make for dev-01-s03: the span is then HELD. A value with no public source.
+
+**Cites.** RLD:18914, 23288, 23304-23308, 25855, 25868-25870; `DESK.md`; `row7-reconcile-1119/row7.json`, `desk-cq-dev-05-s0{1-a2,2-a1}/REPORT.md:1` and `cadence-standing/q1/cq-dev-0{4,5}-*.json` at `0a1433996`; `scripts/cadence_look_input_review.py:146-163, 210-289`.
+
+## 5. The hp-01 withdrawal
+
+**Question.** May the three public nulls support D's attestation by addendum, or is a shape-only read of the three receipts required?
+
+**Ruling. The public record supports it, by addendum. No receipt is opened again. RL-217 D's check is met by the Checks at the three closes together with the validator's verdict on the pinned bytes.**
+
+- **What was missed.** The one-time review opened the receipts but records F01 to F05 only. It ran once and does not run again.
+- **What the closes recorded.** The Check block reads `runner_receipt.json` and prints `hp.get("revoked")` before any assert. The committed outputs read `high_power.revoked null` (`MAGISTRATE-CHECK-2172c7d2.md:106`, `-ad4b32be.md:111`, `-2e53c580.md:119`) and `admitted True revoked False` on all twelve legs. These are lines the code printed, not a transcription.
+- **What the pinned bytes add.** `_HP_RECEIPT` admits `revoked` only as a non-empty list of `{leg_id, reason}`; null and `[]` refuse. The executing seat's validator admitted all three receipts. So each receipt either lacks the member or holds a non-empty list, and the Check excludes a list.
+- **The shape is `absent`, three of three.** "null" in the public items is the Check's print of an absent member.
+- **The two records are of the same bytes.** Each receipt is bound to an inventory written within ten minutes of its Check (RLD:25846).
+- **Why not a shape-only read.** It would open custody outside the one procedure RL-194 allows, with new code, to learn nothing these two records do not show.
+- **The addendum carries, per receipt:** the Check item, the output file and line, `absent (printed null)`, and the grammar line.
+- **The run report's sentence becomes:** "Stage 1 takes rule 6 from the mode at the leg's start and does not read `high_power.revoked`. The Check at each of the three hp-01 closes printed that member from the receipt as null and every leg as not revoked (RS337, RS340, RS343), and the pinned validator admitted the three receipts, which it does only if the member is absent or a non-empty list. None revokes a leg (RL-217 D, RL-218 §5)."
+
+**Comes back.** Nothing.
+
+**Cites.** RLD:23301, 23555, 25846, 25915-25922; RS337, RS340, RS343; `admission.py:287-291, 453-463, 518-520, 579, 887-889`; IR:28, 89-91.
+
+## 6. The pass
+
+**Question.** Does the draft pass B.2's three checks? If it is held, what remains before the lead may commit the manifest and run the stock producer?
+
+**Ruling. The draft `36003475…2650` passes B.2's three checks. It is not committed yet. 6.8 lists what remains, in order.**
+
+### 6.1 Check 1: the manifest equals RL-166 to RL-175 as amended
+
+**Every number, threshold, formula, population, order, inclusion rule and public word agrees.** Read against the rulings: the two stages and the five tripwires at 45, 4, 10, 10 % and 9; rules 3 and 4 and the interval; the heat term, the rates, the onset model and its estimability; validation at 0.02; the prefix bias with equal-day weights; step 3 and the 0.08 tripwire with its 0.04 fallback; the sensitivity prints; freeze 2's contents and its four deferred rules; the host, reservation and failure rules; RL-194's conditions. What differs is text, in 6.2 and 6.3.
+
+### 6.2 Three sentences are corrected at the commit, with the status
+
+They are bytes my pass orders (RLD:25934).
+
+| Member | Change | Why |
+|---|---|---|
+| `title` (MAN:6) | Delete the last sentence, "DRAFT: pins are on a draft basis until the cold reviews close." | False in a committed manifest |
+| `fit.authors.twin` (MAN:593) | The last sentence becomes: "The twin calls the pinned KM003C decoder km003c_parse.parse on each stream file for sample times and watts and writes every step above it (RL-183a)." | RL-183a condition 3 ordered that clause while the manifest is a draft (RLD:20407). The paraphrase dropped it |
+| `fit.step3.method` (MAN:721) | The last sentence, from "Custody mode:" to "statistic (iii).", becomes: "Stage 2 calls the adapter inside its one execution, after the primary fit and under the same reservation, and writes RESTRICTED/step3.json (RL-180 amendment 2)." | The command it names does not exist. Stage 2 computes statistic (iii) (`cadence_look_run.py:1823, 1832`; RLD:19015) |
+
+- **If the pinned validator or a test refuses a new sentence,** the old one stays, this section is its correction of record, and the lead tells me which.
+- **No other manifest byte changes.** The committed manifest differs from the draft in `status` and these three strings. The lead shows that diff and the new sha256.
+
+### 6.3 Text that stays, and how it is read
+
+- **`custody.runs_by: analyst_seat`, `seats: 1`, and "the one seat that runs the look"** (MAN:592, 1304, 1306) name the single runner's role. The lead holds it and starts both stages as detached commands outside a seat (RLD:21022; RL-217 B). The pinned validator fixes the value (`manifest.py:1122`).
+- **"Sends its counts to the lead only"** (MAN:105) means no public page and no seat. They reach me in the lead's packet (RLD:25935).
+- **`rulings` ends at RL-195.** It is an index, not a limit. RL-199, RL-217 and this ruling govern.
+- **`decisions[1].action`** says "passes, fails". The public words are `yes`, `no` and `not_evaluable`, as `outputs.words` has them.
+- **`fit.reads_from_leg_record` lists `admitted`.** Stage 1 re-derives the verdicts and does not read it. Section 5 covers the one case where the two could differ.
+- **`fit.authors` gives the ruled roles, not the commit history.** Sol seats later amended the primary's fit file, and a Mythos seat amended the twin script's custody handling. The run report of the commit lists, from `git log` on the pinned fit path and on the twin script, who committed to each, by model family. It is written before stage 2 runs and comes to me with real stage 1's return. It does not hold the commit, the stock producer or stage 1.
+
+### 6.4 Check 2: the blind statement is true, B.3 as amended included
+
+- **`custody.disclosure` is three ruled sentences, verbatim:** F-12's, RL-199's and RL-217 A.5's.
+- **The public file is closed at fifteen fields:** three hashes, the look id, the commit, one integer and nine words. The writer builds only those and refuses a non-finite number (`interim_release.py:39-78`). Campaign stage 1 prints a file name and a sha256.
+- **No value of the rehearsal's integer or five words is on a public page.** Searched: main, the look branch, #976's branch, the 34 commit messages since `9eb65f4f5`, and PRs 793, 970 to 972 and 974 to 976. `LEAD-PENDING.md` and AIR/`step2b.out` hold them and stay out of every committed trace.
+- **Four readings, no byte change:**
+  1. "Its span's" in A.5's first sentence is the span the Check item checks. RS444, a Check of another span, printed dev-04-s01's digest in full on 18 Nov, and RS319, not a Check, printed dev-01-s01's.
+  2. "The record of that close that RL-217 A names" is, for dev-05-s02, the marker (section 3).
+  3. For dev-01-s03 it is A.3 branch 2's class result, whose public record is RS591.
+  4. "Words, counts that hold no energy, and hashes" describes `PUBLIC.json`. The manifest's six floats are registered thresholds. The pin list's file sizes are `stat` metadata that RL-194 and RL-217 ordered (RLD:23305, 25824). Neither is computed from energy.
+
+### 6.5 Check 3: the date and the per-fold onset parameters are in the head
+
+- **The receipt-derived date:** `cadence_look_run.py:849-850, 945`; `fit_interim.py:141-150, 754`; `tests/cadence/test_look_run.py:106`.
+- **The per-fold onset parameters:** MAN:1236; `fit_interim.py:1118-1126, 1585-1587`; the coefficient schema, lines 205-213; `tests/cadence/test_predict.py:206`.
+- `fit_interim.py`, that test and the schema are byte-unchanged since `9eb65f4f5`.
+
+### 6.6 The two checks RL-183 §2.4 left for this pass (RLD:20231)
+
+- **The single host: confirmed.** The row names one `execution_host`, `hw1:26e2f18d…d3c2`. The command run on the Air in this seat printed the same token.
+- **The twin's reader against the primary's: they agree, by reading.** The twin's identity reader takes the same files as the primary's: the receipt, the soak reference, each rostered leg's record and summary, and the same six bundle files (`scripts/cadence_interim_twin.py:1592-1647`; `manifest.py:2182-2215`). It has the same locator rule and the same type-T exclusion, and it raises unless its map equals stage 1's. The twin pin `91ca54ab…0aab` is unchanged and equals the head's bytes.
+- **Not shown: the twin on a real span.** It first reads real custody inside stage 2. A twin that raises there gives `not_evaluable`, and RL-183 §2.4 has that route.
+
+### 6.7 E.2, E.5, E.6, E.7
+
+- **E.2. Received.** Head `8c2570349a82f5796c2aeac9dd70534fbd4b15fd`, exit 0, blocks dev-01 to dev-04, manifest `36003475…2650`, `level_r.json` `058dc2ef…4093`, `stage1.json` `0b7ddf02…2ec8`. The integer and the five words are in the packet's private section and are not repeated here. They describe four blocks. Real stage 1's words are read under RL-166 Q8 with four days (RLD:15902, 16590).
+- **E.5. Met** by the run of E.6: outside a seat on the Air, the literal `RESTRICTED` name, the real host id, then stage 1, the row and stage 2 on generated inputs (AIR/`e6b.out`:1).
+- **E.6. Met.** 241.243 s for 14 spans, 72 legs and 1,010 streams of 38.16 GB, size-matched, the twin agreeing. It is under 600 s. It ran at `0c0c6ff98`, whose five changed files are tests, the unpinned generator and a run report.
+- **E.7. Met,** with 6.2's three sentences.
+
+### 6.8 What remains, in order
+
+1. **The addendum** of 4.2 and section 5: written, checked by a seat that did not write it, committed on the look branch.
+2. **The manifest edit** of 6.2 with `status: committed`. `validate --final` is clean. The diff from the draft and the new sha256 are shown, and the row takes the new sha256.
+3. **A pin comparison on that head.** Every `{path, sha256}` reference equals the head's bytes, and no pinned file differs from `c1ffe7a32`'s tree.
+4. **CI green on that exact head** (RLD:25936). The run on `05fd7634b` need not be awaited if the final head's own run is green. A red shard is fixed, or shown intermittent on the same commit with its cause named, and recorded with its re-run.
+5. **Then** the commit on main, the committed row, and the stock producer with its receipt.
+
+Steps 1 and 2 may be one commit.
+
+- **After that nothing here changes the order:** real stage 1, the `stage1_committed` row, stage 2.
+- **#976 may merge before or after.** If before, it is in the head of steps 3 and 4.
+- **`docs/process/cadence_look_manifest.md` §8** still says the pinned reader refuses a nested locator under `runs/`. All fourteen spans carry nested locators and the rehearsal read nine. The lead corrects that paragraph in the same commit. It is not manifest bytes.
+
+**Comes back.** An ordered sentence that is refused. A red on the commit head that is neither fixed nor explained. Real stage 1 with any tripwire fired, or a refusal. `twin_agrees` other than `yes`.
+
+**Cites.** RLD:15902, 16590, 17745-17751, 19015, 20231, 20407, 21022, 23305, 25824, 25934-25940; MAN:6, 105, 592-593, 721, 1236, 1304-1306, 1317, 1332; AIR/`step2b.out`, `e6b.out`; `interim_release.py:39-78`.
+
+---
+
+## Part II. W1 before signature
+
+## 7. LR-MS1
+
+**Question.** Are the role estimates and the cap used for W1 step 1 ratified? If a role must change, which estimator applies before the rerun?
+
+**Ruling. Ratified as built. No role changes.**
+
+- **D** takes `I_D + 1.13544 × T_dead + max_R1_tail + 10`. That is the member fit the registered text has the kit assert (P4:195-199; RLD:24560), with R1's measured terms. It is at most 1,800 s by L1's own definition of `T_dead`.
+- **X-S, Y-S, Y-G and the anchors** take their registered planning reservations: 850, 850, 1,150 and 782.82 s (P4:1618-1619). Nothing is transferred to them from X-G.
+- **X-G** takes 1,150 s. The measured value is not used, because R1's X-G phases omit preparation, idle, dwell and cooldown, which `member_s` includes. That is the right reading of "if the accounting matches".
+- **The cap** is the registered 1,800 s, strict.
+- **Why this is safe.** `member_s` is a reservation. No value exceeds its planning figure, so on Amendment A1's own numbers the span stays at or under 26,927 s against 26,940 (P4:1620-1621), and LR-MS1 cannot force the drop of ordinal 18 that a larger estimate would.
+- **RL-207's missing fact is "same".** The R0 digest `e6231a8f…769b` is the standing record R1's start check named (RS437; RS377).
+
+**Conditions.** The plan's record names, per role, which rule gave its value, and cites LR-MS1 and this section. No value is printed.
+
+**Comes back.** A span check that fails or a member over the cap under these rules. Any planning value replaced by a measurement before the signature.
+
+**Cites.** RLD:24560, 25498-25505; P4:192-199, 1618-1630; LOG:487-489; RS377, RS437; `astra-w1-member-s-1125/FINAL-MESSAGE.md`.
+
+## 8. #831
+
+**Question.** May W1 sign with #831 carried and reports A and B outstanding? If carrying it crossed RL-160's gate, what disposition is required?
+
+**Ruling. W1 may sign. Carrying the row builder's bytes is not the merge "through its own gate", and that gate stays whole.**
+
+- **RL-160's list is what remains "before #787 merges"** (RLD:15093-15098). #831 is #787 replayed on the W1 line. Its bytes entered presign through #973 on 25 Nov with reports A and B still owed.
+- **RL-182 §1.5 had already separated the two gates.** W1's receipt needs E1 to E17 on #813; it does not need the row builder. C1's arm needs "#787 merged on the W1 line through its own gate" and a re-signed receipt (RLD:19784-19785). W1 never enters S (RLD:19780).
+- **RL-193 §3 put #831 in the candidate** (RLD:23140) and did not waive RL-160. So the promotion carried the bytes and did not pass the gate. GitHub's `MERGED` on #831 is a side effect of the promotion and is not the gate's record.
+
+**Conditions.**
+1. One line in the deviation log: the date, `dcdedecb1`, and that RL-160's reports were owed when the bytes were carried.
+2. W1's receipt or its file list marks the row builder's files as carried with their own gate open. It does not present them as accepted.
+3. Reports A and B run on the original step-3 bundles, at the row builder's blobs as the signing commit holds them. Clean closes item 4 without a ruling (RLD:14110).
+4. C1 does not arm until that gate is closed and the re-signed receipt binds `s_rows.py`, the release script and the two `rl176` modules (RLD:19785).
+5. A change to the row builder's bytes after W1's signature goes into that re-signed receipt. It touches no other W1-bound file.
+
+**Comes back.** Any of A1 to A7 not zero at a carry-in or inside a turn, any row of B not equal, any `token_stamps_unavailable` (RLD:14108, 15095). The original bundles being unavailable.
+
+**Cites.** RLD:14088-14110, 15093-15098, 19776-19787, 23138-23142; `PROOFS.md`:57-63; PR #831.
+
+## 9. The two R0 sampler limits
+
+**Question.** Are R0-PID-ANON and R0-MONO-EDGE accepted as recorded W1 limitations, or does either need action before signature?
+
+**Ruling. Neither is a W1 limitation and neither needs action before the signature. They are accepted as the recorded state of the R0 background sampler on the pilot-10 lane, and no further.**
+
+- **The sampler is not in W1's tree.** #824 merged as `68ef800dd` into the pilot-10 lane. It is not an ancestor of `dcdedecb1` or `ece96f9c5`, and its four changed runtime files have other blobs on the signing branch.
+- **W1's R0 input predates the merge.** The record `e6231a8f…769b` was restored under item 377 on 16 Nov, and R1's start check named it on 18 Nov (RS437). #824 merged on 25 Nov.
+- **Both limits are in the unsafe direction:** a withhold can become a publish. PID-ANON needs PID reuse, sub-second start rounding and a process never named at any read. MONO-EDGE needs a process within one read's duration of the 0.05 bar. That direction is why I accept them as a record and not as cleared.
+
+**Conditions.**
+1. W1's registered text does not list them as W1 limitations. It would misdescribe the session.
+2. The reproducer `reuse_pair.py` is in a scratch directory only. It is committed on the lane as a named known-limitation case.
+3. An R0 record made by the #824 sampler is not bound into any registered session or receipt until I have ruled on it, with these two limits named.
+
+**Comes back.** Condition 3's case.
+
+**Cites.** PR #824's body (the four KNOWN LIMITATION paragraphs); `astra-824-narrow-t-1125/FINAL-MESSAGE.md`; LOG:485-487; RS377, RS437.
+
+## 10. LR-W1-1
+
+**Question.** May the step-2/3 inputs land after step 1, on a step-1 rerun at the §4.12 commit that changes no path?
+
+**Ruling. Ratified.** RL-193 §3's condition is that every generated or bound artifact is produced on the final tree (RLD:23142). A rerun at the signing commit that changes nothing shows exactly that.
+
+**Conditions.**
+1. **The rerun is at the signing commit itself,** WBM step 12's commit with every step-2/3 input in, from a clean checkout, with the step-1 tool at its committed bytes. "No path" means `git status --porcelain` is empty and the tree id is unchanged.
+2. **A change is not edited away.** The regenerated files are committed, that commit is the new candidate, and step 1 runs again there. One such round is the lead's.
+3. **After the fixed point, in this order:** the three-blob check against `STEP4_CHECKOUT`; the census at that commit; the receipt; `--check` exit 0. An export made before a regeneration that moved any of the three blobs is not reused (RL-210).
+4. **The inputs that may land after step 1** are the ones LR-W1-1 names and the projected replay record.
+
+**Comes back.** A second round that still changes a path. A changed selection after the export (RL-210).
+
+**Cites.** RLD:23140-23156, 25531; WBM:92-110; `docs/run_reports/2026-11-24-w1-step1/README.md:69-77`; LOG:540-545.
+
+## 11. D inconclusive, and the two replays
+
+**Question.** May W1 carry D as inconclusive once the reason code is in? How are the two `other_failure` / `[tool_boundaries]` replays disposed of before the final Part C?
+
+**Ruling. D may sign as U3 INCONCLUSIVE if the reason is the record's. The replays are not passed, not waived and not rerun: the refusal is located first, it comes to me, and the receipt is not signed until I have ruled on it.**
+
+### 11.1 D
+
+- **It is the registered branch.** "A refuted or missing R1 screen leaves D U3 inconclusive" (P4:674). The bar stays valid for 30B and the lead disposes (WBM:51-53).
+- **The reason code says which case this is.** The exporter has two kinds (`scripts/align_v4_u3_export.py:141-186`):
+
+| Kind | Reasons | Disposition |
+|---|---|---|
+| Record-side: the pair was read and is ineligible by a registered criterion | Token identity; a calibration or energy exclusion; energy unavailable; the decode clock over 0.5 %; configuration identity differing within the pair | The screen is missing in P4's sense. W1 signs with D U3 INCONCLUSIVE. No second export, no other pair, no R1 rerun for it |
+| Tool-side: the pair was not read | Bundle identity refused; a bundle unreadable; configuration identity unavailable with an exception type | The registered step has not been carried out. It comes to me with the code. The cause is then fixed without sight of any value, and step 5 runs once more on the same two bundles at the pin |
+
+- **The cost, stated once at signing.** One bar serves the series, and twenty of its twenty-four checks are D checks (P4:668). With the screen missing, D's U3 is INCONCLUSIVE in W1 and in every C and T window, and print 8 lists them. K, S and eligibility do not change (P4:1443-1445). W1's text says this in one sentence with the reason code.
+- **Nobody has seen the screen's value.** The exporter printed two counts.
+- **No digest is invented.** If `assemble` cannot take a missing screen without a value the lead would have to make up, it comes to me.
+
+### 11.2 The two replays
+
+- **They are recorded as they are:** two valid non-passes. A replay is never a Part C and does not reopen R1 (RLD:20146, 20613).
+- **This is what the replays were ordered for.** They are the evaluator's first sight of a real run (RLD:20145), and RL-215 sends a refusal there to me by check name (RLD:25630).
+- **What is known.** Both stop in about a second at `tool_boundaries`, before any gate is counted. The check has four sites in one function: the count of tool events against twice the tool calls (PC:2506-2507), each call's begin and end pair (PC:2556-2566), and the closing bound (PC:2568-2571). F0 run 11 was written at `b2e01464d`, whose ten sources the candidate holds byte-equal. So a native Part C on the final pin would probably stop at the same place.
+
+**Disposition.**
+1. **No rerun.** From the private outputs it already holds, the magistrate projects for each run the failing check's member kind, source name and turn index, or "none". Names and integers.
+2. **Only if that does not settle the site:** one structure-only read per run in a gap. For the failing member, the number of `align_tool_*` events and twice the number of tool calls. For the first failing call, the truth of each clause of PC:2556-2565 and of PC:2568-2570. Counts and booleans. No stamp, tool name, argument or content.
+3. **Both come to me.** I then name the case: (a) the evaluator refuses a record the frozen writer produces, which blocks under RL-215 (RLD:25634) and gets one named fix, the real shape added to the v4 table as a writer-produced case, one audit, and each replay once more; (b) the stored record is damaged in a way a clean run is not, and the refusal stands; (c) a branch only the replay reaches.
+4. **Until then:** no evaluator byte changes; neither replay runs again; the final Part C is not issued; **the W1 receipt is not signed.** The receipt binds the evaluator, and a fix under (a) moves bound bytes. Signing first would mean signing twice.
+5. **Everything else in the signing sequence proceeds.** R1 stays closed.
+
+**WP19 is not ruled here.** Its diagnostic and the lead's ruling come with the cold pass.
+
+**Comes back.** The reason code, in one line; at once if it is tool-side or on neither list. Steps 1 and 2 for each replay.
+
+**Cites.** RLD:20144-20146, 20613, 25531, 25630-25634; P4:668, 674, 1443-1445; WBM:36-53, 97-110; RS601, RS602, RS603; PC:2488-2572.
+
+---
+
+## Amends
+
+- **RL-217 A.2,** dev-05-s02's row (RLD:25842): fixed by its marker under A.1 item 2 (ii). RS437's abbreviation is a second record with a misprinted suffix.
+- **RL-217 A.1 item 2 (ii)** (RLD:25822): "the copy" includes the magistrate's cloud offload.
+- **RL-217 A.5** (RLD:25869): the record's added fields may sit in a cited addendum. The blind sentences are read as 6.4 has them.
+- **RL-217 C and RL-175 B.2** (RLD:17747, 25904): "clean on that head" is met for `lm-interim-01` as section 1 states. RL-190 4 (d) is unchanged.
+- **RL-217 D** (RLD:25918-25921): the check is met as section 5 has it, and the run report's sentence is section 5's.
+- **RL-217 E.1** (RLD:25934): the two re-pins, the status and 6.2's three sentences are the bytes this pass orders.
+- **RL-194 §1,** "Per source" (RLD:23307): the desk's verdict is the row-7 status of 4.1.
+- **RL-183a condition 3** (RLD:20407): made at the commit, while the manifest is still a draft.
+- **RL-160** (RLD:15093): "before #787 merges" is the row builder's own gate. Carrying its bytes in the W1 candidate is not that merge.
+- **Stand unchanged:** RL-166 Q8 with B-7; RL-180; RL-183 §1.3 and §2.4; RL-184; RL-190 4 (d); RL-193 §3; RL-194a; RL-199; RL-207; RL-210; RL-215; RL-216.
+
+**Blind status.** Blind. I read rulings, RUN_STATE on public main, look and W1 source, the committed review record (names, shapes, hashes and verdict words), three committed Check outputs by a grep for one member's lines, the lead's and the seats' reports, and the rehearsal's printed summaries. Those summaries hold hashes, file counts, one wall time, and the integer and five words that RL-217 E.2 sends to me. RS437's public text carries the magistrate's temperature prints; I did not use them. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened, listed or hashed, nothing under the registered root, and no registration value. I ran one command, `host-id`, which reads this machine's hardware id. Sections 1 to 6 change who verifies what and what three sentences and one record say. Sections 7 to 11 fix reservations at or below their registered planning values, the order of signing steps, and what is owed before a signature. No estimator, inclusion rule, threshold, population or word of any registered read changes.
+
+**What comes back to me.**
+- A stock production of `rules_3_4.json` with a sha256 other than `d2321940…f0a`.
+- A statement the lead cannot make for dev-01-s03, or an addendum value with no public source.
+- An ordered sentence of 6.2 that the validator or a test refuses.
+- A red on the commit head that is neither fixed nor explained.
+- Real stage 1 with a tripwire fired, or a refusal by its admission.
+- `twin_agrees` other than `yes`.
+- The as-built authorship list of 6.3, with real stage 1's return.
+- A W1 span check that fails or a member over 1,800 s under LR-MS1, or a planning value replaced by a measurement before the signature.
+- Reports A or B not clean, or their bundles unavailable.
+- An R0 record from the #824 sampler proposed for any registered session.
+- A second step-1 round at the signing commit that still changes a path.
+- The R1 screen's reason code; at once if it is tool-side or on neither list.
+- For each replay, the failing site and then the counts and booleans, before any evaluator byte changes and before the receipt is signed.
+- Then the W1 cold-pass packet, once, with WP19.
+
+**Lead note (Opus 5.5, 2026-11-26 03:31 PST).** Recorded verbatim from seat `fable-b2-w1-batch-1126` (`/Volumes/JW-EXT/scratch/fable-b2-w1-batch-1126/RULING.md`, sha256 dbe593b56dbdd8029a3d4bbcb19a784af92553c0d1088219c44d32d090312610).
