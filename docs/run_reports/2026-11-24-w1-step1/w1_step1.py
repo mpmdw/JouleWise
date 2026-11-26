@@ -6,14 +6,16 @@ the authorized R0 record's digest is named. It runs on a clean checkout of the W
 (--repo). It prints digests, key names and pass/fail lines only, never a value from inputs.json,
 r1_slots.json or the planning release. Run it without GIT_DIR or GIT_WORK_TREE exported (F-10).
 
-    python3.13 -B w1_step1.py --repo "$J" --r0-record-sha256 <64 hex> \
-        --member-seconds member_s.json --plan-id <id> [--r0-note "<one line>"] [--out DIR] [--trace]
+    python3.13 -B w1_step1.py --repo "$J" --pin <commit> --component-heads heads.json \
+        --r0-record-sha256 <64 hex> --member-seconds member_s.json --plan-id <id> \
+        --trace --reader-census /path/to/run_census.py [--r0-note "<one line>"] [--out DIR]
 
 --member-seconds is the lead's file of R1's member_s for the 18 W1 members: a JSON list of 18 numbers
 in ordinal order, or an object {"1": s, ..., "18": s}. The script never chooses or derives one.
 
 What it does, in order (any failure stops it with exit 2 and changes nothing further):
-  0. Preconditions: no GIT_DIR or GIT_WORK_TREE, a clean tree, the ten R1 source blobs equal to the pin.
+  0. Preconditions: no Git directory, worktree or index override, a clean tree, all named component
+     heads in HEAD, and the ten R1 source blobs equal to the pin using the pin's source inventory.
   1. RL-207 completion of inputs.R1.thermal_policy: heavy true, per_turn true, sensors.fan_keys from the
      frozen configs/align/v4/r1_runtime.json, and sensors.r0_sha256 = R0.record_sha256 = the given digest.
      It proves the only changed key paths are those five and that DEC2's five leaves (R1.B_D, R1.T_dead,
@@ -30,29 +32,34 @@ What it does, in order (any failure stops it with exit 2 and changes nothing fur
      receipt, then u3_bar.json, battery_window_policy.json and wp19_receipt.json, which the later
      runbook steps supply); exit 0 comes only after the signed receipt. The refusal census must report
      no difference.
-  6. Optional (--trace, about 22 min): the dynamic closure trace into --out; it is copied over
-     docs/align/v4/dynamic_closure_trace.json only if every scenario is ok.
+  6. Build the dynamic closure trace (--trace, about 22 min) and install it only if every scenario
+     is ok. Run the reader census against a Git tree object made from the generated working tree.
+     Both checks are required for READY_FOR_LEAD_REVIEW.
   7. A digest table of every changed path (blob id and sha256) for the receipt and RL-211's list, and
      step1-receipt.json in --out. Nothing is committed or pushed: the lead reviews `git status` and commits.
 """
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import math
 import os
+import re
 import subprocess
 import sys
-from pathlib import Path
+import tempfile
+from pathlib import Path, PurePosixPath
 
-PIN = "b2e01464d6d4fbf2901ff4d4154df9455104a12a"
+PIN_SOURCE = "joulewise/align/apple/v4_registration.py"
 INPUTS = "configs/campaigns/align_v4/registration/inputs.json"
 R1_SLOTS = "configs/campaigns/align_v4/registration/r1_slots.json"
 W1_PLAN = "configs/campaigns/align_v4/registration/w1_plan.json"
 RUNTIME = "configs/align/v4/r1_runtime.json"
 TRACE = "docs/align/v4/dynamic_closure_trace.json"
 RECEIPT_STOP = "registration_receipt is pending or malformed"
+EVIDENCE = ("registration_receipt_stop", "refusal_census", "trace", "reader_census")
 ADDED = (("R0", "record_sha256"), ("R1", "thermal_policy", "heavy"), ("R1", "thermal_policy", "per_turn"),
          ("R1", "thermal_policy", "sensors", "fan_keys"), ("R1", "thermal_policy", "sensors", "r0_sha256"))
 DEC2 = (("R1", "B_D"), ("R1", "T_dead"), ("R1", "thermal_policy", "g0_cap_s"),
@@ -60,18 +67,33 @@ DEC2 = (("R1", "B_D"), ("R1", "T_dead"), ("R1", "thermal_policy", "g0_cap_s"),
 
 
 class Stop(Exception):
-    pass
+    def __init__(self, code, *fields, exception="Stop", message_sha256=None):
+        super().__init__(code)
+        self.diagnostic = {"code": code, "exception": exception, "fields": list(fields)}
+        if message_sha256 is not None:
+            self.diagnostic["message_sha256"] = message_sha256
 
 
 def say(text):
     print(text, flush=True)
 
 
-def run(repo, *argv, quiet=True, check=True):
-    done = subprocess.run(list(argv), cwd=repo, capture_output=True, text=True)
+def child_refusal(code, done, *fields):
+    # The kit CLI formats this specific ValueError itself. Construct field names
+    # from constants and never copy captures, argv, or any child output to the receipt.
+    if re.fullmatch(r"align_v4_kit: inputs\.R1\.I_D .+ differs from r1_slots\.slots\.I_D .+\n?",
+                    done.stderr):
+        return Stop(code, *fields, "inputs.R1.I_D", "r1_slots.slots.I_D", exception="ValueError")
+    raw = (done.stderr + "\0" + done.stdout).encode("utf-8", errors="surrogateescape")
+    return Stop(code, *fields, exception="CalledProcessError", message_sha256=hashlib.sha256(raw).hexdigest())
+
+
+def run(repo, *argv, check=True, env=None):
+    env = {**(os.environ if env is None else env), "GIT_NO_REPLACE_OBJECTS": "1", "GIT_OPTIONAL_LOCKS": "0"}
+    done = subprocess.run(argv, cwd=repo, capture_output=True, encoding="utf-8",
+                          errors="surrogateescape", env=env)
     if check and done.returncode != 0:
-        tail = (done.stderr or done.stdout).strip().splitlines()[-1:] or ["(no output)"]
-        raise Stop(f"{' '.join(argv[:4])} exited {done.returncode}: {tail[0][:300]}")
+        raise child_refusal("SUBPROCESS_FAILED", done)
     return done
 
 
@@ -103,28 +125,63 @@ def write_json(path, doc):
     path.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def dirty_paths(repo):
+    out = run(repo, "git", "status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all").stdout
+    return [entry[3:] for entry in out.split("\0") if entry]
+
+
 def tree_state(repo):
-    out = run(repo, "git", "status", "--porcelain=v1", "--untracked-files=all").stdout  # unstripped: column 1 matters
     state = {}
-    for line in out.splitlines():
-        path = line[3:]
+    for path in dirty_paths(repo):
         file = repo / path
         state[path] = hashlib.sha256(file.read_bytes()).hexdigest() if file.is_file() else "<deleted>"
     return state
 
 
-def ten_blobs(repo):
-    source = git(repo, "show", f"HEAD:joulewise/align/apple/v4_registration.py")
-    import ast
+def ten_blobs(repo, pin):
+    source = git(repo, "show", f"{pin}:{PIN_SOURCE}")
     tree = ast.parse(source)
-    paths = next(ast.literal_eval(node.value) for node in tree.body if isinstance(node, ast.Assign)
-                 and any(getattr(t, "id", None) == "R1_EXECUTED_SOURCES" for t in node.targets))
-    if len(set(paths)) != 10:
-        raise Stop("R1_EXECUTED_SOURCES is not ten paths")
-    bad = [p for p in paths if git(repo, "rev-parse", f"{PIN}:{p}") != git(repo, "rev-parse", f"HEAD:{p}")]
+    specs = [node.value for node in tree.body if isinstance(node, ast.Assign)
+             and any(getattr(t, "id", None) == "R1_EXECUTED_SOURCES" for t in node.targets)]
+    paths = ast.literal_eval(specs[0]) if len(specs) == 1 else None
+    if (not isinstance(paths, (tuple, list)) or len(paths) != 10
+            or any(not isinstance(p, str) or not p or "\0" in p or PurePosixPath(p).is_absolute()
+                   or ".." in PurePosixPath(p).parts for p in paths) or len(set(paths)) != 10):
+        raise Stop("INVALID_PIN_INVENTORY", PIN_SOURCE, "R1_EXECUTED_SOURCES")
+    bad = []
+    for path in paths:
+        pinned = run(repo, "git", "rev-parse", "--verify", f"{pin}:{path}", check=False)
+        current = run(repo, "git", "rev-parse", "--verify", f"HEAD:{path}", check=False)
+        if (pinned.returncode or current.returncode or pinned.stdout != current.stdout
+                or git(repo, "cat-file", "-t", pinned.stdout.strip()) != "blob"):
+            bad.append(path)
     if bad:
-        raise Stop(f"ten-blob check failed: {bad}")
-    return paths
+        raise Stop("FROZEN_SOURCE_MISMATCH", *bad)
+
+
+def require_component_heads(repo, path, head):
+    heads = json.loads(path.read_bytes())
+    if not isinstance(heads, dict) or not heads or any(
+            not re.fullmatch(r"[0-9]+", pr) or not isinstance(oid, str)
+            or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", oid) for pr, oid in heads.items()):
+        raise Stop("INVALID_COMPONENT_HEADS", "--component-heads")
+    missing = []
+    for pr, oid in heads.items():
+        component = run(repo, "git", "cat-file", "-t", oid, check=False)
+        if (component.returncode or component.stdout.strip() != "commit"
+                or run(repo, "git", "merge-base", "--is-ancestor", oid, head, check=False).returncode):
+            missing.append(f"PR #{pr}")
+    if missing:
+        raise Stop("COMPONENT_NOT_IN_HEAD", *missing)
+    return heads
+
+
+def generated_tree(repo, head):
+    with tempfile.TemporaryDirectory(prefix="w1-step1-index-") as temp:
+        env = {**os.environ, "GIT_INDEX_FILE": str(Path(temp) / "index")}
+        run(repo, "git", "read-tree", head, env=env)
+        run(repo, "git", "add", "--all", "--", ".", env=env)
+        return run(repo, "git", "write-tree", env=env).stdout.strip()
 
 
 def complete_policy(repo, digest, note):
@@ -134,15 +191,14 @@ def complete_policy(repo, digest, note):
     fan_keys = runtime["sensors"]["fan_keys"]
     frozen_r0 = runtime["sensors"]["r0_sha256"]
     if digest != frozen_r0 and not (note and note.strip()):
-        raise Stop("the R0 digest is not r1_runtime.json's sensors.r0_sha256: RL-207 requires the lead's one line "
-                   "(--r0-note) naming which record each digest names and why")
+        raise Stop("R0_NOTE_REQUIRED", RUNTIME, "sensors.r0_sha256", "--r0-note")
     after = json.loads(path.read_bytes())
     policy = after["R1"]["thermal_policy"]
     wanted = {ADDED[0]: digest, ADDED[1]: True, ADDED[2]: True, ADDED[3]: fan_keys, ADDED[4]: digest}
     for key_path, value in wanted.items():
         present = leaf(before, key_path)
         if present != ("<absent>",) and present != value:
-            raise Stop(f"{'.'.join(key_path)} is already set to a different value; refusing to overwrite")
+            raise Stop("INPUT_ALREADY_FILLED", ".".join(key_path))
     after["R0"]["record_sha256"] = digest
     policy["heavy"] = True
     policy["per_turn"] = True
@@ -151,11 +207,11 @@ def complete_policy(repo, digest, note):
     old, new = dict(flat(before)), dict(flat(after))
     changed = sorted(set(old) ^ set(new) | {k for k in set(old) & set(new) if old[k] != new[k]})
     if any(k not in ADDED for k in changed):
-        raise Stop(f"unexpected inputs.json change at {['.'.join(k) for k in changed if k not in ADDED]}")
+        raise Stop("UNEXPECTED_INPUT_CHANGE", *(".".join(k) for k in changed if k not in ADDED))
     dec2_before = hashlib.sha256(b"".join(canonical(leaf(before, p)) for p in DEC2)).hexdigest()
     dec2_after = hashlib.sha256(b"".join(canonical(leaf(after, p)) for p in DEC2)).hexdigest()
     if dec2_before != dec2_after:
-        raise Stop("DEC2's five leaves changed")
+        raise Stop("DEC2_CHANGED", *(".".join(k) for k in DEC2))
     write_json(path, after)
     say(f"step 1: inputs.json completed at {len(changed)} key path(s): {', '.join('.'.join(k) for k in changed)}")
     say(f"step 1: DEC2 five-leaf digest unchanged {dec2_after[:16]}...")
@@ -173,7 +229,7 @@ def regenerate(repo, rounds=4):
         if tree_state(repo) == before:
             say(f"regeneration: fixed point after {attempt} round(s)")
             return
-    raise Stop(f"regeneration did not reach a fixed point in {rounds} rounds")
+    raise Stop("REGENERATION_DID_NOT_CONVERGE")
 
 
 def member_seconds(path):
@@ -181,9 +237,9 @@ def member_seconds(path):
     if isinstance(doc, dict):
         doc = [doc[str(i)] for i in range(1, 19)]
     if not isinstance(doc, list) or len(doc) != 18:
-        raise Stop("--member-seconds must give 18 values in ordinal order")
+        raise Stop("INVALID_MEMBER_COUNT", "--member-seconds")
     if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in doc):
-        raise Stop("--member-seconds values must be finite numbers")
+        raise Stop("INVALID_MEMBER_SECONDS", "--member-seconds")
     return doc
 
 
@@ -192,7 +248,7 @@ def build_plan(repo, seconds, plan_id, status):
     sys.path.insert(0, str(repo / "scripts"))
     import validate_align_v4_w1_plan as validator  # noqa: E402  (the repo's own validator)
     if Path(validator.__file__).resolve().parent != (repo / "scripts").resolve():
-        raise Stop("imported a validator from outside --repo")
+        raise Stop("VALIDATOR_OUTSIDE_REPO", "scripts/validate_align_v4_w1_plan.py")
     inputs = json.loads((repo / INPUTS).read_bytes())
     slots = json.loads((repo / R1_SLOTS).read_bytes())
     collection = json.loads((repo / "configs/campaigns/align_v4/collection_plan.json").read_bytes())
@@ -212,7 +268,7 @@ def build_plan(repo, seconds, plan_id, status):
     write_json(repo / W1_PLAN, plan)
     done = run(repo, sys.executable, "-B", "scripts/validate_align_v4_w1_plan.py", W1_PLAN)
     if '"status": "VALID"' not in done.stdout:
-        raise Stop("w1_plan.json did not validate")
+        raise Stop("PLAN_NOT_VALID", W1_PLAN)
     say(f"step 3: {W1_PLAN} VALID (18 members; arithmetic per the validator)")
 
 
@@ -223,7 +279,7 @@ def digest_table(repo):
         if not file.is_file():
             rows.append({"path": path, "blob": None, "sha256": None})
             continue
-        blob = run(repo, "git", "hash-object", path).stdout.strip()
+        blob = run(repo, "git", "hash-object", "--", path).stdout.strip()
         rows.append({"path": path, "blob": blob, "sha256": hashlib.sha256(file.read_bytes()).hexdigest()})
     return rows
 
@@ -231,6 +287,9 @@ def digest_table(repo):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--repo", type=Path, required=True)
+    ap.add_argument("--pin", required=True, help="commit supplying the frozen R1 source inventory and blobs")
+    ap.add_argument("--component-heads", type=Path, required=True,
+                    help="JSON object mapping PR numbers to full commit IDs")
     ap.add_argument("--r0-record-sha256", required=True)
     ap.add_argument("--r0-note")
     ap.add_argument("--member-seconds", required=True)
@@ -239,21 +298,27 @@ def main(argv=None):
     ap.add_argument("--out", type=Path, default=Path("w1-step1-out"))
     ap.add_argument("--trace", action="store_true")
     ap.add_argument("--reader-census", type=Path,
-                    help="the reader-census module (RL-193 item 5); run with --signing-head if given")
+                    help="the reader-census module (RL-193 item 5), run against the generated Git tree")
     args = ap.parse_args(argv)
     repo = args.repo.resolve()
-    receipt = {"schema": "joulewise.align_v4.w1_step1_receipt.v1"}
+    receipt = {"schema": "joulewise.align_v4.w1_step1_receipt.v1", "missing": list(EVIDENCE)}
     try:
-        if os.environ.get("GIT_DIR") or os.environ.get("GIT_WORK_TREE"):
-            raise Stop("GIT_DIR or GIT_WORK_TREE is exported (F-10)")
+        git_overrides = [name for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE") if name in os.environ]
+        if git_overrides:
+            raise Stop("GIT_ENV_OVERRIDE", *git_overrides)
         digest = args.r0_record_sha256.lower()
         if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
-            raise Stop("--r0-record-sha256 must be 64 lowercase hex digits")
-        if tree_state(repo):
-            raise Stop("the checkout is not clean")
+            raise Stop("INVALID_R0_DIGEST", "--r0-record-sha256")
+        if dirty_paths(repo):
+            raise Stop("UNCLEAN_WORKTREE")
         receipt["head"] = git(repo, "rev-parse", "HEAD")
-        ten_blobs(repo)
-        say(f"step 0: head {receipt['head'][:12]}, clean, ten R1 blobs equal the pin")
+        receipt["pin"] = git(repo, "rev-parse", "--verify", "--end-of-options", f"{args.pin}^{{commit}}")
+        receipt["component_heads"] = require_component_heads(repo, args.component_heads, receipt["head"])
+        ten_blobs(repo, receipt["pin"])
+        out = args.out.resolve()
+        if args.trace and out / Path(TRACE).name == (repo / TRACE).resolve():
+            raise Stop("OUTPUT_OVERLAPS_TRACE", "--out", TRACE)
+        say(f"step 0: head {receipt['head'][:12]}, clean, component ancestors present, ten R1 blobs equal the pin")
         seconds = member_seconds(args.member_seconds)
         receipt["inputs"] = complete_policy(repo, digest, args.r0_note)
         run(repo, sys.executable, "-B", "scripts/align_v4_kit.py")
@@ -262,56 +327,73 @@ def main(argv=None):
             build_plan(repo, seconds, args.plan_id, args.status)
             regenerate(repo)
             # The plan binds collection_plan.json's member configs; if regeneration moved them, rebuild.
-            if run(repo, sys.executable, "-B", "scripts/validate_align_v4_w1_plan.py", W1_PLAN,
-                   check=False).returncode == 0:
+            validation = run(repo, sys.executable, "-B", "scripts/validate_align_v4_w1_plan.py", W1_PLAN, check=False)
+            if validation.returncode == 0:
                 break
             say(f"step 4: w1_plan.json bindings moved during regeneration; rebuilding (round {attempt})")
         else:
-            raise Stop("w1_plan.json and the kit did not converge in 3 rounds")
+            raise child_refusal("PLAN_DID_NOT_CONVERGE", validation, W1_PLAN)
         check = run(repo, sys.executable, "-B", "scripts/align_v4_kit.py", "--check", check=False)
-        tail = ((check.stderr or check.stdout).strip().splitlines()[-1:] or [""])[0]
         if check.returncode == 0:
-            receipt["check"] = "exit 0"
-            say("step 5: align_v4_kit.py --check exit 0")
-        elif tail.endswith(RECEIPT_STOP):
-            # Everything before require_registration passes: inputs, R0 binding, policy, sizing, WP18.
-            # The receipt, U3 bar, B policy and WP19 come later in the runbook (section 9 steps 2-4).
-            receipt["check"] = "stops at the receipt, as expected at step 1"
-            say(f"step 5: --check passes every pre-registration gate and stops at the receipt: {RECEIPT_STOP!r}")
-        else:
-            raise Stop(f"--check exited {check.returncode} before the receipt: {tail[:300]}")
+            raise child_refusal("KIT_CHECK_UNEXPECTED_SUCCESS", check, "registration_receipt")
+        if check.returncode != 1 or check.stdout or check.stderr != f"align_v4_kit: {RECEIPT_STOP}\n":
+            raise child_refusal("KIT_CHECK_UNEXPECTED_STOP", check)
+        receipt["check"] = RECEIPT_STOP
+        receipt["missing"].remove("registration_receipt_stop")
+        say(f"step 5: --check stopped at {RECEIPT_STOP}")
         run(repo, sys.executable, "-B", "-m", "tests.hazards.refusal_census")
+        receipt["missing"].remove("refusal_census")
         say("step 5: refusal census: no difference")
-        args.out.mkdir(parents=True, exist_ok=True)
-        if args.reader_census:
-            run(repo, sys.executable, "-B", str(args.reader_census), "--repo", ".", "--rev", receipt["head"],
-                "--signing-head")
-            say("step 5: reader census PASS at the pre-commit head (rerun at the signing head)")
+        trace_bytes = None
         if args.trace:
-            out = (args.out / "dynamic_closure_trace.json").resolve()
-            run(repo, sys.executable, "-B", "scripts/align_v4_dynamic_trace.py", "--out", str(out))
-            trace = json.loads(out.read_bytes())
-            bad = sorted(name for name, row in trace["scenarios"].items() if not row.get("ok"))
-            if bad:
-                raise Stop(f"dynamic trace scenarios not ok: {bad}; trace left at {out}, not copied")
-            (repo / TRACE).write_bytes(out.read_bytes())
+            with tempfile.TemporaryDirectory(prefix="w1-step1-trace-") as temp:
+                trace_path = Path(temp) / Path(TRACE).name
+                run(repo, sys.executable, "-B", "scripts/align_v4_dynamic_trace.py", "--out", str(trace_path))
+                trace_bytes = trace_path.read_bytes()
+            scenarios = json.loads(trace_bytes)["scenarios"]
+            if not scenarios or any(row.get("ok") is not True for row in scenarios.values()):
+                out.mkdir(parents=True, exist_ok=True)
+                (out / Path(TRACE).name).write_bytes(trace_bytes)
+                raise Stop("DYNAMIC_TRACE_FAILED", TRACE)
+            (repo / TRACE).write_bytes(trace_bytes)
+            receipt["missing"].remove("trace")
             say("step 6: dynamic closure trace regenerated, every scenario ok, copied into the tree")
+        if args.reader_census:
+            tree = generated_tree(repo, receipt["head"])
+            run(repo, sys.executable, "-B", str(args.reader_census.resolve()), "--repo", ".", "--rev", tree)
+            if generated_tree(repo, receipt["head"]) != tree:
+                raise Stop("WORKTREE_CHANGED_DURING_CENSUS")
+            receipt["reader_census_tree"] = tree
+            receipt["missing"].remove("reader_census")
+            say(f"step 6: reader census PASS at generated tree {tree}")
         receipt["changed"] = digest_table(repo)
-        receipt["result"] = "READY_FOR_LEAD_REVIEW"
-        write_json(args.out / "step1-receipt.json", receipt)
+        receipt["result"] = "PARTIAL" if receipt["missing"] else "READY_FOR_LEAD_REVIEW"
+        out.mkdir(parents=True, exist_ok=True)
+        if trace_bytes is not None:
+            (out / Path(TRACE).name).write_bytes(trace_bytes)
+        write_json(out / "step1-receipt.json", receipt)
         say("step 7: changed paths (blob, sha256):")
         for row in receipt["changed"]:
             say(f"  {row['blob'] or '-':<40} {row['sha256'] or '-':<64} {row['path']}")
-        say("done: review `git status`, commit, then run step 4 (RL-184 three-blob check) on this head (§9 step 2)")
+        if receipt["missing"]:
+            say("PARTIAL: missing " + ", ".join(receipt["missing"]))
+            return 1
+        say("READY_FOR_LEAD_REVIEW")
         return 0
-    except Stop as stop:
-        receipt["result"] = f"STOPPED: {stop}"
+    except Exception as exc:
+        if isinstance(exc, Stop):
+            diagnostic = exc.diagnostic
+        else:
+            digest = hashlib.sha256(str(exc).encode("utf-8", errors="backslashreplace")).hexdigest()
+            diagnostic = Stop("STEP1_EXCEPTION", exception=type(exc).__name__, message_sha256=digest).diagnostic
+        receipt["result"] = "PARTIAL"
+        receipt["refusal"] = diagnostic
         try:
             args.out.mkdir(parents=True, exist_ok=True)
             write_json(args.out / "step1-receipt.json", receipt)
         except OSError:
             pass
-        say(f"STOP: {stop}")
+        say("REFUSED " + json.dumps(diagnostic, sort_keys=True))
         return 2
 
 
