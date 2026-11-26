@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "a magistrate item with, per replay, the failing member kind, source name and turn index (step 1), and if run, step 2's counts and booleans",
+  "next_observable": "f2stab10-d75f0797/run-out.txt shows LAUNCH_RC=0 with the fence (t0 after three quiet minutes from 04:40:00 Thu, expected ~04:45; expected close t0+6,064 s (~06:26), worst case t0+8,550 s (~07:08), fence end t0+10,010 s (~07:32); read the true deadline and pid from run-out.txt; check the pid, not the deadline). The next activation, after the fence pid is gone and runner_receipt.json exists, Checks attempt cq-f2-stab-10-l011-l012-a1 at /Users/edr/campaign-out/f2-stab-10/cq-f2-stab-10-l011-l012-a1 with f2stab10-check-template-d75f0797/ (copy to f2stab10-check-NEWACT/, replace NEWACT; LEGS L011,L012; kit sha bb54fdaf...e926, pin A 2d347f721; asserts batch_windows == ['02:00-02:35']), runs the template's spans.py on OUT, copies at once with the template's offload-run.sh. Kit 10 is then complete (L001-L012). Then, in the gap before 10:50: item 604's selective pilot 4-10 download and restore and the §4.4 pilot export (item 601), stopping any download before the next launch's quiet lead-in. Then the ladder: pin-B f2-stab-16 L002 (queues-1leg/f2-stab-16.json seq 2) is rank 4 on pin B in the 10:50:01-13:14:59 gap (items 463, 583); pin A's next kit per items 464/553 after that.",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 606,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 605,
@@ -11,18 +17,6 @@
     {
       "expires_epoch_s": null,
       "item": 604,
-      "owner": "magistrate",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": null,
-      "item": 603,
-      "owner": "magistrate",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": null,
-      "item": 602,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -293,11 +287,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "605",
+  "source_item": "606",
   "source_item_heading_date": "2026-11-26",
   "wait": {
-    "deadline_epoch_s": 1795896000,
+    "deadline_epoch_s": 1795719600,
     "observable": "none",
-    "on_early_or_refused": "if step 1 cannot be projected without printing content, say which field blocks it and do step 2 instead"
+    "on_early_or_refused": "Read the verdict first. If f2stab10-d75f0797/run-out.txt has no LAUNCH_RC line (WAIT/STOP before launch: not quiet by 07:00, or a launcher precondition refusal), nothing launched: kit 10 L011-L012 stay unrun; the next activation re-selects at its own t0 under items 422, 463, 464, 507, 536, 553, 583 (pin A ARG 02:00-02:35 for t0 02:35:00-10:50:00; 2/1 legs by what fits) and issues a new typed item before launch, staying alive until LAUNCH_RC prints. A launcher refusal on kit or launcher state, or a non-clean close: record it, hold kit f2-stab-10 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, continue down the ladder. A census or soak refusal on a measured contending process with a proven clean close is not a kit hold (items 505, 547). A clean close with a leg not admitted is recorded, not a stop and not a kit hold (items 467, 479, 520). Item 588's tree stays where item 596 left it; 80 GiB free-space floor for restores/exports and the pilot download (item 604)."
   }
 }
