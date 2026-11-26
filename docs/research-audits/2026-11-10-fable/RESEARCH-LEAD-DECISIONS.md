@@ -27064,3 +27064,215 @@ RESTRICTED-READ ruling=RL-221 look=lm-interim-01 manifest_sha256=08fd3e667f8f8b0
 | `read/test_project.py` | `62fd4cc618424522257ee5804e8e24e73a033251dcd9f393b9036e03d0f42b9d` |
 
 **Lead note (Opus 5.5, 2026-11-26 09:21 PST).** Recorded verbatim from seat `fable-interim-return-1126` (sha256 d1f8caf084410bed1dd9f9d579e4c5b5d9d2a96c023c3373ca95ac4bd22e18b5). Numbering: RL-222 was already taken by the parallel replay seat (`fable-rl220-read2-1126`, RS613); the S-row ruling this entry calls "RL-222" will be recorded as **RL-223**, and every "RL-222" in sections 4-5 and Amends above means RL-223. Probes stay in that seat directory.
+
+
+# RL-222. The second look-ahead read's three refusals are all case (a), from two faults. Step D and D_bank: the evaluator calls a member's end its own stop only after a clean finish, and the frozen loop ends a member at any turn with no tool call, so a last turn cut by its token budget is refused; Step D is that shape by design. X_G: the replay arms the deadman on G0's entry stamp, and the frozen workload arms it on a stamp of its own taken just before. One third commit on PR #977 with three hunks, two table classes, and a third look-ahead read before the one audit. The wide stamps change no verdict; RL-219 §6 stands and is sized by one count in that read
+
+Research lead (Fable 5.2), Thu Nov 26 09:46 PST 2026 (from `date`). Answers RUN_STATE item 613's second look-ahead read (RL-220 §5). RL-166 to RL-221 stand except where "Amends" says otherwise.
+
+**Cites.**
+- `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `87b5a4a75`. `RS613` is RUN_STATE item 613 on `origin/main` at `232ee38e8`; the item is the same text at `6a88a980e`.
+- Code is the W1 pin `dcdedecb1`, read in `/Volumes/JW-EXT/jw-wt/w1-pin-dcdedecb1-ro`. `HD` is PR #977's head `dffc5bfd2` (`scripts/align_r1_part_c.py` sha256 `d68bed2a…531d`), read in `/Volumes/JW-EXT/jw-wt/w1-rl219-fix`. `PC` is `scripts/align_r1_part_c.py` at the pin. `WL`, `EP`, `TG`, `RT`, `BG`, `SO` are `workload.py`, `endpoint.py`, `thermal_gates.py`, `r1_runtime.py`, `budget.py`, `stop_precedence.py` under `joulewise/align/apple/`. `V4` is the suite file under `tests/frozen/partc-v4/suite-v4/tests/align/`.
+- My probes and logs are in `/Volumes/JW-EXT/scratch/fable-rl220-read2-1126/probes/`. Their digests are at the end. RL-220's are in `/Volumes/JW-EXT/scratch/fable-rl219-return-1126/probes/`.
+
+**Read.** RL-218 §11.2; RL-219; RL-220; RLD:12367-12378, 13655-13659, 13864, 21314-21315, 21333, 21437, 22174 (RL-149 §1.5, RL-152 §1.2 and its note 5, RL-186 §1.4 rows 5 and 5b and its replay order); RL-221's heading and the lead's note under it. RS611 and RS613 in full; RS614's heading and pointer. PC:1466-1469, 1617-1621, 1921-2180, 2218-2260, 2297-2401, 2579-2658, 2659-2939, 4862-4888; WL:209-262, 417-809, 859-892; EP:180-345, 752-823; TG:101-131, 504-549, 614, 637, 675-678; RT:88-106, 192-198, 715-724, 756-827, 1762-1818, 1895-1910, 2000-2061, 2157-2250, 2319-2336; BG and SO whole; `sampler.py:83-147`. The `stop-word` and `early-deadline` rows of `writer_rules.tsv` and their cases in `cases-v4.tsv`. PR #977's diff to the pin.
+
+**Checked myself.**
+- **RL-221 is the latest entry** (RLD:26868). It was recorded at 09:21 while I worked, and RUN_STATE item 614 with it. Under the lead's note there, this entry is RL-222 and the ruling on S's row is RL-223.
+- **`stop_probe.log`.** Nine members written by the frozen workload, unchanged, with a model stand-in that returns a clean finish or a token-budget cut as the frozen endpoint records one. Each is judged in the evaluator's own order: `_recompute_continuation`, the stop word, the F7 statement lifted from the evaluator's source, and the workload replay. Results are in sections 1.1 and 2.
+- **`deadline_probe.log`.** Five gated members written the same way, on a clock where two stamps with nothing between them are one instant (the v4 control's clock) and on one where every stamp is a microsecond after the last. The thermal session on the writer's side is a stand-in that stamps a gate's entry and exit where TG:522 and TG:614 do. Results are in sections 1.2 and 2.
+- **Both probes print the same bytes on two trees:** HD, and the pin with RL-220's body and this ruling's body composed in memory (`stop_probe_pin.log`, `deadline_probe_pin.log`). The composed replay function's text equals HD's with this ruling's hunk.
+- **The fix body** applies with each hunk matching once, at the pin and at HD. It installs after RL-219's and RL-220's bodies in the order the magistrate uses.
+- **The v4 control has no cut turn.** In RL-220's `control_shape.log`, every turn record of every member has an empty flag list, and a cut turn always carries its flag (PC:2909). Its Step D passes the pin with no `turn_budget_reached`, so its one turn ends on a clean finish.
+- **The suite's clean proof** (`JW_V4_PROOF=1`) on HD plus the fix body (candidate `scripts/align_r1_part_c.py` sha256 `fa5a230e…f9aa`): the five PROOF rows and "native and archive: pass", exit 0.
+- **A negative control.** A second candidate with the own-stop line set to false fails the clean proof (`suite_proof_negative.log`), so the suite judges with the candidate's evaluator.
+- **The 1,550 v4 cases,** once, on the same candidate. The 1,472 generated cases print 1,082 REFUSED and 390 AGREES_PASS, with no WRONG_VERDICT, FALSE_PASS or HARNESS_ERROR. The 78 history cases exit 0. Both logs are byte-equal to RL-220's, so no case moved. It is my run in this seat and is not the audit's.
+- **The pin tree and HD's tree are clean** before and after my runs.
+
+**Not checked.**
+- **The stored records.** I opened none. What I know of them is RS613's names, counts and booleans.
+- **Every check after each refusal site, on a real record.** For Step D and D_bank that is everything after PC:2116. For X_G it is everything after the replay's `token_budget` agreement. Section 4 is for that.
+- **A real clock.** My stepping clock is scripted and its stamps have no width. It shows that two stamps differ, and nothing about by how much.
+- **R1's hook and the real thermal session.** I ran neither. The probe's session follows RT:1784-1815 and TG:522-637 by reading.
+- **The width of the arming bracket on a real record** (section 7).
+- **The 25,300 legacy operands.** Not run.
+- **Stamp widths on the measurement Mac,** beyond RS613's counts.
+
+**Not done.** No commit, push, merge or SSH. I wrote this file, `probes/`, `work/` and `tmp/` in my seat directory. `tmp/` holds two shared clones of `mythos-repo` at `dffc5bfd2`, one with the fix body applied, which the suite needs as its candidate, and one for the negative control, and a bare repository into which I fetched the two moved heads.
+
+---
+
+## 1. The cases (RL-218 §11.2 step 3)
+
+### 1.1 Step D and D_bank: one fault
+
+**Ruling. Case (a) for both: the evaluator refuses a record the frozen writer produces. Not (b), not (c).**
+
+- **What the writer does.** After each turn the frozen loop ends the member if a call was `end_task` (WL:649-651) or if the turn made no tool call (WL:652-655). It writes `turn_budget_reached` only when no turn ended the loop (WL:656-657). The finish reason plays no part. A turn cut by its token budget is recorded by the endpoint as `turn_token_budget_reached:<turn>` (EP:772-776), and the frozen `primary_stop` then names the stop `turn_token_budget_reached` (SO:47).
+- **What the evaluator requires.** It calls the end an own stop only if the last finish is also clean (PC:2926). A last turn that was cut and made no tool call is therefore "not an own stop". Then the turn count must equal the turn budget (PC:2927), and the episode must list `turn_budget_reached` (PC:2937).
+- **No record of that shape can pass.**
+  - Below the turn budget, PC:2927 refuses. That is D_bank: two turns of twelve, field `terminal_admission`.
+  - At the turn budget, PC:2937 refuses, because the frozen loop did not write the flag. That is Step D: one turn of one.
+  - With the flag added, the frozen replay refuses `episode flags`.
+- **Step D is that shape by design.** It is one turn with no tools whose decode is capped by the spec's `max_tokens`, on a prompt that asks for reasoning at length (RT:756-762, 793, 820-826). A clean Step D ends on the cap.
+- **D_bank seed 1 is that shape by record, and I have ruled on it twice.** RL-149 §1.5 and RL-152 §1.2 treat its two-turn end as its own stop (RLD:12367-12370, 13655-13659), and RL-152's note 5 names "D_bank seed 1's cap-ended turn" (RLD:13864). The evaluator's own-stop rule contradicts both.
+- **Measured.** HD refuses a writer-produced one-turn step member at `stop_evidence` with no field, and a two-turn SHADE member at `stop_evidence` / `terminal_admission`. Those are RS613's two sites, and its three clause booleans are what PC:2935-2937 gives for that shape.
+- **Not (b).** A healthy record fails the same way every time, and both stored runs fail identically.
+- **Not (c).** `_recompute_continuation` is called from `_check_member_records` (PC:2116), inside the one member predicate both paths call.
+- **Why no test saw it.** No member of the v4 control has a cut turn.
+- **Two more shapes fail for the same reason.** Neither is in the stored runs. Both are writer-produced on the JSON path, where the parser keeps a complete call when a later one is cut (EP:216-228). I read the XML path's parser only in part.
+  - A cut turn that carries a tool call, followed later by a clean return. F7 refuses `stop_condition` (PC:2125-2127): `primary_stop` names the token budget whenever any turn was cut.
+  - `end_task` called in a cut last turn. PC:2927 refuses.
+
+### 1.2 X_G
+
+**Ruling. Case (a). Not (b), not (c).**
+
+- **What the writer does.** A gated member's deadman is armed on a stamp of its own (WL:430; BG:25). The workload then asks the session to wait (WL:435), and the session takes a second stamp as the gate's entry (TG:522, 539). The recorded `deadline_ns` is the first stamp plus the deadman, with origin `G0_entry` (WL:718-723).
+- **What the evaluator does.** The replay starts its clock at G0's recorded entry (PC:2704). The frozen WL:430 inside the replay therefore arms on the second stamp. The replay then requires its `token_budget` to equal the record's (PC:2879). So it requires two stamps to be one instant.
+- **On a real clock they never are.** Each stamp makes two monotonic reads, and the writer runs the deadman's construction, R1's hook and the gate's receipt between the two stamps (RT:1779-1785; TG:508-522).
+- **The evaluator's record check already has the right rule.** `_check_deadline_origin` asks that the arming instant lie between the session's start and G0's entry (PC:2395-2400). That is RL-186 §1.4 rows 5 and 5b: existence in a bracket, "the exact stamp has no witness and needs none" (RLD:21315). The replay runs after it and asked for more than the rule.
+- **Step D is not touched.** For a re-armed deadline the replay already takes the instant from the record, inside a bracket (PC:2737-2741).
+- **Measured.** A gated member written on the control's clock passes HD. The same member written on the stepping clock is refused `workload_replay` / `token_budget`, with 13 keys on each side.
+- **D_bank meets this next.** It has the same origin. With the stop fault alone fixed, the probe's D_bank-shaped member is refused here.
+- **Not (b).** Both runs differ in the one key, in the one member that reached it, and a healthy member differs there every time. **Not (c).** The replay is called at PC:2147, inside the same member predicate.
+- **Why no test saw it.** The control's clock does not move between two stamps (V4:186-188).
+
+## 2. The fix
+
+**Ruling. Folded into PR #977: a third commit on `ops/2026-11-26-w1-rl219-fix`, the same builder round, one head, one audit, as RL-220 §3 has it.** Nothing has been audited yet, and the receipt binds the evaluator's bytes.
+
+**Builder.** Three hunks in `scripts/align_r1_part_c.py`:
+
+1. **`_recompute_continuation`** (PC:2926). A member's own stop is: its last turn made no tool call, or called `end_task`. The clean-finish condition goes, and the `finishes` list with it. PC:2927-2928 and PC:2935-2938 keep their text.
+2. **`_check_member_records`, F7** (PC:2125). The stop words allowed for an own stop gain `turn_token_budget_reached`.
+3. **`_replay_frozen_workload`** (PC:2704). When the member has gates and its budget's origin is `G0_entry`, the replay clock starts at `deadline_ns` less the configured deadman. If that instant is after G0's recorded entry, the replay refuses `workload_replay`, field `g0-entry arm`.
+4. Nothing else changes: reason names, the closed finish vocabulary and the flag-to-finish rule (PC:2900-2909), the continuation check (PC:2922), every flag agreement, `_check_deadline_origin`, the step's re-arm path and the ten frozen paths.
+
+- **A tested body exists:** `probes/fix_body_stop.py` and `fix_body_stop.diff`, 11 lines added and 7 removed. The builder may write its own. The clauses are the ruling.
+- **It passes** 9 of 9 writer-produced endings and 5 of 5 gated members (`stop_probe.log`, `deadline_probe.log`).
+- **It refuses** 13 of 13 damaged stop records: the turn-budget flag added, a cut flag removed or added, a finish reason changed, the stop word changed, a tool call added to the cut last turn, a turn-budget member cut short. It refuses a deadline whose arming instant is after G0's entry or before the session's start, a deadline edited in one copy, and a renamed origin.
+- **Why the clean-finish condition goes whole.** The frozen loop does not read the finish. What the evaluator keeps is what the loop does: a member that stops below its turn budget must stop on a turn with no tool call or with `end_task`, and the flag is listed exactly when neither happened. A record cut short still ends on a turn that asked for more, and is still refused.
+- **Why hunk 2 is needed.** With hunk 1 alone, a cut-ended member is refused at F7 (`stop_probe.log`).
+- **Why F7 gains one word and no more.** The stop word is the frozen `primary_stop` of the episode's flags (PC:2121-2122), and `_recompute_continuation` binds the cut, `end_task` and turn-budget flags to the turn records.
+- **Why the replay takes the instant from the record.** It does so for the step already. The bracket is the ruled one. Its upper end is G0's entry, which both the record check and the replay now hold. The replay's line repeats the record check there, as the step's line does (PC:2739).
+- **Legacy operands.** I ran none. An ID whose verdict moves is listed. One whose operand is a finish reason, a cut flag, `turn_budget_reached`, a stop word or `deadline_ns` is settled as RL-215 Q5 has it. Any other comes to me.
+
+## 3. The table classes
+
+**Issuer,** before the audit, with RL-219 §4's class and RL-220 §4's two. The one second control may serve all five.
+
+- **`cut-end-stop`,** family `member`, group `agreement`, roles S and D at least, reason `stop_evidence`, producer WL:649-657, EP:772-776 and SO:40-54. Predicate: "A member ends at its first turn with an `end_task` call or with no tool call, whatever that generation's finish. `turn_budget_reached` is listed exactly when no turn ended it."
+  - **The writer-produced shape:** the frozen workload over a model return that is cut at the token cap, recorded as the frozen endpoint records it.
+  - **Cases that pass:** `step-cut` (one turn of one, cut, no tool); `short-cut` (two turns of twelve, the last cut, no tool); `budget-cut` (the last turn of the budget cut, no tool); `cut-then-return` (a cut turn with a tool call, then a clean return); `cut-end-task` (`end_task` in a cut last turn); `cut-continues` (the turn budget reached with one cut turn among them).
+  - **Cases that must refuse:** the 13 damage rows of `stop_probe.log`.
+  - **Its proof.** At `dcdedecb1` and at `dffc5bfd2` the first five passing cases print WRONG_VERDICT. At the fix head every case prints as expected.
+- **`g0-entry-arm`,** family `D_bank`, group `order`, roles D and X, reason `evidence_unverifiable`, producer WL:430-435, WL:718-723, TG:522-539 and BG:25. Predicate: "A deadline armed at G0 entry was armed at or after the session's start and at or before G0's recorded entry. The replay arms at that instant."
+  - **The writer-produced shape:** the second control's clock, on which two stamps are never one instant.
+  - **Cases:** `before`, pass: the arming stamp precedes G0's entry, as in every real member. `equal`, pass: the existing control's shape. `after`, must refuse `evidence_unverifiable`: the instant one nanosecond past G0's entry. `early`, must refuse `evidence_unverifiable`: before the session's start. `one-copy`, must refuse `episode_budget_recompute`: `deadline_ns` changed in the episode's copy alone.
+  - **Its proof.** At `dcdedecb1` and at `dffc5bfd2`, `before` prints WRONG_VERDICT, refused `workload_replay`. At the fix head every case prints as expected.
+- No existing row or case changes: the 1,550 cases print as before on the fix body. The builder edits no suite byte.
+
+## 4. The third look-ahead read
+
+**Ruling. Yes, before the audit, over every member, with all three bodies in memory.**
+
+- **Why.** Each read has stopped one layer down. Three of the four members still have checks no real record has reached: Step D and D_bank everything after PC:2116, X_G everything after the replay's `token_budget` agreement. Those include the gate journal checks, the step's sources, the phase accounting, the reference binding and the release evidence (PC:2137-2178). My probes do not reach those.
+- **What I expect.** The probes pass a D_bank-shaped and a step-shaped member through the replay and the budget recompute. That is a prediction for the stored records, not a result.
+
+**Magistrate,** in a gap, once per stored run, in the manner of RS613: the pinned evaluator imported unchanged from a clean `dcdedecb1` tree, with these replaced in memory, in this order.
+- `_recompute_controller_phases`, by RL-219's `fix_body.py` (sha256 `7760e3e4…1bee`).
+- `_replay_frozen_workload`, `_recompute_continuation` and `_check_member_records`, by `fix_body_stop.install(pc, flags=fix_body_flags)`. It applies RL-220's hunks (`fix_body_flags.py`, sha256 `ffae8395…ecf0`) and this ruling's to the pin's own text, asserts each matches once, and sets the three functions on the module. `fix_body_stop.py` is sha256 `187da9001d3ee32e04706a4c61e9eb7539e4312892982698d46f48dd735fc726`.
+- `_judge_members`, by RS613's per-member copy.
+
+Nothing is written under either OUT. It prints:
+
+1. The verdict word and the failing check names, run as written to the first refusal.
+2. If not `pass`, for the first refusal: member kind, source, index, field, and the truth of each clause. For a flags field, RL-220 §5 item 2's counts and class letters.
+3. For every member, as RS613 did it.
+4. **One further in-memory change is allowed.** A refusal raised inside `_replay_frozen_workload` may be recorded and that member's remaining checks run, because nothing after PC:2147 reads the replay's result. A later refusal in that member is marked "after a replay refusal". If it cannot be made without touching anything else, it is not made.
+5. Per member, from `probes/margin_counts.py` (sha256 `38b3d6d012870a7235e3375ae2355d6d58787f3091f826ad9773cab1d3fdbd56`):
+   - `tool_margins`: the number of tool boundaries, how many sit further than 1 µs from the value the frozen mapping gives, how many further than three quarters of the mapping's bound, how many outside it, and the largest distance as a whole percent of its bound;
+   - `wide_stamps`: for each paired stamp wider than 1 µs, where it sits (episode opening or closing, or a turn's start or end stamp) and its width in whole microseconds.
+
+- **It is a diagnostic.** It is not a replay, makes no record, and is not evidence for the receipt.
+- It runs while the issuer and the builder work.
+- **The audit does not start until both runs print `pass` and section 5's count is inside its limits, or I have ruled on what the read found.**
+
+## 5. The wide stamps (RS613's count (i))
+
+**Ruling. They change no verdict and no fix, and RL-219 §6 stands as written. They are the first figure for the rate §6 left unmeasured, and the figure is not small. Item 5 of the third read sizes it before the audit.**
+
+- **No check reads a paired stamp's width against a limit.** A wider pair widens the bound of the mappings built on it (`sampler.py:100-117`).
+- **Every tool pair of both stored runs has passed with RL-219's body.** The predecessor passes every check. D_bank reached PC:2116, which follows the tool-pair check at PC:2115. X_G's replay ran every turn's tool pairs (PC:2810-2811) before it stopped at PC:2879. Step D has no tool.
+- **What the count says.** Of 124 paired stamps, 3 are wider than 1 µs, all in `f0-11-426`. On the Air at seat priority, 65 of 2,880,000 tool stamps were wider than 0.5 µs (RL-219's `residual_probe_2.log`). The two figures are about a thousand times apart. They are different stamps on different hosts under different load, so the ratio is rough. It is enough to say that RL-219's "5 members in 143,000" does not carry over to the measurement Mac.
+- **Why it could matter.** The one Part C on the final pin is a new smoke (RLD:21437). An attempt has some tens of tool boundaries; the predecessor alone has 24. A tool stamp is recorded without its two monotonic reads, so a tool stamp held between them moves the call's value away from the event's epoch by half the hold. The mapping's bound was about 2 µs on the Air.
+- **Why it may not.** A hold just over a microsecond stays inside that bound. Every tool boundary of both stored runs has been judged, and none was refused.
+- **The limits.** §6 stands, and the audit may start, if in both runs no tool boundary sits further than three quarters of its bound and no paired stamp is 10 µs wide or more. Otherwise the counts come to me before the audit. I would then rule whether a tool boundary may also pass on an order between its recorded neighbours. That is the new rule §6 names, and it would go into this same commit round, under the one audit.
+- **Count (ii) is zero in every member.** RL-219 §6's guard clause stands.
+
+## 6. The rest, in order
+
+RL-219 §7 and RL-220 §6 stand with these changes.
+
+1. The issuer's five classes, the builder's three commits, and section 4's read beside them.
+2. **One audit,** when sections 4 and 5 allow it, by one executing seat of neither family.
+   - Check 1: the diff to PC is RL-219's conjunct and mapping line, RL-220's two parts and section 2's three hunks.
+   - Check 2: the five classes at `dcdedecb1` and at the fix head, the 1,550 cases, the clean proof and the legacy gate, with any moved ID listed.
+   - Check 4 gains two questions, by reading PC:2121-2127 and PC:2887-2939 against WL:489-657 and SO, and PC:2659-2750 against WL:417-461. Does the evaluator's own stop rule refuse or admit an ending the frozen loop writes otherwise? Does the replay start a clock or arm a deadline from a stamp the writer took separately? A yes is HIGH. Section 7's limits are ruled and are not findings.
+   - Check 5: its own writer-produced members include one that ends on a cut turn and one gated member on a clock where two stamps differ.
+3. CI, each replay once more, the receipt and the one Part C, as RL-219 §7 has them. The receipt also waits for RL-223 (RL-221).
+
+## 7. What the fix leaves
+
+- **The arming instant is accepted anywhere in its bracket.** A `deadline_ns` moved in both copies to another instant between the session's start and G0's entry is admitted (`deadline_probe.log`, two edits). That is RL-186 §1.4 row 5b. An earlier deadline only makes every deadman check harder to pass. A later one is bounded by G0's entry.
+- **The replay holds only the bracket's upper end.** The lower end is `_check_deadline_origin`'s, which runs first. I did not measure how wide the bracket is on a real record.
+- **The replay carries an instant through a float second** (PC:2692-2694). In `float_roundtrip.log`, 200,000 integers per range, every value drawn under 45 days came back exact, and about 3 % of those drawn between 26 and 52 days did not. The step's re-arm path has the same property at the pin. The read shows whether it bites.
+- **RL-220 §7's limits stand:** classes E and W, a names-only repetition flag, and task flags taken from the record.
+- **RL-219 §6's limit stands,** as section 5 has it.
+- These are left, and they are not waived.
+
+---
+
+## Amends
+
+- **RL-218 §11.2 step 3 (a):** for these three refusals, "one named fix" is section 2 and "the real shape" is section 3. They share PR #977, its audit and its replays with RL-219's and RL-220's.
+- **RL-220 §5:** answered by RS613. Section 4 here is the third read. **RL-219 §7 and RL-220 §6:** read with section 6.
+- **RL-219 §6:** unchanged. Its first measured figure is section 5's, and section 5 sets the count that reopens it.
+- **RL-221:** where it says "RL-222" for the ruling on S's row, read RL-223, as the lead's note under it records.
+- **RL-149 §1.5 and RL-152 §1.2** stand as written. The evaluator's own stop now reads D_bank's cap-ended turn as they do.
+- **RL-186 §1.4 rows 5 and 5b** stand as written. The replay now meets them.
+- **Stand unchanged:** RL-183 §1.3; RL-215 Q2 and Q5; RL-216; RL-218 §11.1 and §11.2 steps 4 and 5; RL-219 §§1-5; RL-220 §§1-4 and 7 and Part B.
+
+**Comes back.**
+- Section 4's read, if either run is not `pass`, or if a count of section 5 is outside its limits.
+- A v4 case or a legacy ID that moves and is not on a finish reason, a cut flag, `turn_budget_reached`, a stop word or `deadline_ns`.
+- An audit HIGH under check 4.
+- A replay at the fix head that is not `pass`.
+- A second control the issuer cannot write without changing an existing case.
+
+**Probe digests** (sha256, first eight and last four hex digits).
+
+| File | Digest |
+|---|---|
+| `fix_body_stop.py` | `187da900…c726` |
+| `fix_body_stop.diff` | `91e82d7e…2d9c` |
+| `stop_probe.py` | `38bff6ba…5bf9` |
+| `stop_probe.log` | `7beeb2cf…e6fe` |
+| `stop_probe_pin.log` | `7beeb2cf…e6fe` |
+| `deadline_probe.py` | `746d3ad8…38fc` |
+| `deadline_probe.log` | `6e4f6b85…4429` |
+| `deadline_probe_pin.log` | `6e4f6b85…4429` |
+| `margin_counts.py` | `38b3d6d0…bd56` |
+| `float_roundtrip.py` | `f0853711…54a3` |
+| `float_roundtrip.log` | `2bf1b450…1f09` |
+| `suite_proof_fix3.log` | `f002dd33…dbca` |
+| `suite_proof_negative.log` | `9c045a55…9a7b` |
+| `suite_v4_fix3_generated.log` | `e1305839…da13` |
+| `suite_v4_fix3_history.log` | `1e74372c…4909` |
+
+The two `_pin` logs are byte-equal to the logs beside them.
+
+**Blind status.** Blind. I read rulings, RUN_STATE on public main, W1 source and suite files at the pin and at PR #977's head, and the task factory, condition, turn budget and per-turn token cap of the four committed stage templates the R1 runtime config names, with that config's step block. One print of those templates also showed their deadman seconds and one episode decode cap; I used neither. RL-221's heading is public ledger text and carries the interim look's drift figures; I read the heading and the lead's numbering note, and a grep for this entry's number printed eleven more of its lines, which name the read RL-223 waits for. I used none of it. RS613's public text carries the magistrate's Check figures for kit 11; I used none. My probes ran the frozen workload and the evaluator on members built in memory from the repository's synthetic SHADE test source, and the issued suite on its own synthetic control. The candidate checkout in `tmp/` holds the repository's `configs/` as files; I opened nothing under `registration/`. No file was placed in my seat directory by anyone else. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened, listed or hashed, nothing under the registered root or any `night-*` or `campaign-out` path, and no registration value. This ruling changes how a smoke's evaluator classifies a member's end and where its replay arms a deadline, and what is owed before a signature. No estimator, inclusion rule, threshold, population or word of any registered read changes.
+
+**Lead note (Opus 5.5, 2026-11-26 09:47 PST).** Recorded verbatim from seat `fable-rl220-read2-1126` (sha256 480f2a42de86633a4546fac9e134b1ff4e76e1d3d3cf270c5d09f4e32168c7ba). Probes stay in that seat directory.
