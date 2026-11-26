@@ -351,6 +351,30 @@ class ReviewRecord(unittest.TestCase):
         self.assertEqual(code, 1, out)
         self.assertIn("origin/main cannot be fetched", out)
 
+    def test_hp01_review_uses_writer_a(self):
+        from tests.cadence.test_interim_admission import HP01Admission
+
+        fixture = HP01Admission()
+        fixture.setUp()
+        sid = "hp-01-s01"
+        for name, doc in fixture.docs.items():
+            self.write(sid, name, T.doc_bytes(name, doc))
+        self.pins = PF.synthetic_pins({sid: self.root / sid})
+        self.pins["spans"][0]["runner_commit"] = fixture.KIT["frozen_commit"]
+        self.sha = custody_pins.pin_list_sha256(custody_pins.pin_list_bytes(self.pins))
+        self.run_state = PF.run_state(self.pins)
+
+        skeleton = RV.template(self.pins, self.sha, "m" * 64)
+        with self.subTest(record="skeleton"):
+            self.assertEqual(skeleton["spans"][0]["receipt"]["writer_pin"], "A")
+        record = self.review()
+        row = record["spans"][0]
+        row["verdicts"]["desk"] = "admissible"
+        self.assertEqual(row["verdicts"]["executing_seat"], "admissible", row["verdicts"])
+        with self.subTest(record="filled"):
+            self.assertEqual(row["receipt"]["writer_pin"], "A")
+        self.assertEqual(self.problems(record), [])
+
     def test_the_record_cites_the_writer_of_the_span_s_pinned_runner_commit(self):
         """Audit 2 (MED): with the span's runner commit changed to one no writer is pinned at, the review still cited
         writer A from the receipt and the checker found nothing. The writer is the runner commit's, or none."""
@@ -360,6 +384,8 @@ class ReviewRecord(unittest.TestCase):
         self.assertEqual(self.problems(record), [])
         self.pins["spans"][0]["runner_commit"] = "1" * 40
         self.sha = custody_pins.pin_list_sha256(custody_pins.pin_list_bytes(self.pins))
+        skeleton = RV.template(self.pins, self.sha, "m" * 64)
+        self.assertIsNone(skeleton["spans"][0]["receipt"]["writer_pin"])
         record = self.review()
         for row in record["spans"]:
             row["verdicts"]["desk"] = "admissible"
