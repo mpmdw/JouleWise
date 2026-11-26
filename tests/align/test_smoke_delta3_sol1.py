@@ -327,7 +327,7 @@ class PacketCoverage(previous.DeltaFixture):
                     with self.subTest(path=path, action=action):
                         self.assertIn(json.dumps(edited, sort_keys=True), mutations)
 
-    def test_production_packet_has_490_mutations_and_an_admitted_control(self):
+    def test_production_packet_has_506_mutations_and_an_admitted_control(self):
         ctx = wp.Context(previous.ROOT, self.tmp / 'packet-work', 'w1')
         ctx.work.mkdir()
         _root, _scenario, _now, _pointer, arm, packet = wp._rebuild(ctx, 'coverage')
@@ -340,8 +340,9 @@ class PacketCoverage(previous.DeltaFixture):
         _holed, removed = wp._omit_attempt(packet, attempt)
         self.assertEqual(attempt, 'C3')
         self.assertGreater(removed, 0)
-        # R20 adds change and removal of the manifest source. The extra probe omits an attempt.
-        self.assertEqual(len(mutations) + 1, 490)
+        # The 488-case baseline includes the C3 omission. R20 adds change and
+        # removal of the manifest source. RL-183b does the same for eight receipt sources.
+        self.assertEqual(len(mutations) + 1, 506)
 
 
 if __name__ == '__main__':

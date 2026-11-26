@@ -49,14 +49,12 @@ FULL_DESK_GATE_EXEMPT = ('v4_B_bar',)     # = align_v4_session.FULL_DESK_GATE_EX
 # R17 (RUN_STATE 228): the off-MBP full desk's sources. A record committed before the Air desk finished
 # carries ``light_triage`` instead; its successor record carries ``previous_final`` = these sources for it.
 FINAL_SOURCES = ('pilot', 'desk', 'exclusions')
+FINAL_SOURCES_WITH_RECEIPT = (*FINAL_SOURCES, 'unpack_receipt')
 LIGHT_TRIAGE_SCHEMA = 'joulewise.align_v4.light_triage.v1'   # = light_triage.SCHEMA (tested equal)
 # R17 review F4: final sources count only as evidence of a COMPLETED harvest whose exclusions the desk
 # recorded (= align_v4_harvest_off.COMPLETED_HARVEST, tested equal), bound to the window's own plan.
 COMPLETED_HARVEST = light_triage.COMPLETED_HARVEST          # the shared predicate (delta D9)
 DESK_ADJUDICATIONS = light_triage.DESK_ADJUDICATIONS        # PILOT.json status of a completed desk
-# R17 review F2: every record after R1 binds the record-bound tree manifest written at finalize
-# (= harvest_offload.FINALIZED_SCHEMA, tested equal); its canonical bytes' SHA-256 is the digest unpack checks.
-FINALIZED_MANIFEST_SCHEMA = 'joulewise.align_v4.finalized_manifest.v2'
 
 
 def digest(raw):
@@ -220,27 +218,22 @@ class WindowRecord:
         self.finalized_manifest_sha256 = self._finalized_manifest()
 
     def _finalized_manifest(self):
-        """R17 review F2: the committed record-bound manifest (required after R1). Returns its digest."""
-        descriptor = self.record.get('finalized_manifest')
-        if descriptor is None and self.window == 'R1':
+        """RL-163 §1: only the digest is committed on every record after R1."""
+        if self.window == 'R1':
             return None
-        require(isinstance(descriptor, dict) and set(descriptor) == {'path', 'sha256'},
-                'R17: the window record must bind the finalized tree manifest (finalized_manifest {path, sha256})')
-        raw = self.evidence.source(self.commit, descriptor, json_value=False)
-        manifest = decode(raw)
-        require(isinstance(manifest, dict) and manifest.get('schema') == FINALIZED_MANIFEST_SCHEMA
-                and isinstance(manifest.get('source_root'), str) and isinstance(manifest.get('entries'), dict)
-                and isinstance(manifest.get('closure'), dict)
-                and json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode() == raw,
-                'R17: finalized_manifest is not a canonical ' + FINALIZED_MANIFEST_SCHEMA + ' manifest')
-        return descriptor['sha256']
+        value = self.record.get('finalized_manifest')
+        require(isinstance(value, str) and SHA.fullmatch(value),
+                'RL-163: finalized_manifest must be a lowercase SHA-256 digest')
+        return value
 
     def source(self, name, *, json_value=True):
-        if name in FINAL_SOURCES and self.final_from is not None:
+        if name in FINAL_SOURCES_WITH_RECEIPT and self.final_from is not None:
             commit, sources = self.final_from
-            return self.evidence.source(commit, sources.get(name), json_value=json_value)
-        return self.evidence.source(self.commit, self.record.get('sources', {}).get(name),
-                                    json_value=json_value)
+        else:
+            commit, sources = self.commit, self.record.get('sources', {})
+        if name == 'unpack_receipt' and name not in sources:
+            return None
+        return self.evidence.source(commit, sources.get(name), json_value=json_value)
 
     def final_evidence(self):
         """``None`` when the full desk's final adjudication is bound to this record, else why not.
@@ -254,20 +247,33 @@ class WindowRecord:
         """
         names = self.record.get('sources', {})
         absent = self.capture_absent()
-        if not self.has_final_sources():
-            if absent and 'light_triage' in names:
-                try:
-                    self.light()
-                    return None
-                except (ValueError, KeyError, TypeError, AttributeError) as exc:
-                    return 'light triage unreadable: ' + str(exc)
-            return 'no final sources'
+        plan_id = None
+        if self.has_final_sources():
+            try:
+                desk, pilot, exclusions = self.source('desk'), self.source('pilot'), self.source('exclusions')
+                plan_id = self.source('plan')['plan_id']
+            except (ValueError, KeyError, TypeError, AttributeError) as exc:
+                return 'final sources unreadable: ' + str(exc)
+            error = light_triage.final_adjudication_error(desk, pilot, exclusions, plan_id, captured=not absent)
+            if error is not None:
+                return error
+        else:
+            if not absent or 'light_triage' not in names:
+                return 'no final sources'
+            try:
+                self.light()
+            except (ValueError, KeyError, TypeError, AttributeError) as exc:
+                return 'light triage unreadable: ' + str(exc)
+        if self.window == 'R1':
+            return None
         try:
-            desk, pilot, exclusions = self.source('desk'), self.source('pilot'), self.source('exclusions')
-            plan_id = self.evidence.source(self.commit, names.get('plan'))['plan_id']
+            raw = self.source('unpack_receipt', json_value=False)
+            if raw is not None and plan_id is None:
+                plan_id = self.source('plan')['plan_id']
         except (ValueError, KeyError, TypeError, AttributeError) as exc:
-            return 'final sources unreadable: ' + str(exc)
-        return light_triage.final_adjudication_error(desk, pilot, exclusions, plan_id, captured=not absent)
+            return 'unpack receipt unreadable: ' + str(exc)
+        return light_triage.unpack_receipt_error(raw, window=self.window, plan_id=plan_id,
+                                                 finalized_sha256=self.finalized_manifest_sha256, captured=not absent)
 
     def has_final_sources(self):
         names = self.record.get('sources', {})
@@ -305,8 +311,9 @@ class WindowRecord:
             return
         require(isinstance(final, dict) and set(final) == {'record_sha256', 'sources'}
                 and final['record_sha256'] == self.sha256
-                and isinstance(final['sources'], dict) and set(final['sources']) == set(FINAL_SOURCES),
-                'previous_final must name this record and carry exactly the full desk sources')
+                and isinstance(final['sources'], dict)
+                and set(final['sources']) in (set(FINAL_SOURCES), set(FINAL_SOURCES_WITH_RECEIPT)),
+                'previous_final must name this record and carry exactly the full desk sources and optional unpack receipt')
         self.final_from = (successor.commit, final['sources'])
 
     def roster(self):
@@ -460,9 +467,7 @@ class WindowRecord:
                     pair = PAIR_NAMES.get(planned.get('task_pair'))
                     require(pair in counts, 'unknown benign task pair')
                     counts[pair] += 1
-        # A window with no capture at all has nothing a harvest could exclude: final at once (R17;
-        # delta D5: actual absence, supplemental captures included, as in final_evidence).
-        return {'window': self.window, 'status': 'final' if not captured else status,
+        return {'window': self.window, 'status': status,
                 'captured_members': len(counted), 'eligible_benign': counts}
 
 
@@ -471,9 +476,9 @@ def template():
     ref = {'path': 'REPLACE', 'sha256': 'REPLACE'}
     return {'record': {'schema': RECORD_SCHEMA, 'window': 'W1', 'finalized_at_epoch_s': None,
             'role': 'development', 'previous_record': None, 'code_commit': 'REPLACE',
-            'finalized_manifest': dict(ref),
+            'finalized_manifest': 'REPLACE',
             'sources': {n: dict(ref) for n in ('plan', 'collection_plan', 'result', 'chain_started',
-                'chain_exited', 'courier', 'courier_sent', 'watchdog_state', 'pilot', 'desk', 'exclusions')},
+                'chain_exited', 'courier', 'courier_sent', 'watchdog_state', *FINAL_SOURCES_WITH_RECEIPT)},
             'captures': {'RUN_ID': None}, 'raw_evidence': [dict(ref)]},
         'series': {'schema': SERIES_SCHEMA, 'previous_record': {'commit': 'REPLACE', **ref},
             'quiet': dict(ref),
@@ -1100,7 +1105,8 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
                 if row.get('barred'):
                     counts['barred'] = row['barred']
             else:
-                counts = {'captured_members': record.counted_captures(), 'status': 'final',
+                counts = {'captured_members': record.counted_captures(),
+                          'status': 'final' if record.is_final() else 'provisional',
                           'eligible_benign': dict.fromkeys(cadence.CAL_PAIRS, 0)}
                 if record.record.get('role') == 'test':
                     # RUN_STATE 252 option B (claim contract B6): a structurally barred T window is not

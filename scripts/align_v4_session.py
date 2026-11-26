@@ -987,7 +987,7 @@ def supplemental_report(records):
                          'excluded': bool(r.get('excluded'))} for r in supplemental]}
 
 
-def powermode_desk_check(*, state, members, runs_root, kit_path):
+def powermode_desk_check(*, state, members, runs_root, kit_path, window_harvest_flags=()):
     """Council ruling 7: any member whose bundle-recorded AC powermode differs
     from the frozen series value sets ``instrument_ok`` false. The report also
     carries the D members' X2 count and rate (print-only, LEAD-RULINGS-2 R10)."""
@@ -1018,6 +1018,12 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     # Desk release guard (protocol B0/B2/B9/R27): before release a C or T window prints no member's DC row.
     from joulewise.align.apple import v4_desk_seal
     sealed_scope = v4_desk_seal.sealed_scope(state)
+    dc_fit_flags = set()
+    if sealed_scope and members:  # Light triage has no training members.
+        dc_fit_flags = {flag for model in dc.get('models', ()) for flag in model.get('flags', ())}
+    if dc_fit_flags:
+        codes = sorted({flag.partition('=')[0] for flag in dc_fit_flags})
+        print(f'{km003c.LABEL} window fit flags (RL-163 section 3): ' + ', '.join(codes))
     if sealed_scope in ('C', 'T'):
         dc = v4_desk_seal.seal_dc(dc, plan['members'])
     for rid, row in dc['members'].items():
@@ -1025,8 +1031,9 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
             print(f'{rid} {km003c.LABEL}: ' + json.dumps({k: row[k] for k in
                   ('status', 'sealed', 'sealed_sha256', 'sealed_hmac_sha256', 'flags') if k in row}, sort_keys=True))
         else:
-            print(f'{rid} {km003c.LABEL}: ' + json.dumps({k: row[k] for k in
-                  ('status', 'dc_in_energy_j', 'dc_in_delta_j', 'dc_in_residual_j', 'flags')}, sort_keys=True))
+            printed = {k: row[k] for k in ('status', 'dc_in_energy_j', 'dc_in_delta_j', 'dc_in_residual_j')}
+            printed['flags'] = [flag for flag in row['flags'] if flag not in dc_fit_flags]
+            print(f'{rid} {km003c.LABEL}: ' + json.dumps(printed, sort_keys=True))
     report['km003c'] = dc
     # Keep the common v3 desk unchanged. V4 adds its registered thermal desk.
     from scripts.align_v4_thermal_desk import registration_evidence, enrich_record, r1_soak_c, contrast_predeclaration
@@ -1118,13 +1125,13 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
         print('W1 D G1 timeout tripwire (RL-149 section 1.5): ' + report['w1_g1_tripwire']['verdict'])
     if sealed_scope is not None:
         # RL-152 section 3.4: the tool-path and unlisted-code lines (in memory; one fact each).
-        # RL-162 section 2: the unlisted-codes line reads four sources per member, in memory.
+        # RL-162 §2 and RL-163 §2: four sources per member plus the window-scoped harvest flags.
         sources = {rid: {'harvest_flags': (pilot_members.get(rid) or {}).get('harvest_flags') or [],
                          'exclusion_codes': (pilot_members.get(rid) or {}).get('exclusion_codes') or [],
                          'dc_flags': dc_rows.get(rid) or []} for rid in {r['run_id'] for r in plan['members']}}
         trip, lines = v4_desk_seal.tripwires(records, sealed_scope, v4_desk_seal._nonbenign(plan['members']),
                                              roles={m.get('run_id'): m.get('role') for m in plan['members']},
-                                             sources=sources)
+                                             sources=sources, window_harvest_flags=window_harvest_flags)
         report.update(trip)
         for line in lines:
             print(line)

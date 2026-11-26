@@ -434,7 +434,9 @@ def _desk(session_root, *, run=subprocess.run, harvest=True, compare_session=Non
     # Pack-specific instrument checks (v4: ruling 7 powermode); v3 passes none.
     extra_report = None
     if extra_checks is not None:
-        added, extra_report = extra_checks(state=state, members=members, runs_root=runs_root, kit_path=kit)
+        harvest_inputs = {'window_harvest_flags': harvest_flags.get(None, [])} if v4 else {}
+        added, extra_report = extra_checks(state=state, members=members, runs_root=runs_root, kit_path=kit,
+                                           **harvest_inputs)
         checks.update(added)
     pilot = {'schema_version': desk_schema, 'non_claim': True, 'session_id': state['session_id'],
              'plan_id': state['session_id'], 'runs_root': str(runs_root), 'members': members,

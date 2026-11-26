@@ -23,6 +23,7 @@ from scripts import validate_align_v4_w1_plan as validator
 from tests.align.v4_registration_fixtures import held_window_acceptance, session_plan
 
 ROOT = Path(__file__).resolve().parents[2]
+PENDING_RECEIPT = 'registration_receipt is pending or malformed'
 
 
 _LOG_DIR = []
@@ -90,7 +91,7 @@ class KitTests(unittest.TestCase):
 
     def test_committed_bytes_reproduce_without_reading_models(self):
         for path, raw in self.files.items():
-            self.assertEqual((ROOT / path).read_bytes(), raw, path)
+            self.assertEqual(kit.sha((ROOT / path).read_bytes()), kit.sha(raw), path)
 
     def test_roster_exactly_matches_amendment_a1(self):
         expected = ['anchor'] * 4 + ['D', 'X-G', 'Y-S', 'D', 'X-S', 'Y-G',
@@ -209,7 +210,7 @@ class KitTests(unittest.TestCase):
             self.assertIs(policy['heavy'], False)
             self.assertEqual(policy['per_turn'], m['role'].endswith('G'))
 
-    def test_d_has_required_base_controls_and_explicit_pending_slots(self):
+    def test_d_has_required_base_controls(self):
         for m in self.members:
             if m['role'] != 'D':
                 continue
@@ -227,9 +228,6 @@ class KitTests(unittest.TestCase):
             self.assertTrue(spec['task_kwargs']['give_hint'])
             self.assertEqual(config.sampling.idle_seconds, 300)
             self.assertNotIn('max_episode_seconds', spec)
-            for key in ('max_episode_decode_tokens', 'deadman_s'):
-                self.assertIn(key, spec)
-                self.assertIsNone(spec[key])
             self.assertEqual(spec['chat_template_kwargs'], {'reasoning_effort': 'medium'})   # R0 re-run 11
             self.assertIs(spec['thermal']['heavy'], True)
             self.assertIs(spec['thermal']['per_turn'], True)
@@ -325,31 +323,54 @@ class KitTests(unittest.TestCase):
         self.assertEqual(verdict['powermode_mismatches'][0]['run_id'], plan['members'][7]['run_id'])
 
     def test_sizing_is_only_a_provisional_preview_until_r1_fills_the_w1_plan(self):
-        self.assertNotIn(kit.W1_PLAN, self.files)
-        self.assertNotIn(kit.KIT / 'registration/sizing_b5.json', self.files)
-        preview = json.loads(self.files[kit.KIT / 'registration/sizing_preview.json'])
+        sizing = json.loads(self.files[kit.SIZING])
+        self.assertEqual(sizing['sources']['w1_plan']['sha256'],
+                         hashlib.sha256((ROOT / kit.W1_PLAN).read_bytes()).hexdigest())
+        kit.require_sizing(ROOT)
+        self.assertTrue(self.tree['non_claim'])
+        self.assertEqual(self.tree['draft_status'], 'FOR_LEAD_REVIEW')
+        self.assertEqual(self.plan['status'], 'FOR_LEAD_REVIEW')
+
+        pending, slots = ready_inputs()
+        pending['R1']['T_dead'] = None
+        with patch.object(kit, 'read_inputs', return_value=pending), \
+                patch.object(kit, 'read_r1_slots', return_value=slots), \
+                patch.object(kit, 'read_w1_plan_bytes', return_value=None):
+            files = kit.build_files(ROOT)
+        self.assertNotIn(kit.W1_PLAN, files)
+        self.assertNotIn(kit.SIZING, files)
+        preview = json.loads(files[kit.KIT / 'registration/sizing_preview.json'])
+        self.assertEqual(preview['status'], 'PROVISIONAL_NOT_ARM_SIZING')
         self.assertEqual(preview['planning_span_s'], 26927)
         self.assertEqual(preview['planning_window_max_s'], 44640)
         self.assertEqual(preview['span_limit_s'] - preview['planning_span_s'], 13)
-        self.assertTrue(self.tree['non_claim'])
-        self.assertEqual(self.tree['draft_status'], 'PROVISIONAL_SKELETON')
+        tree = json.loads(files[kit.KIT / 'plan_tree.json'])
+        self.assertTrue(tree['non_claim'])
+        self.assertEqual(tree['draft_status'], 'PROVISIONAL_SKELETON')
+        self.assertEqual(json.loads(files[kit.KIT / 'collection_plan.json'])['pending_inputs'], ['R1.T_dead'])
 
     def test_placeholders_fail_check_and_cannot_be_hidden_by_status(self):
-        with self.assertRaisesRegex(ValueError, 'BLOCKED.*R1'):
+        with self.assertRaisesRegex(ValueError, f'^{PENDING_RECEIPT}$'):
             kit.generate(ROOT, check=True)
-        inputs = kit.read_inputs(ROOT)
-        inputs['status'] = 'ready'
-        with self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.B_D'):
-            kit.require_ready(inputs)
-        self.assertNotIn('R0.reasoning_effort', kit.pending_inputs(kit.read_inputs(ROOT)))   # filled from R0 re-run 11
-        self.assertIn('R1.T_dead', self.plan['pending_inputs'])
-        # WP18 is filled; an emptied WP18 leaf still blocks, whatever status says.
-        inputs['WP18']['X']['max_turns'] = None
-        with self.assertRaisesRegex(ValueError, 'BLOCKED.*WP18.X.max_turns'):
-            kit.require_ready(inputs)
+        self.assertEqual(kit.pending_inputs(kit.read_inputs(ROOT)), [])
+        self.assertEqual(self.plan['pending_inputs'], [])
         with redirect_stderr(io.StringIO()) as err:
             self.assertEqual(kit.main(['--check']), 1)
-        self.assertIn('BLOCKED by placeholders', err.getvalue())
+        self.assertEqual(err.getvalue(), f'align_v4_kit: {PENDING_RECEIPT}\n')
+
+        r1_pending, slots = ready_inputs()
+        wp18_pending = deepcopy(r1_pending)
+        r1_pending['R1']['B_D'] = None
+        wp18_pending['WP18']['X']['max_turns'] = None
+        for inputs, field in ((r1_pending, r'R1\.B_D'), (wp18_pending, r'WP18\.X\.max_turns')):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
+                inputs['status'] = 'ready'
+                with patch.object(kit, 'read_inputs', return_value=inputs), \
+                        patch.object(kit, 'read_r1_slots', return_value=slots), \
+                        patch.object(kit, 'read_w1_plan_bytes', return_value=None):
+                    kit.generate(tmp)
+                    with self.assertRaisesRegex(ValueError, f'BLOCKED by placeholders: {field}'):
+                        kit.generate(tmp, check=True)
 
     def test_each_missing_owner_is_independently_fail_closed(self):
         # Even if all other owners have supplied nonempty values, this owner
@@ -358,9 +379,10 @@ class KitTests(unittest.TestCase):
         # WP11 (W1-blockers lane) and WP15 (the R1 runtime argv) are supplied;
         # emptying either must still block on its own.
         # WP18 is filled from the committed fixtures; it is checked below with the supplied owners.
-        self.assertEqual(pending_owners, {'R1'})      # R0 is filled from re-run 11
+        # R1 is filled by PR #886 (R0 from re-run 11): no owner is pending, and emptying R1 still blocks.
+        self.assertEqual(pending_owners, set())
         for owner, fields in kit.read_inputs(ROOT).items():
-            if not isinstance(fields, dict) or owner not in pending_owners | {'WP11', 'WP15', 'WP18'}:
+            if not isinstance(fields, dict) or owner not in pending_owners | {'WP11', 'WP15', 'WP18', 'R1'}:
                 continue
             candidate = {k: {name: 'supplied' for name in v} for k, v in kit.read_inputs(ROOT).items()
                          if isinstance(v, dict)}
@@ -371,9 +393,15 @@ class KitTests(unittest.TestCase):
                 kit.require_ready(candidate)
 
     def test_pending_specs_refuse_runtime_deserialization(self):
-        for m in self.members[4:]:
-            config = json.loads(self.files[Path(m['config_path'])])
-            with self.assertRaises((ValueError, TypeError)):
+        inputs, slots = ready_inputs()
+        inputs['R1']['thermal_policy'] = None
+        with patch.object(kit, 'read_inputs', return_value=inputs), \
+                patch.object(kit, 'read_r1_slots', return_value=slots), \
+                patch.object(kit, 'read_w1_plan_bytes', return_value=None):
+            files = kit.build_files(ROOT)
+        for member in self.members[4:]:
+            config = json.loads(files[Path(member['config_path'])])
+            with self.subTest(ordinal=member['ordinal']), self.assertRaises((ValueError, TypeError)):
                 EpisodeSpec.from_text(config['workload_profile']['prompt_text'])
 
     def test_kit_drift_is_reported_before_readiness(self):
@@ -652,7 +680,8 @@ class R1EvidenceBindingTests(unittest.TestCase):
         inputs, slots = ready_inputs()
         kit.require_ready(inputs, slots)
         with patch.object(kit, 'read_inputs', return_value=inputs), \
-                patch.object(kit, 'read_r1_slots', return_value=slots):
+                patch.object(kit, 'read_r1_slots', return_value=slots), \
+                patch.object(kit, 'read_w1_plan_bytes', return_value=None):
             files = kit.build_files(ROOT)
         plan = json.loads(files[kit.KIT / 'collection_plan.json'])
         for member in plan['members']:
@@ -712,12 +741,11 @@ class R1EvidenceBindingTests(unittest.TestCase):
 class R1BudgetBindingTests(unittest.TestCase):
     """Lead ruling R5-4: B_D, the thermal policy and ruling 1(f) bind to r1_slots."""
 
-    def test_b_d_may_only_be_lowered_from_the_step_d_budget(self):
+    def test_b_d_above_the_step_d_budget_is_refused(self):
         inputs, slots = ready_inputs()
-        inputs['R1']['B_D'] = 6144
         kit.require_ready(inputs, slots)
         inputs['R1']['B_D'] = 9216
-        with self.assertRaisesRegex(ValueError, 'exceeds r1_slots.slots.B_D 8192'):
+        with self.assertRaisesRegex(ValueError, 'must equal the decided step-d budget 8192'):
             kit.require_ready(inputs, slots)
 
     def test_r1_slots_without_an_admissible_step_d_budget_refuse(self):
@@ -765,8 +793,6 @@ class R1BudgetBindingTests(unittest.TestCase):
         self.assertEqual(kit.max_fitting_b_d(slots, inputs['R1']['T_dead']), 7168)
         # RL-148 section 2, RL-149 section 1.5: ruling 1(f)'s worst case no longer refuses D;
         # require_ready asks that the typical case fits (tests/align/test_rl149_typical_case.py).
-        kit.require_ready(inputs, slots)
-        inputs['R1']['B_D'] = 7168
         kit.require_ready(inputs, slots)
 
     def test_ruling_1f_needs_the_measured_inputs(self):
@@ -1211,9 +1237,17 @@ class SessionParameterTests(unittest.TestCase):
         self.assertEqual(pilot.SCHEMA, 'joulewise.align_pilot_desk.v3')
 
     def test_v4_prepare_refuses_before_shared_prepare_or_session_creation(self):
+        blanked, slots = ready_inputs()
+        blanked['R1']['B_D'] = None
         with tempfile.TemporaryDirectory() as tmp, patch.object(pilot, 'prepare') as prepare:
             target = Path(tmp) / 'new-session'
-            with self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.B_D'):
+            with self.assertRaisesRegex(ValueError, f'^{PENDING_RECEIPT}$'):
+                session.prepare(ROOT, target)
+            # A synthetic blanked R1 leaf still refuses before the shared prepare.
+            with patch.object(kit, 'read_inputs', return_value=blanked), \
+                    patch.object(kit, 'read_r1_slots', return_value=slots), \
+                    patch.object(kit, 'build_files', return_value={}), \
+                    self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.B_D'):
                 session.prepare(ROOT, target)
             prepare.assert_not_called()
             self.assertFalse(target.exists())
@@ -1223,6 +1257,7 @@ class SessionParameterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.object(pilot, 'prepare') as prepare, \
                 patch.object(kit, 'read_inputs', return_value=inputs), \
                 patch.object(kit, 'read_r1_slots', return_value=slots), \
+                patch.object(kit, 'read_w1_plan_bytes', return_value=None), \
                 patch.object(kit, 'build_files', return_value={}):
             target = Path(tmp) / 'new-session'
             with self.assertRaisesRegex(ValueError, r'BLOCKED: .*sizing_b5\.json is not derivable yet.*'
@@ -1232,8 +1267,16 @@ class SessionParameterTests(unittest.TestCase):
             self.assertFalse(target.exists())
 
     def test_v4_install_refuses_before_shared_installer(self):
+        blanked, slots = ready_inputs()
+        blanked['R1']['B_D'] = None
         with patch.object(pilot.h, 'read', return_value={'measurement_root': str(ROOT)}), patch.object(pilot, 'install') as install:
-            with self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.B_D'):
+            with self.assertRaisesRegex(ValueError, f'^{PENDING_RECEIPT}$'):
+                session.install('synthetic-session', w1_disk_config='/x.json')
+            # A synthetic blanked R1 leaf still refuses before the shared installer.
+            with patch.object(kit, 'read_inputs', return_value=blanked), \
+                    patch.object(kit, 'read_r1_slots', return_value=slots), \
+                    patch.object(kit, 'build_files', return_value={}), \
+                    self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.B_D'):
                 session.install('synthetic-session', w1_disk_config='/x.json')
             install.assert_not_called()
 
@@ -1485,7 +1528,10 @@ class PendingMessageTests(unittest.TestCase):
         self.assertNotIn('WP15', text)  # the R1 runtime argv is committed in inputs.json
         self.assertNotIn('WP18', text)  # filled from the committed X/Y token fixtures
         self.assertNotIn('R0.reasoning_effort', text)
-        self.assertIn('| R1: ' + kit.PENDING_REASONS['R1'], text)
+        self.assertNotIn('BLOCKED by placeholders', text)
+        self.assertNotIn('| R1: ', text)
+        self.assertEqual(text, PENDING_RECEIPT)
+        self.assertIn('| R1: ' + kit.PENDING_REASONS['R1'], self.message(R1=('B_D',)))
 
 
 class W1SizingTests(unittest.TestCase):
@@ -1493,21 +1539,19 @@ class W1SizingTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        from scripts import align_v4_w1_synthetic as dry
+
         cls.inputs, cls.slots = ready_inputs()
-        with patch.object(kit, 'read_inputs', return_value=deepcopy(cls.inputs)), \
-                patch.object(kit, 'read_r1_slots', return_value=deepcopy(cls.slots)), \
-                patch.object(kit, 'read_w1_plan_bytes', return_value=None):
-            # D config bytes depend on the R1 inputs; bind the plan to that roster.
-            cls.collection_plan = json.loads(kit.build_files(ROOT)[kit.KIT / 'collection_plan.json'])
+        # D config bytes depend on the R1 inputs; bind the plan to that roster.
+        cls.collection_plan, _, cls.preview_files = dry.build_kit(cls.inputs, cls.slots)
         cls.plan = filled_w1_plan(cls.inputs, cls.slots, collection_plan=cls.collection_plan)
         cls.raw = (json.dumps(cls.plan, indent=2, sort_keys=True) + '\n').encode()
-        with patch.object(kit, 'read_inputs', return_value=deepcopy(cls.inputs)), \
-                patch.object(kit, 'read_r1_slots', return_value=deepcopy(cls.slots)), \
-                patch.object(kit, 'read_w1_plan_bytes', return_value=cls.raw):
-            cls.files = kit.build_files(ROOT)
+        _, _, cls.files = dry.build_kit(cls.inputs, cls.slots, w1_plan=cls.plan)
         cls.sizing = json.loads(cls.files[kit.SIZING])
 
     def test_kit_derives_sizing_from_the_filled_plan_with_the_design_arithmetic(self):
+        self.assertNotIn(kit.W1_PLAN, self.preview_files)
+        self.assertNotIn(kit.SIZING, self.preview_files)
         self.assertEqual(self.files[kit.W1_PLAN], self.raw)
         sized = self.sizing['packs'][kit.PACK_ID]
         # Amendment 1 W1 arithmetic at the planning member_s.
@@ -1546,9 +1590,9 @@ class W1SizingTests(unittest.TestCase):
             kit.build_files(ROOT)
 
     def test_require_sizing_needs_the_plan_then_the_derived_file(self):
-        with self.assertRaisesRegex(ValueError, r'sizing_b5\.json is not derivable yet.*FINAL-DESIGN B8'):
-            kit.require_sizing(ROOT)
         with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, r'sizing_b5\.json is not derivable yet.*FINAL-DESIGN B8'):
+                kit.require_sizing(tmp)
             (Path(tmp) / kit.W1_PLAN).parent.mkdir(parents=True)
             (Path(tmp) / kit.W1_PLAN).write_bytes(self.raw)
             with self.assertRaisesRegex(ValueError, 'missing; regenerate'):

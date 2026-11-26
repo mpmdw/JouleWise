@@ -441,6 +441,15 @@ class RegistrationTests(unittest.TestCase):
 
 
 class R1ExecutedSourceTests(unittest.TestCase):
+    def test_all_ten_frozen_r1_blobs_match_b2e01464d(self):
+        root = Path(__file__).resolve().parents[2]
+        pin = 'b2e01464d6d4fbf2901ff4d4154df9455104a12a'
+        self.assertEqual(len(reg.R1_EXECUTED_SOURCES), 10)
+        for path in reg.R1_EXECUTED_SOURCES:
+            with self.subTest(path=path):
+                raw = subprocess.check_output(['git', 'cat-file', 'blob', f'{pin}:{path}'], cwd=root)
+                self.assertEqual((root / path).read_bytes(), raw)
+
     def test_condition13_names_exactly_the_ten_ruled_sources(self):
         self.assertEqual(set(reg.R1_EXECUTED_SOURCES), {
             "scripts/align_r1_rehearsal.py", "joulewise/align/apple/r1_runtime.py",

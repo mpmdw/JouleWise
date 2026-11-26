@@ -361,7 +361,7 @@ class AdmissionWitnesses(Fixture):
         self.assertEqual(wp.probe('deadline', ctx)['status'], wp.FAIL,
                          'installer --plan differs while plan_path is merely another argv value')
 
-    def test_packet_probe_checks_all_490_mutations_on_the_production_arm(self):
+    def test_packet_probe_checks_all_506_mutations_on_the_production_arm(self):
         ctx = self.context()
         captured = []
         original = wp._mutations
@@ -374,7 +374,7 @@ class AdmissionWitnesses(Fixture):
         with mock.patch.object(wp, '_mutations', inspect):
             row = wp.probe('packet-tamper', ctx)
         self.assertEqual(row['status'], wp.PASS, row)
-        self.assertEqual(row['evidence']['mutations_tried'], 490, row)
+        self.assertEqual(row['evidence']['mutations_tried'], 506, row)
         self.assertEqual(row['evidence']['admitted_mutations'], [])
         self.assertEqual(row['evidence']['zero_capture_attempt'], 'C3')
         packet, rows = captured[0]

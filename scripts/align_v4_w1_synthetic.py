@@ -110,9 +110,12 @@ PAIR_GROUPS = {5: 'D-5-17', 17: 'D-5-17', 6: 'X-G', 16: 'X-G', 9: 'X-S', 13: 'X-
                7: 'Y-S', 15: 'Y-S', 10: 'Y-G', 12: 'Y-G'}
 
 
-def build_kit(inputs, r1_slots=SYN_R1_SLOTS):
+def build_kit(inputs, r1_slots=SYN_R1_SLOTS, *, w1_plan=None):
+    """Build from synthetic sources, including the plan when supplied."""
+    plan_bytes = None if w1_plan is None else kit.raw_json(w1_plan)
     with patch.object(kit, 'read_inputs', lambda root=kit.ROOT: deepcopy(inputs)), \
-            patch.object(kit, 'read_r1_slots', lambda root=kit.ROOT: deepcopy(r1_slots)):
+            patch.object(kit, 'read_r1_slots', lambda root=kit.ROOT: deepcopy(r1_slots)), \
+            patch.object(kit, 'read_w1_plan_bytes', return_value=plan_bytes):
         kit.require_ready(deepcopy(inputs), deepcopy(r1_slots), synthetic=True)
         files = kit.build_files(kit.ROOT)
     plan = json.loads(files[kit.KIT / 'collection_plan.json'])

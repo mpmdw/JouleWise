@@ -1451,6 +1451,7 @@ def check_r1_w1_chain(ctx):
         with mock.patch.object(r1, '_now_local', lambda: rehearsal.NOON_SAFE), \
                 mock.patch.object(r1, '_run', rehearsal.FakeWorld(step_d_rate=40.0, gated_decode_tokens=28000,
                                                                gated_admitted_turns=7)), \
+                rehearsal.synthetic_s6_registration(), \
                 contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             if r1.run(rehearsal.R1Tests.args(None, str(data), synthetic=True)) != 0:
                 raise RuntimeError('synthetic R1 rehearsal did not complete')

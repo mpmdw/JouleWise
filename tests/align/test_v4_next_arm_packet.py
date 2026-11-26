@@ -269,6 +269,11 @@ class Scenario:
         self.git('commit', '-qm', 'synthetic evidence', '--allow-empty')
         return self.git('rev-parse', 'HEAD')
 
+    def unpack_receipt(self, sha256, **override):
+        receipt = {'schema': builder.light_triage.UNPACK_RECEIPT_SCHEMA, 'window': self.window,
+                   'plan_id': self.sources['plan']['plan_id'], 'finalized_manifest_sha256': sha256}
+        return json.dumps({**receipt, **override}, sort_keys=True, separators=(',', ':')).encode()
+
     def retarget_next_members(self):
         """Keep fixture member IDs in the named slot, preserving roster mutations."""
         slot = series.slot_of(self.next_plan['window'])
@@ -294,9 +299,14 @@ class Scenario:
         self.sources['watchdog_state'].setdefault('released_terminal_windows', [
             f"{self.sources['plan']['plan_id']}:/DO-NOT-FOLLOW/custody:"
             f"{builder.digest((json.dumps(self.sources['result'], sort_keys=True) + chr(10)).encode())}"])
+        if self.window != 'R1' and not getattr(self, 'omit_finalized_manifest', False):
+            finalized_sha = self.record.setdefault('finalized_manifest', builder.digest(f'synthetic tree {d}'.encode()))
+            if any(m['run_id'] not in self.absent_captures for m in self.members):
+                self.sources.setdefault('unpack_receipt', self.unpack_receipt(finalized_sha))
         if self.provisional:
             # R17: committed before the Air full desk finished; the light triage stands in.
-            self.final_sources = {k: copy.deepcopy(self.sources[k]) for k in builder.FINAL_SOURCES}
+            self.final_sources = {k: copy.deepcopy(self.sources[k])
+                                  for k in builder.FINAL_SOURCES_WITH_RECEIPT if k in self.sources}
             light_thermal = copy.deepcopy(self.thermal)
             for m in light_thermal['members']:
                 m['excluded'] = bool(m['calibration_exclusions'])
@@ -305,7 +315,7 @@ class Scenario:
                 'km003c': self.sources['pilot']['extra_checks']['km003c'],
                 'series_desk_row': self.sources['pilot']['extra_checks'].get('series_desk_row')}
             self.sources['desk'] = {'plan_id': self.sources['plan']['plan_id'], 'status': 'running_off_mbp'}
-            self.omit_sources.update(('pilot', 'exclusions'))
+            self.omit_sources.update(('pilot', 'exclusions', 'unpack_receipt'))
         if self.previous_final:
             prior = self.previous
             self.record['previous_final'] = {'record_sha256': prior.link['sha256'], 'sources': {
@@ -318,14 +328,6 @@ class Scenario:
             if self.raw_custody else self.write(f'{d}/captures/{i}.jsonl', b'{"monotonic_ns":1,"power_w":1}\n'))
             for i in pairs}
         self.record['raw_evidence'] = [self.write(f'{d}/raw/sidecar.jsonl', b'{"temperature_c":30}\n')]
-        if self.window != 'R1' and not getattr(self, 'omit_finalized_manifest', False):
-            # R17 review F2: the record binds the finalized (record-bound) tree manifest, canonical bytes.
-            finalized = {'schema': builder.FINALIZED_MANIFEST_SCHEMA, 'source_root': '/DO-NOT-FOLLOW/session-' + d,
-                         'entries': {'raw/sidecar.jsonl': {'sha256': 'f' * 64, 'size': 21}},
-                         'closure': {'links': {}, 'files': {}, 'inputs': [], 'mirror': None}}
-            self.record['finalized_manifest'] = self.write(
-                f'{d}/evidence/finalized_manifest.json',
-                json.dumps(finalized, sort_keys=True, separators=(',', ':')).encode())
         if self.raw_custody:
             self.record['raw_evidence'].extend(self.record['captures'].values())
         self.record_path = f'{d}/record.json'
@@ -1677,11 +1679,9 @@ class R17ReviewFinalityTests(Base):
         self.addCleanup(temp.cleanup)
         return temp.name
 
-    def test_constants_match_the_runner_and_the_offload_module(self):
-        from joulewise.align.apple import harvest_offload
+    def test_finality_constants_match_the_runner(self):
         from scripts import align_v4_harvest_off as runner
         self.assertEqual(builder.COMPLETED_HARVEST, runner.COMPLETED_HARVEST)
-        self.assertEqual(builder.FINALIZED_MANIFEST_SCHEMA, harvest_offload.FINALIZED_SCHEMA)
 
     def light_with_stale_final_sources(self, root, w1):
         # F4: PILOT/exclusions present, desk still running off the MBP, honest light triage.
@@ -1759,21 +1759,79 @@ class R17ReviewFinalityTests(Base):
                 self.assertIn('R17: final eligibility of C1', packet['calibration_error'])
                 self.assertFalse(evaluate(c2, packet)['admitted'])
 
-    def test_record_must_bind_a_canonical_finalized_manifest(self):
+    def test_record_requires_only_the_finalized_manifest_digest(self):
         root = self.root()
         w1 = Scenario(root, 'W1').finish()
         c1 = Scenario(root, 'C1', previous=w1)
         c1.omit_finalized_manifest = True
         c1.finish()
-        with self.assertRaisesRegex(ValueError, 'must bind the finalized tree manifest'):
+        with self.assertRaisesRegex(ValueError, 'finalized_manifest must be a lowercase SHA-256 digest'):
             c1.build()
         c1b = Scenario(self.root(), 'W1')
         c1b.omit_finalized_manifest = True
-        c1b.record['finalized_manifest'] = c1b.write('w-W1/evidence/finalized_manifest.json', {
-            'schema': builder.FINALIZED_MANIFEST_SCHEMA, 'source_root': '/x', 'entries': {}, 'closure': {}})
+        c1b.record['finalized_manifest'] = {'path': 'unused-manifest.json', 'sha256': 'a' * 64}
         c1b.finish()
-        with self.assertRaisesRegex(ValueError, 'not a canonical'):
+        with self.assertRaisesRegex(ValueError, 'finalized_manifest must be a lowercase SHA-256 digest'):
             c1b.build()
+
+
+class UnpackReceiptTests(Base):
+    @staticmethod
+    def record(scenario):
+        return builder.WindowRecord(builder.GitEvidence(scenario.root), scenario.record_commit, scenario.record_path)
+
+    def test_rl183b_committed_final_rejects_wrong_identity_and_receipt_encoding(self):
+        sha = 'a' * 64
+        for change, reason in (({'window': 'C1'}, 'another window'),
+                               ({'plan_id': 'other-plan'}, 'another plan'),
+                               ({'finalized_manifest_sha256': 'b' * 64}, 'manifest digest'),
+                               ({'file_count': 1}, 'exactly'), (None, 'not canonical')):
+            with self.subTest(change=change):
+                s = self.scenario()
+                s.record['finalized_manifest'] = sha
+                s.sources['unpack_receipt'] = (s.unpack_receipt(sha, **change) if change
+                                                else s.unpack_receipt(sha) + b'\n')
+                s.finish()
+                self.assertIn(reason, self.record(s).final_evidence())
+        s = self.scenario()
+        s.omit_sources.add('unpack_receipt')
+        s.finish()
+        self.assertIn('unpack receipt missing', self.record(s).final_evidence())
+
+    def test_rl183b_previous_final_checks_the_predecessor_digest(self):
+        w1 = self.scenario().finish()
+        c1 = Scenario(w1.root, 'C1', previous=w1, provisional=True).finish()
+        c2 = Scenario(w1.root, 'C2', previous=c1, previous_final=True)
+        c2.record['finalized_manifest'] = 'b' * 64
+        self.assertNotEqual(c1.record['finalized_manifest'], c2.record['finalized_manifest'])
+        c1.final_sources['unpack_receipt'] = c1.unpack_receipt(c2.record['finalized_manifest'])
+        c2.finish()
+        predecessor, successor = self.record(c1), self.record(c2)
+        predecessor.bind_final(successor)
+        self.assertTrue(successor.is_final())
+        self.assertIn('manifest digest', predecessor.final_evidence())
+        self.assertFalse(predecessor.is_final())
+        self.assertIn('final eligibility of C1', c2.build()['checks']['member_eligibility']['basis'])
+
+    def test_rl183b_zero_capture_light_triage_and_r1_are_exempt(self):
+        w1 = self.scenario().finish()
+        zero = Scenario(w1.root, 'C1', previous=w1, captured=False, provisional=True).finish()
+        r1 = self.scenario('R1').finish()
+        for s in (zero, r1):
+            with self.subTest(window=s.window):
+                record = self.record(s)
+                self.assertIsNone(record.source('unpack_receipt', json_value=False))
+                self.assertTrue(record.is_final())
+        self.assertIsNone(self.record(r1).finalized_manifest_sha256)
+        self.assertFalse(self.record(zero).has_final_sources())
+
+        wrong = zero.unpack_receipt(zero.record['finalized_manifest'], window='C2')
+        zero.record['sources']['unpack_receipt'] = zero.write('w-C1/evidence/unpack_receipt.json', wrong)
+        zero.write(zero.record_path, zero.record)
+        zero.record_commit = zero.commit()
+        record = self.record(zero)
+        self.assertIn('another window', record.final_evidence())
+        self.assertEqual(record.eligibility(allow_provisional=True)['status'], 'provisional')
 
 
 if __name__ == '__main__':

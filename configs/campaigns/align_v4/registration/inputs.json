@@ -1,16 +1,55 @@
 {
-  "schema_version": "joulewise.align_v4_inputs.v1",
-  "status": "PROVISIONAL_PLACEHOLDERS_NOT_EXECUTABLE",
+  "R0": {
+    "reasoning_effort": "medium",
+    "record_sha256": "e6231a8f3e6ab6177bbedbf12b878c958a7b4d4331e36472c74c2a192588769b"
+  },
+  "R1": {
+    "B_D": 10240,
+    "I_D": 631.718592813,
+    "T_dead": 984.8881554172832,
+    "thermal_policy": {
+      "chunk_tokens": 4096,
+      "classification_sha256": "c1ab71d536c952da96a5790cfa6434f84b09873da1c0735ab64bacdee182e920",
+      "contrast_fit": {
+        "authority": "LEAD-RULINGS-2 R11 / RUN_STATE 212",
+        "available_cap_s": 488,
+        "deadman_s": 1086.2968298885671,
+        "episode_s": 587.339656691,
+        "fits": false,
+        "history_disclosure": "A skipped/capped contrast changes predecessor heat for W1 D; W1 is development only.",
+        "nominal_cap_s": 600,
+        "predeclared": "INCONCLUSIVE: reduced contrast cap can change predecessor heat for downstream W1 D",
+        "r1_g0_timeout_s": 1200.0,
+        "reasons": [
+          "reduced contrast cap can change predecessor heat for downstream W1 D"
+        ],
+        "role": "contrast",
+        "rule": "cap_c=max(0,min(nominal,floor(contrast_deadman-X_G_episode-10))); missing timing gives 0; non-veto INCONCLUSIVE",
+        "value_s": 488,
+        "worst_s": 1075.339656691,
+        "x_g_fallback": false,
+        "x_g_wait_s": 85.426611916,
+        "x_max_turns": 12
+      },
+      "contrast_g0_cap_s": 488,
+      "delta_fast_c": 1.0,
+      "delta_slow_c": 1.0,
+      "g0_cap_s": 600,
+      "heavy": true,
+      "per_turn": true,
+      "sensors": {
+        "fan_keys": [
+          "F0Ac",
+          "F1Ac"
+        ],
+        "r0_sha256": "e6231a8f3e6ab6177bbedbf12b878c958a7b4d4331e36472c74c2a192588769b",
+        "s_fast": "TV0h",
+        "s_slow": "TV1h"
+      },
+      "turn_cap_s": 300.0
+    }
+  },
   "WP11": {
-    "identity_unit": {
-      "flags": [
-        "runtime_stack_unobserved"
-      ],
-      "model_artifact_sha256": "a8d1c5c963787dd9dc524912e05d409172124da773d196e8f5123820b4c36b30",
-      "model_name": "Qwen3.8-27B-8bit",
-      "model_revision": "815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9",
-      "model_source": "/Users/edr/jw_models/mlx-community/Qwen3.8-27B-8bit"
-    },
     "artifact_inventory": {
       "algorithm": "sha256",
       "files": {
@@ -70,6 +109,15 @@
       "root": "/Users/edr/jw_models/mlx-community/Qwen3.8-27B-8bit",
       "status": "ok"
     },
+    "identity_unit": {
+      "flags": [
+        "runtime_stack_unobserved"
+      ],
+      "model_artifact_sha256": "a8d1c5c963787dd9dc524912e05d409172124da773d196e8f5123820b4c36b30",
+      "model_name": "Qwen3.8-27B-8bit",
+      "model_revision": "815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9",
+      "model_source": "/Users/edr/jw_models/mlx-community/Qwen3.8-27B-8bit"
+    },
     "local_file_verification": {
       "folded_sha256": "a8d1c5c963787dd9dc524912e05d409172124da773d196e8f5123820b4c36b30",
       "hf_pins": {
@@ -97,11 +145,23 @@
       "weight_files": 6
     }
   },
-  "WP18": {
-    "X": {"max_turns": 12, "token_fixture_sha256": "9dac183dc113275c799f339f827be3ab1e332f4685b2e4b6b0da9466d6dc658f"},
-    "Y": {"max_turns": 12, "token_fixture_sha256": "f17a5a0f52921b52d67216e6b0bfa86cb3f96ebd143d6e39a4c210ba81420dac"}
+  "WP15": {
+    "runtime_entrypoint": [
+      "scripts/align_r1_runtime.py",
+      "--config",
+      "configs/align/v4/r1_runtime.json"
+    ]
   },
-  "R0": {"reasoning_effort": "medium"},
-  "R1": {"B_D": null, "I_D": null, "T_dead": null, "thermal_policy": null},
-  "WP15": {"runtime_entrypoint": ["scripts/align_r1_runtime.py", "--config", "configs/align/v4/r1_runtime.json"]}
+  "WP18": {
+    "X": {
+      "max_turns": 12,
+      "token_fixture_sha256": "9dac183dc113275c799f339f827be3ab1e332f4685b2e4b6b0da9466d6dc658f"
+    },
+    "Y": {
+      "max_turns": 12,
+      "token_fixture_sha256": "f17a5a0f52921b52d67216e6b0bfa86cb3f96ebd143d6e39a4c210ba81420dac"
+    }
+  },
+  "schema_version": "joulewise.align_v4_inputs.v1",
+  "status": "PROVISIONAL_PLACEHOLDERS_NOT_EXECUTABLE"
 }

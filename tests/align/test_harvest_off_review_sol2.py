@@ -265,6 +265,8 @@ class EligibilityTests(Scratch):
         t2.finish()
         packet = t2.build()
         self.assertEqual(packet['calibration_decision']['decision'], 'calibration_complete')
+        self.assertEqual(next(row['status'] for row in packet['series_history'] if row['attempt_id'] == 'T1'),
+                         'provisional')
         freeze = series.raw_json({'status': 'pass', 'manifest_sha256': packet['series_manifest_sha256'],
                                    'calibration_rows_sha256': series.sha(series.raw_json(packet['calibration_windows']))})
         t2.write(series.ADMISSION.as_posix(), {'evidence': {'test_threshold_freeze': {

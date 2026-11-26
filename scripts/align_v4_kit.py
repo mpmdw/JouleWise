@@ -202,14 +202,19 @@ PLANNING_RELEASE_PEAK_FIELD = 'heater_key_max_last_300s_c'
 
 def read_r1_planning_release(root=ROOT):
     """The committed lead planning-release record (a canonical raw_json file), or None."""
+    record, _ = _read_r1_planning_release(root)
+    return record
+
+
+def _read_r1_planning_release(root):
     path = Path(root) / R1_PLANNING_RELEASE
     if not path.is_file():
-        return None
+        return None, None
     raw = path.read_bytes()
     record = json.loads(raw)
     if not isinstance(record, dict) or raw != raw_json(record):
         raise ValueError(f'{R1_PLANNING_RELEASE} must be a canonical JSON object (indent 2, sorted keys)')
-    return record
+    return record, raw
 
 
 def planning_heater_key(root=ROOT):
@@ -972,7 +977,7 @@ def max_fitting_b_d(r1_slots, t_dead):
 def check_r1_budget_and_policy(r1_inputs, r1_slots, *, x_max_turns=None):
     """Lead ruling R5-4 (executing review MEDIUM-2, cold pass MEDIUM-2).
 
-    inputs.R1.B_D may only be lowered from R1's step-d budget (A1's fit rule),
+    inputs.R1.B_D must equal the budget named by decide (RL-189 section 2.5),
     the thermal policy must be the one R1 measured (chunk_tokens = N_chunk,
     delta_slow_c = S6, which is S5 until the lead's FD 2.6 S6 tuning,
     turn_cap_s = S7), and the frozen B_D must satisfy ruling 1(f) against the
@@ -989,9 +994,10 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots, *, x_max_turns=None):
     if type(top) is not int or not 1024 <= top <= 40960 or top % 1024:
         raise ValueError('R1 r1_slots.slots.B_D must be the step-d decode budget (a multiple of 1024 in '
                          '[1024, 40960])')
-    if type(r1_inputs['B_D']) is not int or r1_inputs['B_D'] > top:
-        raise ValueError(f'inputs.R1.B_D {r1_inputs["B_D"]!r} exceeds r1_slots.slots.B_D {top} '
-                         '(the fit rule only lowers B_D)')
+    # The TYPICAL-CASE decision copies the step-d budget to set_inputs['R1.B_D'].
+    if type(r1_inputs['B_D']) is not int or r1_inputs['B_D'] != top:
+        raise ValueError(f'inputs.R1.B_D {r1_inputs["B_D"]!r} must equal the decided step-d budget '
+                         f'{top} (RL-189 section 2.5 item 2)')
     policy = r1_inputs.get('thermal_policy')
     if not isinstance(policy, dict):
         raise ValueError('inputs.R1.thermal_policy must be an object')
@@ -1502,6 +1508,9 @@ def build_files(root=ROOT):
     # PR #790 row-2 LOW 3: generation without --check writes no receipt-armed D config either (RL-156 section 3.1).
     refuse_ruling_1f_receipt(inputs, root)
     files = {INPUTS: (root / INPUTS).read_bytes(), R1_SLOTS: (root / R1_SLOTS).read_bytes()}
+    _, planning_release_raw = _read_r1_planning_release(root)
+    if planning_release_raw is not None:
+        files[R1_PLANNING_RELEASE] = planning_release_raw
     w1_plan_raw = read_w1_plan_bytes(root)
     if w1_plan_raw is not None:
         files[W1_PLAN] = w1_plan_raw
@@ -1766,9 +1775,10 @@ def arm_powermode_check(plan, observed_ac_powermode):
 
 
 def generate(output_root=ROOT, *, check=False, source_root=ROOT):
+    output_root = Path(output_root)
     files = build_files(source_root)
     for path, raw in files.items():
-        target = Path(output_root) / path
+        target = output_root / path
         if check:
             if not target.is_file() or target.read_bytes() != raw:
                 raise ValueError('generated v4 kit drifted: ' + str(path))
@@ -1776,6 +1786,8 @@ def generate(output_root=ROOT, *, check=False, source_root=ROOT):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(raw)
     if check:
+        # Every generated file (the planning release included) was byte-compared at output_root above;
+        # readiness also reads non-kit sources (r1_runtime.json, frozen pins), which live only in the source tree.
         require_w1_ready(source_root)
     return files
 

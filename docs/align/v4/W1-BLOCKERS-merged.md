@@ -110,6 +110,51 @@ placeholders that the lead or magistrate fills in. No agent opens them.
 Paths under `u3_sources/` are relative to `configs/campaigns/align_v4/registration/`.
 Steps 4-5 print two integers to stdout, `pairs` and `unavailable`, and nothing else. The values and reasons go only to the named output file (Sol1 `abe2d4164`, Sol2 S2-02).
 
+### W1 signing checklist additions
+
+- Run step 4 after R1 closes from a clean checkout containing the lead-reviewed
+  RL-168 finding 1 commit and its test (RL-183 §2.5). Record the full
+  `git rev-parse --verify HEAD` from the checkout that actually runs step 4.
+  Audit round 1 binds the roster and selection to that checkout's `HEAD`.
+- Before signing, set `STEP4_CHECKOUT` to the recorded commit and
+  `SIGNING_COMMIT` to the proposed signing commit. Use `J` for a checkout
+  with both commits. Compare the three Git blob IDs (RL-184 §4).
+  Exit 0 means all three match. If any differs (exit 1), rerun step 4 from a
+  clean checkout at the signing pin and record that run's commit. If either
+  commit or any blob cannot be verified (exit 2), hold signing until the
+  comparison can be completed.
+
+  ```sh
+  (
+    if [ -z "${J:-}" ] || [ -z "${STEP4_CHECKOUT:-}" ] || [ -z "${SIGNING_COMMIT:-}" ]; then
+      printf 'Set J, STEP4_CHECKOUT and SIGNING_COMMIT before comparing.\n' >&2
+      exit 2
+    fi
+    step4=$(git -C "$J" rev-parse --verify --end-of-options "$STEP4_CHECKOUT^{commit}") || exit 2
+    signing=$(git -C "$J" rev-parse --verify --end-of-options "$SIGNING_COMMIT^{commit}") || exit 2
+    result=0
+    for blob_path in \
+      scripts/align_v4_u3_export.py \
+      configs/campaigns/align_v4/registration/u3_sources/selection.json \
+      configs/campaigns/align_v4/collection_plan.json
+    do
+      used=$(git -C "$J" rev-parse --verify --end-of-options "$step4:$blob_path") || exit 2
+      proposed=$(git -C "$J" rev-parse --verify --end-of-options "$signing:$blob_path") || exit 2
+      [ "$(git -C "$J" cat-file -t "$used")" = blob ] &&
+        [ "$(git -C "$J" cat-file -t "$proposed")" = blob ] || exit 2
+      if [ "$used" != "$proposed" ]; then
+        printf 'Changed blob: %s\n' "$blob_path"
+        result=1
+      fi
+    done
+    exit "$result"
+  )
+  ```
+
+- Before signing, close the desk-seal successor under PR #826. Review the RL-183b unpack-receipt gate on direct and successor final sources and confirm the digest-only record format. Until the successor lands, hold v4 series-record commits.
+- Record C1(b) exclusions and tripwire evidence (register row 13, RL-163 §§2–3). The synthetic harvest must exercise a real exclusion and list each `members_excluded` row's keys. Confirm that the counted window-harvest codes and DC fit codes print without member observations or fit row counts. The lead owns the RL-163 §3 `calibration.refit_cache_miss` all-or-none check on the protected sessions. Refer any mixed result to Fable before signing.
+- Keep each window's offload pack and MBP originals until its desk is final and its record is pushed (RL-168 finding 3).
+
 Steps 1-3 and 11 can be done during R1. Steps 4-10 fit in the R1→W1 gap. Only
 steps 4-5 touch measurement bundles.
 

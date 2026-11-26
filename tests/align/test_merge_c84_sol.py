@@ -49,7 +49,9 @@ class NativeFinalityTests(unittest.TestCase):
         self.assertEqual(desk['members_disclosure_only'], {victim: ['contention.unmeasured']})
         # A completed non-passing desk is also final under R17. The synthetic
         # fixture's other instrument checks need not all pass for this assertion.
-        final = runner.cmd_final(SimpleNamespace(session_root=fixture.session, pilot=None, window_id='C1'))
+        receipt, digest = fixture.unpack_receipt()
+        final = runner.cmd_final(SimpleNamespace(session_root=fixture.session, pilot=None, window_id='C1',
+                                                unpack_receipt=receipt, finalized_sha256=digest))
         self.assertEqual(final['member_eligibility']['stage'], 'final')
 
 

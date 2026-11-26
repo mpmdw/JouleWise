@@ -1,6 +1,2076 @@
 {
+  "ac_powermode": 0,
+  "battery": {
+    "authority": "CHAIR ruling 4(b)",
+    "charge_resume_events": [],
+    "charge_resume_soc_pct": null,
+    "drain_pct_per_h": {
+      "30B": -0.0,
+      "D": 0.0
+    },
+    "drain_pct_per_h_by_segment": {
+      "D_bank_benign_s1_gated_held": -0.0,
+      "D_spam_benign_s1_gated_held_a": -0.0,
+      "D_spam_benign_s1_gated_held_b": -0.0,
+      "step_30b": -0.0,
+      "step_D_prefill_10k_decode_4096": -0.0
+    }
+  },
+  "budget_fit_inputs": {
+    "authority": "CHAIR ruling 1(f); lead rulings R5-4, R6-3, R7-2",
+    "r_decode_gated_tok_per_s": {
+      "D_bank_benign_s1_gated_held": 11.96814138706922,
+      "D_spam_benign_s1_gated_held_a": 12.167678775660425,
+      "D_spam_benign_s1_gated_held_b": 12.182839623519598
+    },
+    "r_decode_step_d_tok_per_s": 12.007690168130106,
+    "r_decode_tok_per_s": 11.96814138706922,
+    "rule": "G0_cap_W1 (r1_slots.g0_cap_w1.value_s, R7-2) + max (G1 + H) + max (prefill + tool) over the gated D runs + (B_D + turn_cap_tokens) / r_decode <= T_dead, r_decode = min(step-d rate, every gated run's observed rate) (scripts/align_v4_kit.py ruling_1f_fit)",
+    "turn_cap_tokens": 4096
+  },
+  "calibration_precools": {
+    "cooldown_after_D": true,
+    "planning_turn_R_plus_0C.precool": true,
+    "planning_turn_R_plus_2C.precool": true
+  },
+  "deadman_budget": [
+    {
+      "T_dead_s": 984.8881554172832,
+      "admitted_turns": 2,
+      "decode_tokens": 4199,
+      "duty_T_dead_s": 984.8881554172832,
+      "duty_bar": {
+        "checks": {
+          "admitted_turns_ge_3": "not_applicable: episode returned at turn 1",
+          "gate_hold_le_40pct_T_dead": true,
+          "no_x7": true
+        },
+        "pass": true,
+        "stop": {
+          "own_stop": true,
+          "why": null
+        },
+        "turn_check_authority": "RL-149 section 1.5",
+        "verdict": "pass"
+      },
+      "follows_d_turn": "planning_turn_R_plus_0C",
+      "fraction_of_T_dead": {
+        "G0": 0.10424220519181843,
+        "G1": 0.09215454765982586,
+        "H": 0.0,
+        "decode": 0.3562314420801929,
+        "prefill": 0.11091441585640481,
+        "tail": 0.0,
+        "tool": 4.4943028055044514e-05
+      },
+      "g0_outcome": "released",
+      "g1_timeouts": 0,
+      "gate_hold_s": 193.42883564599998,
+      "gate_waits_s": {
+        "G1": [
+          90.761922458
+        ]
+      },
+      "inconclusive_reason": null,
+      "phases_s": {
+        "G0": 102.666913188,
+        "G1": 90.761922458,
+        "H": 0.0,
+        "decode": 350.848127892,
+        "prefill": 109.238294442,
+        "tail": 0.0,
+        "tool": 0.044263856
+      },
+      "predicted_turns_per_episode": 3.202879212318457,
+      "r_decode_tok_per_s": 11.96814138706922,
+      "run": "D_bank_benign_s1_gated_held",
+      "turn_completed": [
+        true,
+        false
+      ],
+      "turn_counts_source_sha256": "f56914d842516c8dfef7953b7d9fa6ff71429347b781d093f59a4c7bc8d38120",
+      "turn_decode_counts": [
+        103,
+        4096
+      ],
+      "x7": false
+    },
+    {
+      "T_dead_s": 984.8881554172832,
+      "admitted_turns": 3,
+      "decode_tokens": 552,
+      "duty_T_dead_s": 984.8881554172832,
+      "duty_bar": {
+        "checks": {
+          "admitted_turns_ge_3": true,
+          "gate_hold_le_40pct_T_dead": true,
+          "no_x7": true
+        },
+        "pass": true,
+        "stop": {
+          "own_stop": false,
+          "why": "episode.context_limit:3"
+        },
+        "turn_check_authority": "RL-149 section 1.5",
+        "verdict": "pass"
+      },
+      "follows_d_turn": "D_bank_benign_s1_gated_held",
+      "fraction_of_T_dead": {
+        "G0": 0.10957471857632028,
+        "G1": 0.16776158878567882,
+        "H": 0.0,
+        "decode": 0.04606217355084246,
+        "prefill": 0.14178418574730026,
+        "tail": 0.0,
+        "tool": 0.00038344453420702886
+      },
+      "g0_outcome": "released",
+      "g1_timeouts": 0,
+      "gate_hold_s": 273.145244188,
+      "gate_waits_s": {
+        "G1": [
+          104.003631791,
+          61.222769938
+        ]
+      },
+      "inconclusive_reason": null,
+      "phases_s": {
+        "G0": 107.918842459,
+        "G1": 165.226401729,
+        "H": 0.0,
+        "decode": 45.366089143,
+        "prefill": 139.641565168,
+        "tail": 0.0,
+        "tool": 0.37764998
+      },
+      "predicted_turns_per_episode": 7.503765258552931,
+      "r_decode_tok_per_s": 12.167678775660425,
+      "run": "D_spam_benign_s1_gated_held_a",
+      "turn_completed": [
+        true,
+        true,
+        true
+      ],
+      "turn_counts_source_sha256": "f56914d842516c8dfef7953b7d9fa6ff71429347b781d093f59a4c7bc8d38120",
+      "turn_decode_counts": [
+        84,
+        110,
+        358
+      ],
+      "x7": false
+    },
+    {
+      "T_dead_s": 984.8881554172832,
+      "admitted_turns": 3,
+      "decode_tokens": 552,
+      "duty_T_dead_s": 984.8881554172832,
+      "duty_bar": {
+        "checks": {
+          "admitted_turns_ge_3": true,
+          "gate_hold_le_40pct_T_dead": true,
+          "no_x7": true
+        },
+        "pass": true,
+        "stop": {
+          "own_stop": false,
+          "why": "episode.context_limit:3"
+        },
+        "turn_check_authority": "RL-149 section 1.5",
+        "verdict": "pass"
+      },
+      "follows_d_turn": "D_spam_benign_s1_gated_held_a",
+      "fraction_of_T_dead": {
+        "G0": 0.12394543815615253,
+        "G1": 0.16972427994037242,
+        "H": 0.0,
+        "decode": 0.04600485180756687,
+        "prefill": 0.14158540364405012,
+        "tail": 0.0,
+        "tool": 0.00039484058454864824
+      },
+      "g0_outcome": "released",
+      "g1_timeouts": 0,
+      "gate_hold_s": 289.231826958,
+      "gate_waits_s": {
+        "G1": [
+          104.929949917,
+          62.229483083
+        ]
+      },
+      "inconclusive_reason": null,
+      "phases_s": {
+        "G0": 122.072393958,
+        "G1": 167.159433,
+        "H": 0.0,
+        "decode": 45.309633637,
+        "prefill": 139.445787029,
+        "tail": 0.0,
+        "tool": 0.388873815
+      },
+      "predicted_turns_per_episode": 7.347203797375225,
+      "r_decode_tok_per_s": 12.182839623519598,
+      "run": "D_spam_benign_s1_gated_held_b",
+      "turn_completed": [
+        true,
+        true,
+        true
+      ],
+      "turn_counts_source_sha256": "f56914d842516c8dfef7953b7d9fa6ff71429347b781d093f59a4c7bc8d38120",
+      "turn_decode_counts": [
+        84,
+        110,
+        358
+      ],
+      "x7": false
+    }
+  ],
+  "duty_bar": {
+    "declared": {
+      "max_gate_hold_fraction_of_T_dead": 0.4,
+      "min_admitted_turns": 3,
+      "x7": false
+    },
+    "duty_T_dead_s": 984.8881554172832,
+    "fallback_order": [
+      "S6 tuning jointly for G1 and hold waits (median <= 90 s each), delta_slow capped at 2.0 C",
+      "idle 300 -> 450 s after D predecessors only",
+      "4-bit at the same rung (quantization rule trigger extended to 'duty bar fails')",
+      "D screen-only; return to council"
+    ],
+    "inconclusive_runs": [],
+    "pass": true,
+    "reference": "step-D R_D (RL-59)",
+    "schedule": {
+      "authority": "LEAD-RULINGS-2 R6-1",
+      "inter_member_idle_s": {
+        "D": 300.0,
+        "X-G": 300.0
+      },
+      "rule": "each gated D run and X-G follows a D turn with only W1's inter-member schedule (the member's own configured idle); no cool-to-band",
+      "source": "configs/campaigns/align_v4/night_plan.template.json member configs, sampling.idle_seconds",
+      "templates_idle_s": {
+        "d_bank": 300.0,
+        "d_spam": 300.0,
+        "x_g": 300.0
+      }
+    },
+    "three_turn_run_present": true,
+    "turn_check_authority": "RL-149 section 1.5",
+    "verdict": "pass"
+  },
+  "executed_commit": "b2e01464d6d4fbf2901ff4d4154df9455104a12a",
+  "external_volumes": [
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "t0",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before:calibration-pre:pre_calibration_bracket",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before:idle:idle_soak",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before:step-30b:step_30b",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before:high-power-aba-a1:high_power_A1",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before:high-power-aba-b:high_power_B",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before:high-power-aba-a2:high_power_A2",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before:capture-predecessor-30b:capture_predecessor_30b",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before:step-d:step_D_prefill_10k_decode_4096",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before:idle-until-soak:cooldown_after_D",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before:d-planning-turn-r-plus-4c:planning_turn_R_plus_4C",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before:idle-until-soak:planning_turn_R_plus_2C.precool",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before:d-planning-turn-r-plus-2c:planning_turn_R_plus_2C",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before:idle-until-soak:planning_turn_R_plus_0C.precool",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before:d-planning-turn-r-plus-0c:planning_turn_R_plus_0C",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before:d-bank-benign-s1:D_bank_benign_s1_gated_held",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before:d-spam-benign-s1-a:D_spam_benign_s1_gated_held_a",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before:d-spam-benign-s1-b:D_spam_benign_s1_gated_held_b",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before:x-g:X_G_contrast",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before:calibration-post:post_calibration_bracket",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before:harvest:harvest",
+      "reasons": [],
+      "verdict": "PASS"
+    },
+    {
+      "external": [],
+      "mounts": [
+        {
+          "class": "internal",
+          "device": "/dev/disk3s1s1",
+          "fs_type": "apfs",
+          "mount_point": "/"
+        },
+        {
+          "class": "pseudo",
+          "device": "devfs",
+          "fs_type": "devfs",
+          "mount_point": "/dev"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s6",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/VM"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Preboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s4",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Update"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s2",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/xarts"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s1",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/iSCPreboot"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk1s3",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Hardware"
+        },
+        {
+          "class": "internal",
+          "device": "/dev/disk3s5",
+          "fs_type": "apfs",
+          "mount_point": "/System/Volumes/Data"
+        },
+        {
+          "class": "pseudo",
+          "device": "map auto_home",
+          "fs_type": "autofs",
+          "mount_point": "/System/Volumes/Data/home"
+        }
+      ],
+      "point": "before_registration",
+      "reasons": [],
+      "verdict": "PASS"
+    }
+  ],
+  "g0_cap_w1": {
+    "authority": "LEAD-RULINGS-2 R7-2, R7-12",
+    "censored": [],
+    "factor": 1.25,
+    "floor_s": 600.0,
+    "max_g0_s": 122.072393958,
+    "r1_g0_timeout_s": 1200.0,
+    "rule": "G0_cap_W1 = clamp(ceil(1.25 x max G0 wait over D_bank, D_spam a, D_spam b, X-G), 600 s, R1 G0 timeout); an unreleased G0, or an X-G that is not measured (x_g_fallback), counts at the R1 G0 timeout; ruling 1(f) uses value_s as its G0 term",
+    "value_s": 600,
+    "waits_s": {
+      "D_bank_benign_s1_gated_held": 102.666913188,
+      "D_spam_benign_s1_gated_held_a": 107.918842459,
+      "D_spam_benign_s1_gated_held_b": 122.072393958,
+      "X_G_contrast": 85.426611916
+    },
+    "x_g_fallback": false
+  },
+  "g0_waits": [
+    {
+      "g0_outcome": "released",
+      "g0_timeout_s": 1200,
+      "g0_wait_s": 191.540689459,
+      "output_dir": "/Users/edr/night-align/r1-20261118T231014Z/night/align-r1/step_30b",
+      "segment": "step_30b"
+    },
+    {
+      "g0_outcome": "released",
+      "g0_timeout_s": 1200,
+      "g0_wait_s": 207.180820291,
+      "output_dir": "/Users/edr/night-align/r1-20261118T231014Z/night/align-r1/high_power_A1",
+      "segment": "high_power_A1"
+    },
+    {
+      "g0_outcome": "released",
+      "g0_timeout_s": 1200,
+      "g0_wait_s": 209.141855208,
+      "output_dir": "/Users/edr/night-align/r1-20261118T231014Z/night/align-r1/high_power_B",
+      "segment": "high_power_B"
+    },
+    {
+      "g0_outcome": "released",
+      "g0_timeout_s": 1200,
+      "g0_wait_s": 209.197456667,
+      "output_dir": "/Users/edr/night-align/r1-20261118T231014Z/night/align-r1/high_power_A2",
+      "segment": "high_power_A2"
+    },
+    {
+      "g0_outcome": "released",
+      "g0_timeout_s": 1200,
+      "g0_wait_s": 207.123849062,
+      "output_dir": "/Users/edr/night-align/r1-20261118T231014Z/night/align-r1/step_D_prefill_10k_decode_4096",
+      "segment": "step_D_prefill_10k_decode_4096"
+    },
+    {
+      "g0_outcome": "timeout",
+      "g0_timeout_s": 1200,
+      "g0_wait_s": 1200.042840916,
+      "output_dir": "/Users/edr/night-align/r1-20261118T231014Z/night/align-r1/planning_turn_R_plus_4C",
+      "segment": "planning_turn_R_plus_4C"
+    },
+    {
+      "g0_outcome": "timeout",
+      "g0_timeout_s": 1200,
+      "g0_wait_s": 1200.046520125,
+      "output_dir": "/Users/edr/night-align/r1-20261118T231014Z/night/align-r1/planning_turn_R_plus_2C",
+      "segment": "planning_turn_R_plus_2C"
+    },
+    {
+      "g0_outcome": "released",
+      "g0_timeout_s": 1200,
+      "g0_wait_s": 139.180186626,
+      "output_dir": "/Users/edr/night-align/r1-20261118T231014Z/night/align-r1/planning_turn_R_plus_0C",
+      "segment": "planning_turn_R_plus_0C"
+    },
+    {
+      "g0_outcome": "released",
+      "g0_timeout_s": 1200,
+      "g0_wait_s": 102.666913188,
+      "output_dir": "/Users/edr/night-align/r1-20261118T231014Z/night/align-r1/D_bank_benign_s1_gated_held",
+      "segment": "D_bank_benign_s1_gated_held"
+    },
+    {
+      "g0_outcome": "released",
+      "g0_timeout_s": 1200,
+      "g0_wait_s": 107.918842459,
+      "output_dir": "/Users/edr/night-align/r1-20261118T231014Z/night/align-r1/D_spam_benign_s1_gated_held_a",
+      "segment": "D_spam_benign_s1_gated_held_a"
+    },
+    {
+      "g0_outcome": "released",
+      "g0_timeout_s": 1200,
+      "g0_wait_s": 122.072393958,
+      "output_dir": "/Users/edr/night-align/r1-20261118T231014Z/night/align-r1/D_spam_benign_s1_gated_held_b",
+      "segment": "D_spam_benign_s1_gated_held_b"
+    },
+    {
+      "g0_outcome": "released",
+      "g0_timeout_s": 1200,
+      "g0_wait_s": 85.426611916,
+      "output_dir": "/Users/edr/night-align/r1-20261118T231014Z/night/align-r1/X_G_contrast",
+      "segment": "X_G_contrast"
+    }
+  ],
+  "high_power": {
+    "g0_released": {
+      "A1": true,
+      "A2": true,
+      "B": true
+    },
+    "leg_g0_released": {
+      "A1": true,
+      "A2": true,
+      "B": true
+    },
+    "reason": "t_decline(B) < 1.25 x max(A1, A2)",
+    "start_state_bars": {
+      "cross_band": [
+        {
+          "against": "B",
+          "leg": "A1",
+          "margin_c": 0.8041534423828125,
+          "pass": true,
+          "role": "fast"
+        },
+        {
+          "against": "B",
+          "leg": "A1",
+          "margin_c": 0.8041534423828125,
+          "pass": true,
+          "role": "slow"
+        },
+        {
+          "against": "A2",
+          "leg": "A1",
+          "margin_c": 0.7467384338378906,
+          "pass": true,
+          "role": "fast"
+        },
+        {
+          "against": "A2",
+          "leg": "A1",
+          "margin_c": 0.7467384338378906,
+          "pass": true,
+          "role": "slow"
+        },
+        {
+          "against": "A1",
+          "leg": "B",
+          "margin_c": 0.38465118408203125,
+          "pass": true,
+          "role": "fast"
+        },
+        {
+          "against": "A1",
+          "leg": "B",
+          "margin_c": 0.38465118408203125,
+          "pass": true,
+          "role": "slow"
+        },
+        {
+          "against": "A2",
+          "leg": "B",
+          "margin_c": 0.657073974609375,
+          "pass": true,
+          "role": "fast"
+        },
+        {
+          "against": "A2",
+          "leg": "B",
+          "margin_c": 0.657073974609375,
+          "pass": true,
+          "role": "slow"
+        },
+        {
+          "against": "A1",
+          "leg": "A2",
+          "margin_c": 0.4054527282714844,
+          "pass": true,
+          "role": "fast"
+        },
+        {
+          "against": "A1",
+          "leg": "A2",
+          "margin_c": 0.4054527282714844,
+          "pass": true,
+          "role": "slow"
+        },
+        {
+          "against": "B",
+          "leg": "A2",
+          "margin_c": 0.73529052734375,
+          "pass": true,
+          "role": "fast"
+        },
+        {
+          "against": "B",
+          "leg": "A2",
+          "margin_c": 0.73529052734375,
+          "pass": true,
+          "role": "slow"
+        }
+      ],
+      "pass": true,
+      "slow_capture_bracket": true
+    },
+    "t_decline_s": {
+      "A1": 99.987379699,
+      "A2": 100.345508007,
+      "B": 100.344233781
+    },
+    "verdict": "not_adopted"
+  },
+  "inadmissible_slots": {
+    "B_D": [],
+    "I_D": [],
+    "N_chunk": [],
+    "S1": [],
+    "S2": [],
+    "S3": [],
+    "S4": [],
+    "S5": [],
+    "S5_fast": [],
+    "S6": [],
+    "S7": [],
+    "S8": [],
+    "S9": [],
+    "T_dead": [],
+    "U5": [
+      "r1.g0_timeout_run",
+      "r1.u5_inconclusive"
+    ],
+    "ac_powermode": [],
+    "budget_fit_inputs": [],
+    "class": [],
+    "deadman_budget": [],
+    "duty_bar": [],
+    "e_D": [],
+    "g0_cap_w1": [],
+    "l1": [],
+    "max_r1_tail_s": [],
+    "planning_temperature": [
+      "r1.g0_timeout_run"
+    ],
+    "projected_mde": [],
+    "t_decline": [],
+    "thermometry.D": [],
+    "x_g": []
+  },
+  "inconclusive_segments": {
+    "planning_turn_R_plus_2C": "r1.g0_timeout_run",
+    "planning_turn_R_plus_4C": "r1.g0_timeout_run"
+  },
+  "l1": {
+    "I_D": 631.718592813,
+    "armed_T_dead_s": 984.8881554172832,
+    "armed_fits": true,
+    "authority": "LEAD-RULINGS-1 L1",
+    "effective_T_dead_s": 984.8881554172832,
+    "l1_T_dead_s": 984.8881554172832,
+    "max_r1_tail_s": 0.0,
+    "member_cap_s": 1800,
+    "member_fit_ok": true,
+    "member_fit_worst_armed_s": 1760.0,
+    "member_fit_worst_effective_s": 1760.0
+  },
+  "max_r1_tail_s": 0.0,
+  "mode_adoption_provisional": false,
+  "planning_temperature": {
+    "inconclusive_states": [
+      "planning_turn_R_plus_2C",
+      "planning_turn_R_plus_4C"
+    ],
+    "label": "PRINT_ONLY_R1_PLANNING_TEMPERATURE_SECONDARY",
+    "run_order_offsets_c": [
+      4.0,
+      2.0,
+      0.0
+    ],
+    "status": "inconclusive"
+  },
+  "projected_mde": {
+    "E_D_j": 9969.739704571555,
+    "e_D_j_per_token": 2.1281368482260308,
+    "energy_scaled_misfit": {
+      "B_high_1.7pct": {
+        "q=2.5": 199.1008885530505,
+        "q=3.0": 238.9210662636606,
+        "q=7.0": 557.4824879485415,
+        "s_r_j": 169.48557497771645
+      },
+      "B_low_1.2pct": {
+        "q=2.5": 140.54180368450622,
+        "q=3.0": 168.65016442140748,
+        "q=7.0": 393.5170503166175,
+        "s_r_j": 119.63687645485867
+      }
+    },
+    "formula": "MDE ~= q * s_r,D / e_D (CHAIR section C)",
+    "label": "PRINT_ONLY_R1_PROJECTED_MDE",
+    "replay_pair_abs_diff_j": 10.265287211524083,
+    "replay_pair_floor_tokens": 4.8236029652327135
+  },
+  "s6_tuning": {
+    "G1_median_s": 90.761922458,
+    "G1_waits": 5,
+    "H_median_s": null,
+    "H_waits": 0,
+    "S6_now": 1.0,
+    "authority": "RL-78 default band",
+    "receipt_transferred": false,
+    "status": "new_sensor_default"
+  },
   "schema": "joulewise.align.r1_slots.v1",
-  "source": "PENDING_R1_REHEARSAL",
+  "skipped_segments": {},
   "slot_names": [
     "S1",
     "S2",
@@ -19,16 +2089,632 @@
     "t_decline",
     "class"
   ],
-  "slots": {"S6": 1.5},
-  "s6_tuning": {
-    "status": "adopted",
-    "authority": "docs/process_traces/2026-11-10-r1-g0/10-fable52-ruling.md sections 1, 3.2, 7 (decisions 6-7)",
-    "ruling_commit": "cc709ace2",
-    "ruling_branch": "ops/2026-11-10-r1-g0-diagnosis",
-    "from_c": 1.0,
-    "to_c": 1.5,
-    "derivation": "Smallest registered 0.5 C step with 1.25 x longest fitted tail release below the existing 1200 s cap (911 s from the instantaneous slope in the ruling; 941 s through the production gate, whose 60 s OLS slope lags by about 30 s: 1.25 x 941 = 1176 s, cold pass F2); S5 stays max(1.0 C, 3 x soak SD), fast stays max(1.0 C, 3 x soak SD). Other slots await R1."
+  "slots": {
+    "B_D": 10240,
+    "I_D": 631.718592813,
+    "N_chunk": 4096,
+    "S1": 58.94989585876465,
+    "S2": 27.742370542,
+    "S3": 58.94989585876465,
+    "S4": 183.007449792,
+    "S5": 1.0,
+    "S5_fast": 1.0,
+    "S6": 1.0,
+    "S7": 300.0,
+    "S8": 4096.0,
+    "S9": 99.516146428,
+    "T_dead": 984.8881554172832,
+    "class": "heavy",
+    "t_decline": 99.516146428
   },
-  "ac_powermode": null,
-  "max_r1_tail_s": null
+  "slots_ac_powermode": 0,
+  "source": "R1 hardware rehearsal",
+  "thermometry": {
+    "30B_record_only": {
+      "alias_groups": [
+        [
+          "F0Fb",
+          "F1Fb"
+        ],
+        [
+          "F0Fc",
+          "F1Fc"
+        ],
+        [
+          "F0Md",
+          "F1Md"
+        ],
+        [
+          "F0Sf",
+          "F1Sf",
+          "FRmp",
+          "Ftst"
+        ],
+        [
+          "TB0T",
+          "TB2T"
+        ],
+        [
+          "TCMb",
+          "TVD0"
+        ],
+        [
+          "TD23",
+          "TDVx"
+        ],
+        [
+          "TG0B",
+          "TG0V",
+          "TG2B"
+        ],
+        [
+          "TH1a",
+          "TH1b",
+          "TVMD",
+          "Ta08",
+          "Ta0G",
+          "Ta0K",
+          "Ta0O",
+          "Tz11",
+          "Tz12",
+          "Tz13",
+          "Tz14",
+          "Tz15",
+          "Tz16",
+          "Tz17",
+          "Tz18",
+          "Tz1j"
+        ],
+        [
+          "TV0h",
+          "TV1h"
+        ],
+        [
+          "TV1m",
+          "TVm0"
+        ],
+        [
+          "TVsa",
+          "TVss"
+        ],
+        [
+          "Ta09",
+          "Ta0H",
+          "Ta0L",
+          "Ta0P"
+        ],
+        [
+          "Tf04",
+          "Tf0D"
+        ],
+        [
+          "Tf0C",
+          "Tf1C",
+          "Tf3C",
+          "Tf4C"
+        ],
+        [
+          "Tf14",
+          "Tf1D"
+        ],
+        [
+          "Tf24",
+          "Tf2D"
+        ],
+        [
+          "Tf34",
+          "Tf3D"
+        ],
+        [
+          "Tf44",
+          "Tf4D"
+        ],
+        [
+          "Th00",
+          "Th01"
+        ],
+        [
+          "Th04",
+          "Th05"
+        ],
+        [
+          "Th08",
+          "Th09"
+        ],
+        [
+          "Th0C",
+          "Th0D"
+        ],
+        [
+          "Tp1g",
+          "Tp1o",
+          "Tp1x",
+          "Tp25",
+          "Tp29",
+          "Tp2H",
+          "Tp2P",
+          "Tp2X",
+          "Tp2f",
+          "Tp2j",
+          "Tp2r",
+          "Tp2z",
+          "Tp33",
+          "Tp3B"
+        ],
+        [
+          "Tp1h",
+          "Tp1p",
+          "Tp1y",
+          "Tp26",
+          "Tp2s",
+          "Tp30"
+        ],
+        [
+          "Tp1i",
+          "Tp1q",
+          "Tp1z",
+          "Tp27",
+          "Tp2B",
+          "Tp2J",
+          "Tp2R",
+          "Tp2Z",
+          "Tp2h",
+          "Tp2l",
+          "Tp2t",
+          "Tp31",
+          "Tp35",
+          "Tp3D",
+          "Tp3a",
+          "Tp3b",
+          "Tp3e",
+          "Tp3f",
+          "Tp3i",
+          "Tp3j"
+        ],
+        [
+          "Tp2A",
+          "Tp2I",
+          "Tp2Q",
+          "Tp2Y",
+          "Tp34",
+          "Tp3C"
+        ],
+        [
+          "Tp2g",
+          "Tp2k"
+        ],
+        [
+          "Ts04",
+          "Ts05"
+        ],
+        [
+          "Ts0C",
+          "Ts0D"
+        ],
+        [
+          "Ts0R",
+          "Ts0S"
+        ],
+        [
+          "Ts0U",
+          "Ts0V"
+        ]
+      ],
+      "alias_rule": "keys whose 1 Hz (value, error) series are identical in every row of the classification journal are one sensor (LEAD-RULINGS-2 R7-13; the signature of smc_enumeration.rank selected_key_aliases, PR #692)",
+      "classification_file": "inventory/r1_classification.json",
+      "classification_sha256": "bb184bf48e981a4ec1a51500cb647c053c5d58f84a49199c48e48a3afef522de",
+      "die_candidates": [
+        "Tp18",
+        "TV0h",
+        "TV1h",
+        "TVh0",
+        "Tp3W",
+        "Tp1I",
+        "Tp1J",
+        "Tp1S",
+        "Tp1G",
+        "Tp1Q",
+        "Tp1R",
+        "TV0s",
+        "TV1s",
+        "TVsa",
+        "TVss",
+        "TVHC",
+        "TV0m"
+      ],
+      "flags": [
+        "r1.sensor_pick_changed"
+      ],
+      "heatsink_candidates": [
+        "Ts0E",
+        "Te0S",
+        "Te0L",
+        "Te0K",
+        "Ts0C",
+        "Ts0D",
+        "Tf49",
+        "TVMC"
+      ],
+      "night_confirmation": null,
+      "r0_sensors": {
+        "s_fast": "TV0h",
+        "s_slow": "TV1h"
+      },
+      "reasons": [],
+      "registered_picks": null,
+      "s7_for_r1_picks": null,
+      "s_fast": "Tp18",
+      "s_slow": "Te0K",
+      "sensor_pick_changed": true,
+      "status": "pass"
+    },
+    "D": {
+      "alias_groups": [
+        [
+          "F0Fb",
+          "F1Fb"
+        ],
+        [
+          "F0Fc",
+          "F1Fc"
+        ],
+        [
+          "F0Md",
+          "F1Md"
+        ],
+        [
+          "F0Sf",
+          "F1Sf",
+          "Ftst"
+        ],
+        [
+          "TB0T",
+          "TB2T"
+        ],
+        [
+          "TCMb",
+          "TVD0"
+        ],
+        [
+          "TD23",
+          "TDVx"
+        ],
+        [
+          "TG0B",
+          "TG0V",
+          "TG2B"
+        ],
+        [
+          "TH1a",
+          "TH1b",
+          "TVMD",
+          "Ta08",
+          "Ta0G",
+          "Ta0K",
+          "Ta0O",
+          "Tz11",
+          "Tz12",
+          "Tz13",
+          "Tz14",
+          "Tz15",
+          "Tz16",
+          "Tz17",
+          "Tz18",
+          "Tz1j"
+        ],
+        [
+          "TV0h",
+          "TV1h"
+        ],
+        [
+          "TVsa",
+          "TVss"
+        ],
+        [
+          "Ta09",
+          "Ta0H",
+          "Ta0L",
+          "Ta0P"
+        ],
+        [
+          "Tf0C",
+          "Tf1C",
+          "Tf3C",
+          "Tf4C"
+        ],
+        [
+          "Tf14",
+          "Tf1D"
+        ],
+        [
+          "Tf24",
+          "Tf2D"
+        ],
+        [
+          "Tf34",
+          "Tf3D"
+        ],
+        [
+          "Tf44",
+          "Tf4D"
+        ],
+        [
+          "Th00",
+          "Th01"
+        ],
+        [
+          "Th04",
+          "Th05"
+        ],
+        [
+          "Th08",
+          "Th09"
+        ],
+        [
+          "Th0C",
+          "Th0D"
+        ],
+        [
+          "Tp1g",
+          "Tp1o",
+          "Tp1x",
+          "Tp25",
+          "Tp29",
+          "Tp2H",
+          "Tp2P",
+          "Tp2X",
+          "Tp2f",
+          "Tp2j",
+          "Tp2r",
+          "Tp2z",
+          "Tp33",
+          "Tp3B"
+        ],
+        [
+          "Tp1h",
+          "Tp1p",
+          "Tp1y",
+          "Tp26",
+          "Tp2s",
+          "Tp30"
+        ],
+        [
+          "Tp1i",
+          "Tp1q",
+          "Tp1z",
+          "Tp27",
+          "Tp2B",
+          "Tp2J",
+          "Tp2R",
+          "Tp2Z",
+          "Tp2h",
+          "Tp2l",
+          "Tp2t",
+          "Tp31",
+          "Tp35",
+          "Tp3D"
+        ],
+        [
+          "Tp2A",
+          "Tp2I",
+          "Tp2Q",
+          "Tp2Y",
+          "Tp34",
+          "Tp3C"
+        ],
+        [
+          "Tp2g",
+          "Tp2k"
+        ],
+        [
+          "Tp3a",
+          "Tp3b",
+          "Tp3e",
+          "Tp3f",
+          "Tp3i",
+          "Tp3j"
+        ],
+        [
+          "Ts04",
+          "Ts05"
+        ],
+        [
+          "Ts0C",
+          "Ts0D"
+        ],
+        [
+          "Ts0R",
+          "Ts0S"
+        ],
+        [
+          "Ts0U",
+          "Ts0V"
+        ]
+      ],
+      "alias_rule": "keys whose 1 Hz (value, error) series are identical in every row of the classification journal are one sensor (LEAD-RULINGS-2 R7-13; the signature of smc_enumeration.rank selected_key_aliases, PR #692)",
+      "classification_file": "inventory/r1_classification.json",
+      "classification_sha256": "c1ab71d536c952da96a5790cfa6434f84b09873da1c0735ab64bacdee182e920",
+      "die_candidates": [
+        "TV0h",
+        "TV1h",
+        "Tf3B",
+        "TVsa",
+        "TVss",
+        "Tf34",
+        "Tf3D",
+        "Tf3E",
+        "TVSC",
+        "Tf48",
+        "Tf1B",
+        "Tf14",
+        "Tf1D",
+        "Tf1E",
+        "Tf44",
+        "Tf4D",
+        "Tf4E",
+        "Tf18",
+        "Ts0h",
+        "Tf2B",
+        "Tf19",
+        "Tf24",
+        "Tf2D",
+        "Tf2E",
+        "Tf1A",
+        "TV0m",
+        "Tf28",
+        "TVMC",
+        "Tf29",
+        "Tf4A",
+        "Tf2A",
+        "TRD2",
+        "TRD0",
+        "TRD9",
+        "TRDX",
+        "TRDf",
+        "TRD4",
+        "TRD5",
+        "TRD8",
+        "TRDa",
+        "TRDb",
+        "TRD1",
+        "TRD6",
+        "TRD7",
+        "TRD3",
+        "TRDe"
+      ],
+      "flags": [],
+      "heatsink_candidates": [
+        "TCDX",
+        "TVV0",
+        "Tf39",
+        "Tf3A",
+        "Tf49",
+        "Tf38",
+        "Tf4B",
+        "Tf04",
+        "Tf0D",
+        "Tf0E",
+        "Tf0B",
+        "Tf09",
+        "Tf0A",
+        "Tf08",
+        "Ts0C",
+        "Ts0D",
+        "Th0C",
+        "Th0D",
+        "Th0E",
+        "Te0L",
+        "Te0K",
+        "Te0S",
+        "Th00",
+        "Th01",
+        "Th02",
+        "Ts0U",
+        "Ts0V",
+        "Ts0R",
+        "Ts0S",
+        "Ts04",
+        "Ts05",
+        "Ts0W",
+        "Te0P",
+        "Te04",
+        "Te05",
+        "Tp1I",
+        "Tp1J",
+        "Tp0z",
+        "Tp0y",
+        "Tp16",
+        "Tp17",
+        "TCMb",
+        "TVD0",
+        "Tp0v",
+        "Tp0u",
+        "Tp3S",
+        "Th04",
+        "Th05",
+        "Th08",
+        "Th09",
+        "Tp0K",
+        "Tp0L",
+        "Tp1E",
+        "Tp1F",
+        "Tp0m",
+        "Tp0n",
+        "Tp0R",
+        "Tp0S",
+        "TR2d",
+        "TaTP",
+        "TPMP",
+        "TPSP",
+        "TW0P",
+        "TMVR",
+        "TaLW",
+        "TaRW",
+        "TaLT",
+        "TaRT"
+      ],
+      "night_confirmation": {
+        "authority": "RL-78",
+        "ok": true,
+        "reasons": [],
+        "s_fast": "TV0h",
+        "s_slow": "TV1h",
+        "second_key_basis": "alias_group_of_fast_key",
+        "second_key_label": "near-die settling check",
+        "second_key_rule": "RL-145"
+      },
+      "r0_sensors": {
+        "s_fast": "TV0h",
+        "s_slow": "TV1h"
+      },
+      "reasons": [],
+      "registered_picks": {
+        "s_fast": "TV0h",
+        "s_slow": "TVV0"
+      },
+      "s7_for_r1_picks": null,
+      "s_fast": "TV0h",
+      "s_slow": "TV1h",
+      "sensor_pick_changed": false,
+      "status": "pass"
+    },
+    "authority": "protocol v4 WP14(a) R1 paragraph (LEAD-RULINGS-2 R5-5)",
+    "bar": "pass",
+    "bar_basis": "RL-145 ruled alias pair: one thermometer under two key names, confirmed by the session's RL-145 night confirmation",
+    "flags": [
+      "r1.picks_alias_pair_rl145"
+    ]
+  },
+  "turn_counts_backfill": {
+    "authority": "RUN_STATE 212 R16; lead-owned export",
+    "export_sha256": "f56914d842516c8dfef7953b7d9fa6ff71429347b781d093f59a4c7bc8d38120",
+    "lead_step": true
+  },
+  "u5": {
+    "authority": "LEAD-RULINGS-1 L2",
+    "c": 1.0,
+    "criterion": "U5",
+    "reason": "designed start state(s) INCONCLUSIVE (R6-2): planning_turn_R_plus_2C, planning_turn_R_plus_4C",
+    "verdict": "inconclusive"
+  },
+  "x_g": {
+    "admitted_turns": 12,
+    "authority": "LEAD-RULINGS-2 R6-1",
+    "follows_d_turn": "D_spam_benign_s1_gated_held_b",
+    "g0_outcome": "released",
+    "g0_wait_s": 85.426611916,
+    "inconclusive_reason": null,
+    "inter_member_idle_s": 300.0,
+    "phases_s": {
+      "G0": 85.426611916,
+      "G1": 489.094942435,
+      "H": 0.0,
+      "decode": 83.765481998,
+      "prefill": 14.223942899,
+      "tail": 0.0,
+      "tool": 0.255289359
+    },
+    "status": "measured",
+    "x7": false
+  }
 }

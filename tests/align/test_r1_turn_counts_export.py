@@ -101,9 +101,11 @@ class ExportTests(unittest.TestCase):
         clock = patch.object(r1, '_now_local', lambda: rehearsal.NOON_SAFE)
         clock.start()
         self.addCleanup(clock.stop)
-        # 28,000 decode tokens over 7 admitted turns, as a lane-shaped gated record.
+        # 28,000 decode tokens over 7 admitted turns, as a lane-shaped gated record. PR #886: the
+        # committed registration/r1_slots.json is the R1 record; pin the synthetic S6 registration.
         with patch.object(r1, '_run', rehearsal.FakeWorld(step_d_rate=40.0, gated_decode_tokens=28000,
-                                                gated_admitted_turns=TURNS)):
+                                                gated_admitted_turns=TURNS)), \
+                rehearsal.synthetic_s6_registration():
             self.assertEqual(r1.run(rehearsal.R1Tests.args(None, str(self.tmp), synthetic=True)), 0)
         self.run_dir = self.tmp / 'run'
 

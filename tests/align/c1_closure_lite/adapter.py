@@ -137,9 +137,10 @@ class Attempt:
         history = work / 'history.git'
         self.identities = json.loads((Path(__file__).parent / 'suite/history-identity.json').read_bytes())
         subprocess.run(['git', 'clone', '-q', '--local', '--shared', history, self.git_dir], check=True)
-        self.git('update-ref', self.identities['pushed_ref'], self.identities['record_commit'])
         self.git('config', 'user.name', 'Invented Fixture')
         self.git('config', 'user.email', 'fixture@invalid')
+        self.bind_w1_finality()
+        self.git('update-ref', self.identities['pushed_ref'], self.identities['record_commit'])
         self.plan = closure.decode((self.git_dir / KIT / series.C1_PLAN).read_bytes())
         self.source = closure.decode((self.git_dir / KIT / 'plan_tree.json').read_bytes())
         self.bindings = {name: str(work / name) for name in ('claim_runs_root', 'bound_runs_root',
@@ -200,6 +201,31 @@ class Attempt:
         self.git('add', '-A')
         self.git('commit', '-qm', summary)
         return self.rev()
+
+    def bind_w1_finality(self):
+        """Use the frozen synthetic W1 digest and attach the RL-183b receipt in its clone."""
+        record_path = self.identities['record_path']
+        raw = (self.git_dir / record_path).read_bytes()
+        record = closure.decode(raw)
+        prior = {'commit': self.identities['record_commit'], 'path': record_path, 'sha256': closure.digest(raw)}
+        plan = closure.decode((self.git_dir / record['sources']['plan']['path']).read_bytes())
+        record['finalized_manifest'] = record['finalized_manifest']['sha256']
+        receipt = {'schema': builder.light_triage.UNPACK_RECEIPT_SCHEMA, 'window': record['window'],
+                   'plan_id': plan['plan_id'], 'finalized_manifest_sha256': record['finalized_manifest']}
+        receipt_raw = json.dumps(receipt, sort_keys=True, separators=(',', ':')).encode()
+        receipt_path = Path(record['sources']['plan']['path']).with_name('unpack_receipt.json')
+        put(self.git_dir, receipt_path, receipt_raw)
+        record['sources']['unpack_receipt'] = {'path': receipt_path.as_posix(), 'sha256': closure.digest(receipt_raw)}
+        updated = put(self.git_dir, record_path, record)
+        self.identities['record_commit'] = self.commit('Bind invented W1 finality')
+        link = {'commit': self.identities['record_commit'], 'path': record_path,
+                'sha256': closure.digest(updated.read_bytes())}
+        series_path = self.identities['series_path']
+        state = closure.decode((self.git_dir / series_path).read_bytes())
+        for key in ('previous_record', 'last_passed_record'):
+            if state[key] == prior:
+                state[key] = link
+        put(self.git_dir, series_path, state)
 
     def edit_night(self, night):
         """A test hook: change the prepared night plan before it is sealed."""

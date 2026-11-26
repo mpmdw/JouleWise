@@ -8,8 +8,9 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from joulewise.align.apple import r1_phase_table, r1_runtime as rt
+from joulewise.align.apple import r1_phase_table, r1_runtime as rt, v4_registration as reg
 from scripts import align_r1_rehearsal as r1, align_v4_kit as kit, align_w1_budget_procedure as procedure
 from tests.align.test_v4_kit import ready_inputs
 
@@ -112,6 +113,14 @@ def release_for(slots, names, **row):
             'segments': {name: dict(segment) for name in names}}
 
 
+def write_kit_source(root, inputs, slots, release_raw):
+    for path, raw in ((kit.INPUTS, kit.raw_json(inputs)), (kit.R1_SLOTS, kit.raw_json(slots)),
+                      (kit.R1_PLANNING_RELEASE, release_raw), (CONFIG.relative_to(ROOT), CONFIG.read_bytes())):
+        target = root / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)
+
+
 class PlanningReleaseTests(unittest.TestCase):
     """RL-120 item 3 extended to R+0 by RL-122 3(a)."""
 
@@ -192,6 +201,43 @@ class PlanningReleaseTests(unittest.TestCase):
             with self.subTest(desk=desk), self.assertRaisesRegex(ValueError, 'desk print'):
                 kit.require_ready(inputs, slots, planning_release=record)
 
+    def test_w1_readiness_refuses_drift_in_the_receipts_planning_release(self):
+        names = ['planning_turn_R_plus_2C', 'planning_turn_R_plus_4C']
+        inputs, slots = planning_slots(names)
+        release = release_for(slots, names)
+        gate_paths = {stage: f'docs/align/v4/gate-{stage}.md' for stage in ('A', 'B')}
+        candidate = dict.fromkeys((*reg.ARTIFACTS, *gate_paths.values()), kit.raw_json({}))
+        candidate.update({kit.R1_PLANNING_RELEASE.as_posix(): kit.raw_json(release),
+                          kit.INPUTS.as_posix(): kit.raw_json(inputs), kit.R1_SLOTS.as_posix(): kit.raw_json(slots),
+                          kit.D_PINS.as_posix(): kit.raw_json({}),
+                          (kit.KIT / 'collection_plan.json').as_posix(): kit.raw_json(
+                              {'runtime_requirements': {'km003c': kit.km003c.REQUIREMENT}})})
+        receipt = {'schema': reg.RECEIPT_SCHEMA, 'status': 'registered', 'commit': 'f' * 40,
+                   'artifacts': {path: reg.digest(candidate[path]) for path in reg.ARTIFACTS},
+                   'rulings': {str(n): 'installed' for n in reg.RULINGS},
+                   'gates': {stage: {'verdict': 'ADMIT', 'path': path, 'sha256': reg.digest(candidate[path])}
+                             for stage, path in gate_paths.items()},
+                   'lead_signature': 'lead: synthetic-test 2026-11-12'}
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(reg, '_committed_bytes', return_value=candidate), \
+                patch.object(reg, 'verify_r1_executed_sources'), patch.object(reg, 'validate_u3'), \
+                patch.object(reg, 'validate_wp19'), patch('joulewise.align.apple.v4_battery.validate_policy'), \
+                patch.object(kit, 'check_w1_record_keys'), patch.object(kit, 'validate_d_identity'), \
+                patch.object(kit, 'require_sizing'), patch.object(kit, 'validate_wp18_fixtures'), \
+                patch.object(kit, 'planning_heater_key', return_value='TV1h'):
+            root = Path(tmp)
+            for path, raw in {**candidate, reg.REGISTRATION+'registration_receipt.json': kit.raw_json(receipt)}.items():
+                target = root / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(raw)
+            kit.require_w1_ready(root)
+            digest = reg.artifact_set_digest(root)
+            release['desk_print']['sha256'] = '0' * 64
+            (root / kit.R1_PLANNING_RELEASE).write_bytes(kit.raw_json(release))
+            with self.assertRaisesRegex(ValueError, r'registration_receipt digest drift: .*r1_planning_release\.json'):
+                kit.require_w1_ready(root)
+            self.assertNotEqual(reg.artifact_set_digest(root), digest)
+
     def test_the_heater_key_comes_from_root(self):
         # PR #752 cold review F4: require_w1_ready(root) reads the heater key from root.
         names = ['planning_turn_R_plus_0C']
@@ -235,11 +281,109 @@ class PlanningReleaseTests(unittest.TestCase):
         _, clean = ready_inputs()
         self.assertEqual(released['step'], procedure.decide(clean, 12)['step'])
 
+    def test_w1_step_one_completes_role_flags_and_fan_keys_after_r0(self):
+        names = ['planning_turn_R_plus_2C', 'planning_turn_R_plus_4C']
+        inputs, slots = planning_slots(names)
+        release = release_for(slots, names)
+        policy = inputs['R1']['thermal_policy']
+        del policy['heavy'], policy['per_turn'], policy['sensors']['fan_keys']
+        # Both R0 digest fields are already bound. The missing role flags
+        # refuse at the outer gate-policy check, before sensor validation.
+        with self.assertRaisesRegex(ValueError, '^thermal policy has missing or unknown fields$'):
+            kit.require_ready(inputs, slots, planning_release=release)
+        policy.update(heavy=True, per_turn=True)
+        with self.assertRaisesRegex(ValueError, r'^smc_temperature must have .*fan_keys'):
+            kit.require_ready(inputs, slots, planning_release=release)
+        policy['sensors']['fan_keys'] = []
+        kit.require_ready(inputs, slots, planning_release=release)
+
+    def test_readiness_requires_the_budget_selected_by_decide(self):
+        names = ['planning_turn_R_plus_2C', 'planning_turn_R_plus_4C']
+        inputs, slots = planning_slots(names)
+        release = release_for(slots, names)
+        decision = procedure.decide(slots, inputs['WP18']['X']['max_turns'], planning_release=release)
+        self.assertEqual(decision['step'], 'TYPICAL-CASE')
+        chosen = decision['set_inputs']['R1.B_D']
+        inputs['R1']['B_D'] = chosen
+        kit.require_ready(inputs, slots, planning_release=release)
+
+        inputs['R1']['B_D'] = chosen - 1024
+        self.assertEqual(kit.turn_opportunity(slots, inputs['R1']['B_D'])['status'], 'pass')
+        with self.assertRaisesRegex(ValueError, r'R1\.B_D .* must equal .*RL-189'):
+            kit.require_ready(inputs, slots, planning_release=release)
+
+    def test_generated_d_members_copy_the_budget_selected_by_decide(self):
+        names = ['planning_turn_R_plus_2C', 'planning_turn_R_plus_4C']
+        inputs, slots = planning_slots(names)
+        release = release_for(slots, names)
+        decision = procedure.decide(slots, inputs['WP18']['X']['max_turns'], planning_release=release)
+        self.assertEqual(decision['step'], 'TYPICAL-CASE')
+        frozen = kit.frozen
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(kit, 'frozen', side_effect=lambda root, commit, path: frozen(ROOT, commit, path)):
+            root = Path(tmp)
+            write_kit_source(root, inputs, slots, kit.raw_json(release))
+            files = kit.build_files(root)
+        plan = json.loads(files[kit.KIT / 'collection_plan.json'])
+        members = [member for member in plan['members'] if member['role'] == 'D']
+        self.assertTrue(members)
+        for member in members:
+            config = json.loads(files[Path(member['config_path'])])
+            spec = json.loads(config['workload_profile']['prompt_text'])
+            with self.subTest(ordinal=member['ordinal']):
+                for actual in (member['spec'], spec):
+                    self.assertEqual(actual['max_episode_decode_tokens'], decision['set_inputs']['R1.B_D'])
+                    self.assertEqual(actual['deadman_s'], decision['set_inputs']['R1.T_dead'])
+
+    def test_output_root_carries_and_checks_the_canonical_planning_release(self):
+        names = ['planning_turn_R_plus_2C', 'planning_turn_R_plus_4C']
+        inputs, slots = planning_slots(names)
+        raw = kit.raw_json(release_for(slots, names))
+        frozen = kit.frozen
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(kit, 'frozen', side_effect=lambda root, commit, path: frozen(ROOT, commit, path)), \
+                patch.object(kit, 'require_w1_ready') as ready:
+            source, destination = Path(tmp) / 'source', Path(tmp) / 'output'
+            write_kit_source(source, inputs, slots, raw)
+            kit.generate(destination, source_root=source)
+            target = destination / kit.R1_PLANNING_RELEASE
+            self.assertTrue(target.is_file(), 'generated planning release missing from output root')
+            self.assertEqual(target.read_bytes(), raw)
+            for changed in (None, raw + b' '):
+                with self.subTest(missing=changed is None):
+                    if changed is None:
+                        target.unlink()
+                    else:
+                        target.write_bytes(changed)
+                    with self.assertRaisesRegex(ValueError, r'generated v4 kit drifted: .*r1_planning_release\.json'):
+                        kit.generate(destination, check=True, source_root=source)
+            ready.assert_not_called()
+            target.write_bytes(raw)
+            kit.generate(destination, check=True, source_root=source)
+            ready.assert_called_once_with(source)
+
+    def assert_planning_segment_keys(self, release_keys, inconclusive_keys):
+        expected = {'planning_turn_R_plus_2C', 'planning_turn_R_plus_4C'}
+        self.assertEqual(release_keys, expected)
+        self.assertEqual(inconclusive_keys, expected)
+
+    def test_committed_planning_segment_keys(self):
+        raw = (ROOT / kit.R1_PLANNING_RELEASE).read_bytes()
+        self.assertEqual(kit.sha(raw), '171b2a3bd28ada24f832e1deafc5d526bd47ff60d55388859220a12ddd5ddf6a')
+        release_keys = set(json.loads(raw)['segments'])
+        inconclusive_keys = set(json.loads((ROOT / kit.R1_SLOTS).read_bytes())['inconclusive_segments'])
+        self.assert_planning_segment_keys(release_keys, inconclusive_keys)
+
+    def test_segment_assertion_rejects_a_segment_missing_from_both_records(self):
+        for segment in ('planning_turn_R_plus_2C', 'planning_turn_R_plus_4C'):
+            with self.subTest(remaining=segment), self.assertRaises(AssertionError):
+                self.assert_planning_segment_keys({segment}, {segment})
+
     def test_record_file_is_read_canonically(self):
-        self.assertIsNone(kit.read_r1_planning_release(ROOT))  # none committed: no release is in force
         _, slots = planning_slots(['planning_turn_R_plus_0C'])
         record = release_for(slots, ['planning_turn_R_plus_0C'])
         with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(kit.read_r1_planning_release(tmp))  # none committed: no release is in force
             path = Path(tmp) / kit.R1_PLANNING_RELEASE
             path.parent.mkdir(parents=True)
             path.write_bytes(kit.raw_json(record))

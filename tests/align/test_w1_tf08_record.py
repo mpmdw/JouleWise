@@ -28,7 +28,8 @@ class W1RecordTests(unittest.TestCase):
     def setUpClass(cls):
         cls.inputs, cls.slots = ready_inputs()
         with patch.object(kit, 'read_inputs', return_value=cls.inputs), \
-                patch.object(kit, 'read_r1_slots', return_value=cls.slots):
+                patch.object(kit, 'read_r1_slots', return_value=cls.slots), \
+                patch.object(kit, 'read_w1_plan_bytes', return_value=None):
             cls.files = kit.build_files(ROOT)
         cls.plan = json.loads(cls.files[kit.KIT / 'collection_plan.json'])
 
@@ -66,7 +67,8 @@ class W1RecordTests(unittest.TestCase):
         self.check_ready(self.plan)
 
     def test_provisional_generator_also_carries_the_record_key(self):
-        files = kit.build_files(ROOT)
+        with patch.object(kit, 'read_w1_plan_bytes', return_value=None):
+            files = kit.build_files(ROOT)
         plan = json.loads(files[kit.KIT / 'collection_plan.json'])
         for member in plan['members'][4:]:
             self.assertEqual((member['spec']['thermal']['sensors'] or {}).get('record_keys'), [HEATSINK])
