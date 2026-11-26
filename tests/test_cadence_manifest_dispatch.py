@@ -28,7 +28,7 @@ QUALIFICATION = LOOKS / "lm-qual-01.manifest.json"
 INSTRUMENT = LOOKS / "lm-inst-01.manifest.json"
 STABILITY = LOOKS / "lm-stab-01.manifest.json"
 H = sha256(b"synthetic digest").hexdigest()
-INTERIM_REF = "2f67206528f46d227815355ce701bd738233f647"
+INTERIM_REF = "97cbe9b16b9dd1bc84f81c1a2edd3ecce23761dc"  # committed at freeze 2
 RAIL_SUM_COLUMNS = ["cpu_power", "gpu_power", "ane_power"]
 CUSTODY = {
     INSTRUMENT: ["hold.json", "turn.json", "gain.json", "edges.json", "stdout", "stderr"],
@@ -37,6 +37,7 @@ CUSTODY = {
 V1_SCHEMA_PINS = {
     "5c0724bd39cb41d2a0e155de31b9930a850286d395213e658be3e0e0e231b723",  # 9a7defbb
     "78f312feb24e3ee95ac8bdd386cdb38f56fc0ab6846d27edc66f522f3a7acd3d",  # f09469894
+    "468e5038dc58acf095bc71774e0f13a8c1864e87f48d715136198b022759dba6",  # freeze 2 (97cbe9b16)
 }
 MALFORMED_JSON = (
     b'{"synthetic": "\xff"}',
@@ -962,18 +963,32 @@ raise SystemExit(97)
             self.skipTest(f"interim comparison commit {INTERIM_REF} is absent from this checkout")
         self.assertEqual(ref.returncode, 0, ref.stderr)
 
-        def tree(ref):
-            result = subprocess.run(
-                ["git", "ls-tree", "-r", ref, "--", "docs/process/cadence/looks", "joulewise/cadence_looks"],
-                cwd=ROOT, capture_output=True, check=False,
-            )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            return dict(line.split(b"\t")[::-1] for line in result.stdout.splitlines())
+        # Route B projects the public interim artifacts onto main. Its execution
+        # checkout carries the implementation pins checked by the v1 validator.
+        cadence = "docs/process/cadence"
+        look_dir = f"{cadence}/looks"
+        public_paths = (
+            f"{cadence}/kits/cl-dev-01.json",
+            f"{cadence}/kits/cl-dev-02.json",
+            f"{look_dir}/evidence/2026-11-14-mythos-passrate-rerun-REPORT.md",
+            f"{look_dir}/evidence/2026-11-15-q11-drift-10k-REPORT.md",
+            f"{look_dir}/look_manifest.schema.json",
+        )
 
-        interim = tree(INTERIM_REF)
+        def tree(ref):
+            entries = subprocess.check_output(
+                ["git", "ls-tree", "-r", ref, "--", look_dir, *public_paths], cwd=ROOT,
+                text=True,
+            )
+            return {
+                path: entry for entry, path in (line.split("\t") for line in entries.splitlines())
+                if path.startswith(f"{look_dir}/lm-interim-01.") or path in public_paths
+            }
+
         current = tree("HEAD")
-        for path in (interim.keys() & current.keys()) - {b"docs/process/cadence/looks/LOOKS.json"}:
-            self.assertEqual(current[path], interim[path], path)
+        ledger = json.loads((ROOT / look_dir / "LOOKS.json").read_bytes())
+        if current or any(row["look_id"] == "lm-interim-01" for row in ledger["looks"]):
+            self.assertEqual(current, tree(INTERIM_REF))
 
 
 class TransferManifestTests(unittest.TestCase):
