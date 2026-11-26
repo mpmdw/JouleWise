@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "a magistrate item with, per stored run, the verdict and check names, the first refusal's site and clause booleans, the per-member counts of RL-220 §5 item 4, and the item-610/RL-220 §1 name boolean",
+  "next_observable": "a lead item ending the LOOKS.json hold, or a research-lead ruling on lm-interim-01's drift tripwire",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 612,
+      "owner": "lead",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 611,
@@ -297,13 +303,13 @@
       "status": "ISSUED"
     }
   ],
-  "owner": "magistrate",
+  "owner": "lead",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "611",
+  "source_item": "612",
   "source_item_heading_date": "2026-11-26",
   "wait": {
     "deadline_epoch_s": 1795896000,
-    "observable": "none",
-    "on_early_or_refused": "if the per-member continuation cannot be made without touching anything else, stop at the first refusal and say so; if a hunk does not match once, stop that run's read; make no other change"
+    "observable": "ruling_recorded",
+    "on_early_or_refused": "the LOOKS.json file hold of item 611 stays until the lead posts its end"
   }
 }

@@ -1052,6 +1052,30 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+612. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-26 08:34 PST: lm-interim-01 ran: stock verdict equal, stage 1 and stage 2 rc 0, twin yes, authorize-freeze2 exit 0; drift tripwire to the research lead; LOOKS.json hold kept**
+
+```pointer
+owner: lead
+wait: ruling_recorded
+deadline: 2026-11-28T12:00:00-08:00
+on_early_or_refused: the LOOKS.json file hold of item 611 stays until the lead posts its end
+next_observable: a lead item ending the LOOKS.json hold, or a research-lead ruling on lm-interim-01's drift tripwire
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795710899, "number": 612, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Look `lm-interim-01` has run (RL-218 §6.8 order complete).** Every step ran on the Air (registered host `hw1:26e2f18d…`), outside a seat, from a clean pinned execution checkout that is in main's history (route B). No pinned byte changed at any step.
+  - **Stock rules-3/4 producer** at execution commit `276a9643a` (row commit `0826ba77b`): `rules_3_4.json` sha256 `d23219409746…f0a`, equal to the registered rehearsal verdict; 72 legs; roster `93cdec23…`; receipt written; rc 0.
+  - **Real stage 1**: rc 0, `stage1.json` sha256 `c0d25a29ae45…f7be`, no refusal. The `stage1_committed` row is on main at `1fde77429` (merge `2a2b267b9`).
+  - **The execution roots** (`custody_root`, `public_root` = `public`) were registered in the row at `df634f8f1` (merge `84149f306`). Two stage-2 attempts before this refused in preflight, before any reservation, and consumed nothing: "missing public root" and "the two registered look directories must already exist".
+  - **Stage 2** at execution commit `eba2e2c94`: rc 0, 08:13-08:33 PST. `RESTRICTED` reserved; `public/lm-interim-01/PUBLIC.json` sha256 `0ee830b1d6a2…66a9`; twin agrees `yes`.
+  - **The report and `run` row** are on main at `f9c56b5fe` (merge `2b1593e4f`): `output_sha256` `0ee830b1…`, `coefficients_sha256` `58977b06…075e`.
+  - **`authorize-freeze2`** from execution checkout `471142a7b`: exit 0. Printed evidence: `main_commit` `2b1593e4f2d6f19c32f02583eb4764a43ab1a714`, `public_sha256` `0ee830b1d6a27f1145c3bd21ee652543eaba69cc73489db624aa656de53566a9`, `coefficients_sha256` `58977b062124d9ba2922e88e1bc44e515514891f4ce5d0ee5a726703fae3075e`, `decision_source` `yes`.
+- **The report's `drift_tripwire` word is `to_research_lead`.** It goes to the research lead with stage 1's return and the as-built authorship list (`docs/run_reports/2026-11-26-lm-interim-01-fit-authors.md` on the look branch, `756196dfa`).
+- **The LOOKS.json file hold (item 611, RL-220 B.1) stays in force until the lead posts its end.** Its end condition is met. The lead keeps it until the research lead has disposed of the drift tripwire and said whether a frozen scoring falls due before RL-220 B.2's successor reader is audited. ctl-01 registration is still build-and-review only.
+
 611. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-26 08:06 PST: RL-220: second look-ahead read over every member with both fix bodies; corrected flag-name test; LOOKS.json file hold until interim freeze 2**
 
 ```pointer
