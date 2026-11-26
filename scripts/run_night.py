@@ -20,12 +20,13 @@ import math
 import queue
 import resource
 import socket
-from contextlib import ExitStack
+import tempfile
+from contextlib import ExitStack, contextmanager
 from contextvars import copy_context
 from dataclasses import asdict, replace
 from datetime import date, datetime, time as wall_time, timedelta, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 
 # Keep aligned with pyproject.toml requires-python. The installer reads this literal.
@@ -49,6 +50,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from joulewise import arm_readiness as readiness
 from joulewise import arm_readiness_evidence_t0 as t0_author
 from joulewise import battery_float, night_gate, t0_rehearsal, quiet_admission, network_time_off
+from joulewise import timing_receipts
 from joulewise.measurement_liveness import (  # noqa: E402
     observe_identity, pending_launch_closed, _start_token,
 )
@@ -1020,24 +1022,81 @@ def _run_chain_once(
                 child_channel.close()
                 child_channel = replacement
             channel.setblocking(False)
-        return _run_chain_once_impl(chain_path, plan, probes, night_dir,
-            claim_descriptor, command=command, abort_on_census=abort_on_census,
-            shutdown_monotonic=shutdown_monotonic, channel=channel,
-            child_channel=child_channel, start_fd_env=start_fd_env, extra_env=extra_env,
-            supervise=supervise, census_group_on_exit=census_group_on_exit,
-            census=census, append_census=append_census)
+        launched: dict[str, Any] = {}
+        try:
+            return _run_chain_once_impl(chain_path, plan, probes, night_dir,
+                claim_descriptor, command=command, abort_on_census=abort_on_census,
+                shutdown_monotonic=shutdown_monotonic, channel=channel,
+                child_channel=child_channel, start_fd_env=start_fd_env, extra_env=extra_env,
+                supervise=supervise, census_group_on_exit=census_group_on_exit,
+                census=census, append_census=append_census, launched=launched)
+        except KeyboardInterrupt as interrupt:
+            # Lead ruling R8-1: an interrupt (INT, or TERM/HUP through the R7-4
+            # handler) after the chain launched stops the chain's group and
+            # proves it gone before run_night's close runs.
+            # Round-8 disposition D8-2: the outcome travels on the interrupt;
+            # _run_night sets _CHAIN_TERMINATION_UNPROVEN from it when unproven.
+            interrupt.chain_termination = _stop_chain_on_interrupt(launched, night_dir, plan, interrupt)
+            raise
+
+
+def _stop_chain_on_interrupt(launched: Mapping[str, Any], night_dir: Path, plan: NightPlan,
+                             interrupt: BaseException) -> dict[str, Any] | None:
+    """Lead ruling R8-1 (round-7 exec MEDIUM-3 = cold MEDIUM-1, option A).
+
+    The chain holds the host night lock (R7-5), so a close that ran while it
+    still measured could not retake the lock and deferred the restore, and
+    the chain measured on with no supervisor and no window deadline. On an
+    interrupt after launch the chain's process group is terminated exactly as
+    the window-deadline path does it (TERM, bounded wait, KILL, a re-signalled
+    group census) and proven gone; ``chain.exited`` is recorded for a claimed
+    chain, ``chain.unkilled`` when the proof fails. The normal close then
+    retakes the lock and restores (or, unproven, defers as R7-5 says).
+    Further TERM/HUP/INT are swallowed so they cannot cut the termination
+    short. Returns the outcome (None when no chain was launched); never
+    raises past the caller's interrupt."""
+    process = launched.get("process")
+    if process is None:
+        return None
+    if _SIGNAL_CLOSING is not None:
+        _SIGNAL_CLOSING()
+    outcome: dict[str, Any] = {"trigger": str(interrupt) or type(interrupt).__name__, "pgid": process.pid,
+                               "authority": "lead ruling R8-1"}
+    try:
+        deadline = launched.get("deadline")
+        fired = deadline.cancel() if deadline is not None else None
+        if fired is not None:
+            outcome.update(proven=bool(fired["proven"]), by="window_deadline")
+        else:
+            evidence: dict[str, Any] = {}
+            claimed = (night_dir / "chain.started").exists()
+            proven = _terminate_process_group(process, night_dir if claimed else None, pgid=process.pid,
+                                              evidence=evidence, pending_dir=night_dir)
+            outcome.update(proven=proven, by="interrupt", group_census=list(evidence.get("group_census", [])))
+            if not proven and not (night_dir / "chain.unkilled").exists():
+                _write_json(night_dir / "chain.unkilled",
+                            {"pgid": process.pid, "epoch_s": time.time(),
+                             "group_census": outcome["group_census"], "trigger": outcome["trigger"]})
+    except BaseException as error:  # noqa: BLE001 - the interrupt stands; the close decides on the lock
+        outcome.update(proven=False, error=f"{type(error).__name__}: {error}")
+    try:
+        _append_log(Path(plan.custody_root), "chain terminated on interrupt (lead ruling R8-1): "
+                    + json.dumps(outcome, sort_keys=True, default=str))
+    except Exception:  # noqa: BLE001
+        pass
+    return outcome
 
 
 def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                          *, command, abort_on_census, shutdown_monotonic,
                          channel, child_channel, start_fd_env, extra_env=None,
                          supervise=None, census_group_on_exit=False, census=None,
-                         append_census=None):
+                         append_census=None, launched=None):
 
     census_path = night_dir / "censuses.jsonl"
     stdout_path = night_dir / "chain.stdout.log"
     stderr_path = night_dir / "chain.stderr.log"
-    with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
+    with ExitStack() as launch_timing, stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
         os.chmod(stdout_path, 0o600)
         os.chmod(stderr_path, 0o600)
         environment = _chain_environment(plan, night_dir)
@@ -1046,9 +1105,19 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                 raise ValueError("pack launcher environment keys")
             environment.update(extra_env)
         launch_options = {}
+        barrier = None
         if child_channel is not None:
+            # Closed as 'refused' unless the launcher's start signal is accepted (status 'complete' is set
+            # only where the chain is released); an exception closes it as error/interrupted.
+            barrier = launch_timing.enter_context(timing_receipts.span("arm", "chain_launch_barrier"))
+            barrier.status = "refused"
             environment[start_fd_env] = str(child_channel.fileno())
             launch_options["pass_fds"] = (child_channel.fileno(),)
+        if _CHAIN_HOST_LOCK is not None and _CHAIN_HOST_LOCK.held:
+            # Lead ruling R7-5: the chain inherits the host night lock, so the
+            # lock lives as long as the night's process tree, not run_night.
+            launch_options["pass_fds"] = tuple(launch_options.get("pass_fds", ())) + _CHAIN_HOST_LOCK.pass_fds(
+                reserved=(LAUNCHER_HANDOFF_FD,))
         try:
             process = t0_rehearsal.observed_popen(
                 command if command is not None else ["/bin/zsh", str(chain_path)],
@@ -1059,6 +1128,8 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                 start_new_session=True,
                 **launch_options,
             )
+            if launched is not None:
+                launched["process"] = process   # lead ruling R8-1: an interrupt from here stops the group
         except OSError as error:
             if claim_descriptor is not None:
                 launch_error = _complete_chain_launch_failure(claim_descriptor, error)
@@ -1102,6 +1173,8 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                 time.monotonic() + (deadline_epoch_s - float(probes.now_epoch_s()))
             ),
         )
+        if launched is not None:
+            launched["deadline"] = deadline
         deadline.start()
 
         def exceeded(outcome: dict[str, Any]) -> tuple[
@@ -1191,6 +1264,9 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                     pgid = _complete_chain_start(descriptor, process, night_dir)
                     claimed = True
                     awaiting_start = False
+                    if barrier is not None:
+                        barrier.status = "complete"
+                    launch_timing.close()  # before releasing any collection
                     try:
                         channel.sendall(b"G")
                     except OSError as error:
@@ -1198,6 +1274,7 @@ def _run_chain_once_impl(chain_path, plan, probes, night_dir, claim_descriptor,
                 elif signal_byte == b"":
                     # EOF is the ordinary refusal path. No claim was made.
                     awaiting_start = False
+                    launch_timing.close()
                 elif signal_byte is not None:
                     return refuse_start(_CODES["chain_launch_failed"],
                         "launcher sent an invalid chain-start signal")
@@ -1403,6 +1480,7 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, Any]]:
         # result.json's refusal_documents or the courier's refusal discovery.
         *sorted(night_dir.glob("rerun.refusal*.json")),
         night_dir / "result.json",
+        *sorted(night_dir.glob("deadman_host_restoration-*.json")),
         night_dir / "launch.pending",
         night_dir / "launch.resolved",
         night_dir / "chain.started",
@@ -1417,6 +1495,8 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, Any]]:
         night_dir / "courier.attempts.jsonl",
         night_dir / "courier.heartbeat",
         night_dir / "courier.sent",
+        night_dir / "courier.delivery.json",
+        night_dir / "courier.filed",
         night_dir / "evidence_busy_cores.jsonl",
         night_dir / "evidence_processes.jsonl",
         night_dir / "evidence_envelopes.jsonl",
@@ -1454,6 +1534,7 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, Any]]:
     return artifacts
 
 
+@timing_receipts.timed("offload", "publication", outcome=lambda error: "error" if error else "complete")
 def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str | None:
     """Best-effort results-branch publish; return any failure diagnostic.
 
@@ -1462,6 +1543,10 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
     keeps the hash it saw, so the omission must reach the prompt and the log.
     """
 
+    # A-02: terminal ALIGN records, including pre-chain refusals, must leave
+    # immediately. No repository-sized clone before the first push.
+    if str(plan.plan_id).startswith("align-"):
+        return _publish_terminal_result(custody_root, night_dir, plan.plan_id)
     omitted: list[str] = []
     try:
         origin = t0_rehearsal.observed_run(
@@ -1498,19 +1583,24 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
         if not allow_raw_logs:
             for name in ("chain.stdout.log", "chain.stderr.log"):
                 (destination / name).unlink(missing_ok=True)
-        for artifact in _artifact_list(custody_root, night_dir):
-            if not allow_raw_logs and Path(artifact["path"]).name in {"chain.stdout.log", "chain.stderr.log"}:
-                continue
-            if "error" in artifact:
-                omitted.append(f"{artifact['path']} ({artifact['error']})")
-                continue
-            source = custody_root / artifact["path"]
-            # Preserve repeated envelope basenames; flattening loses all but
-            # the final rounds/session/raw-power file.
-            relative = source.relative_to(night_dir) if source.is_relative_to(night_dir / "evidence") else Path(source.name)
-            target = destination / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, target)
+        with timing_receipts.span("offload", "results_copy"):
+            for artifact in _artifact_list(custody_root, night_dir):
+                if not allow_raw_logs and Path(artifact["path"]).name in {"chain.stdout.log", "chain.stderr.log"}:
+                    continue
+                if "error" in artifact:
+                    omitted.append(f"{artifact['path']} ({artifact['error']})")
+                    continue
+                source = custody_root / artifact["path"]
+                # Preserve repeated envelope basenames; flattening loses all but
+                # the final rounds/session/raw-power file.
+                relative = source.relative_to(night_dir) if source.is_relative_to(night_dir / "evidence") else Path(source.name)
+                target = destination / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+        # Timing stays in the existing local journal, outside the immutable
+        # result inventory and the structure-only courier export. A custodian
+        # exports it only for an authorized unblinded window. Push completion
+        # is local evidence for the next such export, never a recursive push.
         t0_rehearsal.observed_run(
             ["git", "-C", str(clone), "add", str(destination.relative_to(clone))],
             capture_output=True,
@@ -1518,20 +1608,14 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
             timeout=30,
             check=True,
         )
-        t0_rehearsal.observed_run(
-            ["git", "-C", str(clone), "commit", "-m", f"record night {plan.plan_id}"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=True,
-        )
-        t0_rehearsal.observed_run(
-            ["git", "-C", str(clone), "push", "origin", f"HEAD:{branch}"],
-            capture_output=True,
-            text=True,
-            timeout=120,
-            check=True,
-        )
+        with timing_receipts.span("offload", "local_commit"):
+            t0_rehearsal.observed_run(
+                ["git", "-C", str(clone), "commit", "-m", f"record night {plan.plan_id}"],
+                capture_output=True, text=True, timeout=30, check=True)
+        with timing_receipts.span("offload", "push"):
+            t0_rehearsal.observed_run(
+                ["git", "-C", str(clone), "push", "origin", f"HEAD:{branch}"],
+                capture_output=True, text=True, timeout=120, check=True)
         _append_log(custody_root, f"durable record pushed branch={branch}")
     except Exception as error:
         try:
@@ -1543,9 +1627,141 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
     return None
 
 
+def _publish_terminal_result(custody_root, night_dir, plan_id):
+    """Push a structure-only snapshot with one shared 50 s budget.
+
+    A-02, measurement-system audit 2026-11-10 §3.1 / Q11 (cited rebind).
+    Fetch only the results ref, never main, model files or raw chain logs.
+    A delivery receipt is written only after git acknowledges the push.
+    """
+    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", plan_id) is None:
+        return "results delivery failed: invalid plan id"
+    deadline = time.monotonic() + 50.0
+    branch = "refs/heads/night-results/" + plan_id
+    omitted = []
+
+    def run(args, **kwargs):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("terminal results delivery exceeded 50 seconds")
+        return t0_rehearsal.observed_run(args, capture_output=True, text=True,
+                                       timeout=remaining, **kwargs)
+
+    try:
+        result_path = night_dir / "result.json"
+        result_digest = _sha256_path(result_path)
+        origin = run(["git", "-C", str(REPO_ROOT), "remote", "get-url", "origin"], check=True).stdout.strip()
+        with tempfile.TemporaryDirectory(prefix="results-publish-", dir=custody_root) as tmp:
+            repository = Path(tmp) / "repo.git"
+            run(["git", "init", "--bare", "-q", str(repository)], check=True)
+            git = ["git", "--git-dir=" + str(repository), "-c", "user.name=JouleWise courier",
+                   "-c", "user.email=joulewise-courier@example.invalid"]
+            remote = run([*git, "ls-remote", "--exit-code", origin, branch])
+            parents = []
+            if remote.returncode == 0:
+                run([*git, "fetch", "--depth=1", origin, branch], check=True)
+                parent = run([*git, "rev-parse", "FETCH_HEAD"], check=True).stdout.strip()
+                parents = ["-p", parent]
+            elif remote.returncode != 2:
+                raise subprocess.CalledProcessError(remote.returncode, remote.args if hasattr(remote, "args") else git,
+                                                    stderr=remote.stderr)
+            prefix = "docs/process_traces/night-results/" + plan_id + "/"
+            # The default bare index starts empty: each commit is an exact
+            # snapshot, while its parent retains previous delivery evidence.
+            for artifact in _artifact_list(custody_root, night_dir):
+                relative = Path(artifact["path"])
+                if relative.name in {"chain.stdout.log", "chain.stderr.log"}:
+                    continue
+                if "error" in artifact:
+                    if relative == Path("night/result.json"):
+                        raise OSError("unreadable terminal result: " + str(relative))
+                    omitted.append({"path": str(relative), "error": artifact["error"]})
+                    continue
+                source = custody_root / relative
+                name = (source.relative_to(night_dir).as_posix()
+                        if source.is_relative_to(night_dir / "evidence") else source.name)
+                try:
+                    blob = run([*git, "hash-object", "-w", str(source)], check=True).stdout.strip()
+                except (OSError, subprocess.SubprocessError) as error:
+                    if source == result_path:
+                        raise
+                    omitted.append({"path": str(relative), "error": _delivery_error(error)})
+                    continue
+                run([*git, "update-index", "--add", "--cacheinfo", "100644", blob, prefix + name], check=True)
+            if omitted:
+                blob = run([*git, "hash-object", "-w", "--stdin"],
+                           input=json.dumps({"omitted_unreadable_artifacts": omitted}, sort_keys=True) + "\n",
+                           check=True).stdout.strip()
+                run([*git, "update-index", "--add", "--cacheinfo", "100644", blob,
+                     prefix + "delivery_omissions.json"], check=True)
+            tree = run([*git, "write-tree"], check=True).stdout.strip()
+            commit = run([*git, "commit-tree", tree, *parents],
+                         input="record terminal night " + plan_id + "\n", check=True).stdout.strip()
+            run([*git, "push", origin, commit + ":" + branch], check=True)
+        receipt = {"transport": "git-push", "plan_id": plan_id, "ref": branch,
+                   "commit": commit, "result_sha256": result_digest, "delivered_epoch_s": time.time()}
+        if omitted:
+            receipt["omitted_unreadable_artifacts"] = omitted
+        pending = night_dir / (".courier-delivery-" + uuid.uuid4().hex)
+        pending.write_bytes(_json_bytes(receipt))
+        os.replace(pending, night_dir / "courier.delivery.json")
+        _append_log(custody_root, "terminal results delivered ref=" + branch + " commit=" + commit)
+        if omitted:
+            _append_log(custody_root, "terminal results omitted unreadable artifacts: " + json.dumps(omitted))
+        return None
+    except Exception as error:
+        return "results delivery failed: " + _delivery_error(error)
+
+
+def _delivery_error(error):
+    tail = getattr(error, "stderr", "") or ""
+    if isinstance(tail, bytes):
+        tail = tail.decode("utf-8", "replace")
+    return (type(error).__name__ + ": " + str(error))[-1024:] + ("; stderr: " + tail[-2048:] if tail else "")
+
+
+def _program_courier_delivery(custody_root, plan_id):
+    """The non-agent courier acknowledges transport, never a local file drop."""
+    custody_root = Path(custody_root)
+    night = custody_root / "night"
+    (night / "courier.heartbeat").write_text(f"{os.getpid()} {time.time()}\n")
+    delivered = False
+    try:
+        receipt = json.loads((night / "courier.delivery.json").read_text())
+        delivered = (receipt.get("transport") == "git-push" and receipt.get("plan_id") == plan_id
+                     and receipt.get("ref") == "refs/heads/night-results/" + plan_id
+                     and receipt.get("result_sha256") == _sha256_path(night / "result.json")
+                     and re.fullmatch(r"[0-9a-f]{40,64}", receipt.get("commit", "")) is not None)
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    if not delivered:
+        error = _publish_terminal_result(custody_root, night, plan_id)
+        if error:
+            (night / "courier.filed").write_text(error + "\n")
+            return 1
+    (night / "courier.sent").touch()
+    (night / "courier.filed").unlink(missing_ok=True)
+    return 0
+
+
+class _FallbackPlan(night_gate.HazardNightPlan):
+    """A malformed record's reporting plan; its courier must be a program.
+
+    Surviving bindings cannot establish which block the original plan used.
+    Keep them for reporting, but never use their shape to authorize an agent.
+    """
+
+
 def _resolve_courier_bin(
-    requested: Path | None,
+    requested: Path | None, *, plan: NightPlan | None = None,
 ) -> tuple[Path | None, str | None, dict[str, str] | None]:
+    # Block six (design 3.1, 6.4) sends no mail through an agent: its courier is
+    # a program, never `claude`, and a missing courier is never substituted.
+    if plan is not None:
+        from joulewise.b6 import courier as b6_courier
+        if isinstance(plan, _FallbackPlan) or b6_courier.block_six_plan(plan):
+            found, error = b6_courier.resolve(requested, plan.measurement_root)
+            return found, error, None
     substitution: dict[str, str] | None = None
     if requested is not None:
         candidate = requested
@@ -1642,6 +1858,7 @@ def _wait_for_courier(
     *,
     stop_epoch_s: float | None = None,
     report: dict[str, Any] | None = None,
+    process: Any = None,
 ) -> tuple[bool, bool]:
     if report is None:
         report = {"diagnostics": []}
@@ -1661,6 +1878,8 @@ def _wait_for_courier(
         if sent.is_file():
             optional("sent marker persistence", lambda: _fsync_path(sent))
             return heartbeat_seen, True
+        if process is not None and process.poll() not in (None, 0):
+            return heartbeat_seen, False
         deadline_remaining = deadline - time.monotonic()
         stop_remaining = (
             float("inf")
@@ -1941,6 +2160,7 @@ def run_courier(
                     sent,
                     stop_epoch_s=deadman_epoch_s,
                     report=report,
+                    process=process,
                 )
                 heartbeat_seen = heartbeat_seen or saw_heartbeat
                 if was_sent:
@@ -2023,6 +2243,89 @@ def run_courier(
         optional("courier lock removal", lambda: (night_dir / "courier.lock").unlink(missing_ok=True))
 
 
+_CHAIN_REFUSAL_CODES = frozenset({
+    "thermal.start_gate_timeout", "thermal.gate_timeout", "thermal.hold_timeout",
+    "thermal.state_unobserved", "thermal.collector_failed", "thermal.custody_invalid",
+    "thermal.status_source_missing", "episode.deadman", "episode.decode_budget",
+    "episode.g0_unreleased", "episode.time_guard", "episode.context_limit",
+    "powermode.host_lock_unavailable", "powermode.host_lock_held", "powermode.restore_failed",
+})
+
+
+def _r1_refusal_summary(raw):
+    """D-05: publish vocabulary only, never error text, paths or numeric values."""
+    from joulewise.align.apple.r1_phase_table import phase_plan
+    phases = phase_plan(include_4bit=True)
+    names = {name for name, *_ in phases}
+    error = raw.get("error") if isinstance(raw.get("error"), str) else ""
+    phase = raw.get("refused_phase")
+    if not isinstance(phase, str) or phase not in names:
+        phase = next((name for name in sorted(names, key=lambda name: (-len(name), name)) if re.search(
+            r"(?<![\w.-])" + re.escape(name) + r"(?![\w.-])", error)), None)
+    if phase is None:
+        kinds = re.findall(r"(?<![\w.])runtime\.([\w-]+)(?=:|\.invalid_json:)", error)
+        matches = {name for name, kind, *_ in phases if kind in kinds}
+        if len(matches) == 1:
+            phase = matches.pop()
+    tokens = set(re.findall(r"(?<![\w.])[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)+(?![\w.])", error))
+    structured = raw.get("refusal_codes")
+    if isinstance(structured, list):
+        tokens.update(code for code in structured if isinstance(code, str))
+    return {"chain_refused_phase": phase, "chain_refusal_codes": sorted(tokens & _CHAIN_REFUSAL_CODES)}
+
+
+def _chain_outcome(plan, night_dir, verdict, chain_exit_code, aborted_reason=None):
+    """Reporting only: keep the registered arm verdict and exit policy intact.
+
+    A-01, measurement-system audit 2026-11-10 §3.1 / Q3 (cited rebind).
+    Read only R1's structural status, never its measurements or slot values.
+    """
+    reasons = []
+    started = (night_dir / "chain.started").exists()
+    payload = night_dir / "align-r1" / "r1_result.json"
+    is_r1 = (str(plan.plan_id).startswith("align-r1-")
+             or "align_r1_rehearsal" in str(getattr(plan, "chain_path", ""))
+             or payload.exists())
+    status = None
+    refusal = {"chain_refused_phase": None, "chain_refusal_codes": []}
+    if is_r1 and started:
+        try:
+            raw = json.loads(payload.read_text(encoding="utf-8"))
+            status = raw.get("status") if isinstance(raw, dict) else None
+            if status not in ("complete", "refused", "aborted", "running"):
+                status = "invalid"
+            if status in ("refused", "aborted"):
+                try:
+                    refusal = _r1_refusal_summary(raw)
+                except Exception:  # noqa: BLE001 - enrichment must never prevent a terminal record
+                    pass  # retain the null summary in both primary and fallback result writes
+        except FileNotFoundError:
+            status = "absent"
+        except (OSError, ValueError):
+            status = "unreadable"
+        if status != "complete":
+            reasons.append("r1_status:" + status)
+    if chain_exit_code not in (0, None):
+        reasons.append(f"chain_exit_nonzero:{chain_exit_code}")
+    if verdict == "REFUSED" and not started:
+        outcome = "REFUSED_PRE_CHAIN"
+        reasons.append("refusal:" + str(aborted_reason or "unknown"))
+    elif verdict == "ABORTED":
+        outcome = "ABORTED"
+        reasons.append("abort:" + str(aborted_reason or "unknown"))
+    elif reasons or verdict in ("REFUSED", "CHAIN_STOPPED"):
+        outcome = "CHAIN_FAILED"
+        if not reasons:
+            reasons.append("chain_verdict:" + verdict)
+    elif started and chain_exit_code == 0:
+        outcome = "COMPLETE"
+    else:
+        outcome = "UNKNOWN"
+    return {"chain_outcome": outcome, "measurement_outcome": status, **refusal,
+            "fault": bool(reasons), "fault_reasons": reasons}
+
+
+@timing_receipts.timed('finalize', 'night_result')
 def _write_result(
     custody_root: Path,
     night_dir: Path,
@@ -2036,7 +2339,9 @@ def _write_result(
     census_count: int,
     census_hits: list[dict[str, Any]] | None = None,
     calibration_refusal: dict[str, Any] | None = None,
+    *, host_restoration: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    restoration = (_HOST_STATE_CLOSE() if _HOST_STATE_CLOSE is not None else host_restoration)
     document = {
         "schema": RESULT_SCHEMA,
         "plan_id": plan.plan_id,
@@ -2060,7 +2365,22 @@ def _write_result(
                               for path in _refusal_paths(night_dir)],
         "artifacts": _artifact_list(custody_root, night_dir),
     }
+    document.update(_chain_outcome(plan, night_dir, verdict, chain_exit_code, aborted_reason))
+    if restoration is not None:
+        document["host_restoration"] = restoration
+    # Preserve pre-existing hazard faults as well as the new chain faults.
+    try:
+        hazard = json.loads((night_dir / "hazard_result.json").read_text(encoding="utf-8"))
+        reasons = hazard.get("faults", {}).get("reasons", [])
+        document["fault_reasons"] = list(dict.fromkeys([*document["fault_reasons"], *reasons]))
+        document["fault"] = bool(document["fault_reasons"])
+    except (OSError, ValueError, AttributeError, TypeError):
+        pass
+    if restoration is not None and not restoration.get("ok"):
+        document["fault_reasons"] = list(dict.fromkeys([*document["fault_reasons"], "host_restoration_incomplete"]))
+        document["fault"] = True
     _write_json(night_dir / "result.json", document)
+    _resume_terminal_signals(_SIGNAL_CLOSING)
     return document
 
 
@@ -2086,19 +2406,21 @@ def _fallback_plan(plan_path: Path) -> NightPlan:
     receipt_class = raw.get("receipt_class")
     if receipt_class not in set(night_gate.PLAN_RECEIPT_CLASSES):
         receipt_class = "DIAGNOSTIC_NO_PACK"
-    return NightPlan(
+    hazard = raw.get("hazard_window")
+    return _FallbackPlan(
         plan_id=plan_id,
         receipt_class=receipt_class,
         t0_epoch_s=now,
         window_max_s=1,
         authored_epoch_s=now,
         repo_head="0" * 40,
-        measurement_root="/",
+        measurement_root=raw.get("measurement_root") if isinstance(raw.get("measurement_root"), str) else "/",
         measurement_head="0" * 40,
         chain_path="",
         chain_sha256_path="",
         custody_root=custody,
         registration_path=None,
+        hazard_window=hazard if isinstance(hazard, dict) else {},
     )
 
 
@@ -2259,6 +2581,7 @@ def _write_courier_outcome(night_dir: Path, outcome: Mapping[str, Any]) -> None:
     _write_json(night_dir / "courier.json", document)
 
 
+@timing_receipts.timed("offload", "reporting_handoff")
 def _finish_reporting(
     custody_root: Path,
     night_dir: Path,
@@ -2272,10 +2595,23 @@ def _finish_reporting(
     courier_bin_substitution: Mapping[str, str] | None = None,
     report: dict[str, Any] | None = None,
 ) -> int:
+    # The host close and create-once result are complete (or a minimal
+    # persistence attempt has failed); the bounded courier is interruptible.
+    _resume_terminal_signals(_SIGNAL_CLOSING)
     if report is None:
         report = {"facts": {"plan_id": plan.plan_id}, "diagnostics": [],
                   "result_unavailable": False, "base_exit_code": base_exit_code,
                   "prepared": False}
+    try:
+        result = json.loads((night_dir / "result.json").read_bytes())
+        if "host_restoration" in result:
+            report["facts"]["host_restoration"] = result["host_restoration"]
+            if not result["host_restoration"].get("ok"):
+                report["facts"]["fault"] = True
+                report["facts"]["fault_reasons"] = list(dict.fromkeys(
+                    [*report["facts"].get("fault_reasons", []), "host_restoration_incomplete"]))
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
     optional = lambda label, op: _courier_optional(report, label, op)
     if allow_courier and courier_bin is not None:
         outcome = run_courier(
@@ -2384,7 +2720,7 @@ def _malformed_plan_exit(plan_path: Path, error: Exception, courier_bin: Path | 
         started_epoch_s,
         started_monotonic_ns,
     )
-    resolved, resolution_error, substitution = _resolve_courier_bin(courier_bin)
+    resolved, resolution_error, substitution = _resolve_courier_bin(courier_bin, plan=plan)
     _record_courier_substitution(custody_root, substitution)
     return _finish_reporting(
         custody_root,
@@ -2413,6 +2749,7 @@ def _prepare_pack_night(plan: NightPlan, plan_path: Path, plan_raw: bytes):
     return night_gate._authenticate_pack_records(plan)
 
 
+@timing_receipts.timed("arm", "author_pack_arm")
 def _author_pack_arm(plan: NightPlan, prepared):
     root = prepared["root"]
     custody = Path(plan.custody_root)
@@ -2423,27 +2760,28 @@ def _author_pack_arm(plan: NightPlan, prepared):
     before = {p.resolve() for p in namespace.glob("arm-*.json")}
     night_gate.authenticate_arm_context(plan,
         legacy_rehearsal=prepared["authorization_record"]["purpose"] == "T0_REHEARSAL")
-    authored = t0_author.author_arm_readiness_evidence_t0(root, custody)
+    with timing_receipts.span("arm", "arm_evidence_authoring"):
+        authored = t0_author.author_arm_readiness_evidence_t0(root, custody)
     if authored.get("status") != "PASS":
         raise PackNightRefusal("t0_evidence: author refused")
     context = _pack_object(pack_custody / "arm_readiness.t0.inputs/arm-context.json", "arm_context")
     confirmation = prepared["confirmation_record"]
-    result = readiness.generate_arm_receipt(
-        root, context, custody,
-        step6_confirmation_table=confirmation["table_path"],
-        expected_confirmation_digest=confirmation["table_sha256"],
-    )
+    with timing_receipts.span("arm", "arm_receipt_authoring"):
+        result = readiness.generate_arm_receipt(
+            root, context, custody,
+            step6_confirmation_table=confirmation["table_path"],
+            expected_confirmation_digest=confirmation["table_sha256"])
     if result.get("arm_disposition") != "GO" or result.get("status") != "PASS":
         raise PackNightRefusal("arm_receipt: NO_GO")
     path = Path(result["receipt_path"])
     if (path.parent != namespace or not re.fullmatch(r"arm-[0-9]{4,}\.json", path.name)
             or path.resolve() in before):
         raise PackNightRefusal("arm_receipt: must be the driver's self-written receipt")
-    verification = readiness._verify_arm_receipt(
-        root, path, require_unconsumed=True,
-        step6_confirmation_table=confirmation["table_path"],
-        expected_confirmation_digest=confirmation["table_sha256"],
-    )
+    with timing_receipts.span("arm", "arm_receipt_verification"):
+        verification = readiness._verify_arm_receipt(
+            root, path, require_unconsumed=True,
+            step6_confirmation_table=confirmation["table_path"],
+            expected_confirmation_digest=confirmation["table_sha256"])
     arm = _pack_object(path, "arm_receipt", result["receipt_sha256"])
     if verification.get("receipt_sha256") != result["receipt_sha256"]:
         raise PackNightRefusal("arm_receipt.sha256")
@@ -2451,9 +2789,54 @@ def _author_pack_arm(plan: NightPlan, prepared):
     return {"path": path, "arm": arm, "sha256": result["receipt_sha256"], "authored": authored}
 
 
+@contextmanager
+def _timing_journal(night, plan):
+    """Use the driver's existing log; never create a child stage journal.
+
+    With the driver's ``night.log`` present, boundaries append to it. Without one (arm-only invocations, or a
+    missing log) they are held in memory and, when the scope closes, spilled to ``night/timing-receipts.jsonl``
+    in the session's custody (Opus cold review LOW-2). That happens after the operation, outside any measured
+    segment; nothing is created while a window runs.
+    """
+    rows = []
+    scope = ExitStack()
+    try:
+        try:
+            append = rows.append
+            path = night.parent / "night.log"
+            try:
+                # No O_CREAT: a missing log stays absent. Main has already
+                # written its normal 'night driver started' entry.
+                handle = scope.enter_context(os.fdopen(
+                    os.open(path, os.O_WRONLY | os.O_APPEND), "w", encoding="utf-8"))
+                def append(row):
+                    handle.write(json.dumps(row, sort_keys=True) + "\n")
+                    handle.flush()  # turnaround only; no added fsync
+            except FileNotFoundError:
+                pass
+            scope.enter_context(timing_receipts.bind(timing_receipts.Writer(
+                append, producer='night_driver', plan_id=plan.plan_id,
+                attempt=(getattr(plan, "hazard_window", None) or {}).get("attempt"))))
+        except Exception as error:
+            sys.stderr.write(f"timing journal unavailable: {error}\n")
+        yield rows
+    finally:
+        try:
+            scope.close()
+        except Exception as error:
+            sys.stderr.write(f"timing journal close failed: {error}\n")
+        if rows:
+            try:
+                with open(night / "timing-receipts.jsonl", "a", encoding="utf-8") as spill:
+                    for row in rows:
+                        spill.write(json.dumps(row, sort_keys=True) + "\n")
+            except OSError as error:
+                sys.stderr.write(f"timing receipts spill failed: {error}\n")
+
+
 def arm_only(context_path: Path) -> dict[str, Any]:
     """Author and verify one ARM, then persist a GO-less no-launch record."""
-    from scripts.check_v5_arm_abort import context_at, absence
+    from scripts.check_v5_arm_abort import context_at
     context, plan, prepared = context_at(context_path)
     custody = Path(plan.custody_root)
     night = custody / "night"
@@ -2461,6 +2844,13 @@ def arm_only(context_path: Path) -> dict[str, Any]:
     output = night / "arm-only.json"
     if output.exists() or _existing_record(night, plan) is not None:
         raise PackNightRefusal("arm-only custody already used")
+    with _timing_journal(night, plan):
+        return _arm_only_admission(context_path, context, plan, prepared, custody, night, output)
+
+
+@timing_receipts.timed("arm", "arm_only_admission")
+def _arm_only_admission(context_path, context, plan, prepared, custody, night, output):
+    from scripts.check_v5_arm_abort import absence
     absence(plan, context["arm_context"])
     input_path = custody / plan.pack_night["pack_id"] / "arm_readiness.t0.inputs/arm-context.json"
     input_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2488,16 +2878,23 @@ def arm_only(context_path: Path) -> dict[str, Any]:
 
 
 def _qualification_observe(night, producer, operation):
-    """Observation failures never become driver refusals or change chain rc."""
+    """Observation failures never become driver refusals or change chain rc.
+
+    Round-8 disposition D8-1 (R1 round-8 exec MEDIUM-1): an interrupt
+    (KeyboardInterrupt, which the R7-4/R8-1 handler raises for TERM/HUP/INT)
+    is not an observation failure. The fault is recorded and
+    the exception re-raised, so the R8-1 latch sees the first signal."""
     try:
         return operation()
-    except BaseException:
+    except BaseException as error:
         try:
             t0_rehearsal.append_observation(night / "producer-faults.jsonl", {
                 "schema_version": "joulewise.v5_qualification_producer_fault.v1",
                 "producer": producer, "status": "REFUSED"})
         except BaseException:
             pass
+        if isinstance(error, KeyboardInterrupt):
+            raise
         return None
 
 
@@ -3484,6 +3881,7 @@ def smoke_observation_round(interval_s):
     return observation, cost
 
 
+@timing_receipts.timed("gates", "network_time_off_settle")
 def _admit_network_time_off(plan, night_dir, *, during_settle=None, budget=None):
     from joulewise import v5_qualification
     off_path = v5_qualification.off_receipt_path(plan, night_dir)
@@ -3501,7 +3899,8 @@ def _admit_network_time_off(plan, night_dir, *, during_settle=None, budget=None)
     if budget is not None and remaining > _derivation_budget_remaining(budget):
         raise ValueError("OFF settle exceeds derivation start deadline")
     if remaining and plan.receipt_class != "TRANSACTION_PACK":
-        time.sleep(remaining)
+        with timing_receipts.span("gates", "network_time_off_sleep", requested_s=remaining):
+            time.sleep(remaining)
     network_time_off.seconds_since_receipt(
         network_time_off.read_receipt(off_path, plan_id=off["plan_id"], window_id=off["window_id"]),
         {**network_time_off._clock(), "boot_id": network_time_off.boot_id()})
@@ -3768,6 +4167,7 @@ def _write_refused_start_conditions(plan, night_dir, reason):
     _write_start_conditions(plan, night_dir, refusal_reason=reason)
 
 
+@timing_receipts.timed("dwell", "clean_dwell")
 def _admit_derivation_clean_dwell(plan, night_dir, budget):
     """Revision 6 §6.2(g): retain the complete unattended dwell evidence."""
     script = Path(plan.measurement_root) / "scripts/prewindow_check.sh"
@@ -3848,7 +4248,10 @@ def _admit_qualification_clean_dwell(plan, night_dir, budget):
         "schema": "joulewise.v5_qualification_clean_dwell.v1", "plan_id": plan.plan_id,
         "source": {"path": str(path), "sha256": _sha256_path(path)},
         "required_clean_dwell_s": 600, "timeout_s": 2700,
-        "reused_native_t0_capture": True, "budget": budget}))
+        "reused_native_t0_capture": True, "budget": budget,
+        "started_monotonic_ns": capture["started_monotonic_ns"],
+        "ended_monotonic_ns": capture["finished_monotonic_ns"],
+        "boot_session_id": capture["boot_session_id"]}))
 
 
 def _admit_qualification_control_order(plan, record):
@@ -3964,6 +4367,391 @@ def _hazard_seams():
     return hazard_driver.production_seams(REPO_ROOT)
 
 
+AC_POWERMODE_ARGV = ("/usr/bin/pmset", "-g", "custom")
+
+
+def _power_markers(plan: NightPlan) -> list[str]:
+    """The host-level High Power marker (lead ruling R6-7) and the R1 chain's
+    ``$MEASUREMENT_ROOT/.align-r1-high-power``."""
+    from joulewise.align.apple import powermode
+    return [powermode.host_marker_path(),
+            str(Path(plan.measurement_root) / powermode.R1_HIGH_POWER_MARKER)]
+
+
+def _admit_ac_powermode(plan: NightPlan, probes: Probes, lock: Any = None,
+                        plan_path: Path | None = None) -> dict[str, Any]:
+    """HIGH-3 host-level admission through the probe seam (tests fake ``run``).
+
+    Reads the AC-profile ``powermode`` (exact key in the ``AC Power:`` block),
+    retried once on a failed read. If a High Power marker exists (the
+    host-level one, lead ruling R6-7, or ``$MEASUREMENT_ROOT/.align-r1-high-power``),
+    Automatic is restored with the narrow sudo rule and the mode is read
+    again, never while another night holds the host night lock. Never raises:
+    a failure is a refusal record.
+    """
+    from joulewise.align.apple import powermode
+
+    def runner(argv):
+        return probes.run(tuple(argv))
+
+    expected = night_gate.DEFAULT_AC_POWERMODE if plan.ac_powermode is None else plan.ac_powermode
+    markers = None
+    try:
+        markers = _power_markers(plan)
+        record = powermode.admit_ac_powermode(expected, markers=markers, runner=runner, lock=lock,
+                                              owner={"custody_root": plan.custody_root, "plan_path": plan_path})
+    except Exception as error:  # noqa: BLE001 - admission evidence, never a crash
+        record = {"expected": expected, "observed": None, "marker": markers[0] if markers else None,
+                  "marker_present": None,
+                  "admitted": False, "reason": f"admission failed: {type(error).__name__}: {error}"}
+    record["plan_declared"] = plan.ac_powermode
+    record["host_state_dir"] = _host_state_dir_record()
+    return record
+
+
+def _host_state_dir_record() -> str:
+    """Lead ruling R7-10: the host state directory this night used, for its
+    admission record and custody log (or why it could not be used)."""
+    from joulewise.align.apple import powermode
+    try:
+        return powermode.host_state_dir()
+    except Exception as error:  # noqa: BLE001 - a record, the refusal is elsewhere
+        return f"refused: {type(error).__name__}: {error}"
+
+
+def _restore_owed_on_exit(plan_path: Path, custody_root: str | Path | None, probes: Probes,
+                          reason: str, lock: Any = None) -> dict[str, Any]:
+    """Lead ruling R6-7: a night that exits without measuring (malformed plan,
+    rerun, J4 launch_abandoned) restores Automatic for the host-level W1 High
+    Power marker it owns, so an armed W1 session never leaves the host at 2.
+    A marker another session owns is left alone (a late launchd fire of a
+    released plan must not undo a retried night's High Power), and nothing
+    is restored while a measuring night holds the host night lock. Never
+    raises; the outcome goes to the custody log when there is one."""
+    from joulewise.align.apple import powermode
+    if _HOST_STATE_CLOSE is not None:
+        record = _HOST_STATE_CLOSE()
+        if custody_root is not None:
+            try:
+                _append_log(Path(custody_root), f"ac powermode exit restore ({reason}): "
+                            + json.dumps(record, sort_keys=True))
+            except Exception:  # noqa: BLE001
+                pass
+        return record
+
+    def runner(argv):
+        return probes.run(tuple(argv))
+
+    try:
+        markers = [powermode.host_marker_path()]
+    except Exception as error:  # noqa: BLE001 - never raises (R7-10 refusal of an override)
+        record = {"reason": reason, "action": "error", "error": f"{type(error).__name__}: {error}"}
+    else:
+        record = powermode.restore_owed(markers, runner=runner, reason=reason, lock=lock,
+                                        owner={"custody_root": custody_root, "plan_path": plan_path})
+    if record.get("action") not in (None, "none") and custody_root is not None:
+        try:
+            _append_log(Path(custody_root), f"ac powermode exit restore ({reason}): "
+                        + json.dumps(record, sort_keys=True, default=str))
+        except Exception:  # noqa: BLE001
+            pass
+    return record
+
+
+def _refuse_ac_powermode(custody_root: Path, night_dir: Path, plan: NightPlan, courier_bin: Path | None,
+                         admission: Mapping[str, Any], started_epoch_s: float, started_monotonic_ns: int,
+                         code: str = "refused_ac_powermode") -> int:
+    """The HIGH-3 refusal: record it, deliver the notice, never launch.
+    ``code`` is ``refused_host_lock_error`` when the host night lock failed
+    for a reason other than another holder (lead ruling R7-11)."""
+    _append_log(custody_root, "ac powermode admission refused: " + str(admission["reason"]))
+    resolved_courier, courier_error, courier_substitution = _resolve_courier_bin(courier_bin, plan=plan)
+    _record_courier_substitution(custody_root, courier_substitution)
+    _write_standard_refusal_result(
+        custody_root, night_dir, plan, _CODES[code],
+        str(admission["reason"]), started_epoch_s, started_monotonic_ns, evidence=dict(admission))
+    return _finish_reporting(custody_root, night_dir, plan, EXIT_REFUSED, resolved_courier,
+                             courier_error=courier_error, deadman_epoch_s=deadman_epoch(plan),
+                             courier_bin_substitution=courier_substitution)
+
+
+NETWORK_TIME_ON_ARGV = ("/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-setusingnetworktime", "on")
+NETWORK_TIME_QUERY_ARGV = ("/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-getusingnetworktime")
+
+
+def _leave_network_time(probes: Probes, *, skipped: bool) -> dict[str, Any]:
+    """D-02: preserve the preparation preflight's OFF state, with a read-back."""
+    record = {"action": "unchanged", "restoration_owed": False, "verified": False,
+              "observed": None, "reason": ("rerun or abandoned launch; preserve next arm's OFF state"
+                  if skipped else "night did not turn network time OFF; next arm requires OFF")}
+    try:
+        result = probes.run(NETWORK_TIME_QUERY_ARGV)
+        record["read"] = {"argv": list(NETWORK_TIME_QUERY_ARGV), "exit_code": result.exit_code,
+                          "stdout": result.stdout, "stderr": result.stderr}
+        observed = result.stdout.strip().casefold()
+        if result.exit_code == 0 and observed in ("network time: off", "network time: on"):
+            record.update(observed=observed.rsplit(": ", 1)[1], verified=True)
+            if record["observed"] == "off":
+                record["action"] = "left_off"
+    except Exception as error:  # noqa: BLE001 - a failed query is explicit, never a setter
+        record["error"] = f"{type(error).__name__}: {error}"
+    return record
+
+
+def _restore_network_time(probes: Probes) -> dict[str, Any]:
+    """Lead ruling 2026-11-10 A-05: set ON and authenticate the read-back.
+
+    This prospectively supersedes D-186's leave-OFF policy for these nights.
+    The narrow systemsetup rule is used for both operations; failures remain
+    explicit evidence and never conceal the power-mode restore.
+    """
+    record: dict[str, Any] = {"ok": False, "requested": "on",
+                              "next_arm_preflight": "clock.frequency_word_nonzero",
+                              "next_arm_owns_zeroing": True}
+    for key, argv in (("set", NETWORK_TIME_ON_ARGV), ("read", NETWORK_TIME_QUERY_ARGV)):
+        try:
+            result = probes.run(argv)
+            record[key] = {"argv": list(argv), "exit_code": result.exit_code,
+                           "stdout": result.stdout, "stderr": result.stderr}
+        except Exception as error:  # noqa: BLE001 - still attempt the other operation
+            record[key] = {"argv": list(argv), "error": f"{type(error).__name__}: {error}"}
+    observed = record["read"].get("stdout", "").strip().casefold()
+    record["observed"] = "on" if observed == "network time: on" else None
+    record["ok"] = (record["set"].get("exit_code") == 0
+                    and record["read"].get("exit_code") == 0 and record["observed"] == "on")
+    return record
+
+
+def _night_turned_network_time_off(plan: NightPlan) -> bool:
+    night = Path(plan.custody_root) / "night"
+    try:
+        action = json.loads((night / "network_time_off.action.json").read_bytes())
+        if (action.get("argv") == list(network_time_off.OFF_ARGV)
+                and action.get("returncode") == 0 and not action.get("error")
+                and not action.get("timed_out")
+                and network_time_off.off_stdout_admitted(action.get("stdout"))):
+            return True
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    try:
+        network_time_off.read_receipt(night / network_time_off.RECEIPT_BASENAME, plan_id=plan.plan_id)
+        return True
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def _close_ac_powermode(plan: NightPlan, probes: Probes, admission: Mapping[str, Any],
+                        lock: Any = None) -> dict[str, Any]:
+    """Restore Automatic and any network-time obligation under the host lock.
+
+    All plans close here, including mode-0 R1 chains that entered High Power
+    internally. Never restore while chain termination is unproven, a child
+    retains the inherited lock, or a different session owns a W1 marker.
+    A failed read-back keeps the power markers for the dead-man/next start.
+    """
+    from joulewise.align.apple import powermode
+    global _CHAIN_HOST_LOCK
+    _CHAIN_HOST_LOCK = None
+    record: dict[str, Any] = {"ok": False, "network_time": {"ok": False, "action": "not_attempted"}}
+    try:
+        if _CHAIN_TERMINATION_UNPROVEN is not None:
+            path = _CHAIN_TERMINATION_UNPROVEN.get("path")
+            cause = "interrupt" if path == "interrupt" else "chain stop or supervision exception"
+            record.update(deferred=f"chain process group was not proven gone after the {cause} "
+                          "(lead ruling R8-1); restore owed to dead-man",
+                          chain_termination=_CHAIN_TERMINATION_UNPROVEN)
+            return record
+        lock = lock if lock is not None else powermode.HostLock(role=f"night-close:{plan.plan_id}")
+        proven = lock.retake() if lock.held else lock.acquire()
+        if not proven:
+            record["deferred"] = "host night lock unavailable; a measuring night may still hold it"
+            return record
+        host_marker = powermode.host_marker_path()
+        if (os.path.lexists(host_marker) and powermode.w1_marker(host_marker)
+                and not powermode.owned_by(host_marker, custody_root=plan.custody_root,
+                                           plan_path=admission.get("plan_path"))):
+            record.update(action="not_owner", marker=host_marker, owner=powermode.marker_owner(host_marker))
+            return record
+        markers = [m for m in _power_markers(plan) if os.path.lexists(m)]
+        try:
+            restored = powermode.restore_automatic(markers[0] if markers else None,
+                                                    runner=lambda argv: probes.run(tuple(argv)))
+            if restored.get("ok"):
+                for marker in markers[1:]:
+                    if os.path.lexists(marker):
+                        os.unlink(marker)
+            record.update(restored)
+            record["markers"] = markers
+            record["action"] = "restored" if restored.get("ok") else "restore_failed"
+        except Exception as error:  # noqa: BLE001 - network time still gets its restore
+            record.update(ok=False, error=f"{type(error).__name__}: {error}")
+        record["network_time"] = (_restore_network_time(probes)
+            if (not admission.get("skip_network_time_restore")
+                and (_night_turned_network_time_off(plan) or admission.get("deadman_no_night_installed")))
+            else _leave_network_time(probes, skipped=bool(admission.get("skip_network_time_restore"))))
+        record["powermode_ok"] = record["ok"]
+        record["ok"] = record["powermode_ok"] and (record["network_time"].get("ok") is True
+                                                   or record["network_time"].get("verified") is True)
+    except BaseException as error:  # noqa: BLE001 - never mask the night's outcome
+        record.update(ok=False, error=f"{type(error).__name__}: {error}")
+    finally:
+        if lock is not None:
+            try:
+                lock.release()
+            except BaseException as error:  # noqa: BLE001
+                record.update(ok=False, release_error=f"{type(error).__name__}: {error}")
+        try:
+            label = "ac powermode close deferred" if "deferred" in record else "ac powermode close"
+            if record.get("action") == "not_owner":
+                label += ": marker belongs to another session"
+            elif record.get("action") in ("restored", "restore_failed"):
+                label += ": restore Automatic"
+                label += (" and network time ON" if record["network_time"].get("requested") == "on"
+                          else "; network time " + record["network_time"]["action"])
+            _append_log(Path(plan.custody_root), label + ": " + json.dumps(record, sort_keys=True))
+        except Exception:  # noqa: BLE001
+            pass
+    return record
+
+
+def _close_night_host(stage: dict[str, Any], plan_path: Path) -> dict[str, Any]:
+    """Idempotent close, before result delivery and also from the exception finally.
+
+    Retain a separate create-once record even on a rerun or a write failure.
+    SIGKILL cannot execute Python cleanup: the dead-man uses the same close.
+    """
+    if "host_restoration" in stage:
+        return stage["host_restoration"]
+    if _SIGNAL_CLOSING is not None:
+        _SIGNAL_CLOSING()
+    plan = stage.get("plan") or _fallback_plan(plan_path)
+    try:
+        record = _close_ac_powermode(plan, stage.get("probes") or make_probes(),
+                                     {"plan_path": plan_path,
+                                      "skip_network_time_restore": stage.get("skip_network_time_restore", False)},
+                                     stage.get("lock"))
+    except BaseException as error:  # noqa: BLE001 - record a broken probe boundary too
+        record = {"ok": False, "error": f"{type(error).__name__}: {error}"}
+    stage["host_restoration"] = record
+    night = Path(plan.custody_root) / "night"
+    try:
+        if (night / LAUNCH_ABANDONED_MARKER).exists():
+            return record  # J4: the custody log records it; no new driver records may re-fence this span
+        night.mkdir(parents=True, exist_ok=True)
+        _write_json(night / f"host_restoration-{time.time_ns()}.json", record)
+    except Exception as error:  # noqa: BLE001 - preserve the close in the result if possible
+        record["record_error"] = f"{type(error).__name__}: {error}"
+    return record
+
+
+def _own_high_power_marker(plan: NightPlan, plan_path: Path, admission: dict[str, Any]) -> bool:
+    """R6-7 (round-6 Sol critique): a night measuring under High Power always
+    leaves a host-level obligation, so a SIGKILL of it is restored by the
+    next session start or admission even if no marker was present. False
+    when that marker could not be written: lead ruling R7-11 refuses the
+    night before it measures."""
+    from joulewise.align.apple import powermode
+    try:
+        if any(os.path.lexists(m) for m in _power_markers(plan)):
+            return True
+        powermode.write_host_marker(powermode.host_marker_path(), tag=powermode.W1_MARKER_TAG,
+                                    owner={"custody_root": plan.custody_root, "plan_path": plan_path,
+                                           "writer": "run_night admission"})
+        admission["marker_written_at_admission"] = True
+        return True
+    except Exception as error:  # noqa: BLE001 - OSError, or a refused host state override (R7-10)
+        admission["marker_written_at_admission"] = f"failed: {type(error).__name__}: {error}"
+        return False
+
+
+def _take_host_lock(plan: NightPlan) -> tuple[Any, str | None]:
+    """R6-7: a night admitted under High Power measures holding the host night
+    lock (waiting out a session install that holds it). Lead ruling R7-11:
+    returns ``(lock, error)``. ``error`` None with the lock not held means
+    another night holds it (EWOULDBLOCK after the wait); ``error`` names any
+    other failure (an OSError of the lock file, a refused host state
+    override), which has its own refusal code and runs the restore path."""
+    from joulewise.align.apple import powermode
+    try:
+        lock = powermode.HostLock(role=f"night:{plan.plan_id}")
+        lock.acquire(wait_s=powermode.NIGHT_LOCK_WAIT_S)
+    except Exception as error:  # noqa: BLE001 - OSError or HostStateOverrideRefused
+        return None, f"{type(error).__name__}: {error}"
+    return lock, None
+
+
+# Lead ruling R7-5: the host night lock of the night being run, handed to its
+# chain (pass_fds) so the lock lives as long as the night's process tree.
+_CHAIN_HOST_LOCK: Any = None
+# The measurement launcher's one-use capability slot (``_launcher_barrier``);
+# the lock is never passed on it, or the launcher's dup2 would drop it.
+LAUNCHER_HANDOFF_FD = 198
+# Lead ruling R7-4: TERM and HUP end run_night through its normal close.
+TERMINATION_SIGNALS = (signal.SIGTERM, signal.SIGHUP)
+# Lead ruling R8-1: the running night's ``closing`` hook, so the chain
+# termination on an interrupt swallows further TERM/HUP/INT as the close does.
+_SIGNAL_CLOSING: Callable[[], None] | None = None
+# Lead ruling R8-1 (round-8 Sol critique) and round-8 disposition D8-2: set
+# by _run_night when the chain's termination is unproven on any path (an
+# interrupt, a census abort, a supervision stop, the window deadline, or an
+# exception escaping the chain wait); the close then restores nothing.
+_CHAIN_TERMINATION_UNPROVEN: dict[str, Any] | None = None
+_HOST_STATE_CLOSE: Callable[[], dict[str, Any]] | None = None
+
+
+def _set_chain_termination_unproven(record: Mapping[str, Any]) -> None:
+    global _CHAIN_TERMINATION_UNPROVEN
+    _CHAIN_TERMINATION_UNPROVEN = dict(record, proven=False)
+
+
+def _resume_terminal_signals(closing) -> None:
+    resume = getattr(closing, "resume", None)
+    if resume is not None:
+        resume()
+
+
+def _install_termination_handlers() -> tuple[Callable[[], None], Callable[[], None]]:
+    """Lead ruling R7-4: SIGTERM and SIGHUP unwind run_night like SIGINT (a
+    KeyboardInterrupt), so its normal close runs, High Power restore included.
+    Once the close has begun (``closing()``), further TERM/HUP are swallowed
+    so they cannot interrupt it; lead ruling R8-1 adds SIGINT (when it still
+    has Python's default handler), and the first such signal itself latches
+    ``closing`` before it raises, so no later one can cut short the chain
+    termination or the close. Python-level handlers reset to the
+    default on exec, so children keep default dispositions. Main thread only.
+    The host close resumes interruption before the courier phase using
+    ``closing.resume``. Returns ``(closing, restore)``."""
+    if threading.current_thread() is not threading.main_thread():
+        return (lambda: None), (lambda: None)
+    state = {"closing": False, "received": []}
+
+    def handler(signum: int, _frame: Any) -> None:
+        state["received"].append(signum)
+        if not state["closing"]:
+            # Round-8 Sol critique: the first signal latches the shutdown, so
+            # a second one cannot escape the chain termination before it
+            # begins (lead ruling R8-1).
+            state["closing"] = True
+            raise KeyboardInterrupt(f"signal {signum}")
+
+    previous = {sig: signal.signal(sig, handler) for sig in TERMINATION_SIGNALS}
+    if signal.getsignal(signal.SIGINT) is signal.default_int_handler:
+        # Lead ruling R8-1: SIGINT keeps its KeyboardInterrupt, but like
+        # TERM/HUP it can no longer cut short the chain termination or the
+        # close once they have begun.
+        previous[signal.SIGINT] = signal.signal(signal.SIGINT, handler)
+
+    def closing() -> None:
+        state["closing"] = True
+
+    closing.resume = lambda: state.update(closing=False)
+
+    def restore() -> None:
+        for sig, old in previous.items():
+            signal.signal(sig, old)
+    return closing, restore
+
+
 def run_night(
     plan_path: Path,
     *,
@@ -3971,6 +4759,86 @@ def run_night(
     courier_bin: Path | None = None,
     dry_arm: bool = False,
 ) -> int:
+    global _CHAIN_HOST_LOCK, _SIGNAL_CLOSING, _CHAIN_TERMINATION_UNPROVEN, _HOST_STATE_CLOSE
+    closers: list[Callable[[], Any]] = []
+    stage: dict[str, Any] = {}
+    closing, restore_signals = _install_termination_handlers()
+    _SIGNAL_CLOSING = closing
+    _CHAIN_TERMINATION_UNPROVEN = None
+    _HOST_STATE_CLOSE = None if dry_arm else lambda: _close_night_host(stage, plan_path)
+    try:
+        return _run_night(plan_path, rehearsal=rehearsal, courier_bin=courier_bin, dry_arm=dry_arm,
+                          closers=closers, stage=stage)
+    except BaseException:
+        closing()
+        stage["escaped_exception"] = True
+        if dry_arm:
+            # Lead ruling R8-5 (round-7 cold LOW-1): --dry-arm is a desk
+            # control that never changes the mode; an interrupt or exception
+            # in it only exits, and never restores an armed session's High
+            # Power (its marker and its mode are left exactly as they were).
+            pass
+        elif "plan_path" not in stage:
+            # Round-7 Sol critique: a signal or exception before the plan
+            # parse (the initial agent census) restores what this plan's
+            # session owns, matched as the malformed-plan exit matches it.
+            try:
+                fallback_custody = _fallback_plan(plan_path).custody_root
+            except Exception:  # noqa: BLE001
+                fallback_custody = None
+            try:
+                _restore_owed_on_exit(Path(plan_path).absolute(), fallback_custody, make_probes(),
+                                      "exception_before_admission")
+            except Exception:  # noqa: BLE001 - never masks the night's own exception
+                pass
+        elif not stage.get("admission_reached"):
+            # Lead ruling R7-11: an exception (or a TERM/HUP/INT) between the
+            # plan parse and the admission runs the restore path.
+            lock = stage.get("lock")
+            try:
+                _restore_owed_on_exit(stage["plan_path"], stage["custody_root"], stage["probes"],
+                                      "exception_before_admission", lock=lock)
+            finally:
+                if lock is not None:
+                    lock.release()
+        raise
+    finally:
+        closing()
+        if _HOST_STATE_CLOSE is not None:
+            try:
+                _HOST_STATE_CLOSE()
+                plan = stage.get("plan") or _fallback_plan(plan_path)
+                night = Path(plan.custody_root) / "night"
+                if stage.get("escaped_exception") and not (night / "result.json").exists():
+                    _write_result(Path(plan.custody_root), night, plan,
+                                  "ABORTED" if (night / "chain.started").exists() else "REFUSED",
+                                  None, "exception_before_result", time.time(), time.monotonic_ns(), None, 0)
+                    _durable_record(Path(plan.custody_root), night, plan)
+            except BaseException:  # noqa: BLE001 - a failure cannot mask the original exception
+                pass
+        for close in closers:
+            try:
+                close()
+            except BaseException:  # noqa: BLE001 - the night's own result stands; the log has the close
+                pass
+        _CHAIN_HOST_LOCK = None
+        _SIGNAL_CLOSING = None
+        _CHAIN_TERMINATION_UNPROVEN = None
+        _HOST_STATE_CLOSE = None
+        restore_signals()
+
+
+def _run_night(
+    plan_path: Path,
+    *,
+    rehearsal: bool = False,
+    courier_bin: Path | None = None,
+    dry_arm: bool = False,
+    closers: list[Callable[[], Any]],
+    stage: dict[str, Any] | None = None,
+) -> int:
+    global _CHAIN_HOST_LOCK
+    stage = {} if stage is None else stage
     probes = make_probes()
     bind_start_epoch, bind_start_monotonic = time.time(), time.monotonic()
     initial_probe, initial_refusal = agent_census(probes)
@@ -3982,6 +4850,13 @@ def run_night(
         if dry_arm:
             sys.stderr.write(f"dry-arm refused: plan unreadable or malformed: {error}\n")
             return EXIT_REFUSED
+        # Lead ruling R6-7: a malformed plan never measures; restore the High
+        # Power this plan's session set (matched by plan path).
+        try:
+            fallback_custody = _fallback_plan(plan_path).custody_root
+        except Exception:  # noqa: BLE001
+            fallback_custody = None
+        _restore_owed_on_exit(plan_path, fallback_custody, probes, "plan_malformed")
         return _malformed_plan_exit(plan_path, error, courier_bin)
 
     if dry_arm:
@@ -3995,24 +4870,91 @@ def run_night(
                                      (initial_probe, initial_refusal), seams=_hazard_seams())
 
     custody_root = Path(plan.custody_root)
+    stage.update(plan_path=plan_path, plan=plan, custody_root=custody_root, probes=probes)
     night_dir = custody_root / "night"
     night_dir.mkdir(parents=True, exist_ok=True)
     existing = _existing_record(night_dir, plan)
     if existing is not None:
+        stage["skip_network_time_restore"] = True
         if existing.name == LAUNCH_ABANDONED_MARKER:
             # J4: the watchdog released this launch. Write nothing under night/
             # (any driver record there would re-fence the released span); the
             # custody log keeps the trace.
             _append_log(custody_root, "night driver refused: the watchdog marked this launch "
                                       "abandoned (night/launch_abandoned.json); nothing measured")
+            _restore_owed_on_exit(plan_path, custody_root, probes, "launch_abandoned")
             return EXIT_REFUSED
         _write_rerun_refusal(night_dir, plan, existing)
+        # R6-7: a rerun measures nothing. Its own night, if still measuring,
+        # holds the host night lock, so this never restores under it.
+        _restore_owed_on_exit(plan_path, custody_root, probes, "rerun")
         return EXIT_REFUSED
 
     _append_census(night_dir / "censuses.jsonl", initial_probe, initial_refusal)
     started_epoch_s = time.time()
     started_monotonic_ns = time.monotonic_ns()
     _append_log(custody_root, "night driver started")
+    timing_scope = ExitStack()
+    closers.append(timing_scope.close)
+    timing_scope.enter_context(_timing_journal(night_dir, plan))
+    # Host-level power-mode admission (executing review HIGH-3, 2026-11-06),
+    # before any receipt-class branch: a crash, SIGKILL or power loss during
+    # R1's High Power leg leaves the persistent AC profile at powermode 2,
+    # which the generic low-power gate admits. Refuse unless the AC powermode
+    # equals the plan's declared value (default 0), after restoring Automatic
+    # when the R1 marker under MEASUREMENT_ROOT says a restore is owed.
+    host_lock, lock_error = _take_host_lock(plan) if plan.ac_powermode == 2 else (None, None)
+    stage["lock"] = host_lock
+    if lock_error is not None:
+        # Lead ruling R7-11: not another holder but a lock that cannot be
+        # used at all: its own refusal code, and the restore path runs.
+        stage["admission_reached"] = True
+        powermode_admission = {"expected": plan.ac_powermode, "observed": None, "marker_present": None,
+                               "plan_declared": plan.ac_powermode, "admitted": False,
+                               "host_state_dir": _host_state_dir_record(),
+                               "reason": f"the host night lock is unavailable: {lock_error} (lead ruling R7-11)"}
+        powermode_admission["exit_restore"] = _restore_owed_on_exit(plan_path, custody_root, probes,
+                                                                    "host_lock_error")
+        return _refuse_ac_powermode(custody_root, night_dir, plan, courier_bin, powermode_admission,
+                                    started_epoch_s, started_monotonic_ns, code="refused_host_lock_error")
+    if host_lock is not None and not host_lock.held:
+        powermode_admission = {"expected": plan.ac_powermode, "observed": None, "marker_present": None,
+                               "plan_declared": plan.ac_powermode, "admitted": False,
+                               "host_state_dir": _host_state_dir_record(),
+                               "reason": "another night holds the host night lock (lead ruling R6-7)"}
+    else:
+        powermode_admission = _admit_ac_powermode(plan, probes, lock=host_lock, plan_path=plan_path)
+    if not powermode_admission["admitted"]:
+        if host_lock is not None and host_lock.held:
+            # Lead ruling R6-7: a W1 High Power night refused at admission
+            # (mode mismatch, failed pmset read) measures nothing; restore
+            # Automatic and clear the marker before releasing the lock.
+            powermode_admission["exit_restore"] = _HOST_STATE_CLOSE()
+            host_lock.release()
+        return _refuse_ac_powermode(custody_root, night_dir, plan, courier_bin, powermode_admission,
+                                    started_epoch_s, started_monotonic_ns)
+    if powermode_admission["expected"] == 2:
+        # Lead ruling R5-6: the host was admitted in High Power; Automatic is
+        # restored when this night closes, whatever its outcome. R6-7: the
+        # night holds the host night lock until then.
+        stage["admission_reached"] = True   # R7-11: the close owns the restore from here
+        if not _own_high_power_marker(plan, plan_path, powermode_admission):
+            # Lead ruling R7-11: no host-level obligation means a SIGKILL of
+            # this night would leave 2 with no marker; refuse before measuring
+            # (the close above restores Automatic).
+            powermode_admission["admitted"] = False
+            powermode_admission["reason"] = ("the host-level High Power marker could not be written after a "
+                                             "plan-2 admission: " + str(powermode_admission[
+                                                 "marker_written_at_admission"]) + " (lead ruling R7-11)")
+            return _refuse_ac_powermode(custody_root, night_dir, plan, courier_bin, powermode_admission,
+                                        started_epoch_s, started_monotonic_ns)
+        _CHAIN_HOST_LOCK = host_lock
+    stage["admission_reached"] = True
+    _append_log(custody_root, "ac powermode admitted: expected {expected} observed {observed}{restored}; "
+                "host state dir {host}".format(
+        expected=powermode_admission["expected"], observed=powermode_admission["observed"],
+        host=powermode_admission.get("host_state_dir"),
+        restored=" (R1 High Power marker restored to Automatic)" if powermode_admission["marker_present"] else ""))
     if plan.receipt_class == night_gate.HAZARD_PACK:
         if rehearsal:
             # `rehearse` never runs a real window; HAZARD_PACK has no stub mode.
@@ -4029,7 +4971,7 @@ def run_night(
             started_epoch_s=started_epoch_s, started_monotonic_ns=started_monotonic_ns,
             courier_bin=courier_bin, seams=_hazard_seams())
     resolved_courier, courier_error, courier_substitution = _resolve_courier_bin(
-        courier_bin
+        courier_bin, plan=plan
     )
     _record_courier_substitution(custody_root, courier_substitution)
     if resolved_courier is None:
@@ -4293,21 +5235,42 @@ def run_night(
             courier_bin_substitution=courier_substitution,
         )
 
-    chain_exit_code, abort, census_count, census_hits, termination_proven = (
-        _run_chain_once(
-            chain_path,
-            plan,
-            probes,
-            night_dir,
-            claim_descriptor,
-            command=command,
-            abort_on_census=not rehearsal_effective,
-            **({"extra_env": pack_env} if is_pack else {}),
-            **({"shutdown_monotonic": bind_start_monotonic + (
-                plan.t0_epoch_s + plan.window_max_s + WINDOW_SHUTDOWN_GRACE_S - bind_start_epoch)}
-               if plan.quiet_admission is not None else {}),
+    global _CHAIN_TERMINATION_UNPROVEN
+    try:
+        chain_exit_code, abort, census_count, census_hits, termination_proven = (
+            _run_chain_once(
+                chain_path,
+                plan,
+                probes,
+                night_dir,
+                claim_descriptor,
+                command=command,
+                abort_on_census=not rehearsal_effective,
+                **({"extra_env": pack_env} if is_pack else {}),
+                **({"shutdown_monotonic": bind_start_monotonic + (
+                    plan.t0_epoch_s + plan.window_max_s + WINDOW_SHUTDOWN_GRACE_S - bind_start_epoch)}
+                   if plan.quiet_admission is not None else {}),
+            )
         )
-    )
+    except BaseException as error:
+        # Round-8 disposition D8-2 (R1 round-8 exec MEDIUM-2): an interrupt's
+        # unproven chain termination defers the close (R8-1 Sol fix 1). Any
+        # other exception escaping the chain wait never terminated the chain,
+        # so its termination is unproven too.
+        if isinstance(error, KeyboardInterrupt):
+            outcome = getattr(error, "chain_termination", None)
+            if outcome is not None and not outcome.get("proven"):
+                _CHAIN_TERMINATION_UNPROVEN = dict(outcome, path="interrupt")
+        else:
+            _CHAIN_TERMINATION_UNPROVEN = {"path": "exception", "proven": False,
+                                           "error": f"{type(error).__name__}: {error}"}
+        raise
+    if not termination_proven:
+        # D8-2: so does an unproven census-abort, supervision-stop or
+        # window-deadline termination; a survivor that does not hold the lock
+        # must never see a restore.
+        _CHAIN_TERMINATION_UNPROVEN = {"path": "return", "proven": False, "chain_exit_code": chain_exit_code,
+                                       "abort_reason": None if abort is None else abort.get("reason")}
 
     if is_pack and prepared["authorization_record"]["purpose"] == "G2B_SHAKEDOWN":
         def lifecycle_operation():
@@ -4328,6 +5291,7 @@ def run_night(
     }
     optional = lambda label, op: _courier_optional(report, label, op)
 
+    @timing_receipts.timed("finalize", "prepare_result")
     def prepare_result():
         calibration_refusal = _calibration_refusal(
             night_dir, plan, chain_exit_code if abort is None else None)
@@ -4483,21 +5447,105 @@ def _pending_launch_refusal(night_dir: Path) -> dict[str, Any] | None:
         {"pgid": pgid, "record": "launch.pending"})
 
 
+def _deadman_host_restore(stage: dict[str, Any], plan_path: Path) -> dict[str, Any]:
+    if "restoration" in stage:
+        return stage["restoration"]
+    if stage.get("closing") is not None:
+        stage["closing"]()
+    plan = stage.get("plan") or _fallback_plan(plan_path)
+    night = Path(plan.custody_root) / "night"
+    if (night / LAUNCH_ABANDONED_MARKER).exists():
+        # D-03/J4: restore power without creating any night record that could
+        # re-fence this abandoned span. The close writes only the custody log.
+        safe = (not (night / "launch.pending").exists()
+                and (not (night / "chain.started").exists() or (night / "chain.exited").exists()))
+        record = (_close_ac_powermode(plan, make_probes(), {
+            "plan_path": plan_path, "skip_network_time_restore": True}) if safe else
+            {"ok": False, "deferred": "abandoned launch has an unproven chain"})
+        stage["restoration"] = record
+        _resume_terminal_signals(stage.get("closing"))
+        return record
+    if stage.get("stand_down"):
+        record = {"ok": False, "deferred": stage.get("deferred", "launch abandoned")}
+        stage["restoration"] = record
+        return record
+    try:
+        result = json.loads((night / "result.json").read_bytes())
+        restored = (result.get("host_restoration") or {}).get("ok") is True
+        if restored and not any(os.path.lexists(m) for m in _power_markers(plan)):
+            stage["restoration"] = result["host_restoration"]
+            _resume_terminal_signals(stage.get("closing"))
+            return stage["restoration"]
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    if stage.get("safe_to_restore"):
+        try:
+            record = _close_ac_powermode(plan, make_probes(), {
+                "plan_path": plan_path, "deadman_no_night_installed": stage.get("no_night_installed", False)})
+        except BaseException as error:  # noqa: BLE001 - preserve the dead-man's terminal outcome
+            record = {"ok": False, "error": f"{type(error).__name__}: {error}",
+                      "network_time": {"ok": False, "action": "not_attempted"}}
+    else:
+        record = {"ok": False, "deferred": stage.get("deferred", "chain termination not established"),
+                  "network_time": {"ok": False, "action": "not_attempted"}}
+    stage["restoration"] = record
+    try:
+        night.mkdir(parents=True, exist_ok=True)
+        _write_json(night / f"deadman_host_restoration-{time.time_ns()}.json", record)
+        if not stage.get("safe_to_restore"):
+            # A live/unknown night still owns its once-only result slot.
+            # Keep the refusal evidence separate until recovery is safe.
+            return record
+        if not (night / "result.json").exists():
+            _write_result(Path(plan.custody_root), night, plan, "REFUSED", None,
+                          "dead_man_recovery", time.time(), time.monotonic_ns(), None, 0,
+                          host_restoration=record)
+    except Exception as error:  # noqa: BLE001 - the separate record/log still carries the attempt
+        try:
+            _append_log(Path(plan.custody_root), f"dead-man restore result recording failed: {error}")
+        except Exception:  # noqa: BLE001 - never mask the terminal outcome
+            pass
+    _resume_terminal_signals(stage.get("closing"))
+    return record
+
+
 def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
+    stage: dict[str, Any] = {}
+    closing, restore_signals = _install_termination_handlers()
+    stage["closing"] = closing
+    try:
+        return _dead_man(plan_path, courier_bin=courier_bin, stage=stage)
+    finally:
+        closing()
+        try:
+            if "plan" not in stage:
+                plan = _fallback_plan(plan_path)
+                stage["plan"] = plan
+                night = Path(plan.custody_root) / "night"
+                stage["safe_to_restore"] = (_pending_launch_refusal(night) is None
+                    and (not (night / "chain.started").exists() or (night / "chain.exited").exists()))
+            _deadman_host_restore(stage, plan_path)
+        finally:
+            restore_signals()
+
+
+def _dead_man(plan_path: Path, *, courier_bin: Path | None, stage: dict[str, Any]) -> int:
     try:
         plan = _load_plan(plan_path)
     except (OSError, ValueError, TypeError, PlanError) as error:
         return _malformed_plan_exit(plan_path, error, courier_bin)
     custody_root = Path(plan.custody_root)
+    stage["plan"] = plan
     night_dir = custody_root / "night"
     night_dir.mkdir(parents=True, exist_ok=True)
-    sent = night_dir / "courier.sent"
-    if sent.exists():
-        _fsync_path(sent)
-        _append_log(custody_root, "dead-man skipped: courier already sent")
+    if (night_dir / LAUNCH_ABANDONED_MARKER).exists():
+        stage["stand_down"] = True
+        _append_log(custody_root, "dead-man launch abandoned; standing down")
         return EXIT_GO
     completion_epoch_s = _completion_epoch_s(plan)
     if time.time() < completion_epoch_s:
+        stage["stand_down"] = True
+        stage["deferred"] = "dead-man fired before the night's completion epoch"
         _append_log(
             custody_root,
             "dead-man fired before the night's completion epoch "
@@ -4505,8 +5553,19 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
         )
         return EXIT_GO
 
+    # A delivered, restored terminal night is immutable under daily fires.
+    try:
+        result = json.loads((night_dir / "result.json").read_bytes())
+        if ((result.get("host_restoration") or {}).get("ok") is True
+                and not any(os.path.lexists(m) for m in _power_markers(plan))
+                and (night_dir / "courier.sent").is_file()):
+            stage["restoration"] = result["host_restoration"]
+            return EXIT_GO
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+
     resolved_courier, courier_error, courier_substitution = _resolve_courier_bin(
-        courier_bin
+        courier_bin, plan=plan
     )
     _record_courier_substitution(custody_root, courier_substitution)
     if _courier_lock_is_live(night_dir):
@@ -4590,6 +5649,21 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
             _append_log(custody_root, f"dead-man wall meter cleanup: {json.dumps(reaped, sort_keys=True)}")
 
     probes = make_probes()
+    # Lead ruling R6-7 (round-6 executing review): the dead-man is this night's
+    # last exit when the night job never launched, or when run_night died
+    # without its close (SIGKILL, power loss; TERM/HUP run the close since
+    # R7-4, which may itself defer to here under R7-5). The chain is proved gone
+    # above, so restore the High Power marker this plan's session owns; a
+    # marker another session owns is left alone, and nothing is restored
+    # while a measuring night holds the host night lock. Never raises.
+    stage["safe_to_restore"] = True
+    try:
+        census = probes.run(("launchctl", "print", f"gui/{os.getuid()}/com.joulewise.night"))
+        absent = f'Could not find service "com.joulewise.night" in domain for user gui: {os.getuid()}'
+        stage["no_night_installed"] = (census.exit_code == 113 and absent in census.stderr.splitlines())
+    except Exception:  # noqa: BLE001 - absence is unproven
+        stage["no_night_installed"] = False
+    _deadman_host_restore(stage, plan_path)
     probe, census_refusal = agent_census(probes)
     _append_census(night_dir / "censuses.jsonl", probe, census_refusal)
     if census_refusal is not None:
@@ -5239,4 +6313,6 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.dont_write_bytecode = True
+    from joulewise.align.apple import powermode as _powermode
+    _powermode.mark_production_entry("run_night")   # lead ruling R7-10
     raise SystemExit(main())

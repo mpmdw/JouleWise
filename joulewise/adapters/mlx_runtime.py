@@ -213,6 +213,7 @@ class _GenerationRecord:
     prompt_token_ids: list[int]
     prompt_text: str | None
     output_token_ids: list[int]
+    prefill_tokens: int | None = None
 
 
 class MlxRuntimeAdapter:
@@ -277,13 +278,6 @@ class MlxRuntimeAdapter:
 
         start_s = self._clock.now()
         try:
-            config_path = Path(source).expanduser() / "config.json"
-            if config_path.is_file():
-                raw = json.loads(config_path.read_text(encoding="utf-8"))
-                if isinstance(raw, dict) and raw.get("model_file") == "qwen4_exp_upstream.py":
-                    from joulewise.align.models.qwen4_exp_upstream import ModelArgs
-
-                    ModelArgs.validate_config(raw)
             loaded = mlx_lm.load(
                 source,
                 revision=config.model.revision,
@@ -770,6 +764,12 @@ class MlxRuntimeAdapter:
         position: int | None = None,
         token_message_prefix: str = "mlx token",
         prepare_prompt: Any | None = None,
+        stream_options: dict[str, Any] | None = None,
+        cache_accounting: bool = False,
+        setup_metadata: dict[str, Any] | None = None,
+        reconcile_prompt: Any | None = None,
+        sampler_policy: dict[str, Any] | None = None,
+        per_turn_seed: int | None = None,
     ) -> _GenerationRecord:
         events: list[RuntimeEvent] = [
             self._event("phase_start", "tokenize", "mlx tokenization started")
@@ -793,8 +793,21 @@ class MlxRuntimeAdapter:
                 "phase_start",
                 "generation_setup",
                 "mlx generation setup started",
+                setup_metadata,
             )
         )
+        if reconcile_prompt is not None:
+            # Optional episode cache work is measured in generation_setup; the
+            # full render/encode above remains in the tokenize window.
+            prompt = reconcile_prompt(prompt_token_ids)
+        # Opt-in only: legacy calls keep their sampler construction and event bytes.
+        if sampler_policy is not None:
+            sampler, sampler_provenance = self._sampler_for_generation(sampler_policy)
+            if type(per_turn_seed) is not int or not 0 <= per_turn_seed < 2**64:
+                raise ValueError("sampled generation requires an unsigned 64-bit turn seed")
+            mx = _resolve_mlx_core()
+            mx.random.seed(per_turn_seed)
+            sampler_provenance["per_turn_seed"] = per_turn_seed
         original_eos_ids = self._suppress_eos() if suppress_eos else None
         eos_suppressed = original_eos_ids is not None
         events.append(
@@ -805,6 +818,7 @@ class MlxRuntimeAdapter:
                 {
                     "requested_output_tokens": max_tokens,
                     "eos_suppressed": eos_suppressed,
+                    **(setup_metadata or {}),
                 },
             )
         )
@@ -814,6 +828,8 @@ class MlxRuntimeAdapter:
             "requested_output_tokens": max_tokens,
             "eos_suppressed": eos_suppressed,
         }
+        if cache_accounting:
+            prefill_metadata.update(cached_tokens=prompt_tokens - len(prompt), prefill_tokens=len(prompt))
         if item_id is not None:
             prefill_metadata.update(
                 {"item_id": item_id, "item_index": item_index, "position": position}
@@ -830,10 +846,12 @@ class MlxRuntimeAdapter:
         output_token_ids: list[int] = []
         text_parts: list[str] = []
         last_finish_reason: str | None = None
-        sampler, sampler_provenance = self._sampler_for_generation()
+        if sampler_policy is None:
+            sampler, sampler_provenance = self._sampler_for_generation()
 
         try:
-            stream_kwargs: dict[str, Any] = {"max_tokens": max_tokens}
+            stream_kwargs: dict[str, Any] = dict(stream_options or {})
+            stream_kwargs["max_tokens"] = max_tokens
             if sampler is not None:
                 stream_kwargs["sampler"] = sampler
             stream = self._mlx_lm.stream_generate(
@@ -980,6 +998,7 @@ class MlxRuntimeAdapter:
             prompt_token_ids=prompt_token_ids,
             prompt_text=prompt_text,
             output_token_ids=output_token_ids,
+            prefill_tokens=len(prompt) if cache_accounting else None,
         )
 
     def cleanup(
@@ -1053,7 +1072,7 @@ class MlxRuntimeAdapter:
         )
         return token_ids, token_ids, None, "synthetic", False
 
-    def _sampler_for_generation(self) -> tuple[Any | None, dict[str, Any]]:
+    def _sampler_for_generation(self, policy: dict[str, Any] | None = None) -> tuple[Any | None, dict[str, Any]]:
         base = {
             "kind": "greedy",
             "temperature": 0.0,
@@ -1070,6 +1089,15 @@ class MlxRuntimeAdapter:
             sampler_api = "mlx_lm.sample_utils.make_sampler"
         if not callable(make_sampler):
             self._raise_sampler_pin_failure("mlx_lm sampler API unavailable")
+        if policy is not None:
+            # Record the constructor arguments after validation, not a copy of
+            # the episode spec. Never silently fall back to greedy sampling.
+            kwargs = {"temp": policy["temperature"], **{k: policy[k] for k in ("top_p", "top_k", "min_p")}}
+            sampler = make_sampler(**kwargs)
+            return sampler, {"kind": "categorical", "temperature": kwargs["temp"],
+                             **{k: kwargs[k] for k in ("top_p", "top_k", "min_p")},
+                             "pinned": True, "api": sampler_api, "parameter": "temp",
+                             "constructor_kwargs": dict(kwargs)}
         errors: list[str] = []
         for kwargs in ({"temp": 0.0}, {"temperature": 0.0}):
             try:
