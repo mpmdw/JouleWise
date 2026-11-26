@@ -2510,6 +2510,7 @@ def _recompute_controller_phases(kind, episode, witnessed, intervals, events):
     _required(all(row["end_ns"] <= work_end for row in intervals if row["kind"] == "G0"),
               "context_checks", kind, source, field="G0")
     guards, tool_offset, prior_position = [], 0, -1
+    clocks = _replay_clock_mappings(episode, witnessed)
     outer = episode.hardware["paired_clock_stamps_ns"]
 
     def offset_bounds(stamps):
@@ -2545,7 +2546,6 @@ def _recompute_controller_phases(kind, episode, witnessed, intervals, events):
                   "context_checks", kind, source, index=index)
         guards.append((min(hi_begin, limit), min(hi_end, limit)))
 
-        offsets = offset_bounds((end, following))
         work_end = turn.end_ns
         prior_position = decode_end[index]
         for call_index, call in enumerate(turn.tool_calls):
@@ -2553,8 +2553,6 @@ def _recompute_controller_phases(kind, episode, witnessed, intervals, events):
             tool_offset += 2
             call_id = begin["metadata"].get("tool_call_id")
             expected = {"align_turn_index": index, "tool_call_id": call_id}
-            start_lo, start_hi = span(begin, offsets)
-            end_lo, end_hi = span(close, offsets)
             _required(begin["event_type"] == "phase_start" and close["event_type"] == "phase_end"
                       and begin["phase"] == close["phase"] == f"align_tool_{index}_{call_index}"
                       and begin["message"] == close["message"] == call.name
@@ -2562,7 +2560,8 @@ def _recompute_controller_phases(kind, episode, witnessed, intervals, events):
                       and canonical(begin["metadata"]) == canonical(close["metadata"]) == canonical(expected)
                       and prior_position < tool_begin_pos < tool_end_pos
                       and begin["timestamp_s"] <= close["timestamp_s"] and work_end <= call.start_ns
-                      and start_lo <= call.start_ns <= start_hi and end_lo <= call.end_ns <= end_hi,
+                      and clocks.matches_after(index, begin["timestamp_s"], call.start_ns)
+                      and clocks.matches_after(index, close["timestamp_s"], call.end_ns),
                       "tool_boundaries", kind, source, index=index)
             work_end = call.end_ns
             prior_position = tool_end_pos
