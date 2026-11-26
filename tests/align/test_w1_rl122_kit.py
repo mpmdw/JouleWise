@@ -8,8 +8,9 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from joulewise.align.apple import r1_phase_table, r1_runtime as rt
+from joulewise.align.apple import r1_phase_table, r1_runtime as rt, v4_registration as reg
 from scripts import align_r1_rehearsal as r1, align_v4_kit as kit, align_w1_budget_procedure as procedure
 from tests.align.test_v4_kit import ready_inputs
 
@@ -191,6 +192,43 @@ class PlanningReleaseTests(unittest.TestCase):
                 record['desk_print'] = desk
             with self.subTest(desk=desk), self.assertRaisesRegex(ValueError, 'desk print'):
                 kit.require_ready(inputs, slots, planning_release=record)
+
+    def test_w1_readiness_refuses_drift_in_the_receipts_planning_release(self):
+        names = ['planning_turn_R_plus_2C', 'planning_turn_R_plus_4C']
+        inputs, slots = planning_slots(names)
+        release = release_for(slots, names)
+        gate_paths = {stage: f'docs/align/v4/gate-{stage}.md' for stage in ('A', 'B')}
+        candidate = dict.fromkeys((*reg.ARTIFACTS, *gate_paths.values()), kit.raw_json({}))
+        candidate.update({kit.R1_PLANNING_RELEASE.as_posix(): kit.raw_json(release),
+                          kit.INPUTS.as_posix(): kit.raw_json(inputs), kit.R1_SLOTS.as_posix(): kit.raw_json(slots),
+                          kit.D_PINS.as_posix(): kit.raw_json({}),
+                          (kit.KIT / 'collection_plan.json').as_posix(): kit.raw_json(
+                              {'runtime_requirements': {'km003c': kit.km003c.REQUIREMENT}})})
+        receipt = {'schema': reg.RECEIPT_SCHEMA, 'status': 'registered', 'commit': 'f' * 40,
+                   'artifacts': {path: reg.digest(candidate[path]) for path in reg.ARTIFACTS},
+                   'rulings': {str(n): 'installed' for n in reg.RULINGS},
+                   'gates': {stage: {'verdict': 'ADMIT', 'path': path, 'sha256': reg.digest(candidate[path])}
+                             for stage, path in gate_paths.items()},
+                   'lead_signature': 'lead: synthetic-test 2026-11-12'}
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(reg, '_committed_bytes', return_value=candidate), \
+                patch.object(reg, 'verify_r1_executed_sources'), patch.object(reg, 'validate_u3'), \
+                patch.object(reg, 'validate_wp19'), patch('joulewise.align.apple.v4_battery.validate_policy'), \
+                patch.object(kit, 'check_w1_record_keys'), patch.object(kit, 'validate_d_identity'), \
+                patch.object(kit, 'require_sizing'), patch.object(kit, 'validate_wp18_fixtures'), \
+                patch.object(kit, 'planning_heater_key', return_value='TV1h'):
+            root = Path(tmp)
+            for path, raw in {**candidate, reg.REGISTRATION+'registration_receipt.json': kit.raw_json(receipt)}.items():
+                target = root / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(raw)
+            kit.require_w1_ready(root)
+            digest = reg.artifact_set_digest(root)
+            release['desk_print']['sha256'] = '0' * 64
+            (root / kit.R1_PLANNING_RELEASE).write_bytes(kit.raw_json(release))
+            with self.assertRaisesRegex(ValueError, r'registration_receipt digest drift: .*r1_planning_release\.json'):
+                kit.require_w1_ready(root)
+            self.assertNotEqual(reg.artifact_set_digest(root), digest)
 
     def test_the_heater_key_comes_from_root(self):
         # PR #752 cold review F4: require_w1_ready(root) reads the heater key from root.
