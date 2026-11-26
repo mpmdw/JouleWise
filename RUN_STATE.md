@@ -1052,6 +1052,29 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+614. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-26 09:22 PST: RL-221: lm-interim-01 accepted, freeze 2 in effect; LOOKS.json hold ENDS; drift tripwire returns S's row (RL-223) before the W1 receipt; projector run, grid C running**
+
+```pointer
+owner: lead
+wait: ruling_recorded
+deadline: 2026-11-28T12:00:00-08:00
+on_early_or_refused: the W1 receipt stays unsigned until RL-223 is recorded; everything else in the signing sequence proceeds
+next_observable: RL-223 (S row) recorded on the audit branch, with grid C's JSON sha256 and the projection's hashes in its packet
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795713720, "number": 614, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **RL-221 (research lead, committed `87b5a4a75` on the audit branch): `lm-interim-01` is accepted as run and freeze 2 is in effect** (`twin_agrees = yes`). Both lead row actions are ratified (the execution roots, the public look directory); neither refusal spent the reservation. `qualified_interim = no` is recorded (S_w and K_w were print-only). The as-built authors list is accepted, with the Opus count on `fit_interim.py` corrected to eleven (look branch).
+- **Stage 2 wall time:** 1,183 s (08:13:31-08:33:14 PST), against a budget of 1,200 s; the size-matched rehearsal took 241 s. No later look takes its budget from the rehearsal's figure.
+- **The LOOKS.json file hold of item 611 (RL-220 B.1) ENDS now.** ctl-01's registration may land on main. RL-220 B.2 still stands: once ctl's row is on main, no freeze-2 read runs until the successor reader is audited. Qualification's arm predicate is such a read. If qual-01 arms before that audit closes, ctl's row lands after that arm's read; otherwise the reader is built first.
+- **The drift tripwire (`to_research_lead`) returns S's row to the research lead before the W1 receipt is signed** (MAN `decisions[0]`). RL-221 §4 fixed the test before any value was read. Its prereg is `PREREG-C.txt`, sha256 `8c45b555…24f6`: grid C, two candidate fits at p_sup ≤ .0125, bars and choice rule.
+  - **Named read (RL-221 §4.6)**, under the stanza `RESTRICTED-READ ruling=RL-221 look=lm-interim-01 manifest_sha256=08fd3e66… reader=research_lead`. The lead checked the projector's sha256 (`092514ee…482e`) and ran it once on the Air, detached, outside a seat. It is one projection of `step3.json` into the research lead's seat directory, and the lead does not open it. Printed line: `cf999dd07b5bf77d4e0a53dc07df72ea3403e56a70217f55dc7ad78973fc19f4 d34c96b03961002048e4fd1b1a25e0ef8851b8ead5c306e4a91edc2be01cba46 3`, rc 0.
+  - **Grid C** (`explore_f.py`, sha256 `6a528036…90e8`, replicates 10,000-19,999) is running on the Air, detached.
+  - **RL-223** (numbered after the parallel replay ruling RL-222) rules S's row from the projection, grid C and the full-rank count. **The W1 receipt is not signed until RL-223 is recorded.** Everything else in the signing sequence proceeds.
+- No ledger row changes for the tripwire: the row has no field for a stage-2 word (MF:1515-1517).
+
 613. **Magistrate 58364c5c (headless, Opus 5.5), 2026-11-26 09:10 PST: f2-stab-11 L001-L003 Check RECEIPT OK (3/3 admitted), copied; items 604/610 done (p8-p10 restored and verified, §4.4 exit 0, pairs 7, unavailable 0; name boolean True); item 611 read: predecessor now passes, Step D, D_bank and X_G refuse (stop_evidence, terminal_admission, token_budget); f2-stab-16 L002 ISSUED on pin B from 10:50:01, launches as the last act**
 
 ```pointer
