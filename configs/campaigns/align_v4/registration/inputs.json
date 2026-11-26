@@ -1,6 +1,7 @@
 {
   "R0": {
-    "reasoning_effort": "medium"
+    "reasoning_effort": "medium",
+    "record_sha256": "e6231a8f3e6ab6177bbedbf12b878c958a7b4d4331e36472c74c2a192588769b"
   },
   "R1": {
     "B_D": 10240,
@@ -34,7 +35,14 @@
       "delta_fast_c": 1.0,
       "delta_slow_c": 1.0,
       "g0_cap_s": 600,
+      "heavy": true,
+      "per_turn": true,
       "sensors": {
+        "fan_keys": [
+          "F0Ac",
+          "F1Ac"
+        ],
+        "r0_sha256": "e6231a8f3e6ab6177bbedbf12b878c958a7b4d4331e36472c74c2a192588769b",
         "s_fast": "TV0h",
         "s_slow": "TV1h"
       },
