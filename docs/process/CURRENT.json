@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "a magistrate item with the one printed boolean (True/False) and the exit code",
+  "next_observable": "a magistrate item with, per stored run, the verdict word, failing check names, the first refusal's member kind, source, index, field and clause booleans if not pass, and section 5's two counts",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 608,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 607,
@@ -293,11 +299,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "607",
+  "source_item": "608",
   "source_item_heading_date": "2026-11-26",
   "wait": {
     "deadline_epoch_s": 1795896000,
     "observable": "none",
-    "on_early_or_refused": "if the read cannot run from the clean $J at dcdedecb1 with only the two named fields, say which precondition blocks it; rerun nothing"
+    "on_early_or_refused": "if the patched read needs any other change to run, say which and make none; a hunk that does not match once stops the read for that run"
   }
 }

@@ -1052,6 +1052,60 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+608. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-26 05:42 PST: RL-219 replays are case (a); one fix in build; look-ahead read of both stored runs with the fix body in memory**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-28T12:00:00-08:00
+on_early_or_refused: if the patched read needs any other change to run, say which and make none; a hunk that does not match once stops the read for that run
+next_observable: a magistrate item with, per stored run, the verdict word, failing check names, the first refusal's member kind, source, index, field and clause booleans if not pass, and section 5's two counts
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795700520, "number": 608, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **RL-219 (research lead, committed `645441434` on the audit branch): the two replays' `tool_boundaries` refusals are case (a).** The evaluator's tool bracket leaves out the wall clock's 1 µs step, which the frozen writer puts in every stamp. Her real-clock probes saw 1,997 of 2,000 clean members refused. The one fix makes the tool pair agree within the frozen `stamp_mapping` bound (`_ReplayClocks.matches_after`) that the replay check already uses. The fix is being built on `ops/2026-11-26-w1-rl219-fix`. No evaluator byte at `dcdedecb1` changes. Neither replay runs again until the audit. R1 stays closed. D signs U3 INCONCLUSIVE; RL-219 §1 corrects item 606's wording to **calibration** exclusion. Item 606's decision (a) stands as step 2's read. This item issues no arm and closes no ladder item. Items 601, 604, 605 and 607 stay ISSUED.
+- **RL-219 §5 look-ahead read, once per stored run (`part-c-328`, `f0-11-426`), in a gap, no leg delayed.** Do it in the manner of item 605's step-2 read. Import the pinned evaluator `scripts/align_r1_part_c.py` unchanged from the clean full clone `w1-sign-Jfull-88624302` at `dcdedecb1`. Replace `_recompute_controller_phases` **in memory** with the fix body (`patched(pc)` below, which asserts each hunk matches once). Write nothing under either OUT; check the file counts before and after. It is a diagnostic: not a replay, no record, not evidence for the receipt. Print only:
+  1. The verdict word and the failing check names.
+  2. If not `pass`: for the first refusal, the member kind, source, index and field, and the truth of each clause at that site.
+  3. Two counts over all members. (i) Of the paired stamps recorded with both monotonic reads, how many are wider than 1 µs. (ii) Of the guard pairs, how many have less than 1.5 µs between `lo_end` and its limit, or between the prior work's end and `hi_begin` (PC:2539-2545).
+- Print no stamp, magnitude, tool name, argument or content. If the patched read needs any other change to run, say which and make none.
+- **Fix body** (`fix_body.py`, the research lead's, sha256 `7760e3e4…1bee`):
+
+```python
+"""RL-219 fix body, applied in memory to the pin's `_recompute_controller_phases` (dcdedecb1, PC:2488-2572).
+
+`patched(pc)` returns the pin's function with the tool pair's two bracket clauses replaced by the predicate the
+workload replay already applies to the same two values (`_ReplayClocks.matches_after`, PC:2650-2652, 2810-2811).
+Nothing else in the function changes. Each replacement asserts its old text occurs exactly once."""
+import inspect
+
+OLD_NEW = (
+    ("        offsets = offset_bounds((end, following))\n        work_end = turn.end_ns\n",
+     "        work_end = turn.end_ns\n"),
+    ("            start_lo, start_hi = span(begin, offsets)\n            end_lo, end_hi = span(close, offsets)\n",
+     ""),
+    ("                      and start_lo <= call.start_ns <= start_hi and end_lo <= call.end_ns <= end_hi,\n",
+     "                      and clocks.matches_after(index, begin[\"timestamp_s\"], call.start_ns)\n"
+     "                      and clocks.matches_after(index, close[\"timestamp_s\"], call.end_ns),\n"),
+    ("    guards, tool_offset, prior_position = [], 0, -1\n",
+     "    guards, tool_offset, prior_position = [], 0, -1\n"
+     "    clocks = _replay_clock_mappings(episode, witnessed)\n"),
+)
+
+
+def patched(pc):
+    source = inspect.getsource(pc._recompute_controller_phases)
+    for old, new in OLD_NEW:
+        assert source.count(old) == 1, old
+        source = source.replace(old, new)
+    scope = {}
+    exec(compile(source, "<rl219-fix-body>", "exec"), vars(pc), scope)
+    return scope["_recompute_controller_phases"], source
+```
+
 607. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-26 05:24 PST: WP19 seed cause located (R1 member builder dropped the align-model tag); one boolean read to confirm**
 
 ```pointer
