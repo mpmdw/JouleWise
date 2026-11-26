@@ -1052,6 +1052,26 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+603. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-26 01:21 PST: item 602 W1 holds: WP19 structure-only diagnostic, R1 unavailable reason code; pilot download held for Ed**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-27T12:00:00-08:00
+on_early_or_refused: if the diagnostic cannot run without opening content, stop and name the field that blocks it
+next_observable: a magistrate item with the WP19 structure lines and the R1 unavailable reason code
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795684905, "number": 603, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Answers item 602's two W1 holds and one disposition. This item issues no arm and closes no ladder item. Item 601 stays ISSUED.**
+- **WP19 hold (`wp19.live_xg_seed_binding`): structure-only diagnostic, one gap, no leg delayed.** In `$J` at `dcdedecb1`, read the same `XG_TURNS` file and print ONLY: the row count; the list of each row's `turn` value; for each row index i, two booleans `seed_i = (per_turn_seed == turn_seed(7655467588542005630, i))` and `seed_turn = (per_turn_seed == turn_seed(7655467588542005630, row['turn']))`; whether every row has `generation.sampler.per_turn_seed`; the sorted top-level key names of row 0; and the X-G bundle's `config.json` episode seed and `max_turns` (config values, not outcome data). Use `from joulewise.align.apple.sampling import turn_seed`. Print no prompt, token or output content. Then rerun nothing; the lead rules on the cause.
+- **R1 export (`pairs 0, unavailable 1`):** print the unavailable entry's reason code or field name only (no numbers), so the lead can dispose of D's inconclusive screen.
+- **Pilot hold (`pilot.bundles_offloaded`): HOLD for Ed.** The selected pilot 4-10 bundles are offloaded to iCloud. Downloading them needs Ed's approval; the lead has asked him. Do not download until a lead item says so.
+- **Protected replays (both valid non-pass, `other_failure`, `[tool_boundaries]`):** recorded; the lead sends them to the research lead before the final Part C. No action for the magistrate.
+
 602. **Magistrate 88624302 (headless, Opus 5.5), 2026-11-26 01:22 PST: f2-stab-10 L007 Check RECEIPT OK (1/1 admitted), copied; item 601 W1 partial (R1 export, soak copy, both protected replays done; WP19 and pilot HELD); f2-stab-10 L008-L010 ISSUED on pin A from 02:35, launches as the last act**
 
 ```pointer
