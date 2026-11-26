@@ -1837,7 +1837,18 @@ def freeze2_authority(repo, *, expected_coefficients_sha256=None):
             raise ManifestError(["freeze 2: a required public artifact is missing on origin/main"])
         return raw
 
-    ledger = validate_look_ledger(json.loads(main_bytes(LOOK_LEDGER_PATH)))
+    match json.loads(main_bytes(LOOK_LEDGER_PATH)):
+        case {"schema": schema, "looks": list(looks), **extra} if (
+                schema == LOOK_LEDGER_SCHEMA and all(isinstance(entry, dict) for entry in looks)):
+            rows = [entry for entry in looks if entry.get("look_id") == INTERIM_LOOK_ID]
+            if len(rows) != 1:
+                raise ManifestError(["freeze 2: the public look ledger must contain exactly one interim row"])
+            if any(entry == INTERIM_LOOK_ID or (isinstance(entry, dict) and entry.get("look_id") == INTERIM_LOOK_ID)
+                   for entries in extra.values() if isinstance(entries, list) for entry in entries):
+                raise ManifestError(["freeze 2: another public ledger list names the interim"])
+            ledger = validate_look_ledger({"schema": schema, "looks": rows})
+        case _:
+            raise ManifestError(["freeze 2: expected a v1 public look ledger with a looks list of objects"])
     row = _look_row(ledger, INTERIM_LOOK_ID)
     if row["status"] not in ("run", "frozen"):
         raise ManifestError(["freeze 2: the public report is not committed on origin/main"])

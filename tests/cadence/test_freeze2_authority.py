@@ -148,3 +148,32 @@ class ReportRoute(unittest.TestCase):
         self.commit_ledger(mini, ledger, "publish generated report naming the wrong execution commit")
         with self.assertRaisesRegex(M.ManifestError, "execution commit does not authenticate"):
             M.freeze2_authority(mini)
+
+    def test_freeze2_requires_one_unambiguous_interim_row_on_current_main(self):
+        mini, ledger, row = self.stage1()
+        execution = MR.git(mini, "rev-parse", "HEAD").stdout.strip()
+        record = dict(report(), commit=execution, manifest_sha256=row["sha256"])
+        public = mini / "public" / LOOK / "PUBLIC.json"
+        public.parent.mkdir(parents=True)
+        raw = C.dump(record)
+        public.write_bytes(raw)
+        row.update(status="frozen", output_sha256=digest(raw), coefficients_sha256=record["coefficients_sha256"])
+        ledger["looks"].append({"look_id": "lm-ctl-01", "status": "registered", "sha256": "0" * 64,
+                                "manifest_path": "docs/process/cadence/looks/lm-ctl-01.json"})
+        ledger["events"] = [{"look_id": "lm-ctl-01", "kind": "stage1"}]
+        self.commit_ledger(mini, ledger, "publish generated freeze on mixed ledger")
+        accepted, evidence = M.freeze2_authority(mini)
+        self.assertEqual((accepted, evidence["main_commit"]), (row, MR.git(mini, "rev-parse", "HEAD").stdout.strip()))
+
+        for updates, reason in (
+                ({"events": [{"look_id": LOOK}]}, "another public ledger list"),
+                ({"other": [LOOK]}, "another public ledger list"),
+                ({"looks": [row, row]}, "exactly one interim row"),
+                ({"looks": [dict(row, status="superseded")]}, "public report is not committed"),
+                ({"looks": []}, "exactly one interim row"),
+                ({"looks": [row, None]}, "looks list of objects"),
+                ({"schema": "unknown"}, "expected a v1 public look ledger")):
+            with self.subTest(updates=updates):
+                self.commit_ledger(mini, dict(ledger, **updates), "change generated ledger on main")
+                with self.assertRaisesRegex(M.ManifestError, reason):
+                    M.freeze2_authority(mini)
