@@ -80,6 +80,55 @@ def freeze_test(root, history):
     write(root, s.ADMISSION, admission)
 
 
+class FilledSizingTests(unittest.TestCase):
+    def test_c1_footprint_and_span_use_filled_synthetic_plan(self):
+        # Keep this independent of the committed W1 registration inputs and plan.
+        configs = [w1.KIT / f'synthetic-{i}.json' for i in range(1, 6)]
+        launch = dict(commands=[dict(argv_template=dict(arguments=[dict(value='')]))])
+        stage_graph = [dict(stage_id=f'synthetic-episodes-{half}', kind='campaign_collection', launch=launch)
+                       for half in ('a', 'b')]
+        stage_graph.append(dict(stage_id='scaffold', kind='campaign_collection', expected_count=25))
+        base = {
+            w1.KIT / 'plan_tree.json': s.raw_json(dict(stage_graph=stage_graph, science=[{}])),
+            w1.KIT / 'collection_plan.json': s.raw_json(dict(
+                members=[dict(config_path=str(path)) for path in configs],
+                runtime_requirements=dict(ac_powermode=0, window_reference=dict(capture_ordinal=5)))),
+        }
+        for i, path in enumerate(configs, 1):
+            spec = dict(max_turns=12, task_kwargs={})
+            if i == 5:
+                spec['thermal'] = {}
+            base[path] = s.raw_json(dict(run_id=f'synthetic-{i}', run_metadata={},
+                                        workload_profile=dict(prompt_text=json.dumps(spec))))
+        members = [dict(ordinal=i, role='anchor' if i <= 4 else 'D', member_s=700 + i if i <= 4 else 1500 + i)
+                   for i in range(1, 19)]
+        filled = s.raw_json(dict(align_v4=dict(members=members)))
+        disk = s.raw_json(dict(packs={'align-pilot-v3': dict(
+            disk_member_law=dict(intercept=20, slope=3, largest_positive_residual=5),
+            disk_derivation=dict(scaffold_bytes=10000))}))
+        with tempfile.TemporaryDirectory() as td, ExitStack() as stack:
+            root = Path(td)
+            write(root, w1.W1_PLAN, filled)
+            stack.enter_context(patch.object(w1, 'build_files', return_value=base))
+            stack.enter_context(patch.object(w1, 'frozen', return_value=disk))
+            stack.enter_context(patch.object(w1, 'read_inputs', return_value={}))
+            stack.enter_context(patch.object(w1, '_identities'))
+            stack.enter_context(patch.object(w1, 'bundle_config_bytes', side_effect=s.raw_json))
+            stack.enter_context(patch('joulewise.schemas.BenchmarkConfig.from_mapping', side_effect=lambda value: value))
+            stack.enter_context(patch.object(s.chain, 'stage_plan'))
+            files = s.build_files(root, s.candidate(), 'C1')
+            path = s.kit_path('C1') / 'registration/sizing_b5.json'
+            sizing = registration.load_sizing(write(root, path, files[path]))
+        sized = sizing['packs']['align-v4-c1']
+        self.assertEqual(sizing['sources']['w1_plan_sha256'], hashlib.sha256(filled).hexdigest())
+        self.assertEqual(sized['flags'], [])
+        self.assertEqual((sized['align_members'], sized['member_count']), (22, 47))
+        self.assertEqual(sized['programmed_span_s'], 35129)  # 4995 + sum(701..704) + 18 * 1518
+        self.assertEqual(sized['estimated_footprint_bytes'], 201904)  # two copies of scaffold and all members
+        self.assertLessEqual(sized['window_max_s'], 59520)
+        self.assertEqual(sized['window_ceiling_s'], 59520)
+
+
 class ManifestTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
