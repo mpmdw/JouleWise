@@ -1,5 +1,7 @@
 # B-S-admit: R1 prerequisite text for lead adoption
 
+RL-223 withdrew S's outcome words before W1's signature. P4 B2 *Status* governs. Not registration text.
+
 DRAFT, not signed registration. Scope: RL-149 §5.12's constants-in-draft
 line. These are existing rulings, not new interpretations of measured data.
 Lead: incorporate in the actual amendment PR, record its path/head in ITEM,
