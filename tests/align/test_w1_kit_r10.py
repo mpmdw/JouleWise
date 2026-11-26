@@ -48,7 +48,7 @@ def eight_bit_case(*, d_wait=120.0):
         no_hold(row, 30.0, G0=d_wait, prefill=30.0, tool=6.0)
     set_decode_rate(slots, 11.9)
     slots['g0_cap_w1'] = kit.w1_g0_cap(slots)
-    inputs['R1']['B_D'] = 6144
+    inputs['R1']['B_D'] = slots['slots']['B_D'] = 6144
     fit = kit.w1_contrast_g0_cap(slots, 12)
     inputs['R1']['thermal_policy'].update(contrast_g0_cap_s=fit['value_s'], contrast_fit=fit)
     return inputs, slots
@@ -161,7 +161,7 @@ class RetiredReceiptTests(unittest.TestCase):
             no_hold(row, 30.0, G0=120.0, prefill=30.0, tool=6.0, decode=100.0)
         set_decode_rate(slots, 22.0)
         slots['g0_cap_w1'] = kit.w1_g0_cap(slots)
-        inputs['R1']['B_D'] = 6144
+        inputs['R1']['B_D'] = slots['slots']['B_D'] = 6144
         self.assertGreaterEqual(kit.max_fitting_b_d(slots, inputs['R1']['T_dead']), 6144)
         self.assertEqual(proc.decide(slots, 12)['step'], 'TYPICAL-CASE')
         current_policy = ready_inputs()[0]['R1']['thermal_policy']
@@ -198,7 +198,7 @@ class RoleCapTests(unittest.TestCase):
             no_hold(row, 30.0, G0=120.0, prefill=30.0, tool=6.0)
         set_decode_rate(slots, 20.0)
         slots['g0_cap_w1'] = kit.w1_g0_cap(slots)
-        inputs['R1']['B_D'] = 6144
+        inputs['R1']['B_D'] = slots['slots']['B_D'] = 6144
         return inputs, slots
 
     def test_without_a_receipt_d_term_and_cap_include_x_g_as_at_e901(self):

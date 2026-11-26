@@ -113,6 +113,14 @@ def release_for(slots, names, **row):
             'segments': {name: dict(segment) for name in names}}
 
 
+def write_kit_source(root, inputs, slots, release_raw):
+    for path, raw in ((kit.INPUTS, kit.raw_json(inputs)), (kit.R1_SLOTS, kit.raw_json(slots)),
+                      (kit.R1_PLANNING_RELEASE, release_raw), (CONFIG.relative_to(ROOT), CONFIG.read_bytes())):
+        target = root / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)
+
+
 class PlanningReleaseTests(unittest.TestCase):
     """RL-120 item 3 extended to R+0 by RL-122 3(a)."""
 
@@ -304,6 +312,29 @@ class PlanningReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r'R1\.B_D .* must equal .*RL-189'):
             kit.require_ready(inputs, slots, planning_release=release)
 
+    def test_generated_d_members_copy_the_budget_selected_by_decide(self):
+        names = ['planning_turn_R_plus_2C', 'planning_turn_R_plus_4C']
+        inputs, slots = planning_slots(names)
+        release = release_for(slots, names)
+        decision = procedure.decide(slots, inputs['WP18']['X']['max_turns'], planning_release=release)
+        self.assertEqual(decision['step'], 'TYPICAL-CASE')
+        frozen = kit.frozen
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(kit, 'frozen', side_effect=lambda root, commit, path: frozen(ROOT, commit, path)):
+            root = Path(tmp)
+            write_kit_source(root, inputs, slots, kit.raw_json(release))
+            files = kit.build_files(root)
+        plan = json.loads(files[kit.KIT / 'collection_plan.json'])
+        members = [member for member in plan['members'] if member['role'] == 'D']
+        self.assertTrue(members)
+        for member in members:
+            config = json.loads(files[Path(member['config_path'])])
+            spec = json.loads(config['workload_profile']['prompt_text'])
+            with self.subTest(ordinal=member['ordinal']):
+                for actual in (member['spec'], spec):
+                    self.assertEqual(actual['max_episode_decode_tokens'], decision['set_inputs']['R1.B_D'])
+                    self.assertEqual(actual['deadman_s'], decision['set_inputs']['R1.T_dead'])
+
     def test_output_root_carries_and_checks_the_canonical_planning_release(self):
         names = ['planning_turn_R_plus_2C', 'planning_turn_R_plus_4C']
         inputs, slots = planning_slots(names)
@@ -313,11 +344,7 @@ class PlanningReleaseTests(unittest.TestCase):
                 patch.object(kit, 'frozen', side_effect=lambda root, commit, path: frozen(ROOT, commit, path)), \
                 patch.object(kit, 'require_w1_ready') as ready:
             source, destination = Path(tmp) / 'source', Path(tmp) / 'output'
-            for path, contents in ((kit.INPUTS, kit.raw_json(inputs)), (kit.R1_SLOTS, kit.raw_json(slots)),
-                                   (kit.R1_PLANNING_RELEASE, raw), (CONFIG.relative_to(ROOT), CONFIG.read_bytes())):
-                target = source / path
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(contents)
+            write_kit_source(source, inputs, slots, raw)
             kit.generate(destination, source_root=source)
             target = destination / kit.R1_PLANNING_RELEASE
             self.assertTrue(target.is_file(), 'generated planning release missing from output root')
