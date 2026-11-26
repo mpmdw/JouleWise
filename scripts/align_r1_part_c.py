@@ -2548,6 +2548,7 @@ def _recompute_controller_phases(kind, episode, witnessed, intervals, events):
 
         work_end = turn.end_ns
         prior_position = decode_end[index]
+        near = _tool_neighbours(episode, intervals, index)
         for call_index, call in enumerate(turn.tool_calls):
             (tool_begin_pos, begin), (tool_end_pos, close) = tool_events[tool_offset:tool_offset + 2]
             tool_offset += 2
@@ -2560,8 +2561,10 @@ def _recompute_controller_phases(kind, episode, witnessed, intervals, events):
                       and canonical(begin["metadata"]) == canonical(close["metadata"]) == canonical(expected)
                       and prior_position < tool_begin_pos < tool_end_pos
                       and begin["timestamp_s"] <= close["timestamp_s"] and work_end <= call.start_ns
-                      and clocks.matches_after(index, begin["timestamp_s"], call.start_ns)
-                      and clocks.matches_after(index, close["timestamp_s"], call.end_ns),
+                      and clocks.matches_after(index, begin["timestamp_s"], call.start_ns,
+                                               *near[2 * call_index])
+                      and clocks.matches_after(index, close["timestamp_s"], call.end_ns,
+                                               *near[2 * call_index + 1]),
                       "tool_boundaries", kind, source, index=index)
             work_end = call.end_ns
             prior_position = tool_end_pos
@@ -2597,6 +2600,23 @@ def _frozen_workload_code(wl, tg):
         gate = compile(ast.Module(body=wait[start:start + 2], type_ignores=[]), "issued-gate-flags", "exec")
         _WORKLOAD_CODE[key] = finish, gate
     return _WORKLOAD_CODE[key]
+
+
+def _tool_neighbours(episode, intervals, index):
+    """RL-224: the recorded monotonic instants either side of each tool boundary of one turn.
+
+    A tool stamp's two monotonic reads are not recorded (WL:586, 608, 613-614). They lie after the instant
+    recorded before the stamp and before the one recorded after it: the turn's end, the calls' own values, then
+    the next turn's G1 entry or start, or the episode's end.
+    """
+    turn = episode.turns[index]
+    if index + 1 < len(episode.turns):
+        entries = [row["start_ns"] for row in intervals if row["kind"] == "G1" and row["turn"] == index + 1]
+        closing = min(entries) if entries else episode.turns[index + 1].start_ns
+    else:
+        closing = episode.end_ns
+    instants = [turn.end_ns, *(value for call in turn.tool_calls for value in (call.start_ns, call.end_ns)), closing]
+    return [(instants[at - 1], instants[at + 1]) for at in range(1, len(instants) - 1)]
 
 
 class _ReplayClocks:
@@ -2646,9 +2666,12 @@ class _ReplayClocks:
     def after(self, turn, epoch_s):
         return self._convert(self._after[turn], epoch_s)
 
-    def matches_after(self, turn, epoch_s, monotonic):
+    def matches_after(self, turn, epoch_s, monotonic, before, after):
+        # RL-224: the value is the midpoint of two unrecorded reads that lie between ``before`` and
+        # ``after``, so it sits within its distance to the nearer of them of the event's instant.
         mapping = self._after[turn]
-        return abs(self._convert(mapping, epoch_s) - monotonic) <= mapping.uncertainty_ns
+        slack = max(0, min(monotonic - before, after - monotonic))
+        return abs(self._convert(mapping, epoch_s) - monotonic) <= mapping.uncertainty_ns + slack
 
 
 def _replay_clock_mappings(episode, witnessed):
@@ -2806,14 +2829,17 @@ def _replay_frozen_workload(kind, config_doc, witnessed, events, meta, raw_episo
                 tool_events = [row for row in emitted if row["phase"].startswith("align_tool_")]
                 check(len(tool_events) == len(turn.tool_calls) * 2, "tool event count")
                 calls = []
+                near = _tool_neighbours(episode, gates, position)
                 for i, call in enumerate(turn.tool_calls):
                     begin, close = tool_events[2 * i:2 * i + 2]
                     check((begin["event_type"], close["event_type"]) == ("phase_start", "phase_end")
                           and begin["phase"] == close["phase"] == f"align_tool_{position}_{i}"
                           and begin["message"] == close["message"] == call.name
                           and begin["metadata"] == close["metadata"]
-                          and clocks.matches_after(position, begin["timestamp_s"], call.start_ns)
-                          and clocks.matches_after(position, close["timestamp_s"], call.end_ns),
+                          and clocks.matches_after(position, begin["timestamp_s"], call.start_ns,
+                                                   *near[2 * i])
+                          and clocks.matches_after(position, close["timestamp_s"], call.end_ns,
+                                                   *near[2 * i + 1]),
                           "tool order, identity or time")
                     if spec.deadman_s is not None:
                         check(clocks.after(position, close["timestamp_s"]) < budget["deadline_ns"],
@@ -3258,7 +3284,11 @@ def _gate_witnesses(kind, index, interval, readings, reference, policy, deadline
         return (canonical(interval["entry_sensors"]) == canonical(sensors)
                 and interval["entry_slope_c_per_min"] == readings.slope(start, count))
 
-    check(any(entry(count) for count in dict.fromkeys((sure, possible))), "N5.entry", "evidence_unverifiable")
+    # thermal.py:144-158 holds the collector's lock from before a row's first stamp until it is appended,
+    # and TG:532-540 takes that lock after the entry stamp: a row whose read had begun is in the view.
+    begun = bisect_right(readings.starts, start)
+    check(any(entry(count) for count in dict.fromkeys((sure, possible, begun))), "N5.entry",
+          "evidence_unverifiable")
 
     def status_fault(count):
         prior = readings.rows[bisect_left(readings.starts, start - 10 * NS, hi=count):count]
@@ -3416,7 +3446,12 @@ def _gate_exit_slope(claim, readings, start, end, required):
     def witnesses(instant):
         sure = readings.visible_count(instant, GATE_VISIBILITY_NS)
         possible = readings.visible_count(instant)
-        return sure <= required <= possible and claim == readings.slope(instant, required)
+        if not sure <= required <= possible:
+            return False
+        value = readings.slope(instant, required)
+        # TG:289-293 rounds per instant, and the final poll's instant is not recorded: the claim agrees
+        # with the reducer on the same rows at a witnessed instant within its rounding (RL-224).
+        return claim == value or (_finite(claim) and _finite(value) and abs(claim - value) <= 1e-9)
 
     if any(map(witnesses, points)):
         return True
