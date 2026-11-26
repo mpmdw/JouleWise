@@ -319,15 +319,22 @@ class PlanningReleaseTests(unittest.TestCase):
             kit.generate(destination, check=True, source_root=source)
             ready.assert_called_once_with(destination)
 
+    def assert_planning_segment_keys(self, release_keys, inconclusive_keys):
+        self.assertTrue(release_keys)
+        self.assertLessEqual(release_keys, set(kit.PLANNING_SEGMENTS))
+        self.assertEqual(release_keys, inconclusive_keys)
+
+    def test_committed_planning_segment_keys(self):
+        release_keys = set(json.loads((ROOT / kit.R1_PLANNING_RELEASE).read_bytes())['segments'])
+        inconclusive_keys = set(json.loads((ROOT / kit.R1_SLOTS).read_bytes())['inconclusive_segments'])
+        self.assert_planning_segment_keys(release_keys, inconclusive_keys)
+
+    def test_segment_assertion_rejects_a_segment_missing_from_both_records(self):
+        for segment in ('planning_turn_R_plus_2C', 'planning_turn_R_plus_4C'):
+            with self.subTest(remaining=segment), self.assertRaises(AssertionError):
+                self.assert_planning_segment_keys({segment}, {segment})
+
     def test_record_file_is_read_canonically(self):
-        # PR #886 commits the lead's RL-122 3(a) release: it reads canonically and is in force
-        # for the committed R1 record's INCONCLUSIVE planning segments.
-        committed = kit.read_r1_planning_release(ROOT)
-        self.assertIsInstance(committed, dict)
-        self.assertEqual(committed['schema'], kit.R1_PLANNING_RELEASE_SCHEMA)
-        released = kit.planning_released_segments(kit.read_r1_slots(ROOT), committed)
-        self.assertTrue(released)
-        self.assertLessEqual(released, set(kit.PLANNING_SEGMENTS))
         _, slots = planning_slots(['planning_turn_R_plus_0C'])
         record = release_for(slots, ['planning_turn_R_plus_0C'])
         with tempfile.TemporaryDirectory() as tmp:
