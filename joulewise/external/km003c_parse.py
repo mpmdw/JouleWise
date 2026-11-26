@@ -66,6 +66,7 @@ from pathlib import Path
 from typing import Any
 
 from joulewise.aggregate import student_t_critical_95
+from joulewise.desk_compress import read_bytes
 
 STEP_MS = {0: 500, 1: 100, 2: 20, 3: 1}
 SAMPLE = struct.Struct("<HHiiHHHH")
@@ -104,7 +105,7 @@ CODES = ("meter.absent", "meter.drops_excess", "meter.duplicates", "meter.clock_
 # Loading and decoding
 
 
-def load(path: str | Path | None, *, payload: bytes | None = None) -> tuple[dict | None, dict | None, list[dict], list[dict]]:
+def load(path: str | Path) -> tuple[dict | None, dict | None, list[dict], list[dict]]:
     """(header, trailer, batches, errors) of one stream file.
 
     A truncated last line (a writer killed mid-line) is ignored.  Any other
@@ -113,15 +114,10 @@ def load(path: str | Path | None, *, payload: bytes | None = None) -> tuple[dict
     protocol error; the samples it carried show up as dropped samples.
     """
 
-    if payload is None:
-        with open(path) as handle:
-            text = handle.read()
-    else:
-        text = payload.decode("utf-8")
     header = trailer = None
     batches: list[dict] = []
     errors: list[dict] = []
-    lines = text.split("\n")
+    lines = read_bytes(Path(path)).decode("utf-8").split("\n")
     for number, line in enumerate(lines, 1):
         if not line.strip():
             continue
@@ -161,15 +157,6 @@ class Samples:
 
 
 def samples(header: Mapping[str, Any], batches: Sequence[Mapping[str, Any]]) -> Samples:
-    return _samples(header, batches, decode_values=True)
-
-
-def sample_times(header: Mapping[str, Any], batches: Sequence[Mapping[str, Any]]) -> Samples:
-    """Unwrap time-only batches whose seq lists contain only device counters."""
-    return _samples(header, batches, decode_values=False)
-
-
-def _samples(header, batches, *, decode_values):
     step = STEP_MS[header["rate_idx"]]
     dev_ms: list[int] = []
     vbus: list[float] = []
@@ -181,14 +168,8 @@ def _samples(header, batches, *, decode_values):
     running_max = None
     previous_rx = None
     for j, batch in enumerate(batches):
-        if decode_values:
-            raw = bytes.fromhex(batch["p"]) if batch.get("p") else b""
-            records = SAMPLE.iter_unpack(raw)
-        else:
-            raw = batch.get("seq") or ()
-            records = ((seq,) for seq in raw)
-        for k, record in enumerate(records):
-            seq = record[0]
+        raw = bytes.fromhex(batch["p"]) if batch.get("p") else b""
+        for k, (seq, _marker, v_uv, i_ua, *_aux) in enumerate(SAMPLE.iter_unpack(raw)):
             if previous_seq is None:
                 current = 0
             else:
@@ -205,9 +186,8 @@ def _samples(header, batches, *, decode_values):
                 continue
             running_max = current
             dev_ms.append(current)
-            if decode_values:
-                vbus.append(record[2] / 1e6)
-                ibus.append(record[3] / 1e6)
+            vbus.append(v_uv / 1e6)
+            ibus.append(i_ua / 1e6)
             index.append(j)
         if raw:
             previous_rx = batch["rx"]
@@ -358,15 +338,7 @@ class Stream:
 
 
 def parse(path: str | Path) -> Stream:
-    return _parse_loaded(*load(path))
-
-
-def parse_bytes(payload: bytes) -> Stream:
-    """Decode the caller's already authenticated immutable stream bytes."""
-    return _parse_loaded(*load(None, payload=payload))
-
-
-def _parse_loaded(header, trailer, batches, errors):
+    header, trailer, batches, errors = load(path)
     if header is not None and "status" not in header:
         header = {**header, "status": "streaming"}  # the probe's streams predate the field
     if header is None or header.get("status") != "streaming":
@@ -393,22 +365,20 @@ def raw_offset_ns(stream: Stream, *, allow_unclosed: bool = False) -> int | None
     the stream's start must equal the one at its end (within 1 ms); otherwise
     (a sleep, or a stream without the pairs) None, and the caller takes the
     offset from the hazard monitor's journal lines, which carry both clocks.
-    raw_ns = monotonic_ns + offset.
+    raw_ns = monotonic_ns + offset. With ``allow_unclosed`` a stream without a closing line
+    (the reader died) returns the start offset instead of None.
     """
 
-    return raw_anchor_offset_ns(stream.header, stream.trailer, allow_unclosed=allow_unclosed)
-
-
-def raw_anchor_offset_ns(header, trailer, *, allow_unclosed=False):
-    """Apply the decoder's anchor check without decoding sample values."""
-    if header is None:
-        return None
+    header, trailer = stream.header or {}, stream.trailer or {}
     try:
         start = header["start_raw_ns"] - header["start_mono_ns"]
     except (KeyError, TypeError):
         return None
-    if trailer is None:
-        return start if allow_unclosed else None
+    if allow_unclosed and stream.trailer is None:
+        # A reader that died leaves no closing line (crash-radius salvage, smoke G3): every
+        # complete record before the last valid one is kept. The end offset cannot be
+        # compared, so the caller must disclose ``meter.stream_unclosed``; no sample is invented.
+        return start
     try:
         end = trailer["end_raw_ns"] - trailer["end_mono_ns"]
     except (KeyError, TypeError):
@@ -418,6 +388,28 @@ def raw_anchor_offset_ns(header, trailer, *, allow_unclosed=False):
 
 # --------------------------------------------------------------------------
 # Energy
+
+
+def span_has_drops(stream: Stream, t0: int, t1: int) -> bool:
+    """Whether a missing device-counter sample maps into [t0, t1).
+
+    The counter is integer device milliseconds, independent of host arrival
+    jitter. Inspect neighbouring samples too: a missing first or last sample
+    need not have both surviving neighbours inside the requested span.
+    """
+    if stream.samples is None or stream.fit is None:
+        return False
+    lo = max(0, bisect.bisect_left(stream.host_ns, t0) - 1)
+    hi = min(len(stream.host_ns), bisect.bisect_left(stream.host_ns, t1) + 1)
+    device = stream.samples.dev_ms
+    step = stream.samples.step_ms
+    for i in range(lo + 1, hi):
+        previous, following = device[i - 1], device[i]
+        missing = (following - previous - 1) // step
+        if missing > 0 and (stream.fit.host_ns(previous + step) < t1 and
+                            stream.fit.host_ns(previous + missing * step) >= t0):
+            return True
+    return False
 
 
 def integrate(times_ns: Sequence[int], watts: Sequence[float], t0: int, t1: int

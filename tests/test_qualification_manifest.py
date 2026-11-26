@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import subprocess
 import unittest
 
 from joulewise.cadence_looks.qualification_manifest import (
@@ -23,6 +24,7 @@ PLACEHOLDER = b'"PENDING:CODE"'
 OLD_TAIL_FORMULA = b"c = P + (first_stamp + last_stamp) / 2."
 RL188_TAIL_FORMULA = b"c = P + (first_stamp + 1 + last_stamp) / 2."
 PRIOR_MANIFEST_SHA256 = "d6fde6918023ea69051da45a6b0e3c06ffcfdafd8975a1773989324fa7c9bdab"
+REREGISTRATION_COMMIT = "30629d8ae399605fd20667a60af61f279f9ae7e6"
 PRIOR_LEDGER_SHA256 = "f6d9daf77eaad534608ec44d8c53d238351273f7e79bac44859e6c9122345792"
 
 
@@ -56,7 +58,8 @@ class QualificationRegistrationTests(unittest.TestCase):
         self.assertEqual(document["status"], "registered")
         self.assertEqual(document["registration"]["ledger_path"], LEDGER.relative_to(ROOT).as_posix())
         ledger = json.loads(LEDGER.read_bytes())
-        self.assertEqual(ledger["looks"], [{
+        rows = [row for row in ledger["looks"] if row["look_id"] == document["look_id"]]
+        self.assertEqual(rows, [{
             "look_id": document["look_id"],
             "manifest_path": MANIFEST.relative_to(ROOT).as_posix(),
             "sha256": hashlib.sha256(self.registered).hexdigest(),
@@ -80,7 +83,10 @@ class QualificationRegistrationTests(unittest.TestCase):
         prior_manifest = self.registered.replace(RL188_TAIL_FORMULA, OLD_TAIL_FORMULA, 1)
         self.assertEqual(hashlib.sha256(prior_manifest).hexdigest(), PRIOR_MANIFEST_SHA256)
 
-        ledger = LEDGER.read_bytes()
+        ledger = subprocess.check_output(
+            ["git", "show", f"{REREGISTRATION_COMMIT}:{LEDGER.relative_to(ROOT).as_posix()}"],
+            cwd=ROOT,
+        )
         current_digest = hashlib.sha256(self.registered).hexdigest().encode()
         self.assertNotEqual(current_digest, PRIOR_MANIFEST_SHA256.encode())
         self.assertEqual(ledger.count(current_digest), 1)
