@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "f2stab12-3c8a826f/run-out.txt shows LAUNCH_RC=0 with the fence (t0 after three quiet minutes from 19:30:00 Thu; expected close t0+7,442 s, worst case t0+11,250 s, fence t0+12,710 s; read the true deadline and pid from run-out.txt; check the pid, not the deadline). The next activation, after the fence pid is gone and runner_receipt.json exists, Checks attempt cq-f2-stab-12-l001-l002-l003-a1 at /Users/edr/campaign-out/f2-stab-12/cq-f2-stab-12-l001-l002-l003-a1 with f2stab12-check-template-3c8a826f/ (copy to f2stab12-check-NEWACT/, replace NEWACT; LEGS L001,L002,L003; kit sha 7a0440d3...f9, pin A 2d347f721; asserts batch_windows == ['02:00-02:35']), runs the template's spans.py with OUT as its one argument, copies at once with the template's offload-run.sh. Then the ladder per item 463: pin-B f2-stab-16 L003 onward as Friday's first f2-stab leg from 00:00:00 at rank 1 (W2 README line 429, queues-3leg/f2-stab-16-l003-l004-l005.json sha 0530b3bc...caef; 3/2/1 legs with the fence clear of Fri 02:00-02:35), then pin-A kit 12 L004 onward (README line 390, queues-3leg/f2-stab-12-l004-l005-l006.json sha bafc66a6...0a02; check it before staging; kit already staged at campaign-out/kits/f2-stab-12.v1.1-8f3366c75.json).",
+  "next_observable": "The magistrate's next typed item continues the ladder; the lead's resume item follows when the Air is back.",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 623,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 622,
@@ -299,11 +305,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "622",
+  "source_item": "623",
   "source_item_heading_date": "2026-11-26",
   "wait": {
-    "deadline_epoch_s": 1795766400,
+    "deadline_epoch_s": 1796328000,
     "observable": "none",
-    "on_early_or_refused": "Read the verdict first. If f2stab12-3c8a826f/run-out.txt has no LAUNCH_RC line (WAIT/STOP before launch: not quiet by 20:25, or a launcher precondition refusal), nothing launched: kit 12 L001-L003 stays unrun; the next activation re-selects at its own t0 under items 422, 463, 464, 507, 536, 553, 583 (pin-B f2-stab-16 L003 onward as Friday's first f2-stab leg from 00:00:00 at rank 1, or with t0 in 10:50:01-13:14:59; pin A kit 12 L001 onward, ARG 02:00-02:35 for t0 13:15:00-23:48:10 or 13:14-13:15 per item 463 by the actual t0, 3/2/1 legs with the fence clear of every 02:00-02:35 band and the deadline by 01:50) and issues a new typed item before launch, staying alive until LAUNCH_RC prints. A launcher refusal on kit or launcher state, or a non-clean close: record it, hold kit f2-stab-12 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, continue down the ladder. A census or soak refusal on a measured contending process with a proven clean close is not a kit hold (items 505, 547). A clean close with a leg not admitted is recorded, not a stop and not a kit hold (items 467, 479, 520). Free space is 70 GiB: spans run against the 60 GiB measurement stop (item 610's margin reasoning); no new restore or export goes under 80 GiB except item 604's own. Keep the seven restored pilot run pairs read-only until the W1 receipt is signed (item 610)."
+    "on_early_or_refused": "Continue the ladder of item 622 and its successors; the disk paragraph of this item stands until the lead posts a resume item."
   }
 }

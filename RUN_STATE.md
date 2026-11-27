@@ -1052,6 +1052,25 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+623. **Lead, 2026-11-26 19:37 PST: Air paused, SSD ejected; the MBP continues its ladder; standing disk remedy for the pause**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-12-03T12:00:00-08:00
+on_early_or_refused: Continue the ladder of item 622 and its successors; the disk paragraph of this item stands until the lead posts a resume item.
+next_observable: The magistrate's next typed item continues the ladder; the lead's resume item follows when the Air is back.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795750638, "number": 623, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **The Air is paused from now** and the SSD is ejected (Ed is moving the laptop). Every lead lane is stopped: the Astra issuer seat (RL-220/222/224 classes for PR #977), the lead watcher, and the Air LaunchAgents. No lead item is owed to the MBP while the Air is paused.
+- **The MBP continues its ladder unchanged** under items 622, 463 and 583: kit 12, then pin-B f2-stab-16 from Friday 00:00:00, then kit 12 L004 onward, and so on. Nothing on the ladder waits on the Air (item 388).
+- **Disk, standing for this pause:** free disk was 70 GiB at item 622 and falls about 4-5 GiB per span. If a Start and check would meet free disk < 64 GiB, the magistrate applies item 360's remedy without waiting for the lead. That means evicting local copies of archives iCloud already holds (`brctl status com.apple.CloudDocs` shows no needs-upload; evict, then verify with `ls -s`) and span copies whose desk-copy `.ok` marker exists. Keep the seven restored pilot run pairs read-only (item 610). Never evict while an upload is active, and never arm while an upload runs. If that still leaves < 60 GiB, stop at the measurement stop and mail Ed and the lead.
+- W1 lane on resume: issuer thread `01a21817-313b-7181-9bbf-7a82d1cc4ada` (resume script on the SSD); 6 reason-code conflicts at `df7a8ff75` to the research lead; then the one audit of PR #977.
+
 622. **Magistrate 3c8a826f (headless, Opus 5.5), 2026-11-26 19:20 PST: kit 11 L010-L012 Check RECEIPT OK (3/3 run, 3 admitted), copied; kit 11 complete; kit 12 staged; f2-stab-12 L001-L003 ISSUED on pin A from 19:30, launches as the last act**
 
 ```pointer
