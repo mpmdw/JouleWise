@@ -11,9 +11,9 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from joulewise.align.apple import r1_runtime
+from joulewise.align.apple import r1_runtime, v4_registration
 from joulewise.align.apple.workload import EpisodeSpec
 from joulewise.b5 import chain
 from joulewise.schemas import BenchmarkConfig
@@ -27,6 +27,21 @@ PENDING_RECEIPT = 'registration_receipt is pending or malformed'
 
 
 _LOG_DIR = []
+
+
+def pending_receipt_overlay():
+    """Serve a synthetic pending receipt from the otherwise ready source tree."""
+    receipt_path = v4_registration.REGISTRATION + 'registration_receipt.json'
+    pending = Mock(spec=Path)
+    pending.read_bytes.return_value = b'{"status":"PENDING"}'
+    read_local = v4_registration._local
+
+    def local(root, path):
+        if path == receipt_path:
+            return pending
+        return read_local(root, path)
+
+    return patch.object(v4_registration, '_local', side_effect=local)
 
 
 def topup():
@@ -350,12 +365,13 @@ class KitTests(unittest.TestCase):
         self.assertEqual(json.loads(files[kit.KIT / 'collection_plan.json'])['pending_inputs'], ['R1.T_dead'])
 
     def test_placeholders_fail_check_and_cannot_be_hidden_by_status(self):
-        with self.assertRaisesRegex(ValueError, f'^{PENDING_RECEIPT}$'):
-            kit.generate(ROOT, check=True)
         self.assertEqual(kit.pending_inputs(kit.read_inputs(ROOT)), [])
         self.assertEqual(self.plan['pending_inputs'], [])
-        with redirect_stderr(io.StringIO()) as err:
-            self.assertEqual(kit.main(['--check']), 1)
+        with pending_receipt_overlay():
+            with self.assertRaisesRegex(ValueError, f'^{PENDING_RECEIPT}$'):
+                kit.generate(ROOT, check=True)
+            with redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(kit.main(['--check']), 1)
         self.assertEqual(err.getvalue(), f'align_v4_kit: {PENDING_RECEIPT}\n')
 
         r1_pending, slots = ready_inputs()
@@ -1241,7 +1257,7 @@ class SessionParameterTests(unittest.TestCase):
         blanked['R1']['B_D'] = None
         with tempfile.TemporaryDirectory() as tmp, patch.object(pilot, 'prepare') as prepare:
             target = Path(tmp) / 'new-session'
-            with self.assertRaisesRegex(ValueError, f'^{PENDING_RECEIPT}$'):
+            with pending_receipt_overlay(), self.assertRaisesRegex(ValueError, f'^{PENDING_RECEIPT}$'):
                 session.prepare(ROOT, target)
             # A synthetic blanked R1 leaf still refuses before the shared prepare.
             with patch.object(kit, 'read_inputs', return_value=blanked), \
@@ -1270,7 +1286,7 @@ class SessionParameterTests(unittest.TestCase):
         blanked, slots = ready_inputs()
         blanked['R1']['B_D'] = None
         with patch.object(pilot.h, 'read', return_value={'measurement_root': str(ROOT)}), patch.object(pilot, 'install') as install:
-            with self.assertRaisesRegex(ValueError, f'^{PENDING_RECEIPT}$'):
+            with pending_receipt_overlay(), self.assertRaisesRegex(ValueError, f'^{PENDING_RECEIPT}$'):
                 session.install('synthetic-session', w1_disk_config='/x.json')
             # A synthetic blanked R1 leaf still refuses before the shared installer.
             with patch.object(kit, 'read_inputs', return_value=blanked), \
@@ -1521,7 +1537,7 @@ class PendingMessageTests(unittest.TestCase):
             self.assertIn(needle, text)
 
     def test_committed_kit_check_states_every_remaining_owner_reason(self):
-        with self.assertRaises(ValueError) as caught:
+        with pending_receipt_overlay(), self.assertRaises(ValueError) as caught:
             kit.generate(ROOT, check=True)
         text = str(caught.exception)
         self.assertNotIn('WP11', text)
