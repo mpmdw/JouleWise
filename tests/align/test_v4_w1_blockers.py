@@ -111,6 +111,37 @@ class U3Tests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'inconclusive'):
                     reg.u3_margin(30000, bar, population='D')
 
+    def test_configuration_fingerprints_may_both_be_null_without_a_screen_pair(self):
+        data = export()
+        pairs, policy = data['pairs'], data['policy']
+        sources = {'x': 'a'*64, 'transfer.md': 'f'*64}
+        null_policy = dict(policy, r1_configuration_sha256=None, d_configuration_sha256=None)
+        missing = reg.derive_u3(pairs[:-1], sources, policy=null_policy)
+        self.assertEqual(missing['prediction']['d_screen'], 'missing')
+        self.assertIs(missing['prediction']['d_qualification_pass'], False)
+        missing.update(status='registered', lead_signature='lead: synthetic 2026-11-08',
+                       independent_gate={'verdict': 'ADMIT', 'path': 'docs/align/v4/g.json', 'sha256': 'd'*64,
+                                         'derivation_sha256': missing['derivation_sha256']})
+        self.assertIs(reg.validate_u3(missing), missing)
+        with self.assertRaisesRegex(ValueError, 'U3 D transfer screen missing: D U3 inconclusive'):
+            reg.u3_margin(30000, missing, population='D', configuration_sha256='e'*64)
+        self.assertGreater(reg.u3_margin(2000, missing, population='30B'), 0)
+
+        with self.assertRaisesRegex(ValueError, 'U3 R1 D configuration differs from the signed transfer source'):
+            reg.derive_u3(pairs, sources, policy=null_policy)
+        for field in ('r1_configuration_sha256', 'd_configuration_sha256'):
+            absent = dict(policy)
+            del absent[field]
+            for name, invalid in (('malformed', dict(policy, **{field: 'invalid-digest'})),
+                                  ('absent', absent), ('mixed', dict(policy, **{field: None}))):
+                with self.subTest(field=field, case=name):
+                    with self.assertRaisesRegex(ValueError, 'predictive/OC/transfer policy'):
+                        reg.derive_u3(pairs[:-1], sources, policy=invalid)
+
+        screened = reg.derive_u3(pairs, sources, policy=policy)
+        self.assertEqual(screened['prediction']['d_screen'], 'not_refuted')
+        self.assertIs(screened['prediction']['d_qualification_pass'], True)
+
     def test_heavy_tail_rule_halves_beta_and_min_sessions(self):
         data = export()
         heavy = deepcopy(data)

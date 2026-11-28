@@ -1,0 +1,132 @@
+{
+  "pairs": [
+    {
+      "clock_difference_fraction": 4.1055817670417986e-05,
+      "configuration_sha256": "2b658c548028c6da41c519c6c76cc73d08a708493e92b9e70f67286902142f49",
+      "eligible": true,
+      "energies_j": [
+        3571.0308193082356,
+        3577.428030505774
+      ],
+      "ordinals": [
+        1,
+        9
+      ],
+      "phase": "pilot",
+      "population": "30B",
+      "session": "p4",
+      "source_sha256": "f4840fccbccd3aafc86220b69081ddaebfbc4b161e1b011e6db1e2e08c97f898",
+      "token_identical": true
+    },
+    {
+      "clock_difference_fraction": 4.795001796190463e-05,
+      "configuration_sha256": "2b658c548028c6da41c519c6c76cc73d08a708493e92b9e70f67286902142f49",
+      "eligible": true,
+      "energies_j": [
+        3569.6974255022037,
+        3576.4988607617165
+      ],
+      "ordinals": [
+        1,
+        9
+      ],
+      "phase": "pilot",
+      "population": "30B",
+      "session": "p5",
+      "source_sha256": "27375daff675063968e156fa64e9188ae185e0b314ce89e0d23266c14341f256",
+      "token_identical": true
+    },
+    {
+      "clock_difference_fraction": 8.456815875852799e-06,
+      "configuration_sha256": "2b658c548028c6da41c519c6c76cc73d08a708493e92b9e70f67286902142f49",
+      "eligible": true,
+      "energies_j": [
+        3564.115442830115,
+        3573.881317522369
+      ],
+      "ordinals": [
+        1,
+        9
+      ],
+      "phase": "pilot",
+      "population": "30B",
+      "session": "p6",
+      "source_sha256": "f1d23661f5eb5927439cea45060dd90de522435bc902bdf54706332643117339",
+      "token_identical": true
+    },
+    {
+      "clock_difference_fraction": 5.616963804005403e-05,
+      "configuration_sha256": "2b658c548028c6da41c519c6c76cc73d08a708493e92b9e70f67286902142f49",
+      "eligible": true,
+      "energies_j": [
+        3566.5128475772867,
+        3573.5828921667785
+      ],
+      "ordinals": [
+        1,
+        9
+      ],
+      "phase": "pilot",
+      "population": "30B",
+      "session": "p7",
+      "source_sha256": "8b7388c14b2548aee6de7b5758406ee17f35f5665100520e9bdf32bc8f84c15a",
+      "token_identical": true
+    },
+    {
+      "clock_difference_fraction": 0.00011455206336029812,
+      "configuration_sha256": "2b658c548028c6da41c519c6c76cc73d08a708493e92b9e70f67286902142f49",
+      "eligible": true,
+      "energies_j": [
+        3562.0652519331024,
+        3573.384882755584
+      ],
+      "ordinals": [
+        1,
+        9
+      ],
+      "phase": "pilot",
+      "population": "30B",
+      "session": "p8",
+      "source_sha256": "c07b78cbc33d78b7096b505a7afbf700dd6e5173de98c7685ac7999186346f38",
+      "token_identical": true
+    },
+    {
+      "clock_difference_fraction": 2.109819526163358e-05,
+      "configuration_sha256": "2b658c548028c6da41c519c6c76cc73d08a708493e92b9e70f67286902142f49",
+      "eligible": true,
+      "energies_j": [
+        3562.762353087649,
+        3573.257748006612
+      ],
+      "ordinals": [
+        1,
+        9
+      ],
+      "phase": "pilot",
+      "population": "30B",
+      "session": "p9",
+      "source_sha256": "08b0d704ddd750d1259620078651d5ec080d53dfffa4c2fdd968b3e9a0364ef8",
+      "token_identical": true
+    },
+    {
+      "clock_difference_fraction": 4.7258859854078707e-05,
+      "configuration_sha256": "2b658c548028c6da41c519c6c76cc73d08a708493e92b9e70f67286902142f49",
+      "eligible": true,
+      "energies_j": [
+        3567.4842280374364,
+        3576.839313239338
+      ],
+      "ordinals": [
+        1,
+        9
+      ],
+      "phase": "pilot",
+      "population": "30B",
+      "session": "p10",
+      "source_sha256": "920d10cc7ebdec84b392e34ac3ea528f6ba416da71ddbc4a133cfe38e768a305",
+      "token_identical": true
+    }
+  ],
+  "selection_sha256": "942b3e1474b7e78409211f99923b76fa457d03a3e348df271508e0edcd1048be",
+  "unavailable_sessions": []
+}

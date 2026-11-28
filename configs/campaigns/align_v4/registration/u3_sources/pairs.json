@@ -1,0 +1,224 @@
+{
+  "pairs": [
+    {
+      "clock_difference_fraction": 4.1055817670417986e-05,
+      "configuration_sha256": "2b658c548028c6da41c519c6c76cc73d08a708493e92b9e70f67286902142f49",
+      "eligible": true,
+      "energies_j": [
+        3571.0308193082356,
+        3577.428030505774
+      ],
+      "ordinals": [
+        1,
+        9
+      ],
+      "phase": "pilot",
+      "population": "30B",
+      "session": "p4",
+      "source_sha256": "f4840fccbccd3aafc86220b69081ddaebfbc4b161e1b011e6db1e2e08c97f898",
+      "token_identical": true
+    },
+    {
+      "clock_difference_fraction": 4.795001796190463e-05,
+      "configuration_sha256": "2b658c548028c6da41c519c6c76cc73d08a708493e92b9e70f67286902142f49",
+      "eligible": true,
+      "energies_j": [
+        3569.6974255022037,
+        3576.4988607617165
+      ],
+      "ordinals": [
+        1,
+        9
+      ],
+      "phase": "pilot",
+      "population": "30B",
+      "session": "p5",
+      "source_sha256": "27375daff675063968e156fa64e9188ae185e0b314ce89e0d23266c14341f256",
+      "token_identical": true
+    },
+    {
+      "clock_difference_fraction": 8.456815875852799e-06,
+      "configuration_sha256": "2b658c548028c6da41c519c6c76cc73d08a708493e92b9e70f67286902142f49",
+      "eligible": true,
+      "energies_j": [
+        3564.115442830115,
+        3573.881317522369
+      ],
+      "ordinals": [
+        1,
+        9
+      ],
+      "phase": "pilot",
+      "population": "30B",
+      "session": "p6",
+      "source_sha256": "f1d23661f5eb5927439cea45060dd90de522435bc902bdf54706332643117339",
+      "token_identical": true
+    },
+    {
+      "clock_difference_fraction": 5.616963804005403e-05,
+      "configuration_sha256": "2b658c548028c6da41c519c6c76cc73d08a708493e92b9e70f67286902142f49",
+      "eligible": true,
+      "energies_j": [
+        3566.5128475772867,
+        3573.5828921667785
+      ],
+      "ordinals": [
+        1,
+        9
+      ],
+      "phase": "pilot",
+      "population": "30B",
+      "session": "p7",
+      "source_sha256": "8b7388c14b2548aee6de7b5758406ee17f35f5665100520e9bdf32bc8f84c15a",
+      "token_identical": true
+    },
+    {
+      "clock_difference_fraction": 0.00011455206336029812,
+      "configuration_sha256": "2b658c548028c6da41c519c6c76cc73d08a708493e92b9e70f67286902142f49",
+      "eligible": true,
+      "energies_j": [
+        3562.0652519331024,
+        3573.384882755584
+      ],
+      "ordinals": [
+        1,
+        9
+      ],
+      "phase": "pilot",
+      "population": "30B",
+      "session": "p8",
+      "source_sha256": "c07b78cbc33d78b7096b505a7afbf700dd6e5173de98c7685ac7999186346f38",
+      "token_identical": true
+    },
+    {
+      "clock_difference_fraction": 2.109819526163358e-05,
+      "configuration_sha256": "2b658c548028c6da41c519c6c76cc73d08a708493e92b9e70f67286902142f49",
+      "eligible": true,
+      "energies_j": [
+        3562.762353087649,
+        3573.257748006612
+      ],
+      "ordinals": [
+        1,
+        9
+      ],
+      "phase": "pilot",
+      "population": "30B",
+      "session": "p9",
+      "source_sha256": "08b0d704ddd750d1259620078651d5ec080d53dfffa4c2fdd968b3e9a0364ef8",
+      "token_identical": true
+    },
+    {
+      "clock_difference_fraction": 4.7258859854078707e-05,
+      "configuration_sha256": "2b658c548028c6da41c519c6c76cc73d08a708493e92b9e70f67286902142f49",
+      "eligible": true,
+      "energies_j": [
+        3567.4842280374364,
+        3576.839313239338
+      ],
+      "ordinals": [
+        1,
+        9
+      ],
+      "phase": "pilot",
+      "population": "30B",
+      "session": "p10",
+      "source_sha256": "920d10cc7ebdec84b392e34ac3ea528f6ba416da71ddbc4a133cfe38e768a305",
+      "token_identical": true
+    }
+  ],
+  "policy": {
+    "checks_by_window": {
+      "C1": {
+        "30B": 0,
+        "D": 1
+      },
+      "C10": {
+        "30B": 0,
+        "D": 1
+      },
+      "C11": {
+        "30B": 0,
+        "D": 1
+      },
+      "C12": {
+        "30B": 0,
+        "D": 1
+      },
+      "C13": {
+        "30B": 0,
+        "D": 1
+      },
+      "C14": {
+        "30B": 0,
+        "D": 1
+      },
+      "C2": {
+        "30B": 0,
+        "D": 1
+      },
+      "C3": {
+        "30B": 0,
+        "D": 1
+      },
+      "C4": {
+        "30B": 0,
+        "D": 1
+      },
+      "C5": {
+        "30B": 0,
+        "D": 1
+      },
+      "C6": {
+        "30B": 0,
+        "D": 1
+      },
+      "C7": {
+        "30B": 0,
+        "D": 1
+      },
+      "C8": {
+        "30B": 0,
+        "D": 1
+      },
+      "C9": {
+        "30B": 0,
+        "D": 1
+      },
+      "T1": {
+        "30B": 0,
+        "D": 1
+      },
+      "T2": {
+        "30B": 0,
+        "D": 1
+      },
+      "T3": {
+        "30B": 0,
+        "D": 1
+      },
+      "T4": {
+        "30B": 0,
+        "D": 1
+      },
+      "T5": {
+        "30B": 0,
+        "D": 1
+      },
+      "W1": {
+        "30B": 4,
+        "D": 1
+      }
+    },
+    "d_configuration_sha256": null,
+    "d_transfer_factor": 1.5,
+    "method": "session_zero_rms_series_exact_v1",
+    "r1_D_qualification": "adjacent_matched_predecessor_screen_only",
+    "r1_configuration_sha256": null,
+    "seed": 20261108,
+    "selection": "one_prespecified_pair_per_session",
+    "series_alpha": 0.05,
+    "simulations": 20000,
+    "transfer_justification_sha256": "602150f4c57de313bcd73e6a0e755cb1bbdd907f0e7db40734132a459a95ccb3"
+  }
+}

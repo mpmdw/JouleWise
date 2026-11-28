@@ -108,6 +108,7 @@ placeholders that the lead or magistrate fills in. No agent opens them.
 | 12. Commit and receipt | Air | after steps 10 and 11 | Commit everything above, then regenerate the registration receipt at that commit. It binds `u3_bar.json`, the sources, the gate and the policy. |
 
 Paths under `u3_sources/` are relative to `configs/campaigns/align_v4/registration/`.
+For a record-side unavailable R1 screen, step 6 sets both `r1_configuration_sha256` and `d_configuration_sha256` to JSON `null` (LR-U3-1 extended, RL-218 §11.1).
 Steps 4-5 print two integers to stdout, `pairs` and `unavailable`, and nothing else. The values and reasons go only to the named output file (Sol1 `abe2d4164`, Sol2 S2-02).
 
 ### W1 signing checklist additions

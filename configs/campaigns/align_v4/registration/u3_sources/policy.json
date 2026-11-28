@@ -81,11 +81,11 @@
       "D": 1
     }
   },
-  "d_configuration_sha256": "FILL_SHA256",
+  "d_configuration_sha256": null,
   "d_transfer_factor": 1.5,
   "method": "session_zero_rms_series_exact_v1",
   "r1_D_qualification": "adjacent_matched_predecessor_screen_only",
-  "r1_configuration_sha256": "FILL_SHA256",
+  "r1_configuration_sha256": null,
   "seed": 20261108,
   "selection": "one_prespecified_pair_per_session",
   "series_alpha": 0.05,

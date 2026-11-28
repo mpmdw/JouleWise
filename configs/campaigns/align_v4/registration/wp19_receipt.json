@@ -1,0 +1,32 @@
+{
+  "contrast_predeclared": "INCONCLUSIVE: identity broken",
+  "live_source_sha256": "064149464f4976af39292c324a266b32a5cbc25ccfcc94b86ac60bcb55e3d28b",
+  "live_x_complete": true,
+  "live_x_identical": false,
+  "live_x_turns_compared": 12,
+  "render_all_turns": {
+    "X": true,
+    "Y": true
+  },
+  "schema": "joulewise.align_v4.wp19_identity.v1",
+  "seed_binding": {
+    "reason_code": "wp19.live_xg_seed_binding",
+    "turns_checked": 12,
+    "turns_mismatched": 12
+  },
+  "source_sha256": {
+    "configs/campaigns/align_v4/registration/wp18_x_token_ids.json": "9dac183dc113275c799f339f827be3ab1e332f4685b2e4b6b0da9466d6dc658f",
+    "configs/campaigns/align_v4/registration/wp18_y_token_ids.json": "f17a5a0f52921b52d67216e6b0bfa86cb3f96ebd143d6e39a4c210ba81420dac",
+    "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e06.json": "9218213727956c46740edf5f9adf9cfeb404669e99db341e177303704ba08a2f",
+    "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e10.json": "8fdbc093111b0969c2e4b6230d599291d502524acfc9b465d7b26b5d0829be9a"
+  },
+  "static_proof": {
+    "reseed": "joulewise/align/apple/endpoint.py:MlxEndpoint (turn_seed before measured draw)",
+    "warmup": "joulewise/adapters/mlx_runtime.py:MlxRuntimeAdapter.warmup (greedy; no episode cache)"
+  },
+  "tokenizer_files_sha256": {
+    "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+    "tokenizer_config.json": "253153d0738ceb4c668d2eff957714dd2bea0b56de772a9fdccd96cbf517e6a0"
+  },
+  "verdict": "fail"
+}
