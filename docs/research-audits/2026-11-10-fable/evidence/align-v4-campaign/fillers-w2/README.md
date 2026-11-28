@@ -434,3 +434,11 @@ Pass `--check` to verify the multi-leg queue and README bytes.
 | [queues-3leg/f2-stab-16-l008-l009-l010.json](queues-3leg/f2-stab-16-l008-l009-l010.json) | `90da09a6ea3af21a9ed0fc6a1079eeeda81d7ed3aae599803569d9298c42b0de` |
 | [queues-3leg/f2-stab-16-l009-l010-l011.json](queues-3leg/f2-stab-16-l009-l010-l011.json) | `5892d8a23f60c46348cc232b5fa06903d50058c0e860482cb47b831d5c32517d` |
 | [queues-3leg/f2-stab-16-l010-l011-l012.json](queues-3leg/f2-stab-16-l010-l011-l012.json) | `921722a3867b3f50082acdbfabf5782c17f419d3c5696ad98ef47f4573a9ae5b` |
+
+## Attempt-2 queues (lead, 2026-11-28)
+
+`f2-stab-02` L007's only attempt (`cq-f2-stab-02-l007-a1`) was refused by its own soak with 0 legs run (RUN_STATE item 505), so the leg has never run. This queue is a copy of the `queues-1leg/f2-stab-02.json` seq-7 span with `attempt` 2 and `not_before` `2026-11-28`; nothing else changed. `validate-queue` at pin `2d347f721` with `--kits-root` this checkout: ok, plan id `cq-f2-stab-02-l007-a2`.
+
+| Queue | SHA-256 | Expiry |
+| --- | --- | --- |
+| [queues-a2/f2-stab-02-l007-a2.json](queues-a2/f2-stab-02-l007-a2.json) | `c1933635a5e488d32021c08db346d06eecf38491f38a7b48b203733b54cc2830` | `2026-12-08T12:35:29-08:00` |
