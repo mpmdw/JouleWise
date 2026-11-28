@@ -75,14 +75,18 @@ def policy_checks(policy):
             or type(policy.get('series_alpha')) not in (int, float) or policy['series_alpha'] != .05
             or type(policy.get('d_transfer_factor')) not in (int, float) or policy['d_transfer_factor'] != 1.5):
         raise ValueError('U3 requires registered beta .05 and transfer factor 1.5')
-    if (not isinstance(policy, dict) or policy.get('method') != METHOD
+    r1_configuration_sha256 = policy.get('r1_configuration_sha256')
+    d_configuration_sha256 = policy.get('d_configuration_sha256')
+    if (policy.get('method') != METHOD
             or policy.get('selection') != 'one_prespecified_pair_per_session'
             or type(policy.get('series_alpha')) not in (int, float)
             or not 0 < policy['series_alpha'] <= .15
             or type(policy.get('d_transfer_factor')) not in (int, float)
             or not math.isfinite(policy['d_transfer_factor']) or policy['d_transfer_factor'] < 1
-            or not is_digest(policy.get('d_configuration_sha256'))
-            or not is_digest(policy.get('r1_configuration_sha256'))
+            or 'r1_configuration_sha256' not in policy
+            or 'd_configuration_sha256' not in policy
+            or not ((r1_configuration_sha256 is None and d_configuration_sha256 is None)
+                    or (is_digest(r1_configuration_sha256) and is_digest(d_configuration_sha256)))
             or not is_digest(policy.get('transfer_justification_sha256'))
             or policy.get('r1_D_qualification') != 'adjacent_matched_predecessor_screen_only'
             or type(policy.get('seed')) is not int
