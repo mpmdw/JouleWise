@@ -33,7 +33,10 @@ def pending_receipt_overlay():
     """Serve a synthetic pending receipt from the otherwise ready source tree."""
     receipt_path = v4_registration.REGISTRATION + 'registration_receipt.json'
     pending = Mock(spec=Path)
-    pending.read_bytes.return_value = b'{"status":"PENDING"}'
+    pending.read_bytes.return_value = json.dumps({
+        'schema': v4_registration.RECEIPT_SCHEMA,
+        'status': 'PENDING',
+    }).encode()
     read_local = v4_registration._local
 
     def local(root, path):
