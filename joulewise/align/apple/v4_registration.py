@@ -19,6 +19,7 @@ REGISTRATION = 'configs/campaigns/align_v4/registration/'
 RECEIPT_SCHEMA = 'joulewise.align_v4.registration_receipt.v1'
 U3_SCHEMA = 'joulewise.align_v4.u3_bar.v1'
 WP19_SCHEMA = 'joulewise.align_v4.wp19_identity.v1'
+WP19_SEED_REASON = 'wp19.live_xg_seed_binding'
 RULINGS = (4, 5, 6, 9, 11, 15, 17, 18, 20)
 _NAMED_ARTIFACTS = (
     'docs/align/pilot_protocol_v4.md', 'docs/align/v4/DEVIATIONS.md',
@@ -1964,7 +1965,8 @@ def battery_arm(observation, attested_by, topup=None, *, now_epoch_s=None):
             'topup_window_s': TOPUP_WINDOW_S, 'observation': observation}
 
 
-def wp19_identity(fixtures, rendered_prompt_ids, live_x_turns, *, live_source_sha256):
+def wp19_identity(fixtures, rendered_prompt_ids, live_x_turns, *, live_source_sha256,
+                  live_x_seed_mismatches=0):
     if not is_digest(live_source_sha256):
         raise ValueError('WP19 requires live X source digest')
     checks = {}
@@ -1974,17 +1976,25 @@ def wp19_identity(fixtures, rendered_prompt_ids, live_x_turns, *, live_source_sh
         checks[arm] = bool(turns) and len(rendered) == len(turns) and all(
             row == turn['prompt_token_ids'] for row, turn in zip(rendered, turns))
     x = fixtures['X']['turns']
+    complete = len(live_x_turns) == len(x)
+    if live_x_seed_mismatches and (not complete or not all(checks.values())):
+        raise ValueError('live X-G turn/seed binding failed')
     live_ok = bool(live_x_turns) and len(live_x_turns) <= len(x) and all(
         all(row.get(k) == ref[k] for k in ('turn', 'prompt_token_ids', 'output_token_ids'))
-        for row, ref in zip(live_x_turns, x))
-    passed = all(checks.values()) and live_ok and len(live_x_turns) == len(x)
-    return {'schema': WP19_SCHEMA, 'verdict': 'pass' if passed else 'fail',
-            'render_all_turns': checks, 'live_x_identical': live_ok,
-            'live_x_turns_compared': len(live_x_turns), 'live_x_complete': len(live_x_turns) == len(x),
-            'live_source_sha256': live_source_sha256,
-            'contrast_predeclared': None if passed else 'INCONCLUSIVE: identity broken',
-            'static_proof': {'warmup': 'joulewise/adapters/mlx_runtime.py:MlxRuntimeAdapter.warmup (greedy; no episode cache)',
-                             'reseed': 'joulewise/align/apple/endpoint.py:MlxEndpoint (turn_seed before measured draw)'}}
+        for row, ref in zip(live_x_turns, x)) and not live_x_seed_mismatches
+    passed = all(checks.values()) and live_ok and complete
+    receipt = {'schema': WP19_SCHEMA, 'verdict': 'pass' if passed else 'fail',
+               'render_all_turns': checks, 'live_x_identical': live_ok,
+               'live_x_turns_compared': len(live_x_turns), 'live_x_complete': complete,
+               'live_source_sha256': live_source_sha256,
+               'contrast_predeclared': None if passed else 'INCONCLUSIVE: identity broken',
+               'static_proof': {'warmup': 'joulewise/adapters/mlx_runtime.py:MlxRuntimeAdapter.warmup (greedy; no episode cache)',
+                                'reseed': 'joulewise/align/apple/endpoint.py:MlxEndpoint (turn_seed before measured draw)'}}
+    if live_x_seed_mismatches:
+        receipt['seed_binding'] = {'reason_code': WP19_SEED_REASON,
+                                   'turns_checked': len(live_x_turns),
+                                   'turns_mismatched': live_x_seed_mismatches}
+    return receipt
 
 
 def validate_wp19(receipt):
@@ -2005,6 +2015,15 @@ def validate_wp19(receipt):
                                                           or receipt.get('live_x_complete') is True))
             or (receipt['verdict'] == 'fail' and receipt.get('contrast_predeclared') != 'INCONCLUSIVE: identity broken')):
         raise ValueError('wp19_receipt.json pending or malformed')
+    if 'seed_binding' in receipt:
+        seed = receipt['seed_binding']
+        if (not isinstance(seed, dict) or set(seed) != {'reason_code', 'turns_checked', 'turns_mismatched'}
+                or seed['reason_code'] != WP19_SEED_REASON
+                or type(seed['turns_checked']) is not int or type(seed['turns_mismatched']) is not int
+                or not 0 < seed['turns_mismatched'] <= seed['turns_checked'] == receipt['live_x_turns_compared']
+                or receipt['verdict'] != 'fail' or receipt.get('live_x_identical') is not False
+                or receipt.get('live_x_complete') is not True or not all(receipt['render_all_turns'].values())):
+            raise ValueError('wp19_receipt.json malformed seed binding failure')
     return receipt
 
 

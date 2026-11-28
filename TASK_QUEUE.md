@@ -97,6 +97,11 @@ Current Queue region is the sole live work-selection view.
 
 ## Completed Queue Items
 
+- **LR-WP19-1 [AGENT], 2026-11-27:** WP19 seed-deviation receipt implementation
+  and synthetic verification are complete on the W1 signing PR branch. The
+  lead owns review, native receipt generation, and signing.
+  [Run report](docs/run_reports/2026-11-27-wp19-failed-receipt.md).
+
 2026-09-24 activation a65fb4fa: the two rows below completed together in PR #403 (merge `edcd045b`, head `69fd5daf`) and leave the live kernel (247 − 2 = 245). The production change went through Sol and Opus lenses ([20](docs/process_traces/2026-09-24-activation-a65fb4fa/20-a294-a295-sol-execution-lens.md), [21](docs/process_traces/2026-09-24-activation-a65fb4fa/21-a294-a295-opus-contract-lens.md)), fix round [24](docs/process_traces/2026-09-24-activation-a65fb4fa/24-a294-fix1-seat-report.md), delta re-audit [34](docs/process_traces/2026-09-24-activation-a65fb4fa/34-a294-delta-reaudit.md), and a cold final pass that [ruled MERGE](docs/process_traces/2026-09-24-activation-a65fb4fa/41-a294-a295-fable-final-pass.md). The full local replay at `2235eecb` ran 7,044 tests with 0 failures. [Activation record](docs/process_traces/2026-09-24-activation-a65fb4fa/00-activation-record.md) items 4, 7, 9, 12, 14, 20, 24, 27 and 30 give the in-session chronology.
 
 | ID | Priority | Completed | Task | Evidence |
