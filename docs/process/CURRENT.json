@@ -1,16 +1,16 @@
 {
   "armed": null,
-  "next_observable": "A magistrate item issuing cq-f2-stab-02-l007-a2 at rank 1 (one leg, pin A) at the first legal pin-A t0 after item 644's kit 18 L001-L003 span closes, on Sat 28 Nov, ahead of fillers-w3 kit 18 L004 onward, then its Check.",
+  "next_observable": "f2stab16-f4050cd9/run-out.txt shows LAUNCH_RC=0 with the fence (t0 after three quiet minutes from ~12:30 Sat, expected ~12:33; expected close t0+4,528 s (~13:49), worst case t0+5,850 s (~14:11), fence t0+9,260 s (~15:07), at latest 15:44:20 Sat; read the true deadline and pid from run-out.txt; check the pid, not the deadline). The next activation, after the fence pid is gone and runner_receipt.json exists, Checks attempt cq-f2-stab-16-l004-a1 at /Users/edr/campaign-out/f2-stab-16/cq-f2-stab-16-l004-a1 with f2stab16-check-template-f4050cd9/ (one-leg pin-B template: copy to f2stab16-check-NEWACT/, replace NEWACT; LEG L004; kit sha 0fc1139d...2b96, pin B 6e9d42f1d; asserts batch_windows == []), runs the template's spans.py with OUT as its one argument, copies at once with the template's offload-run.sh, then evicts that copy's local iCloud blocks and its staging .tgz.enc as in disk-remedy-f4050cd9.txt (literal paths in rm). Then item 645's rank 1 at once: f2-stab-02 L007 a2 (queue queues-a2/f2-stab-02-l007-a2.json on audit/2026-11-10-fable at f28873dcd, sha256 c1933635...2830; kit f2-stab-02.v1.1.json sha256 1fe8dd1d...d505 against f2-stab/MANIFEST.md; one leg, pin A 2d347f721, ARG 02:00-02:35 at actual t0 per item 463; output /Users/edr/campaign-out/f2-stab-02/cq-f2-stab-02-l007-a2 absent; check template f2stab02-check-template-45d9cb59/ with LEGS L007 and the batch_windows assert set to the ARG used), then fillers-w3 kit 18 L004-L006 (queues-3leg/f2-stab-18-l004-l005-l006.json at audit 8f3366c75, README line 908 sha ff97629a...f061). Items 605, 612, 614, 619, 623, 645 stay ISSUED.",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 645,
+      "item": 646,
       "owner": "magistrate",
       "status": "ISSUED"
     },
     {
       "expires_epoch_s": null,
-      "item": 644,
+      "item": 645,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -299,11 +299,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "645",
-  "source_item_heading_date": null,
+  "source_item": "646",
+  "source_item_heading_date": "2026-11-28",
   "wait": {
-    "deadline_epoch_s": 1796025600,
+    "deadline_epoch_s": 1795909460,
     "observable": "none",
-    "on_early_or_refused": "If f2-stab-02 L007 a2 cannot start on Sat 28 Nov, run it at the first legal pin-A t0 on a later date (every date from 28 Nov on is a new base date). A soak or census refusal with 0 legs run and a clean close: record it, continue the ladder, and mail the lead (an a3 is a lead queue decision). A launcher refusal on kit or queue state: hold f2-stab-02, mail the lead and Ed."
+    "on_early_or_refused": "Read the verdict first. If f2stab16-f4050cd9/run-out.txt has no LAUNCH_RC line (WAIT/STOP before launch: not quiet by 13:10, or a launcher precondition refusal), nothing launched: f2-stab-16 L004 stays unrun (next pin-B gap 10:50:01-13:14:59 Sun); the next activation goes straight to item 645's rank 1, f2-stab-02 L007 a2 (one leg, pin A 2d347f721, ARG 02:00-02:35 from 13:15:00 per item 463), issuing a new typed item before launch and staying alive until LAUNCH_RC prints. A launcher refusal on kit or launcher state, or a non-clean close: record it, hold kit f2-stab-16 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, continue down the ladder. A census or soak refusal on a measured contending process with a proven clean close is not a kit hold (items 505, 547). A clean close with the leg not admitted is recorded, not a stop and not a kit hold (items 467, 479, 520). DISK: 68.09 GiB free at launch (disk-remedy-f4050cd9.txt); below 64 before a Start apply item 623 again; below 60 stop and mail Ed and the lead. Keep the seven restored pilot run pairs read-only until the W1 receipt is signed (item 610)."
   }
 }
