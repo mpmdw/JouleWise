@@ -1,0 +1,33 @@
+name: U3 drift diagnostic
+
+on:
+  push:
+    branches: [ops/2026-11-28-u3-drift-diag]
+    paths:
+      - .github/workflows/u3-drift-diag.yml
+      - scripts/diagnose_align_v4_u3_drift.py
+
+permissions:
+  contents: read
+
+jobs:
+  replay:
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Compare stored and native derivations
+        run: python -B -m scripts.diagnose_align_v4_u3_drift
+      - name: Install MPFR binding for the candidate replay
+        run: python -m pip install --only-binary=:all: gmpy2==2.2.1
+      - name: Test correctly rounded functions
+        run: python -B -m scripts.diagnose_align_v4_u3_drift --mpfr
