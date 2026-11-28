@@ -28000,3 +28000,339 @@ RL-219 §7 step 3 is met at `8324f1400`. Steps 4 and 5 are these.
 **Blind status.** Blind. I read rulings, the audit report with one probe and its log, W1 source at the pin and at PR #977's head, and two runbook files. A `git diff --stat` between the pin and the signing branch printed the names and line counts of two files under `registration/`; I opened neither, and my name-only searches of the pin tree excluded that directory. A static import walk read source files only. My run of the auditor's probe drove the frozen gate and collector on a reader that returns generated temperatures and wrote its synthetic journals under my seat's `tmp/`; no sensor was read. No custody, energy, power, meter, transcript, thermal, slot, hazard, sealed or restricted data file was opened, listed or hashed, nothing under the registered root or any `night-*` or `campaign-out` path, and no registration value. This ruling names a limit of a smoke's evaluator, closes an audit and orders signing steps. No evaluator byte, estimator, inclusion rule, threshold, population or word of any registered read changes.
 
 **Lead note (Opus 5.5, 2026-11-27 19:07 PST).** Recorded verbatim from seat `fable-h1-1127` (sha256 e153c95aef5cef0688e484c0385f338dbc28cd1fbfbd0827c354642ecb6a35ab). The audit report is `mythos-977-audit-1127/REPORT.md` (sha256 0366acd53c7c617f145b37013105f3b0b1814a582b842fa21eadd67a041c766c).
+
+
+# RL-227. W1 Stage A is ADMIT at `e0242030`: the 77 unequal ranges carry, and the signing commit adds five record rows and no reviewed code. PR #896 is on the W1 line against RL-193 §3 with only a merge check behind it; it is read here for W1's path and carried, with two looser effects disclosed and its own gate left open for C1. LR-WP19-1 and LR-U3-1 are ratified, each with one registered row. The anti-hindsight list stands with one line added
+
+Research lead (Fable 5.2), Sat Nov 28 03:58 PST 2026 (from `date`). This is RL-183 §2.7's Stage A gate and RL-226 §3 step 5's diff-only cold pass (RL-193 §3 item 9), in one reading, on the lead's brief and Astra's packet. The brief cites them as RL-218 §2.7 and step 6. RL-166 to RL-226 stand except where "Amends" says otherwise.
+
+**Cites.**
+- `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `7187d3a9f`.
+- `PK` is `/Volumes/JW-EXT/scratch/astra-w1-stageab-1128/STAGE-A-PACKET.md` (sha256 `cc203428…cf03`). `SB` is `STAGE-B-RECOMPUTATION.md` there (`559ce16f…fb6d`), with `stage-b-gate.json` (`40e9b718…4aec`).
+- W1 code and documents are `/Volumes/JW-EXT/jw-wt/w1-receipt-1128` at `e0242030`, tree `c903a041`. `P4` is its `docs/align/pilot_protocol_v4.md`, `DV` its `docs/align/v4/DEVIATIONS.md`, `SR` its `W1-SIGNING-RECORD.md`, `WBM` its `W1-BLOCKERS-merged.md`, `VR` its `joulewise/align/apple/v4_registration.py`, `SES` its `scripts/align_v4_session.py`, `KIT` its `scripts/align_v4_kit.py`. `PIN` is `b2e01464d`.
+- `RS<item>` is a RUN_STATE item on `origin/main` at `0ebc4a692`. `LOG` is `/Volumes/JW-EXT/scratch/LEAD-PENDING.md`.
+- My gate report is `STAGE-A-GATE.md` in the seat directory, sha256 `41e0523e…ac0a`.
+
+**Read.**
+- PK and SB in full, with the gate JSON. The brief. LOG:604-637 with its rehearsal lines masked. RS607, RS609's answer to it, RS638 and RS640's result. The bodies of PRs #981 and #982.
+- RL-183 §§2.2 to 2.10; RL-189 §2; RL-193 §3 and §7; RL-203 to RL-212; RL-218 Part II; RL-219 §§1, 2, 7 and 8; RL-223 §§5 and 6; RL-226.
+- The two lead rulings' diffs in full: `10ef5a3af..64f81e6d3` (six files) and `abb9ca25c..f3b8fc721` (three). `v4_u3.py:55-260` and VR:1840-1930 at the head.
+- **Myself, in full, 27 of the 77 ranges:** the protocol (5), the deviation log (4), the amendment draft, the E2 fixture, `rl176.py` (2) with its twin and test, the desk seal (4), the estimands, the thermal desk (2) and its script, `v4_u3.py`, WBM (2), LEAD-RULINGS-2.
+- **Four forks of this seat read the other 50,** in groups: the registration module; the session scripts; the kit, plans and packet; #896's late commits, the row builder and Part C. **Two more forks then read #896's diff from PIN** on fifteen files for W1's path. Each returned a table by range or by hunk.
+- **What I rely on from the forks I checked myself:** the arm's clock at PIN and at the head; every changed line of #896 in SES; the plan-tree pin hunk at PIN and at the head, with its two readers; the C1 switch and its one writer; the lineage branch; `e8a31dcc3`; the cited lines of section 6's table.
+- SR in full. The step-1 README:30-109. The scope and verdict lines of the three Fable review papers on #896.
+
+**Checked myself.**
+- **Heads** by `git ls-remote` at 03:55: the audit branch `7187d3a9f`, with RL-226 its last entry; the signing branch `e0242030`. No receipt branch is on origin.
+- **The tree** is at `e0242030` and clean, before and after. Nobody placed a file in my seat directory and `seat.log` holds its START line only.
+- **Ancestry.** Every base in PK is an ancestor of the head except `e15687f94`, #787's own branch.
+- **Since RL-226's signing head `7a46c81f5`:** 30 changed paths, which are #977's 11, #981's 6 and the 13 of the inputs commit and #982. No path is outside the three sets.
+- **The ten R1 sources** have no diff from PIN.
+- **The bound set, from the code.** 333 paths at PIN and 337 at the head. 48 of them differ between the two commits. PK's inventory names the same 48 and each has a comparison row.
+- **The registration module's units,** compared by source between PIN and the head: none removed, four differ (`_NAMED_ARTIFACTS`, `EXECUTED_CLOSURE`, `wp19_identity`, `validate_wp19`), 64 added.
+- **#896.** 59 files; 18 are in the bound set; the committed trace lists 15 of those as executed. The ledger names #896 once (RLD:23140), by a search of the whole copy.
+- **The seed cause,** in `r1_runtime.py`, `sampling.py` and KIT, and every assignment of a member's tag list under `joulewise/` and `scripts/`.
+- **Every reader** of the two U3 configuration digests under `joulewise/` and `scripts/`.
+- **The plan tree's pins,** counted by the collector's own rule on the committed kit tree: 29, with `/plan` and `/campaign_policy` among them. The campaign policy file and the ledger head pin are not in the bound set.
+- **Two absences at the head,** by searches of whole files. No file under `docs/` gives the D screen's reason for W1. `LR-U3-1`, `LR-WP19-1`, `seed_binding` and "identity broken" appear only in RUN_STATE.md, TASK_QUEUE.md, P4, WBM and the builder's run report. DV and SR carry neither sentence.
+- **PK's counts,** recounted from its table: 171 rows, 94 equal, 77 unequal.
+- **`U3-gate.json`** at the head is `6f4015a7…2ae2`, the lead's figure.
+
+**Not checked.**
+- **No test, suite, trace, probe or stage was run** by me or by a fork. CI on `e0242030`, the step-1 fixed point, the three-blob check and the census are the lead's statements.
+- **Stage B.** I read the report. I opened none of its bytes.
+- **The 94 equal rows,** beyond the six paths of section 2.
+- **#896 as C1's handoff,** and its tests.
+- **Reach on a real night.** That a W1 window takes the branches section 2 says it takes is from reading and name searches. The committed trace is at file granularity.
+- **How the night job's environment is built.** That `JOULEWISE_C1_INPUTS` is absent there rests on a search: one writer in code, and no launch template names it.
+- **The texts of the reviews before PIN** (R11, the merged blockers, the arm delta), beyond the scope lines PK gives.
+- **The receipt, the accepted-diff proof, the file list and the reader census at the signing commit.** They do not exist yet.
+- **Whether the fresh Part C reaches `registered_s6()`** (SR §4).
+- **Reports A and B** for the row builder.
+
+**Not done.** No commit, push, merge, fetch or SSH. I wrote this file, `STAGE-A-GATE.md` and `tmp/` in my seat directory. The forks wrote scratch under `tmp/`. Nothing was written in the W1 tree.
+
+---
+
+## 0. The answers
+
+| Question | Answer |
+|---|---|
+| Stage A | **ADMIT** at `e0242030`, for a signing commit that adds section 7's records and no reviewed code |
+| The 77 unequal ranges | All carry (section 1) |
+| PR #896, found in the reading | Carried for W1; its own gate stays open; four conditions (section 2) |
+| LR-WP19-1 | Ratified; one registered row (section 3) |
+| LR-U3-1 | Ratified; one registered row (section 4) |
+| The anti-hindsight list | Accepted; one line added; none without an id (section 5) |
+| The lead's two notes (DV's repeated sentence; P4:1014) | Both stand unedited (section 6) |
+| RL-218 §8 conditions 1 and 2 | Row 1, and the receipt's mark (section 7) |
+| What must change first | Nothing in reviewed code. Five rows after DV:58, two SR paragraphs, the two gate reports, then step 1 at that commit (section 7) |
+
+## 1. Stage A: the 77 unequal ranges
+
+**Ruling. Every one of the 77 carries.** For each, the diff from the verdict's commit to the signing head was read. No hunk alters or removes what its verdict was given on, except under a later verdict or a named ruling. The sixteen "896" ranges carry on section 2's reading and not on the merge review they cite.
+
+**How it was read.** All bases but one are ancestors of the head, so each path was read from its earliest verdict in steps: verdict to verdict, to PIN, to the head. Each hunk was put to its commit and each commit to its PR or ruling. For JSON under `registration/`, key paths only.
+
+| Paths (ranges) | Verdicts | What changed after them, and under what | Carries |
+|---|---|---|---|
+| `pilot_protocol_v4.md` (5) | RL-35, #790, #813, RL-206, #896 | E1 to E17 (#813; RL-182, RL-182a, RL-183 §2.2, RL-185). The #944 union (RL-198, RL-198a, RL-200; RL-206). E2's fourth cause (RL-212), verbatim. RL-223 §5's paragraph and three lines, equal to #979's blob | Yes |
+| `DEVIATIONS.md` (4) | R11, #813, #826, #896 | Before PIN, rows that each name their ruling. Since PIN, eight rows: `RL176-B-S-admit`, `RL223-S-PRINT`, `RL149-DESK-SEAL` confirmed, two RL-163 rows, `RL198-OPTION-C`, `CTL01-RUN`, `R1-S6-SHARED-PATH` | Yes |
+| Amendment draft, E2 fixture (2) | #813 | RL-212's clause; RL-223 §5.6's line | Yes |
+| `rl176.py` (2), its twin, its test (4 in all) | #813, #896 | RL-223 §6: the word branch is gone, every number stays. Equal to #979's blobs | Yes |
+| `v4_desk_seal.py` (4) | #774, #813, #826, #896 | Two disjoint reviewed diffs: #813's seal of the `rl176` block (E16) and #826's window-scoped harvest codes (RL-163 §2) with a clearer lock refusal | Yes |
+| `v4_estimands.py` (1) | R11 | Sol's R11 findings, fixed on 7 and 8 November. Blob equal at RL-35's commit and at PIN | Yes |
+| `thermal_desk.py` (2), `align_v4_thermal_desk.py` (1) | R11, R11d | All before PIN: the U6 rule of R04, the D branch of U3, battery windows, RL-145's prints, #774's guard (RL-168). `contrast_predeclaration` has no hunk | Yes |
+| `v4_u3.py` (1) | BM | RL-16's fixed constants and roster, and the removal of caches, before RL-28. Then LR-U3-1 (section 4) | Yes |
+| `W1-BLOCKERS-merged.md` (2), `LEAD-RULINGS-2.md` (1) | #826, #839, R11 | #839's three-blob block (RL-205); LR-U3-1's line; one correction of two R1 timing rows on 8 November | Yes |
+| `v4_registration.py` (6) | R11, R11d, BM, RL-35, #813, #896 | By AST comparison, the only units PIN had that differ at the head are `_NAMED_ARTIFACTS`, `EXECUTED_CLOSURE`, `wp19_identity` and `validate_wp19`. `validate_receipt`, `require_registration`, `validate_u3` and `u3_margin` equal PIN's. No strict path left the set: 333 to 337, the planning release (RL-211), the two `rl176` modules (RL-176 §F) and the Part C evidence module. #896 adds 1,227 lines (section 2) | Yes |
+| `test_v4_registration.py` (2), the receipt template (1), `dynamic_closure_trace.json` (2) | BM, RL-35, #798 | Tests. The template gains four artifact keys and is still pending. The trace is step 1's (#973); every executed and child-process path is bound | Yes |
+| `align_v4_session.py` (4), `align_pilot_session.py` (2) | R11, BM, #826, #896 | Chair 20's functions are byte-identical from R11. The desk's changes are before PIN and ruling-named, or #826's (RL-163 §§2-3). The rest is #896 (section 2) | Yes |
+| `test_v4_w1_blockers.py` (2), `align_v4_w1_synthetic.py` (1), `align_v4_battery_log.py` (1), `battery_window_policy.json` (1) | BM, #826 | Tests, and LR-U3-1's. One harness seam so the committed plan cannot enter a synthetic build (`e2dede549`, #973). The log's blob is unchanged since 8 November. In the policy only `status` and `lead_signature` changed and `rule` is equal; `v4_battery.validate_policy` checks it at registration | Yes |
+| `align_v4_kit.py` (3) | R11, #790, #886 | Before PIN, under RL-148 §2, RL-149 §1.5, RL-152 §1.2 and RL-156; the blob RL-172c admitted is PIN's. #886: `B_D` must equal the decided budget (RL-189 §2.5 item 2); the planning release is generated and compared. One lead commit in #973, `e8a31dcc3`, puts `--check`'s readiness back on the source tree. I read it: every generated file is still byte-compared at the output root, and production uses one root. Accepted | Yes |
+| `align_v4_next_arm_packet.py` (3), `align_v4_series.py` (1) | R11arm, #826, #896 | A chain of verdicts to RL-35, whose blob is PIN's. #826: digest-only finality and the unpack receipt (RL-163 §1, RL-183b). #896 with J1 to J3 (section 2) | Yes |
+| `series_manifest.json` (1) | R11arm | Equal at RL-28's commit and at RL-35's; the delta is the reserve windows and the seeded sabotage ordinals, all before them | Yes |
+| `collection_plan.json`, `night_plan.template.json`, `plan_tree.json`, `identity_pins.json`, `inputs.json` (5) | #886 | Each equals #973's proof blob. `inputs.json` gains exactly five key paths: the R0 record digest and RL-207's four. The rest is digests that follow | Yes |
+| The plan validator and its test (2), `align_w1_budget_procedure.py` (1) | R11's Sol-2 record, R11 | Before PIN. The procedure has no commit after 14 November | Yes |
+| `b5/plan.py`, `b6/plan_inputs.py`, `night_agent_install.py`, `night_gate.py`, `window_lineage.py`, `bytes_h_session.py`, `install_night_agent.sh` (7) | #896 | Three #896 commits after the merge review (section 2) | Yes, for W1 |
+| `s_rows.py`, its test, its twin (3) | #787 | A byte-identical replay of #787's two fix commits. Every production hunk is an item of RL-154 or RL-160. The finding was conditional and its conditions carry: reports A and B, RL-218 §8 | Yes, gate open |
+| `align_r1_part_c.py`, `SUITE-v4.sha256` (2) | #959 | Fourteen hunks, each ordered by RL-219 §3, RL-220 §3, RL-222 §2 or RL-224 §4. Equal to the audited head of #977 | Yes |
+
+**Checked against the code, not the packet.** The strict set evaluated from `v4_registration.py` at PIN and at the head gives 48 bound paths with a diff. The packet's inventory names the same 48, and each has a comparison row. The ten R1 sources have no diff from PIN.
+
+**The 94 equal rows** were not reread, as RL-183 §2.7 has it, with one exception: the six paths of section 2 that had only the merge review behind them.
+
+**One low note, no action.** `s_rows.py:526` also treats a reference of zero or less as missing, where RL-154 finding 3 says `None`. The twin matches, it is label-free, and it was in the commit RL-160 read.
+
+## 2. PR #896
+
+**Question (mine; the packet did not ask it).** PR #896, the C1 chain closure, is in the signing tree. RL-193 §3 sent it to C1's re-signed receipt (RLD:23140) and no later ruling moved it. Does it hold W1's signature?
+
+**Ruling. No. W1 may sign with #896's bytes on the line. They are carried: read here for what they do on a W1 window, and not judged as C1's handoff. #896's own gate stays open and closes at C1's re-signed receipt.**
+
+**What happened.**
+- The lead merged #896 into the W1 line on 24 November (`38e19a3c9`), with row 4 of its gate ledger, "Cold final pass", reading `NOT-RUN`, and the note "the W1 cold pass runs at W1 signing over the whole line" (PR #896's body; LOG:433).
+- It is 59 files. Eighteen are bound, strict paths of W1's receipt, and the committed trace lists fifteen of them as executed in its synthetic scenarios. It is not a hash-only carry like the row builder.
+- **The packet's "896" row is not a content verdict.** The review at `909465f32` is mine and says what it is: "Pure union, no evil merge", and "It does not re-review the content of either parent's own commits". Nine EQUAL rows and sixteen UNEQUAL rows cite it. Six paths rest on it alone: `b5/chain.py`, `calibration_ledger.py`, `shade/upstream.py`, `b5_window_calibration_verdict.py`, `reserve_calibration_window_bracket.py` and `validate_powermetrics_fiducial.py`.
+- **What content review exists.** My executing reviews of rounds 11 and 12 (22 November, ADMIT-WITH-FIXES) and Opus's, on the number-bearing hunks. Rounds 13 to 21 had Astra's narrow checks and the lead's reruns. Three commits came after the merge review: `452994f2e`, `04437b04d` and `5f726ec5a`. The last has no independent check on record.
+
+**So the diff was read, from PIN to the head, on every bound code file #896 touches,** with one question a hunk: on a window whose id is `W1`, with no C1 handoff and `JOULEWISE_C1_INPUTS` unset, does it change what runs, what is admitted or refused, what is recorded, or any number? Six forks of this seat read it. I read the arm and install hunks, the plan-tree pins and their readers, and the switch itself.
+
+**What #896 changes on a W1 window. This is the whole list found.**
+
+| # | Where (head) | Change | Direction |
+|---|---|---|---|
+| 1 | SES:1561 | The arm takes its clock at entry. At PIN it took it after the battery read (PIN SES:1446). The top-up age and the log's last-row gap are measured from a few seconds earlier; a log row written after the stamp refuses | Looser by the duration of three host reads against 1,800 s; stricter for a late row |
+| 2 | SES:1562-1573, 1897-1901 | A `c1-prepared.json` beside the session, or a C1 window with no handoff, refuses. The arm-side refusal returns before an arm record is written | Fail-closed. A W1 arm reaches it only through a stray marker file |
+| 3 | SES:1632-1643 | The digest and identity checks sit inside the packet rebuild's `try`, so a raise becomes a recorded refusal | Not weaker |
+| 4 | SES:534, 2165-2169 | The watchdog record gains `file_identity`; the arm record gains `external_inputs` naming the NTP helper | Record only |
+| 5 | `align_pilot_session.py:568-569` | Install exits 2 on a packet-kit refusal | Exit code |
+| 6 | `bytes_h_session.py:383-397` | The staged plan tree's `external_inputs.artifacts` holds one file, the NEG-8 derivation's operand. At PIN it held every dispatched file argument: four for W1's tree. The t0 evidence re-verifies that list against committed bytes and refuses the night on a difference (`arm_readiness_evidence_t0.py:1883-1905`; `run_night.py:2764-2766`) | **Looser:** three files leave that t0 check |
+| 7 | `b5/plan.py:181-219` | The dispatch resolver accepts more first-argument kinds and refuses restricted path parts | Same result on W1's six collection stages, by a script over the committed tree |
+| 8 | `calibration_ledger.py` (six sites), `shade/upstream.py:92, 120-128`, `reserve_calibration_window_bracket.py:460-473`, `validate_powermetrics_fiducial.py:2257-2270`, `night_agent_install.py:1216-1228` | Each imports `v4_registration` and asks for the C1 context. With the variable unset the context is `None` and the path is returned as given (VR:1713-1720) | Executes; decides nothing |
+| 9 | `bytes_h_session.py:526-528` | Prepare refuses if the plan was not published at the one plan path | Fail-closed; cannot fire on a clean prepare |
+| 10 | `b5/chain.py:408-415, 1340-1341` | One refusal's text; two bindings read earlier | No rendered byte changes |
+| 11 | `window_lineage.py:875-882` | A lineage that records a pack digest is held to it at launch. W1's view is built from links, so its lineage records null and PIN's branch runs | Refusal only, and not reached by W1 |
+
+Nothing else in #896 was found to run differently on W1. Its 1,227 lines in `v4_registration.py` add functions and change none that PIN had. Its C1 branches key on the window id `C1`, on a handoff, or on the variable, whose one writer is the rendered C1 chain (`b5/chain.py:1245-1252`).
+
+**The two looser items, judged.**
+- **Item 1, the clock.** The registered bound is "within about 30 minutes of a completed top-up" and no slack constant changes (VR:1926-1928). Either stamp is the arm's own clock reading. Seconds against 1,800 do not change what the bound protects. **Accepted, and disclosed in row 4.**
+- **Item 6, the pins.** Of the three files, two keep a pin in the same tree: the plan at `/plan` and the campaign policy at `/campaign_policy`, which the collector's pin walk reads (`flags/collect.py:342-364, 462-474`). The third is the ledger's head pin, which the ledger's own readiness codes govern (`b5/plan.py:599`). For v4, pack identity rests on the kit-regeneration check and the STRICT receipt at arm, and the collector's pack code is disclosure-only (DV `IDENTITY-FLAGS`). No member's eligibility or number depended on the list. What is lost is a second, fail-closed look at the policy file at t0, and the policy is passed to every collection stage and is not a receipt-bound path. **Accepted for W1 with one line at the arm (condition 3 below), and disclosed in row 4.** It is not restored in code now: that is a new change to a bound file for a redundant check.
+
+**Evidence beyond reading, none of it mine today.** My round-11 review ran PIN's `chain.py` beside the blob the signing commit holds, with no C1 inputs: 60 of 60 renders byte-identical over the 30 committed plan trees, and 1,904 perturbations of four trees, `align_v4` among them, of which 8 differ and only in item 10's message. CI is green on `e0242030` and step 1's trace ran the synthetic W1 chain through these files at that commit (the lead's statements).
+
+**Not judged, and owed before C1 arms.**
+- #896 as C1's handoff: the staged closure, the git-free install identity (`night_agent_install.py:1231-1259`), the pack admission (`window_lineage.py:528-641`, where a dispatched config that is a link outside the pack is now resolved before it is checked), and the three late commits.
+- That is one cold final pass over #896 whole, at the blobs the re-signed receipt will bind. RL-182 §1.5's list for that receipt gains #896's files.
+
+**Conditions.**
+1. Section 7's row 4 in the deviation log.
+2. W1's receipt note or file list marks #896's eighteen bound files: bound and executed by W1, C1 branches carried, #896's cold final pass owed at C1's re-signed receipt. It does not present #896 as accepted.
+3. At W1's arm, the arm notice records that the staged view's `configs/campaign_policies/quiet_mac_p2_b5.json` has the sha256 the staged plan tree pins at `/campaign_policy`. One `shasum` and one comparison, by the lead.
+4. SR gains the statement of section 7.
+
+**On how it got here.** RL-193 §3 confirmed a composition, and the composition changed five days later without a ruling. The packet then gave a merge check the place of a verdict, and said so only in its scope words. Neither is a defect in the bytes. A component that moves between receipts comes to me when it moves, not at the pass.
+
+**Comes back.** A W1 prepare, install or arm refused `packet_kit_mismatch`. `JOULEWISE_C1_INPUTS` present in a W1 night's environment. A t0 evidence refusal that names an external-input pin. Condition 3's comparison unequal.
+
+**Cites.** RLD:19776-19787, 23138-23142; LOG:396-433; PR #896's body (gate ledger row 4); `docs/align/reviews/2026-11-24-c1-r18-merge-fable-executing-review.md`; `…/2026-11-22-c1-r11-fable-executing-review.md`; `…/2026-11-22-c1-r12-fable-executing-review.md`; `configs/b6/executing_reviews.json:1484, 1509-1524`; DV row `IDENTITY-FLAGS`; the lines in the table.
+
+## 3. LR-WP19-1
+
+**Question.** R1's X-G turns carry per-turn seeds other than the registered ones. The lead ruled that WP19 writes a valid failed receipt for that case and that the X-G contrast is INCONCLUSIVE, a non-veto, with no seed exception and no R1 rerun. Ratify, amend or return?
+
+**Ruling. Ratified. One registered row is owed with the receipt commit (section 7, row 3). No code changes.**
+
+- **The registered text already has this branch.** "Identity failure pre-declares the contrast INCONCLUSIVE ('identity broken') before arm. Receipt existence is mandatory" (P4:748-750). A failed WP19 is a non-veto on every path (P4:381-382, 754-756). What was missing was a receipt: the writer raised on a seed mismatch, so the one failure R1 actually had could not be recorded. A `fail` receipt was already valid for registration at R11.
+- **The cause is in frozen code, and I read it there.** `member_config` replaces a member's tag list and the kit's `align-model=` tag goes with it (`r1_runtime.py:733-742`, PIN's blob, one of the ten). `seed_inputs` then takes the model's name in place of the registered id (`sampling.py:24-29`). RS607's read, two fields a row, returned `True` for all twelve turns (RS609). RL-219 §8 (b)'s "inference" is settled.
+- **It is R1's, not W1's.** W1's members are built by the kit, which writes the tag and derives its seed table from the same id (KIT:1572-1574, 1586-1587). The R1 runtime "runs R1 only" (KIT:1840). The only other writers of a member's tag list on this line are the series builder, which writes the tag too, and tools outside a W1 night. This is from name searches and reading, not from a trace.
+- **So the registered seed law needs no exception.** The law is not at fault. R1's builder departed from it, and W1's kit does not.
+- **No rerun.** The builder is one of the ten. Giving it the tag moves RL-107's freeze and costs a slot session. It would buy a contrast that is already INCONCLUSIVE on its reduced cap (RL-189 §2.3) and governs no D cell (P4:692-695).
+- **The cap is not touched.** `contrast_fit`'s episode-time term was measured on the deviating stream. The five leaves stay as DEC2 set them (RL-189 §2.5 item 2). A cap re-derived now would be chosen after the record was seen. Row 3 discloses it.
+- **Both grounds print.** The desk joins WP19's reason and the cap's (`scripts/align_v4_thermal_desk.py:46-48`).
+
+**What the code does, read in `10ef5a3af..64f81e6d3`.**
+- The writer counts mismatches instead of raising (`scripts/align_v4_wp19.py:96-104`). A wrong turn index or a seed that is not an integer still raises, and no receipt is written.
+- `wp19_identity` writes the failed receipt only when the comparison is complete and both renders match. Otherwise it raises as before (VR:1980-1981).
+- `validate_wp19` admits `seed_binding` in one shape: three keys, the fixed reason, verdict `fail`, `live_x_identical` false, complete, both renders true, and 0 < mismatched ≤ checked = turns compared (VR:2018-2026). Any other shape refuses.
+- A receipt with a seed mismatch can never read `pass`.
+
+**Three readings, so nobody over-reads the receipt.**
+1. `live_x_identical: false` is forced by the seed count. The receipt does not say whether any token differed. It is not a token comparison and is not cited as one.
+2. No native run has yet shown this runtime reproducing the WP18 stream under the registered seed. P4:751-752 already says the renders and the static proof "do not attest the original execution". W1's X and Y members are the first.
+3. `member_config` also builds R1's step, gated-D and planning members, so their draws used the model-name fallback as well. Nothing registered compares an R1 D member with a fixture. The slot values are measured operating values and stand.
+
+**The fresh Part C** will run the same frozen builder and its X-G will again carry the fallback seeds. WP19 is not run on it. The receipt is R1's.
+
+**Comes back.** A `cross_pilot_token_identity` row of W1's desk that shows an X or Y member not identical to its fixture: the row's counts, before any contrast print is cited. No new check is built for this. A change to the cap or to any of DEC2's five leaves.
+
+**Cites.** P4:79, 381-382, 692-695, 742-756; `r1_runtime.py:733-742`; `sampling.py:24-29`; KIT:1572-1574, 1586-1587, 1840; VR:1968-2027; `scripts/align_v4_wp19.py:93-107`; RS607, RS609, RS638, RS640; RLD:22176-22191, 26336, 26571.
+
+## 4. LR-U3-1
+
+**Question.** With R1's D screen missing on a record-side reason (RL-218 §11.1, RL-219 §1), step 6 has no digest to fill. The lead ruled that the policy carries `r1_configuration_sha256` and `d_configuration_sha256` as null, both or neither. Ratify, amend or return?
+
+**Ruling. Ratified as built at `f3b8fc721`. One registered row is owed with the receipt commit (section 7, row 2). No code changes.**
+
+- **It invents nothing.** RL-218 §11.1 forbade a made-up digest. Null says the truth: no R1 D pair was admitted, so no pair's configuration was fingerprinted, and no D qualification exists for a W1 configuration to be compared with.
+- **Null cannot open D.** I read every reader of the two fields at the head.
+  - `policy_checks` takes both null or both digests and refuses one of each, a missing key, or a malformed value (`v4_u3.py:78-89`).
+  - A null policy with an R1 D pair present refuses: the pair's own digest must be a digest and must equal the policy's (`v4_u3.py:149-162`). So under null the screen can only be `missing`.
+  - `u3_margin` refuses D on a screen that is not `not_refuted` before it reads the D fingerprint (VR:1919-1921). The desk turns that refusal into `inconclusive` with the reason (`thermal_desk.py:314-326`).
+  - No other module reads either field for a decision. The scope-comparison script overwrites them with a placeholder for a shape check.
+- **The 30B branch is untouched.** The bar, q, s₀ and the roster check do not read the two fields.
+- **The cost is RL-218 §11.1's, unchanged:** D's U3 is INCONCLUSIVE in W1 and in every C and T window, and B7 print 8 lists them (P4:1447-1449). An INCONCLUSIVE uses its slot, enters the pool and bars nothing. K, Q, S's prints and eligibility do not change.
+- **Null/null closes D for this bar.** One bar serves the series (P4:678). A later D qualification is a new registered bar and comes to me first.
+
+**On the order of events.** RL-218 §11.1 said this case "comes to me". It came after the build, the Opus review, the Mythos gate and the lead's signature on the bar, and before the receipt. Nothing signed depends on an unratified rule today, because the receipt is not signed. The rule is right, so nothing is redone. Next time a "comes to me" case is sent before the build.
+
+**Not ruled here.** The bar's numbers. They are Stage B's: the Mythos gate recomputed the derivation and Astra checked the gate's binding.
+
+**Stale text, no bound byte.** WBM:14 and WBM:38 still give N = 22. The registered figure is N = 24 (P4:668; RL-16), and the code takes the roster from the manifest (`v4_u3.py:107-111`). WBM:102 describes step 6 without the null case and WBM:111 adds it. The lead corrects WBM:14 and :38 when it next edits the file. WBM is not a bound artifact.
+
+**One consequence to build for, on the C1 line.** Print 8 will name every window, so its recomputation "without those windows" has no window left. The release script says so in words and does not fail on the empty set. That is tested before C1 arms and is bound by C1's re-signed receipt. It gates nothing.
+
+**Comes back.** A D pair's U3 printed as anything but `inconclusive` under this bar. A proposal to qualify D.
+
+**Cites.** P4:659-684, 1447-1449; `v4_u3.py:70-108, 149-190`; VR:1853-1921; `thermal_desk.py:293-326`; WBM:36-53, 97-111; RLD:26309-26322, 26474-26478; LOG:630-633; PR #982's body.
+
+## 5. The anti-hindsight list
+
+**Ruling. The list is accepted with one line added. Thirteen rule groups changed after R1's record existed and each has a ruling id; two of those ids are lead rulings ratified above. Twelve further groups were ruled before the record and built after it. With this ruling recorded, no change is without an id, and nothing returns as a deviation.**
+
+**The thirteen, each checked against the ledger's text and, where it is code, against the hunk.**
+
+| # | Change | Id | My check |
+|---|---|---|---|
+| 1 | The contrast is INCONCLUSIVE in every W1 print, with its reduced cap | RL-189 §2.3, §2.5 item 3 | SR:73-76. The procedure file has no commit after 14 November, so this line is a disclosure and not a code change |
+| 2 | Installed decision leaves equal the slot decision; the planning release is generated and compared; step 5 keeps authored bytes | RL-189 §2.5 items 1-2; RL-193 §3; RL-207; RL-211 | KIT:997-1000; VR:53 |
+| 3 | `rank_deficient_design` is E2's fourth cause | RL-193 §7; RL-212 | P4:1192 equals RLD:23212's sentence |
+| 4 | Option C: P1 to P4, B10, the `k_positive_control_*` code | RL-198 | The #944 union, accepted in RL-206 |
+| 5 | Council row 2 names B10 | RL-198a | P4's council row 2 |
+| 6 | The dose run may move to calibration completion | RL-200 | B10's dose paragraph |
+| 7 | The ctl-01 disclosure, after the block's close and before its look | RL-190 §3.7; RL-198 Amends | DV row `CTL01-RUN` |
+| 8 | The W1-to-C1 packet checks the supplemental sentinels against the frozen roster; the desk proof names the W1 record | RL-162 §5; RL-163 §4 | The rule is RL-163 §4's. The code is #896's and is carried (section 2) |
+| 9 | Member reservations per role | LR-MS1; RL-218 §7 | Stage B rebuilt the plan from them |
+| 10 | The S-row builder is carried with its gate open | RL-160 §4; RL-218 §8 | Blobs equal #831's; no module imports it |
+| 11 | S is a print; no S outcome word | RL-221; RL-223 | P4 and `rl176.py` equal #979's blobs |
+| 12 | A missing D screen is two null digests | RL-218 §11.1; LR-U3-1; **this ruling §4** | `v4_u3.py:78-89` |
+| 13 | A seed mismatch on a complete X-G comparison is a recorded failed identity | LR-WP19-1; **this ruling §3** | VR:1968-2027 |
+| 14 (added) | #896 on the W1 line: C1's handoff gate at arm and install, the arm's clock taken at entry, one plan-tree pin where there were four | **This ruling §2** | Not an analysis rule. Listed because it changed W1's bound arm and staging code after the record existed |
+
+- **The twelve earlier groups** are RL-148 to RL-185, all dated before 06:45 on 18 November, built in #813, #826 and #831. The packet's line at R1's close and SR's line at the first session divide them the same way.
+- **Correctly left out.** The Part C evaluator's fixes (section 6). RL-207's four sibling keys ("No anti-hindsight line is owed", RLD:25504). The B policy's adoption, which changes `status` and `lead_signature` and no rule. RL-203 to RL-205 and RL-208 to RL-211, which are process.
+- **The public copy.** SR §3 holds five rows, to 24 November. `STAGE-A-GATE.md` carries the fourteen. SR §3 gains one line pointing to it. SR is not a bound artifact.
+
+## 6. Two notes of the lead's, and stale text
+
+**The reference point** (SR:65-70 left it to this pass). The lead's: the first session of 18 November. The R1 sessions of 10 to 13 November ran at earlier commits and feed no value W1 registers. The slot record is item 440's session at PIN. The list does not reach back.
+
+**DV's repeated opening sentence.** "PRE-SIGNATURE and blind: no series member exists and W1 is not signed." opens both `RL176-B-S-admit` and `RL223-S-PRINT`. RL-223 §5.5 wrote the second from my own text, against §5's "No sentence that T182 pins is edited or repeated". T182 passes. **Both rows stand.** A row states its own status and does not lean on its neighbour's first sentence.
+
+**P4:1014, "to claim S".** It was not among RL-223 §5's lines. **It stands unedited.** The sentence ends "claim contract B2", and B2 now opens with *Status*. B0 and S's row say S is a print. P4's blob stays the one #979's cold read compared. A byte changed now owes a new text comparison, for one word.
+
+**Stale text. None of it is edited before the signature.**
+
+| Where | What it says | What is true | Disposition |
+|---|---|---|---|
+| P4:793 | The amendment allowlist holds "25 modules" | It is empty (VR:373) and has been since 8 November (`0b73800c4`). Every bound path is strict. The code is stricter than the sentence | Section 7, row 5 |
+| WBM:14, 38 | N = 22 | N = 24 | Section 4 |
+| Trial report :190 | #896 is "Not in the tree" | It landed on 24 November (:88-89, :138 of the same report) | A run report is its day's record. SR gains the statement (section 7) |
+| KIT:1849-1851 | "decrease B_D by 1024 down to 6144" | KIT:997-1000 refuses any `B_D` but the decided one | Bound file. Left. Pre-pin apart from the refusal |
+| SES:1183 | The gate rule's words omit the disclosure-only contention codes | `neutral_exclusion` neutralises them (SES:921-931, R22-1) and the desk lists those members | Bound file. Left. Pre-pin |
+| `window_lineage.py:1086-1087` | Lineage values are "never a reason to lose the window" | A recorded pack digest is now held at launch (:875-878) | Bound file. Left. C1's receipt (section 2) |
+
+**The packet's citation for Part C.** Its "NO RULING ID" paragraph cites RL-183 §1, RL-193, RL-215, RL-216 and RL-226 for the evaluator's fixes. The rulings that order the fourteen hunks are RL-219 §3, RL-220 §3, RL-222 §2 and RL-224 §4. The exclusion from the analysis-rule count is right: the evaluator judges a smoke.
+
+## 7. What lands with the receipt commit
+
+**No reviewed code changes.** One commit on `e0242030` holds the five rows, the two gate reports and the two SR additions. It is the signing commit. `DEVIATIONS.md` is a bound artifact, so the rows must be in the commit the receipt names, and the gate reports must be final there. The receipt file follows in the next commit, as it is not in its own artifact set.
+
+### 7.1 Five rows in `docs/align/v4/DEVIATIONS.md`, after `CTL01-RUN` (DV:58), in this order, verbatim
+
+Row 1 is RL-218 §8 condition 1. Rows 2 to 5 are this ruling's.
+
+> | RL218-831-CARRIED | RL-160 §4 (RLD:15093-15098): reports A and B on the original step-3 bundles are owed "before #787 merges" | Carried, gate open (RL-218 §8). PR #831 is #787 replayed on the W1 line. Its bytes (`joulewise/align/apple/s_rows.py`, `tests/align/s_rows_step0_world.py`, `tests/align/test_s_rows.py`, `tests/align/twins/s_rows_twin.py`) entered with the promoted candidate `dcdedecb1` on 2026-11-25, while RL-160's reports A and B were still owed. Carrying the bytes is not the merge through the row builder's own gate, and GitHub's `MERGED` on #831 is not that gate's record. W1's receipt does not bind `s_rows.py`, no module imports it, and W1 never enters S. Reports A and B run on the original step-3 bundles at the blobs the signing commit holds. C1 does not arm until that gate is closed and a re-signed receipt binds `s_rows.py`, the release script and the two `rl176` modules. |
+
+> | R1-D-SCREEN-MISSING | P4 chair 5: R1's adjacent D_spam a/b pair is U3's transfer screen for D, and its configuration digest fills the policy (W1-BLOCKERS §4 step 6) | PRE-SIGNATURE. The R1 pair was read and is ineligible by a registered criterion: a calibration exclusion of the early bundle, code `thermal.powermetrics_non_nominal` (RL-218 §11.1, RL-219 §1). The exporter printed two counts and the screen's value was not read. The screen is missing in P4's sense. **D's U3 is INCONCLUSIVE in W1 and in every C and T window**, and B7 print 8 lists them. An INCONCLUSIVE window uses its slot, enters the pool and bars nothing (row `V4-05-A23-alignment`). The bar stays valid for 30B. K, Q, S's prints and eligibility do not change. No second export, no other pair and no R1 rerun was made for it. The signed policy carries `r1_configuration_sha256` and `d_configuration_sha256` as null. The code admits the two only together, refuses an R1 D pair against them, and refuses D on the missing screen before it reads either (LR-U3-1, ratified by RL-227 §4). A later D qualification is a new registered bar. The bar is derived, admitted by an independent gate and lead-signed, which ends row `U3-PENDING`'s "remain PENDING". |
+
+> | R1-XG-SEED | P4's member table and WP19: the X contrast runs the pilot-7 sampler and seeds, and WP19 compares R1's X-G turns with the WP18 fixture | PRE-SIGNATURE. R1's member builder, one of the ten frozen R1 sources, replaces a member's tag list and so drops the kit's `align-model=` tag (`joulewise/align/apple/r1_runtime.py:733-742` at `b2e01464d`). The seed law then takes the model's name in place of the registered model id (`joulewise/align/apple/sampling.py:24-29`). Every R1 member that builder made and that samples, X-G among them, therefore drew under another episode seed than the registered law gives. A read of two fields a row confirmed it for all twelve X-G turns (RUN_STATE 607 and 609). WP19 records a failed identity: verdict `fail`, reason `wp19.live_xg_seed_binding`, 12 of 12 turns, both fixture renders matching (RUN_STATE 640). The receipt does not say whether any token differed. By the registered text an identity failure pre-declares the contrast INCONCLUSIVE, so **the X-G contrast is INCONCLUSIVE in W1, a non-veto**, on this ground and on its reduced cap (RL-189 §2.3). The registered seed law is unchanged: no seed exception is made and R1 is not rerun. W1's own members are built by the kit, which writes the tag (`scripts/align_v4_kit.py:1572-1574`), so they run the registered stream. The contrast cap keeps the value fixed before this was known; its episode-time term was measured on the deviating stream. No R1 D member is compared with a fixture, and the slot values stand. LR-WP19-1, ratified by RL-227 §3. |
+
+> | C1-896-CARRIED | RL-193 §3 (RLD:23140): PR #896 goes to C1's re-signed receipt and is not in the W1 candidate | PRE-SIGNATURE. PR #896, the C1 chain closure, was merged into the W1 line on 2026-11-24 (`38e19a3c9`) with its cold final pass not run. RL-227 §2 read its diff from the R1 pin for what it does on a W1 window and carries it; it is not accepted as C1's handoff. On a W1 window its C1 branches do not run: they key on the window id `C1`, on a committed handoff, or on `JOULEWISE_C1_INPUTS`, which only the rendered C1 chain sets. Two things it changes on W1's own path are looser than at the pin and are disclosed here. (1) The arm takes its clock at entry and no longer after the battery read (`scripts/align_v4_session.py:1561`), so the top-up age is measured from a few seconds earlier against the unchanged 1,800 s bound. (2) The staged plan tree's `external_inputs.artifacts` holds one file, the NEG-8 derivation's operand, where the pin's code listed every dispatched file argument, four for W1 (`scripts/bytes_h_session.py:383-397`); the t0 evidence therefore no longer re-verifies the ledger head pin, the pack's collection plan and the campaign policy file against committed bytes. The plan and the policy keep their own pins in the same tree, the head pin is governed by the ledger's readiness codes, and at W1's arm the lead records that the policy file's sha256 equals the tree's pin. Its other effects on a W1 window are refusals that fail closed, record fields, or calls that return their input unchanged. #896's own gate stays open: one cold final pass over the whole PR, its three late commits included, before C1 arms, at the blobs C1's re-signed receipt binds. |
+
+> | P4-ALLOWLIST-EMPTY | P4 "Registration receipt": an amendment tier, "the explicit allowlist `v4_registration.AMENDMENT_ALLOWLIST` (25 modules …)" | The allowlist is empty (`joulewise/align/apple/v4_registration.py:373`) and has been since `0b73800c4` (2026-11-08). Every bound path is strict: a change voids the receipt and owes a re-signed one, and no `amendments` row is admitted. The code is stricter than the sentence. P4 is not edited for it before the signature (RL-227 §6). |
+
+- The lead may fix a typo it finds against the cited source and says so in the commit message. A change of substance in a row returns to me.
+
+### 7.2 The two gate reports, under `docs/align/v4/`, byte for byte
+
+- **Stage A:** this seat's `STAGE-A-GATE.md`, sha256 `41e0523e…ac0a`. The lead's note under this ruling gives it in full.
+- **Stage B:** Astra's report and gate JSON as they stand (`559ce16f…fb6d`, `40e9b718…4aec`). They name `e0242030`. They stay valid at the signing commit if the eleven Stage B paths have the same blobs there, and the lead records that empty diff.
+
+### 7.3 `docs/align/v4/W1-SIGNING-RECORD.md` (not a bound artifact)
+
+After SR:110, one paragraph:
+
+> **The list at the signing commit.** The table above stops at 24 November. The list as judged by the research lead, fourteen lines with their ruling ids, is in the Stage A gate report beside this file (RL-227 §5).
+
+A new last section:
+
+> ## 5. PR #896 on the W1 line (RL-227 §2)
+>
+> PR #896 was merged into the W1 line on 24 November at `38e19a3c9`. RL-193 §3 had sent it to C1's re-signed receipt, and the trial report's "Not in the tree" line for it (`docs/run_reports/2026-11-23-w1-candidate-trial.md:190`) was stale from that day. RL-227 §2 carries its bytes for W1 and leaves its own gate open. The deviation list carries the row `C1-896-CARRIED`.
+
+### 7.4 Then, in RL-218 §10's order
+
+1. **Step 1 again, at that commit,** from a clean checkout. If it changes a path, RL-218 §10 condition 2 applies: commit, and run it once more.
+2. The three-blob check against `STEP4_CHECKOUT`, the census, and CI green on that head.
+3. **The receipt,** with RL-218 §8 condition 2's mark and section 2's condition 2 in its `note` or in the file list. Then `--check` exit 0.
+4. **RL-193 §3 items 5, 7 and 8 are shown by the lead at that commit:** the reader-census module and its evidence; the accepted-diff proof with no unaccepted residual, #896 named among the components; the published file list in RL-211's shape.
+5. **Item 8 is confirmed here by rule, not by sight,** because the list is made with the receipt. It is the receipt's artifact set, 337 paths at `e0242030`, plus the files RL-211 names that are outside it, each with the bound parent that carries its digest. A file in neither class returns to me.
+
+**The verdict of section 0 holds for a signing commit whose diff from `e0242030` is 7.1 to 7.3 and whatever step 1 regenerates from them.** Any other changed path returns to me before the receipt is signed.
+
+## Amends
+
+- **RL-193 §3** (RLD:23140): #896 is on the W1 line as carried bytes. "Go to C1's re-signed receipt" stands for #887, #889 and #894; for #896 what goes there is its gate. **Item 8:** "I confirm it in the cold pass" is section 7.4 item 5. **Item 9** is met by this ruling.
+- **RL-211,** "Shape": the same.
+- **RL-182 §1.5** (RLD:19785): C1's re-signed receipt also binds #896's files and owes its cold final pass.
+- **RL-183 §2.7:** applied, with one reading for later packets. A row whose cited review is a merge or an integration check carries no content verdict; the diff from the last content verdict is read.
+- **RL-218 §8:** condition 1's line is row 1. **§11.1:** "one sentence with the reason code" is row 2, and "it comes to me" is answered by section 4. **§11.2,** "WP19 is not ruled here": ruled in section 3.
+- **RL-219 §8 (b):** settled by RS609 and section 3.
+- **RL-223 §5:** "No sentence that T182 pins is edited or repeated" reads "edited". §5.5's first sentence repeats `RL176-B-S-admit`'s by my own text.
+- **RL-226 §3:** step 5 is met. Step 6 follows section 7.4.
+- **Stand unchanged:** RL-107; RL-160; RL-189 §2.5; RL-198 to RL-200; RL-203 to RL-210; RL-212; RL-215; RL-216; RL-218 §§7, 9 and 10; RL-219 §§1 to 7; RL-220 to RL-225.
+
+**Comes back.**
+- A changed path at the signing commit outside section 7, or a change of substance in one of the five rows.
+- A second step-1 round that still changes a path (RL-218 §10).
+- An unaccepted residual in the accepted-diff proof. A file-list entry in neither class. A census caller that the receipt binds (RL-183 §2.3).
+- Section 2's four cases, section 3's two and section 4's two.
+- Reports A or B not clean, or their bundles unavailable (RL-218 §8).
+- A fresh Part C that reaches `registered_s6()` (SR §4). Then the lead's own limitation applies before it runs: split the registration first.
+
+**Blind status.** Blind. I read rulings, the packet and the Stage B report, public RUN_STATE items, the lead's log with its rehearsal lines masked, and W1 code and documents at the head with their diffs. For JSON under `registration/` this seat and its forks printed key paths, counts and one status word (the receipt template, `inputs.json`, `identity_pins.json`, the battery policy), and no other value; I opened none of those files. The committed kit's `plan_tree.json`, the series manifest and the closure trace were read by key names, stage kinds, argument flags, counts and repository paths. RS640's public text carries the WP19 counts, which I cite from it and not from the receipt. A search of the public ledger for "896" printed two rows of an older ruling's table; I used neither. No custody, energy, power, meter, transcript, thermal, slot, hazard, sealed or restricted data file was opened, listed or hashed, nothing under the registered root or `lm-interim-01-root`, and no registration value. No test, probe, suite or stage was run. This ruling admits a gate, ratifies two lead rulings on branches the registered text already had, carries one PR's bytes, and orders five record rows. No estimator, inclusion rule, threshold, population or word of any registered read changes.
+
+
+**Lead note (RL-227).** Committed verbatim from the Fable seat `fable-w1-stagea-cold-1128` RULING.md, sha256 `3d658513406f852cf586bee1aefba1e2278ecb962118e53231295783c048ad13`. The Stage A gate report it names (STAGE-A-GATE.md, sha256 `41e0523e2bf1be88bf7ef82350709e3958ba166247aaa5538f4dd548e7bfac0a`) lands byte for byte under `docs/align/v4/` in the W1 signing commit.
