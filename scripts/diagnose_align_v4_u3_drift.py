@@ -42,7 +42,8 @@ def compare(path, stored, recomputed, *, differences_only=False):
     else:
         numeric = same_type and type(stored) in (float, int) and path != 'oc.seed'
         relative = relative_difference(stored, recomputed) if numeric else 'n/a'
-        print(f'{path} equal={equal} max_relative_difference={relative}')
+        direction = f' recomputed_greater={recomputed > stored}' if numeric and not equal else ''
+        print(f'{path} equal={equal} max_relative_difference={relative}{direction}')
 
 
 def payload_digest(bar):
@@ -91,6 +92,8 @@ def mpfr_probe(stored):
     print(f'mpfr={gmpy2.mpfr_version()}')
     native = replay(stored)
     with gmpy2.context(gmpy2.ieee(64)):
+        half_df = stored['prediction']['df'] / 2
+        compare('quadrature_lgamma_native_vs_mpfr', math.lgamma(half_df), replacements['lgamma'](half_df))
         for name, fn in replacements.items():
             with patch.object(math, name, fn):
                 pred = v4_u3.prediction(stored['pairs'], stored['policy'])
