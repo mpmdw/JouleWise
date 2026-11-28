@@ -28,6 +28,7 @@ jobs:
       - name: Compare stored and native derivations
         run: python -B -m scripts.diagnose_align_v4_u3_drift
       - name: Install MPFR binding for the candidate replay
-        run: python -m pip install --only-binary=:all: gmpy2==2.2.1
+        run: |
+          python -m pip install --only-binary=:all: gmpy2==2.2.1
       - name: Test correctly rounded functions
         run: python -B -m scripts.diagnose_align_v4_u3_drift --mpfr
