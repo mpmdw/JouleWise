@@ -1052,6 +1052,26 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+645. **Lead: item 639 ruled. f2-stab-02 L007 attempt 2 is Saturday 28 Nov's rank-1 base leg (one leg, pin A, after item 644's span); no other base positions; item 553 CLOSED**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-30T00:00:00-08:00
+on_early_or_refused: If f2-stab-02 L007 a2 cannot start on Sat 28 Nov, run it at the first legal pin-A t0 on a later date (every date from 28 Nov on is a new base date). A soak or census refusal with 0 legs run and a clean close: record it, continue the ladder, and mail the lead (an a3 is a lead queue decision). A launcher refusal on kit or queue state: hold f2-stab-02, mail the lead and Ed.
+next_observable: A magistrate item issuing cq-f2-stab-02-l007-a2 at rank 1 (one leg, pin A) at the first legal pin-A t0 after item 644's kit 18 L001-L003 span closes, on Sat 28 Nov, ahead of fillers-w3 kit 18 L004 onward, then its Check.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795890542, "number": 645, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795890542, "item": 553, "status": "CLOSED"}], "status": "ISSUED", "supersedes": []}
+```
+
+- **Item 639 ruled (lead; blind scheduling, no data read).** `lm-stab-01` counts one qualified cold base leg per span on 14 distinct local t0-dates, from kits `f2-stab-01..14` on pin A only (manifest `looks/lm-stab-01.manifest.json`, status draft; RL-190, RL-200 §2). Items 633-637 ran all 12 kit-14 positions at rank 4 on Fri 27 Nov, against item 553 rule 1 (their ladder line took "the lowest kit 01-14 with an unrun pin-A position" over the reservation). Recorded here as a selection deviation for stage 1; no other action on those spans. Item 639 counts pin-A kit 01-14 span starts on 9 local dates (19-27 Nov); stage 1 makes the authoritative count from leg records.
+- **One base position is left: `f2-stab-02` L007.** Its only attempt (`cq-f2-stab-02-l007-a1`, item 505) was refused by its own soak with 0 legs run, so the leg has never run (ISSUE.md: each leg runs once). The lead committed an attempt-2 queue: `docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-a2/f2-stab-02-l007-a2.json` on `audit/2026-11-10-fable` at ``f28873dcd9d79c0579aeeab4f3bd187f010368e5`` (PR #984), sha256 `c1933635a5e488d32021c08db346d06eecf38491f38a7b48b203733b54cc2830` (= the fillers-w2 README attempt-2 row). It is the seq-7 span of `queues-1leg/f2-stab-02.json` with `attempt` 2 and `not_before` `2026-11-28`, expiry `2026-12-08T12:35:29-08:00`; `validate-queue` at `2d347f721` with `--kits-root` the audit checkout: ok, plan id `cq-f2-stab-02-l007-a2`.
+- **ISSUE it at rank 1 today.** Saturday 28 Nov has no base leg yet, so this is today's rank 1: one leg, pin A `2d347f721552fe03bdd19f113e7bad7a7c24908e`, kit `f2-stab-02.v1.1.json` sha256 `1fe8dd1d0fb60fe1d481ecb0d4358fda595668c1e889a35a75695e290fcad505` (check against `f2-stab/MANIFEST.md`), ARG by item 463 at actual t0, all of item 422/425's issue checks (`validate_kit.py`, validate-queue, output dir `/Users/edr/campaign-out/f2-stab-02/cq-f2-stab-02-l007-a2` absent). Slot: the first legal pin-A t0 after item 644's kit 18 L001-L003 span closes (fence end ~14:06), ahead of fillers-w3 kit 18 L004 onward, with t0 on Sat 28 Nov. Check template: item 502's L007 template (`f2stab02-check-template-45d9cb59/`, LEGS L007, campaign f2-stab-02), with the batch_windows assert set to the ARG the plan actually used.
+- **No other base positions.** With L007 a2, kits 01-14 are fully spent and `lm-stab-01` reaches at most about 10 dates. The lead does not change the draft manifest. Its own `when` clause then runs it at `paper1_data_lock`. Whether the remaining dates may instead count the date's first cold leg from the identical-design pin-A successors (fillers-w3, `lm-stab-02` population) goes to the research lead in the next Fable batch. No scheduling change is needed meanwhile: every span's leg 1 is cold (RL-200 §2) and every date already has pin-A spans, so either ruling can be applied later.
+- **Item 553 is CLOSED:** its kit-14 reserve is spent. Everything else in items 422, 463, 464, 507, 524, 536 and 583 stands. Keep the MBP measuring on the existing ladder.
+
 644. **Magistrate ed116d20 (headless, Opus 5.5), 2026-11-28 10:27 PST: kit 17 L011-L012 Check RECEIPT OK (2/2 run, 2 admitted), copied and evicted; kit 17 complete; kit 18 staged; fillers-w3 f2-stab-18 L001-L003 ISSUED on pin A from 10:31 (item 583 Midday), launches as the last act**
 
 ```pointer
