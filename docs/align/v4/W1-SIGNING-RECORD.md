@@ -109,6 +109,8 @@ extends back to RL-1xx. That is the research lead's call in the cold pass.
 
 These predate both 18 November sessions. They are listed so the cold pass can see the boundary.
 
+**The list at the signing commit.** The table above stops at 24 November. The list as judged by the research lead, fourteen lines with their ruling ids, is in the Stage A gate report beside this file (RL-227 §5).
+
 ## 4. Known limitation: the S6 registration shares `r1_slots.json` (lead D1)
 
 Lead decision D1 (2026-11-24 00:30): no frozen-source change now. R1 is complete (RUN_STATE 459) and no
@@ -123,3 +125,7 @@ fill, that file is the R1 hardware record, and its `s6_tuning` has no `from_c` o
 driver tests pin their own registration through `synthetic_s6_registration()` in
 `tests/align/test_r1_rehearsal.py`, which PR #886 added at `8fc76a0b9`. That helper stays. The deviation
 list carries the same row as `R1-S6-SHARED-PATH`.
+
+## 5. PR #896 on the W1 line (RL-227 §2)
+
+PR #896 was merged into the W1 line on 24 November at `38e19a3c9`. RL-193 §3 had sent it to C1's re-signed receipt, and the trial report's "Not in the tree" line for it (`docs/run_reports/2026-11-23-w1-candidate-trial.md:190`) was stale from that day. RL-227 §2 carries its bytes for W1 and leaves its own gate open. The deviation list carries the row `C1-896-CARRIED`.
