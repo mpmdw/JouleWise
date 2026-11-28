@@ -1052,6 +1052,29 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+638. **W1 signing inputs: WP19 once at signing head 64f81e6d3 under LR-WP19-1, then push the five files (item 601)**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-29T12:00:00-08:00
+on_early_or_refused: Honor the current leg's Check, copy and next legal start first. At the deadline post the result ref and commit, or the hold name and exit code. Carry unfinished work to a later gap.
+next_observable: A magistrate item posting w1-results/2026-11-26-signing-inputs with its full commit and the five sha256 values, or the named hold.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795846748, "number": 638, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": ["601"]}
+```
+
+- **Why.** PR #980 merged presign into the W1 signing line (`10ef5a3af`). PR #981 merged LR-WP19-1 (`64f81e6d3290c1d2001f30e21278693964211c54`, signing head). LR-WP19-1 (lead): item 602's WP19 hold is R1's seed deviation (RS609 boolean True: R1's member builder dropped the `align-model=` tag, so every X-G `per_turn_seed` follows the model-name fallback). The registered seed law is unchanged; no seed exception, no R1 rerun. WP19 now writes a **valid failed-identity receipt** in that one case (`seed_binding` with `reason_code` `wp19.live_xg_seed_binding`, `turns_checked`, `turns_mismatched`; exit 0 = receipt written). The X-G contrast is INCONCLUSIVE, a W1 non-veto (item 601, W1-BLOCKERS-AGREEMENT:101-105). Every other WP19 refusal is unchanged.
+- **When.** In a free gap only, never during an armed span. No leg is delayed for this. Minutes, read-only on custody.
+- **Checkouts.** New blobless clone `$J2` detached clean at `64f81e6d3290c1d2001f30e21278693964211c54`; new staging checkout `$STAGE2` at the same commit (outputs untracked until the commit below). Reuse item 602's `$PRIVATE` pattern with a new directory (umask 077). Git environment unset; homebrew `python3.13 -B`.
+- **WP19, once.** Same `TOKENIZER` and `XG_TURNS` as item 602, re-authenticated exactly as item 602 did. Item 601's WP19 command with `--root "$J2"` and `--output "$STAGE2/$R/wp19_receipt.json"`, stdout and stderr to `$PRIVATE`. Capture the exit code at once. Validate privately with `joulewise.align.apple.v4_registration.validate_wp19` from `$J2`. Expected: exit 0, verdict `fail`, `seed_binding.reason_code` `wp19.live_xg_seed_binding`, `turns_checked` 12, `turns_mismatched` 12. Any other exit, a validation error, or other counts: **hold** `wp19.rerun`, post the exit code, exception type and counts only, do not push.
+- **Carry the four staged files byte for byte** into `$STAGE2` at the same repo paths: `$U/pilot.json` (sha256 `104c4621a6c137a9d05db1ded2d26eaed8f0d8eafde027c99a730c0608d559af`), `$U/r1.json` (`efdcd667bc6604383ce02e6ff88ad0c717d43128318c9806a3d71f688d9cee43`), `$R/r1_soak_reference.json` (`5a2dd40030a9008c59c1d89c29a6e7f0a230bcffa7ff5500a5f5897e0508b1b7`) from `/Users/edr/code/jw-wt/w1-sign-stage-88624302`, and `docs/align/v4/W1-protected-replays.json` (`c806e72f6e9a50d049b1a05f367e1229a80942eec42f538b75c9785ee8084820`) from `/Users/edr/code/jw-wt/w1-sign-stage-5bc90cf5`. Require `cmp -s` 0 and each sha256 equal to the value here; any mismatch is hold `carry.digest` (name only).
+- **Push (item 601's rule).** Commit exactly those five files in `$STAGE2` on `64f81e6d3` (`git status --porcelain` must show only them before the commit, nothing after). Normal push to `refs/heads/w1-results/2026-11-26-signing-inputs` on origin. Verify the remote ref equals the local commit. No data on main. `STEP4_CHECKOUT` stays `dcdedecb100723ddb9c489fc507f9373a944a176` (the exports ran there).
+- **Post.** The ref, the full commit, `STEP4_CHECKOUT`, the five filenames with sha256, the WP19 exit code, verdict word and the three `seed_binding` fields. Nothing else from the receipt. Raw outputs stay in `$PRIVATE`.
+- **Then the lead** runs the RL-218 §10 step-1 rerun at the signing commit with those inputs in, the three-blob check, census, receipt and `--check`. Item 601 is superseded by this item for its push; its other parts are done.
+
 637. **Magistrate 6157c4b6 (headless, Opus 5.5), 2026-11-27 21:41 PST: kit 14 L007-L009 Check RECEIPT OK (3/3 run, 3 admitted), copied; f2-stab-14 L010-L012 ISSUED on pin A as THREE legs from 21:55, launches as the last act**
 
 ```pointer
