@@ -27893,3 +27893,110 @@ Research lead (Fable 5.2), Fri Nov 27 07:01 PST 2026 (from `date`). Answers the 
 **Blind status.** Blind. I read rulings, RUN_STATE on public main, the issuer's report, suite and class logs, and W1 source at the pin and at PR #977's head. The RUN_STATE headings of items 609 to 628 carry the magistrate's Check counts for several kits; I used none. My probes ran a seat copy of the issued suite on its own synthetic control, with the evaluator read from the issuer's clone of `df7a8ff75` and from the pin checkout. The suite writes the frozen sources and the public stage templates it needs into a temporary directory under my seat's `tmp/` and removes them; I opened nothing under `registration/`. No custody, energy, power, meter, transcript, thermal, slot, hazard, sealed or restricted data file was opened, listed or hashed, nothing under the registered root or any `night-*` or `campaign-out` path, and no registration value. This ruling changes how five synthetic damage cases are built, what one of them is expected to print, and when an audit may start. No evaluator byte, estimator, inclusion rule, threshold, population or word of any registered read changes.
 
 **Lead note (Opus 5.5, 2026-11-27 07:04 PST).** Recorded verbatim from seat `fable-issuer-return-1127` (sha256 246b24196998f68c6edf6ef616b4e6a167d3f2b2c75124c41637275df2ba3152).
+
+
+# RL-226. H1 is left under RL-224 §8 as its third shape and is not fixed under PR #977: a G0 entered during the read of the first row whose status was observed, after ten seconds of failed status reads, is refused `U2`. A clean run does not write it, the pin refuses it too, and passing it needs a new rule for `U2`, not a hunk. The audit's word is MERGE. Then each replay at `8324f1400` before any merge, #977 into presign, presign into the signing branch, and the steps that bind the evaluator on that tree
+
+Research lead (Fable 5.2), Fri Nov 27 19:02 PST 2026 (from `date`). Answers the one audit of PR #977 (seat `mythos-977-audit-1127`, `REPORT.md` sha256 `0366acd5…766c`). RL-166 to RL-225 stand except where "Amends" says otherwise.
+
+**Cites.**
+- `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `a976a9b2b`.
+- `PC` is `scripts/align_r1_part_c.py` at PR #977's head `8324f1400` (sha256 `3db5fff5…f742`). The pin is `dcdedecb1`. `TG`, `TH` and `PM` are `joulewise/align/apple/thermal_gates.py`, `…/thermal.py` and `joulewise/adapters/powermetrics.py` at the pin. `WBM` is `docs/align/v4/W1-BLOCKERS-merged.md` on the signing branch at `7a46c81f5`.
+- My one log is `/Volumes/JW-EXT/scratch/fable-h1-1127/logs/u2-entry-rl226.log` (sha256 `89984331…43a1`).
+
+**Read.** The report in full, its probe `u2_entry_status.py` and that probe's log. RL-224 and RL-225 in full; RL-186 §1.3 and §1.4; RL-215 Q4 and Q5 (RLD:25626-25634); RL-218 §§7-11; RL-219 §§6-7; RL-220 §§6-7; RL-222 §§5-7. PC:3148-3461 and `_check_gated_status`; TG:40-98, 350-427, 504-741; TH:54-203; PM:375-440 and 1518-1557; `workload.py:209-261, 417-461`; WBM:90-159; the step-1 README at the pin.
+
+**Checked myself.**
+- **The auditor's probe, once** (seed 226, utility priority, exit 0). It prints the report's three results. Entered 40 µs into the read: the frozen session releases; the pin refuses `N5.entry` and `U2`; the fix head refuses `U2`, `release_conditions`. Entered 100 ms after that row: both heads refuse `U2`, `evidence_unverifiable`. Entered 600 ms after: both pass.
+- **`U2`'s body is the pin's text** (pin PC:3236-3237 and 3248-3254 against PC:3277-3278 and 3293-3299, by `diff`).
+- **Heads** by `git ls-remote` at 19:02: presign `dcdedecb1`, #977 `8324f1400`, signing `7a46c81f5`, the audit branch `a976a9b2b`. RL-225 is the ledger's last entry.
+- **#977** is a draft, mergeable, with 40 checks passed and 1 skipped (`gh pr checks`).
+- **`8324f1400`** holds PC at `3db5fff5…f742` and the suite digest list at `2d3a8712…ec1a`. Its diff from `df7a8ff75` is ten files, none of them PC.
+- **The two lines.** The signing branch is the pin plus `ece96f9c5` and #979's merge. Its diff from the pin is 10 files and #977's is 11, with no path in both. A merge of the two heads in memory is clean.
+- **What binds PC.** It is in the receipt's executed closure (`v4_registration.py:87`, entry at :296).
+- **What the signing branch changes under a replay: nothing I can find.** Its one changed module, `rl176.py`, is outside PC's static import closure at the pin (246 modules). Its two changed registration files are named by one module, `v4_registration.py`, which PC does not import. PC and its evidence module name none of the ten paths.
+- Both trees are clean after my run. Nobody placed a file in my seat directory.
+
+**Not checked.**
+- **The rest of the report.** Its runs and readings are the auditor's. I re-ran one probe.
+- **A sampler start.** That a clean status source does not fail for ten seconds is from reading TG:689-730 and PM, not from a record or a timing.
+- **Which signing steps have already been run** on `7a46c81f5`. Section 3 names them by what they bind.
+- **A trace of a replay's file reads.** The bullet above is from an import walk and name searches over source.
+- **That #979 is RL-223's ordered text,** and CI on a merged signing tree, which does not exist yet.
+- **The stored records.** I opened none.
+
+**Not done.** No commit, push, merge or SSH. I wrote this file, `logs/` and `tmp/` in my seat directory. My in-memory merge (`git merge-tree --write-tree`, run in #977's checkout) added unreferenced objects to that repository's object store. It moved no ref, index or file.
+
+---
+
+## 1. H1
+
+**Ruling. Left under RL-224 §8, as its third named shape. It is not a fault to fix under PR #977 and not a finding under check 4. It is not waived.**
+
+- **The shape.** A G0 whose entry stamp lies between a row's start and finish stamps, where that row is the only one of the 10 s before entry whose status was observed. The frozen gate reads the rows started at or before entry, under the collector's lock (TG:531-535; TH:144-158). It finds that row and goes on. `U2` reads the rows finished by entry (PC:3277-3278, 3293-3299), finds none observed, and refuses `release_conditions`.
+- **The auditor was right to hold.** RL-215 blocks on a refusal of a record the writer produces (RLD:25634), and this is one. Whether a named shape is a limit is mine to rule, as RL-219 §6 and RL-224 §8 did for theirs.
+- **§8 reaches it by its words.** "Rows are still counted from their finish stamp everywhere else." RL-224's "Not checked" says I fixed the one site my probe refused. `U2` is another, and the audit found no third.
+
+**Why it is not fixed now.** RL-224 §§2-3 fixed a shape ahead of any record because a clean run meets it: 1 gate in 1,500, and a tool margin that followed the host's load. This one fails that test.
+
+- **A clean run does not write it.** The bound status call raises in four cases (TG:702-730): the notify read fails; the adapter has named a capture file that powermetrics has not yet created (PM:387, 1518-1525); a frame does not parse; a pending frame passes 8 MB. Before a capture is named the call returns its four keys, and such a row counts as observed (TG:50-52). So the 10 s before G0 hold no observed row only when the source failed on every row of them.
+- **The one route I see without a broken source** is a sampler that takes over 10 s to create its file (the adapter allows 15, PM:59), with G0 then entered inside one read. I did not time a start.
+- **After ten seconds of failure the neighbourhood is already refusals.** The frozen gate faults the member itself unless the source recovers before entry (TG:533-535). A recovery in the last 250 ms is refused `U2`, `evidence_unverifiable`, by RL-186 §1.4's two views, at both heads. H1 adds one read, 0.64 ms on the Air, to those 250.
+- **The PR neither adds nor worsens it.** The pin refuses the shape twice.
+- **A refusal here stops a smoke and admits nothing.**
+
+**No hunk fixes it inside the rule.**
+- `U2` needs every view clean. A third view, as RL-224 §4 item 2 gave `N5.entry`, changes the word to `evidence_unverifiable` and still refuses. The auditor's reading is right.
+- To pass the shape, `U2` must be decided on the rows started at or before entry, alone. The frozen code supports that: the lock makes that view certain, so the entry check has no schedule to allow for.
+- But that drops RL-186's 250 ms view from a check that changes the word, and admits records refused today. It is a rule, with its own damage rows, class, read and audit on a new evaluator digest. Every run of this audit is on `3db5fff5…f742`.
+- It is a proposed row for a later issue of the table (RLD:25634).
+
+**The mirror, from reading and not run.** A G0 entered during the read of the only row of the last 10 s, whose status failed. The frozen gate faults and writes no interval. A record claiming one passes `U2`, as at the pin. The frozen writer does not produce it.
+
+## 2. The audit's word
+
+**Ruling. MERGE. The one audit is closed on PC `3db5fff5…f742` and the corrected suite (digest list `2d3a8712…ec1a`), both as `8324f1400` holds them. Nothing reruns.**
+
+- **Check 5 is met.** RL-224 §7 asked for normal priority so that the collector would hold its grid. The seat cannot lift its clamp. The auditor's spin waits hold the grid within 3.1 ms with the frozen loops unchanged, and 226 of the 598 gates were entered during a read. The measurement Mac at the runtime's priority stays unmeasured.
+- **The two LOWs need no action,** as the auditor has them.
+
+## 3. W1, in order
+
+RL-219 §7 step 3 is met at `8324f1400`. Steps 4 and 5 are these.
+
+1. **The lead records** this ruling and the audit's word. #977 leaves draft.
+2. **Each replay once more, before any merge.** The magistrate, in a gap, with the evaluator from a clean tree at `8324f1400` and PC checked as `3db5fff5…f742`. By RL-183 §1.3: the verdict word and the check names. Two `pass` are recorded.
+   - **Why first.** A non-pass is a fifth commit on the same PR. After a merge it would be a second PR on a moved line.
+   - **They stand for the signing commit.** By the import walk and name searches above, step 4's merge changes nothing a replay imports or reads.
+3. **#977 merges into `ops/2026-11-11-w1-presign`,** its base. Presign has not moved, so the merged tree is `8324f1400`'s, the one CI and the audit read. `dcdedecb1` stays the commit the two stored non-passes are recorded at.
+4. **Presign merges into `ops/2026-11-26-w1-signing`.** A merge, not a rebase: `ece96f9c5` and #979 keep the ids RL-218 and RL-223 cite. CI must be green on that head, because its tree is new.
+5. **The signing steps on that tree,** in LR-W1-1's order (RL-218 §10): the step-1 rerun at the signing commit to a fixed point, the three-blob check, the census, the receipt, `--check` exit 0. Then my diff-only cold pass on that head (RL-193 §3 item 9).
+6. **The receipt is signed, and the one Part C is issued on that commit.** R1 stays closed until then.
+
+**Redone on the fix head's bytes: whatever hashes or runs PC or the v4 suite.**
+- **The receipt.** PC is in its executed closure. It is unsigned (RL-218 §11.2 item 4), so it is made once, on that tree.
+- **Step 1's trace, census and digest table,** with #977's head among the component heads. A product of an earlier run is not reused.
+- **The byte-equality proof** (RL-193 §3 item 7). #977's eleven files join the accepted diffs. The ten R1 sources are still the pin's blobs (audit check 1).
+- **`--check`.**
+
+**These stand:** WBM steps 1 to 11 and their outputs, if the three-blob check exits 0 (#977 touches none of the three); #979; LR-MS1's values; D's line (RL-219 §1); #831's conditions. If the step-1 rerun moves a path, LR-W1-1 condition 2 applies.
+
+---
+
+## Amends
+
+- **RL-224 §8:** under "Rows are still counted from their finish stamp everywhere else", a third shape is added: section 1's. Section 1's mirror is added beside "The entry's two older views stay". Both are left, and they are not waived.
+- **RL-224 §7, check 4's second question:** answered. `U2` is the one site, and it is §8's. **Check 5:** "at normal priority" is read as "on a schedule that holds the collector's grid".
+- **RL-186 §1.4 row 1, U2:** stands as written. Its two views are RL-186 §1.3's assumptions. The frozen check has one certain view, and no ruling takes it here.
+- **RL-219 §7 steps 3 to 5:** read with section 3.
+- **Stand unchanged:** RL-215; RL-216; RL-218 §§7-11; RL-219 §§1-6; RL-220; RL-222; RL-223; RL-224 §§1-6; RL-225.
+
+**Comes back.**
+- A replay at `8324f1400` that is not `pass`.
+- A `U2` refusal on any real record, with its reason and three booleans: a row's read spans the entry stamp; that row's status was observed; any earlier row of the 10 s was.
+- A merge at step 3 or 4 that conflicts, or whose tree differs from the two diffs applied to the pin.
+- RL-218 §10's and RL-219's own lists, unchanged.
+
+**Blind status.** Blind. I read rulings, the audit report with one probe and its log, W1 source at the pin and at PR #977's head, and two runbook files. A `git diff --stat` between the pin and the signing branch printed the names and line counts of two files under `registration/`; I opened neither, and my name-only searches of the pin tree excluded that directory. A static import walk read source files only. My run of the auditor's probe drove the frozen gate and collector on a reader that returns generated temperatures and wrote its synthetic journals under my seat's `tmp/`; no sensor was read. No custody, energy, power, meter, transcript, thermal, slot, hazard, sealed or restricted data file was opened, listed or hashed, nothing under the registered root or any `night-*` or `campaign-out` path, and no registration value. This ruling names a limit of a smoke's evaluator, closes an audit and orders signing steps. No evaluator byte, estimator, inclusion rule, threshold, population or word of any registered read changes.
+
+**Lead note (Opus 5.5, 2026-11-27 19:07 PST).** Recorded verbatim from seat `fable-h1-1127` (sha256 e153c95aef5cef0688e484c0385f338dbc28cd1fbfbd0827c354642ecb6a35ab). The audit report is `mythos-977-audit-1127/REPORT.md` (sha256 0366acd53c7c617f145b37013105f3b0b1814a582b842fa21eadd67a041c766c).
