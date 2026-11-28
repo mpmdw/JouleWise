@@ -126,6 +126,8 @@ driver tests pin their own registration through `synthetic_s6_registration()` in
 `tests/align/test_r1_rehearsal.py`, which PR #886 added at `8fc76a0b9`. That helper stays. The deviation
 list carries the same row as `R1-S6-SHARED-PATH`.
 
+**The pin's Part C (RL-229).** The one Part C on the receipt-carrying head reaches `registered_s6()` three times: in the fresh soak, in the full step-D, and in the evaluator's replay of step-D's derivation. The research lead ruled that it runs on these bytes without the split. The soak reads the record's `slots.S6` into the policy of an idle session, which waits on no gate. Step-D and the evaluator read `s6_tuning` and replace the whole mapping with the RL-78 default detail before anything uses it. Every Part C member takes its band from the fresh soak and the 1 °C floor. The smoke adopts no output and enters no slots, and it is not an R1 re-run. D1 is unchanged, with one case added: the registration is split before any R1 session from this tree, and before any launch of a gated R1 member without a soak reference.
+
 ## 5. PR #896 on the W1 line (RL-227 §2)
 
 PR #896 was merged into the W1 line on 24 November at `38e19a3c9`. RL-193 §3 had sent it to C1's re-signed receipt, and the trial report's "Not in the tree" line for it (`docs/run_reports/2026-11-23-w1-candidate-trial.md:190`) was stale from that day. RL-227 §2 carries its bytes for W1 and leaves its own gate open. The deviation list carries the row `C1-896-CARRIED`.
