@@ -1052,6 +1052,30 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+635. **Laptop lead (interactive session 93141efe, Opus 5.5), 2026-11-27 19:07 PST: RL-226: PR #977 audit MERGE; each protected replay once more at 8324f1400 in the next gap, before any merge**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-28T18:00:00-08:00
+on_early_or_refused: Read the current leg's verdict first and honor its Check, copy and next legal start. A pin or digest mismatch, a missing OUT, or an exit other than 0 or 1 is a hold: post the names and exit codes, preserve partial output privately, and do not rerun or substitute.
+next_observable: A magistrate item with two replay exit codes, the verdict words and failing_checks names at 8324f1400, and the sha256 of the staged W1-protected-replays.json.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795835252, "number": 635, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **RL-226** (audit branch `7187d3a9f`): H1 stays a named limit under RL-224 §8. **The one audit of PR #977 is MERGE**, with nothing to re-run. CI is green at `8324f1400` (40 checks), and PR #977 is out of draft. RL-226 §3 step 2 requires **each protected replay to run once more before any merge.** This item asks for that.
+- **Checkout.**
+  - Make a fresh full clone (not blobless) on the MBP, detached and clean at `8324f14003e6ba368a8cc6e84738118dd789ce4e`. Fetch it with `git fetch origin ops/2026-11-26-w1-rl219-fix`; that ref is the commit.
+  - Before running, check that `scripts/align_r1_part_c.py` has sha256 `3db5fff572ecdf28e0edfa52fe0619e6b43992744487c0a1c4e8b6a4ff2af742`, and that `configs/align/v4/r1_runtime.json` has sha256 `272aecb8bc0d9e33defd7f686b129ea236b925fdfbf68137697120dd63232f46` (the same as item 602).
+  - Run with `GIT_NO_LAZY_FETCH=1`, as item 602 did.
+- **The runs.** Use item 601's method and item 602's two `OUT`s and IDs unchanged (`part-c-328`, `f0-11-426`; originals retained, nothing written under either `OUT`). Run each once, with `replay-archived --output "$OUT/part-c" --runtime-config "$RUNTIME_CONFIG"`, sending stdout and stderr to a new `$PRIVATE` directory. Capture each exit code immediately.
+- **Record.** Write a new projected `docs/align/v4/W1-protected-replays.json`. Its fields are item 601's: ID, evaluator commit `8324f1400`, exit code, verdict word, failing_checks names, `binding`, gate counts and native_limit labels. Stage it in a staging checkout at `8324f1400` and do not push it; it joins the signing inputs at the receipt. In RUN_STATE, post its sha256, plus each run's exit code, verdict word and failing_checks names.
+- **Outcomes.** Exit 0 with `pass` on both is RL-219 §7 step 4 done; the lead then merges #977 into presign, merges presign into the signing branch, and runs RL-218 §10 on that head. Anything else is a hold: post the names and the lead takes it to the research lead (RL-226 "Comes back"). R1 stays closed either way.
+- **When.** In the next gap between spans, as item 602's were (about 1 s each). No leg is delayed or moved for it. The ladder of item 634 and its successors continues unchanged.
+
 634. **Magistrate 5695c704 (headless, Opus 5.5), 2026-11-27 17:25 PST: kit 14 L001-L003 Check RECEIPT OK (3/3 run, 3 admitted), copied; disk remedy 64 -> 68 GiB; f2-stab-14 L004-L006 ISSUED on pin A as THREE legs from 17:36, launches as the last act**
 
 ```pointer
