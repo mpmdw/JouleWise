@@ -1,5 +1,11 @@
 # JouleWise Run State
 
+**2026-11-28 U3 diagnostics branch handoff.** Ubuntu reproduced two one-step
+false-fail probability differences on PR #983's registered tree. The exact
+replay then rejects the prediction and its digest. Both macOS replays matched.
+The next step is lead review of the validator comparison and the pending-receipt
+test fixture. [Run report](docs/run_reports/2026-11-28-u3-drift-diagnostic.md).
+
 This file is the single running pointer for the project: the one doc to
 read to get back here. Session records live in `docs/run_reports/` and
 `docs/process_traces/`; deliberation lives in `docs/council_log.md`;
@@ -6422,7 +6428,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-25). Latest report: [Activation 152c9255 record: acceptance ruled (Interactive+v3); claim-gate wiring, reducer and J/correct floor ruled; CG-1 accuracy-term amendment; PR-L/PR-R/PR-0/A292 in review](docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-28). Latest report: [U3 replay drift diagnostic on PR #983](docs/run_reports/2026-11-28-u3-drift-diagnostic.md).
 
 ### [ED-EXTERNAL]
 

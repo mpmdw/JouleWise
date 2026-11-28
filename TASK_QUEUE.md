@@ -31,6 +31,15 @@ For every new user task:
     must cite that matrix row (file + item id). If no matrix row exists
     for the work, say so explicitly in the evidence cell.
 
+## 2026-11-28 U3 diagnostic handoff
+
+- [AGENT] PR #983 Linux U3 replay diagnosed on
+  `ops/2026-11-28-u3-drift-diag`. The follow-up is lead review of exact stored
+  digest verification, tolerance for replayed probability leaves, and a
+  pending-receipt fixture for four tests. A strict-tier validator change
+  requires delta review and a re-signed receipt. This desk diagnostic has no
+  phase exit checklist row. [Run report](docs/run_reports/2026-11-28-u3-drift-diagnostic.md).
+
 ## Priority Scale
 
 - **P0 Safety**: prevents accidental data loss, bad commits, broken handoffs, or
@@ -682,7 +691,7 @@ Superseded (2026-07-15, WO-017; D-043): P2-027 publication and uninvolved-party 
 <!-- BEGIN GENERATED: state-kernel current-queue -->
 <!-- GENERATED from docs/process/state_kernel.json by scripts/gen_state.py. Do NOT hand-edit between the markers; edit the kernel and regenerate. -->
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-25).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-28).
 
 Generated compatibility table for repository consumers; the lane tables below are the detailed view of the same kernel state.
 
