@@ -140,8 +140,10 @@ class ConfigPinKitChecks(unittest.TestCase):
 
     def test_kit_check_r0_passes_w1_needs_ready(self):
         from scripts import align_v4_kit as kit
-        from tests.align.test_v4_kit import PENDING_RECEIPT, ready_inputs
-        with tempfile.TemporaryDirectory() as tmp:
+        from tests.align.test_v4_kit import PENDING_RECEIPT, pending_receipt_overlay, ready_inputs
+        # The committed tree carries the signed receipt; serve a pending one so this
+        # keeps testing the pre-registration stop on any host (W1-SIGNING-RECORD §6).
+        with tempfile.TemporaryDirectory() as tmp, pending_receipt_overlay():
             row = prequal.check_kit(ctx(tmp))
             self.assertEqual(row["status"], "pass", row["problems"])
             self.assertNotIn("R0.reasoning_effort", row["pending_inputs"])

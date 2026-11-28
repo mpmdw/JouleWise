@@ -109,6 +109,8 @@ extends back to RL-1xx. That is the research lead's call in the cold pass.
 
 These predate both 18 November sessions. They are listed so the cold pass can see the boundary.
 
+**The list at the signing commit.** The table above stops at 24 November. The list as judged by the research lead, fourteen lines with their ruling ids, is in the Stage A gate report beside this file (RL-227 §5).
+
 ## 4. Known limitation: the S6 registration shares `r1_slots.json` (lead D1)
 
 Lead decision D1 (2026-11-24 00:30): no frozen-source change now. R1 is complete (RUN_STATE 459) and no
@@ -123,3 +125,28 @@ fill, that file is the R1 hardware record, and its `s6_tuning` has no `from_c` o
 driver tests pin their own registration through `synthetic_s6_registration()` in
 `tests/align/test_r1_rehearsal.py`, which PR #886 added at `8fc76a0b9`. That helper stays. The deviation
 list carries the same row as `R1-S6-SHARED-PATH`.
+
+**The pin's Part C (RL-229).** The one Part C on the receipt-carrying head reaches `registered_s6()` three times: in the fresh soak, in the full step-D, and in the evaluator's replay of step-D's derivation. The research lead ruled that it runs on these bytes without the split. The soak reads the record's `slots.S6` into the policy of an idle session, which waits on no gate. Step-D and the evaluator read `s6_tuning` and replace the whole mapping with the RL-78 default detail before anything uses it. Every Part C member takes its band from the fresh soak and the 1 °C floor. The smoke adopts no output and enters no slots, and it is not an R1 re-run. D1 is unchanged, with one case added: the registration is split before any R1 session from this tree, and before any launch of a gated R1 member without a soak reference.
+
+## 5. PR #896 on the W1 line (RL-227 §2)
+
+PR #896 was merged into the W1 line on 24 November at `38e19a3c9`. RL-193 §3 had sent it to C1's re-signed receipt, and the trial report's "Not in the tree" line for it (`docs/run_reports/2026-11-23-w1-candidate-trial.md:190`) was stale from that day. RL-227 §2 carries its bytes for W1 and leaves its own gate open. The deviation list carries the row `C1-896-CARRIED`.
+
+## 6. U3 re-derivation is bit-exact on Apple libm only
+
+On Ubuntu with Python 3.13, `prediction.pair_false_fail` and
+`prediction.series_false_fail` each differ from the stored value by one
+binary64 step (relative differences of `1.26e-16` and `1.39e-16`, respectively).
+Replacing `math.erfc` at `joulewise/align/apple/v4_u3.py:50` reproduced both
+differences. The quantile, bars and all OC fields match on Linux. The stored
+canonical payload verifies against its stored digest on all tested hosts.
+The Air on macOS 15 and the GitHub runner on macOS 26 reproduced the stored
+bar and derivation digest exactly.
+
+The registered validator stays exact and fail-closed. W1 runs on macOS.
+Before Part C, run `python3.13 -B scripts/align_v4_kit.py --check` on the MBP
+and require exit 0 to confirm byte-exact replay on that host. The check and
+prepare refuse if the MBP re-derivation differs.
+
+[Diagnostic CI run](https://github.com/mpmdw/JouleWise/actions/runs/46151036410).
+Report: `/Volumes/JW-EXT/scratch/sol-u3-drift-1128/REPORT.md`.
