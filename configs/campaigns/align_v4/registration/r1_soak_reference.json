@@ -1,0 +1,41 @@
+{
+  "attempt": 0,
+  "detrended": {
+    "TV0h": {
+      "detrended_sd_c": 0.009002428519380538,
+      "mean_c": 34.13868371294897,
+      "settled": true,
+      "slope_c_per_min": -0.0012469324523885137,
+      "window_reads": 1201,
+      "window_s": 1200
+    },
+    "TV1h": {
+      "detrended_sd_c": 0.009002428519380538,
+      "mean_c": 34.13868371294897,
+      "settled": true,
+      "slope_c_per_min": -0.0012469324523885137,
+      "window_reads": 1201,
+      "window_s": 1200
+    }
+  },
+  "schema": "joulewise.align.r1_soak_reference.v1",
+  "sensor_roles": {
+    "fan_keys": [
+      "F0Ac",
+      "F1Ac"
+    ],
+    "r0_sha256": "e6231a8f3e6ab6177bbedbf12b878c958a7b4d4331e36472c74c2a192588769b",
+    "record_keys": [
+      "Tf08"
+    ],
+    "s_fast": "TV0h",
+    "s_slow": "TV1h"
+  },
+  "sensors_c": {
+    "TV0h": 34.13868371294897,
+    "TV1h": 34.13868371294897
+  },
+  "source_output": "/Users/edr/night-align/r1-20261118T231014Z/night/align-r1/idle_soak",
+  "source_segment": "idle_soak",
+  "window_s": 1200
+}
