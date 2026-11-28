@@ -4,6 +4,9 @@
 No model load or generation. --tokenizer must be an explicit local directory;
 transformers uses local_files_only=True. Task tools are the simulated SHADE
 tools specified in the contrast config. Run on the lead's authorized desk.
+
+Exit 0 means a receipt was written, including a failed identity receipt.
+Use the receipt's verdict and contrast predeclaration for the outcome.
 """
 import argparse
 import importlib
@@ -90,11 +93,18 @@ def main(argv=None):
     live = args.x_g_turns.read_bytes()
     rows = [json.loads(line) for line in live.splitlines() if line.strip()]
     from joulewise.align.apple.sampling import turn_seed
+    seed_mismatches = 0
     for i, row in enumerate(rows):
-        if row.get('turn') != i or row['generation']['sampler']['per_turn_seed'] != turn_seed(7655467588542005630, i):
+        if type(row.get('turn')) is not int or row['turn'] != i:
             raise ValueError('live X-G turn/seed binding failed')
+        observed = row['generation']['sampler']['per_turn_seed']
+        if type(observed) is not int:
+            raise ValueError('live X-G turn/seed binding failed')
+        # WP18's registered X episode seed, derived with qwen3-30b-a3b.
+        seed_mismatches += observed != turn_seed(7655467588542005630, i)
     turns = [{'turn': r['turn'], **{k: r['generation'][k] for k in ('prompt_token_ids', 'output_token_ids')}} for r in rows]
-    result = wp19_identity(fixtures, rendered, turns, live_source_sha256=digest(live))
+    result = wp19_identity(fixtures, rendered, turns, live_source_sha256=digest(live),
+                           live_x_seed_mismatches=seed_mismatches)
     result['source_sha256'] = sources
     result['tokenizer_files_sha256'] = {name: digest((args.tokenizer/name).read_bytes())
         for name in ('tokenizer.json', 'tokenizer_config.json')}
