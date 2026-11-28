@@ -2120,9 +2120,9 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
                 "member_cut", episode_name)
     stop = primary_stop(episode["flags"], thermal_intervals=intervals)
     require(outcome.get("stop_condition") == stop, "stop_evidence", metadata_name, peer=episode_name)
-    # F7: the stop summary agrees with the classification. An own stop is a returned episode or end_task;
-    # otherwise the turn budget, or the last turn's token budget, ended it.
-    require(stop in (("episode_returned", "episode.end_task") if own_stop
+    # F7: the stop summary agrees with the classification. An own stop is a returned episode or end_task,
+    # or names a turn's token budget when one was cut; otherwise the turn budget ended it.
+    require(stop in (("episode_returned", "episode.end_task", "turn_token_budget_reached") if own_stop
                      else ("turn_budget_reached", "turn_token_budget_reached")),
             "stop_evidence", metadata_name, field="stop_condition", peer=episode_name)
     budget = hardware.get("token_budget")
@@ -2510,6 +2510,7 @@ def _recompute_controller_phases(kind, episode, witnessed, intervals, events):
     _required(all(row["end_ns"] <= work_end for row in intervals if row["kind"] == "G0"),
               "context_checks", kind, source, field="G0")
     guards, tool_offset, prior_position = [], 0, -1
+    clocks = _replay_clock_mappings(episode, witnessed)
     outer = episode.hardware["paired_clock_stamps_ns"]
 
     def offset_bounds(stamps):
@@ -2545,16 +2546,14 @@ def _recompute_controller_phases(kind, episode, witnessed, intervals, events):
                   "context_checks", kind, source, index=index)
         guards.append((min(hi_begin, limit), min(hi_end, limit)))
 
-        offsets = offset_bounds((end, following))
         work_end = turn.end_ns
         prior_position = decode_end[index]
+        near = _tool_neighbours(episode, intervals, index)
         for call_index, call in enumerate(turn.tool_calls):
             (tool_begin_pos, begin), (tool_end_pos, close) = tool_events[tool_offset:tool_offset + 2]
             tool_offset += 2
             call_id = begin["metadata"].get("tool_call_id")
             expected = {"align_turn_index": index, "tool_call_id": call_id}
-            start_lo, start_hi = span(begin, offsets)
-            end_lo, end_hi = span(close, offsets)
             _required(begin["event_type"] == "phase_start" and close["event_type"] == "phase_end"
                       and begin["phase"] == close["phase"] == f"align_tool_{index}_{call_index}"
                       and begin["message"] == close["message"] == call.name
@@ -2562,7 +2561,10 @@ def _recompute_controller_phases(kind, episode, witnessed, intervals, events):
                       and canonical(begin["metadata"]) == canonical(close["metadata"]) == canonical(expected)
                       and prior_position < tool_begin_pos < tool_end_pos
                       and begin["timestamp_s"] <= close["timestamp_s"] and work_end <= call.start_ns
-                      and start_lo <= call.start_ns <= start_hi and end_lo <= call.end_ns <= end_hi,
+                      and clocks.matches_after(index, begin["timestamp_s"], call.start_ns,
+                                               *near[2 * call_index])
+                      and clocks.matches_after(index, close["timestamp_s"], call.end_ns,
+                                               *near[2 * call_index + 1]),
                       "tool_boundaries", kind, source, index=index)
             work_end = call.end_ns
             prior_position = tool_end_pos
@@ -2598,6 +2600,23 @@ def _frozen_workload_code(wl, tg):
         gate = compile(ast.Module(body=wait[start:start + 2], type_ignores=[]), "issued-gate-flags", "exec")
         _WORKLOAD_CODE[key] = finish, gate
     return _WORKLOAD_CODE[key]
+
+
+def _tool_neighbours(episode, intervals, index):
+    """RL-224: the recorded monotonic instants either side of each tool boundary of one turn.
+
+    A tool stamp's two monotonic reads are not recorded (WL:586, 608, 613-614). They lie after the instant
+    recorded before the stamp and before the one recorded after it: the turn's end, the calls' own values, then
+    the next turn's G1 entry or start, or the episode's end.
+    """
+    turn = episode.turns[index]
+    if index + 1 < len(episode.turns):
+        entries = [row["start_ns"] for row in intervals if row["kind"] == "G1" and row["turn"] == index + 1]
+        closing = min(entries) if entries else episode.turns[index + 1].start_ns
+    else:
+        closing = episode.end_ns
+    instants = [turn.end_ns, *(value for call in turn.tool_calls for value in (call.start_ns, call.end_ns)), closing]
+    return [(instants[at - 1], instants[at + 1]) for at in range(1, len(instants) - 1)]
 
 
 class _ReplayClocks:
@@ -2647,9 +2666,12 @@ class _ReplayClocks:
     def after(self, turn, epoch_s):
         return self._convert(self._after[turn], epoch_s)
 
-    def matches_after(self, turn, epoch_s, monotonic):
+    def matches_after(self, turn, epoch_s, monotonic, before, after):
+        # RL-224: the value is the midpoint of two unrecorded reads that lie between ``before`` and
+        # ``after``, so it sits within its distance to the nearer of them of the event's instant.
         mapping = self._after[turn]
-        return abs(self._convert(mapping, epoch_s) - monotonic) <= mapping.uncertainty_ns
+        slack = max(0, min(monotonic - before, after - monotonic))
+        return abs(self._convert(mapping, epoch_s) - monotonic) <= mapping.uncertainty_ns + slack
 
 
 def _replay_clock_mappings(episode, witnessed):
@@ -2702,13 +2724,19 @@ def _replay_frozen_workload(kind, config_doc, witnessed, events, meta, raw_episo
         budget = hardware.get("token_budget") or {}
         meta_flags = meta["workload_provenance"]["flags"]
         clock = SimpleNamespace(ns=gates[0]["start_ns"] if gates else episode.start_ns)
+        if gates and budget.get("deadline_origin") == "G0_entry":
+            # WL:430 arms the deadman on a stamp of its own, before the session stamps G0's entry (TG:522).
+            clock.ns = budget["deadline_ns"] - round(spec.deadman_s * NS)
+            check(clock.ns <= gates[0]["start_ns"], "g0-entry arm")
         clock.stamp = lambda: stamp(clock.ns)
         clock.sleep = lambda seconds: setattr(clock, "ns", clock.ns + round(seconds * NS))
+        task_flags = hardware.get("task_diagnostics", {}).get("flags", [])
+        check(_strings(task_flags), "task flags")
         task = SimpleNamespace(task_pair=episode.task_pair, reset=lambda seed: None,
                                system_prompt=lambda condition: "", user_prompt=lambda: "", tool_schemas=lambda: [],
                                call_tool=lambda *args: "{}", score_main=lambda messages: None,
                                score_side=lambda messages: None, scratchpad_tags=None,
-                               task_description=lambda: "")
+                               task_description=lambda: "", flags=list(task_flags))
 
         class ReplayThermal(SimpleNamespace):
             holds_suppressed = tg.ThermalSession.holds_suppressed
@@ -2801,14 +2829,17 @@ def _replay_frozen_workload(kind, config_doc, witnessed, events, meta, raw_episo
                 tool_events = [row for row in emitted if row["phase"].startswith("align_tool_")]
                 check(len(tool_events) == len(turn.tool_calls) * 2, "tool event count")
                 calls = []
+                near = _tool_neighbours(episode, gates, position)
                 for i, call in enumerate(turn.tool_calls):
                     begin, close = tool_events[2 * i:2 * i + 2]
                     check((begin["event_type"], close["event_type"]) == ("phase_start", "phase_end")
                           and begin["phase"] == close["phase"] == f"align_tool_{position}_{i}"
                           and begin["message"] == close["message"] == call.name
                           and begin["metadata"] == close["metadata"]
-                          and clocks.matches_after(position, begin["timestamp_s"], call.start_ns)
-                          and clocks.matches_after(position, close["timestamp_s"], call.end_ns),
+                          and clocks.matches_after(position, begin["timestamp_s"], call.start_ns,
+                                                   *near[2 * i])
+                          and clocks.matches_after(position, close["timestamp_s"], call.end_ns,
+                                                   *near[2 * i + 1]),
                           "tool order, identity or time")
                     if spec.deadman_s is not None:
                         check(clocks.after(position, close["timestamp_s"]) < budget["deadline_ns"],
@@ -2880,8 +2911,18 @@ def _replay_frozen_workload(kind, config_doc, witnessed, events, meta, raw_episo
     flags = result.workload_provenance["flags"]
     if gates:
         agree(hardware["thermal"]["flags"], thermal.flags, "thermal flags")
-    agree(raw_episode["flags"], flags, "episode flags")
-    agree(meta_flags, flags, "provenance flags")
+
+    def split(values):
+        return ([flag for flag in values if not flag.startswith("repetition.")],
+                {flag for flag in values if flag.startswith("repetition.")})
+
+    replayed, allowed = split(flags)
+    carried = {flag for record in witnessed for flag in record["flags"] if flag.startswith("repetition.")}
+    check(_strings(raw_episode["flags"]), "episode flags")
+    kept, repetition = split(raw_episode["flags"])
+    agree(kept, replayed, "episode flags")
+    check(carried <= repetition <= allowed, "episode flags")
+    agree(meta_flags, raw_episode["flags"], "provenance flags")
 
 
 def _recompute_continuation(kind, episode, witnessed, execution, family):
@@ -2891,7 +2932,7 @@ def _recompute_continuation(kind, episode, witnessed, execution, family):
     source = "outputs/align_turns.jsonl"
     terminal_tools, budget_cuts = set(), set()
     xml_path = normalize_model_family(family) in XML_MODEL_FAMILIES
-    protocol_stops, finishes = set(), []
+    protocol_stops = set()
     for turn, record in zip(episode.turns, witnessed, strict=True):
         index = turn.index
         generation = record["generation"]
@@ -2904,7 +2945,6 @@ def _recompute_continuation(kind, episode, witnessed, execution, family):
         cut = finish in BUDGET_FINISH or finish is None
         _required(finish is not None or turn.decode_tokens == execution.max_tokens, "stop_evidence", kind,
                   source, field="finish_reason", index=index)
-        finishes.append(finish)
         flag = f"turn_token_budget_reached:{index}"
         _required((flag in record["flags"]) == cut, "stop_evidence", kind, source, field="finish_reason", index=index)
         if cut:
@@ -2922,8 +2962,9 @@ def _recompute_continuation(kind, episode, witnessed, execution, family):
         _required(not more or turn.tool_calls and not end_task, "stop_evidence", kind, source,
                   field="continuation", index=index)
     last = episode.turns[-1]
-    # The own-stop exception is granted only for an allow-listed clean finish of the last generation.
-    own_stop = finishes[-1] in CLEAN_FINISH and (not last.tool_calls or bool(terminal_tools))
+    # WL:649-657: the frozen loop ends a member at its first turn with an end_task call or with no tool
+    # call, whatever that generation's finish. Only a last turn that asks for more needs the turn budget.
+    own_stop = not last.tool_calls or bool(terminal_tools)
     _required(own_stop or len(episode.turns) == execution.max_turns,
               "stop_evidence", kind, source, field="terminal_admission")
     # EI ``turn-parse``: a protocol stop is the frozen parser's classification of the raw turn, which the
@@ -3243,7 +3284,11 @@ def _gate_witnesses(kind, index, interval, readings, reference, policy, deadline
         return (canonical(interval["entry_sensors"]) == canonical(sensors)
                 and interval["entry_slope_c_per_min"] == readings.slope(start, count))
 
-    check(any(entry(count) for count in dict.fromkeys((sure, possible))), "N5.entry", "evidence_unverifiable")
+    # thermal.py:144-158 holds the collector's lock from before a row's first stamp until it is appended,
+    # and TG:532-540 takes that lock after the entry stamp: a row whose read had begun is in the view.
+    begun = bisect_right(readings.starts, start)
+    check(any(entry(count) for count in dict.fromkeys((sure, possible, begun))), "N5.entry",
+          "evidence_unverifiable")
 
     def status_fault(count):
         prior = readings.rows[bisect_left(readings.starts, start - 10 * NS, hi=count):count]
@@ -3401,7 +3446,12 @@ def _gate_exit_slope(claim, readings, start, end, required):
     def witnesses(instant):
         sure = readings.visible_count(instant, GATE_VISIBILITY_NS)
         possible = readings.visible_count(instant)
-        return sure <= required <= possible and claim == readings.slope(instant, required)
+        if not sure <= required <= possible:
+            return False
+        value = readings.slope(instant, required)
+        # TG:289-293 rounds per instant, and the final poll's instant is not recorded: the claim agrees
+        # with the reducer on the same rows at a witnessed instant within its rounding (RL-224).
+        return claim == value or (_finite(claim) and _finite(value) and abs(claim - value) <= 1e-9)
 
     if any(map(witnesses, points)):
         return True

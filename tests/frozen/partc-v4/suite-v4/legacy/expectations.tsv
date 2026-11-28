@@ -25299,3 +25299,10 @@ x-g/v3/raw/runtime_result.json/file/garbage	must refuse	v3.1 frozen obligation
 x-g/v3/raw/runtime_result.json/file/invalid	must refuse	v3.1 frozen obligation
 x-g/v3/raw/runtime_result.json/file/truncated	must refuse	v3.1 frozen obligation
 x-g/v3/raw/runtime_result.json/file/wrong-root	must refuse	v3.1 frozen obligation
+tool-pair-clock	low/high and held-before/held-after pass, minus/plus refuse tool_boundaries	RL-219 §4 writer class (v4)
+task-flag-record	task-two/task-three/task-repeated pass, eight damage cases refuse workload_replay	RL-220 §4 writer class (v4)
+repetition-flag-record	same-tool/identical/same-output/three-running pass, five damage cases refuse workload_replay, provenance-only refuses episode_binding	RL-220 §4 writer class (v4)
+cut-end-stop	six cut cases pass, thirteen damage cases refuse stop_evidence	RL-222 §3 writer class (v4)
+g0-entry-arm	before/equal pass, after/early refuse evidence_unverifiable, one-copy refuses episode_budget_recompute	RL-222 §3 writer class (v4)
+exit-slope-instant	untried/tried pass, off refuses evidence_unverifiable	RL-224 §5 writer class (v4)
+gate-entry-read	during passes, during-mixed refuses evidence_unverifiable	RL-224 §5 writer class (v4)

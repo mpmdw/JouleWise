@@ -2580,16 +2580,26 @@ class WriterCase:
         alias = R3_NAMES.get((self.rule, self.member, self.op))
         return "/".join(filter(None, ("v4",self.family,self.member,self.rule,self.op,alias)))
 
+CONTINUATION_RULES = {"task-flag-record", "repetition-flag-record", "cut-end-stop",
+                      "g0-entry-arm", "exit-slope-instant", "gate-entry-read"}
+
 def writer_cases():
     with RULE_FILE.open() as file:
         for r in csv.DictReader(file, delimiter="\t"):
-            for member in r["roles"]:
-                load = {"I":"soak_load","P":"quiet_load","S":"quiet_load"}.get(member,"load_evidence")
-                for cell in r["cases"].split():
-                    if r["id"]=="turn-wire" and member in "PS" and cell.split("=")[0]=="reorder": continue
-                    op, eq, value = cell.partition("=")
-                    code = value if eq else r["reason"].replace("LOAD",load)
-                    yield WriterCase(r["id"], member, op, code, r["family"])
+            # A vertical bar appends a new batch without renumbering the issued cases.
+            for batch in r["cases"].split("|"):
+                for member in r["roles"]:
+                    load = {"I":"soak_load","P":"quiet_load","S":"quiet_load"}.get(member,"load_evidence")
+                    for cell in batch.split():
+                        if r["id"]=="turn-wire" and member in "PS" and cell.split("=")[0]=="reorder": continue
+                        if r["id"] in CONTINUATION_RULES:
+                            roles, cell = cell.split(":", 1)
+                            if member not in roles:
+                                continue
+                        op, eq, value = cell.partition("=")
+                        code = value if eq else r["reason"].replace("LOAD",load)
+                        yield WriterCase(r["id"], member, op, code, r["family"])
+
 
 def shift_cmp(op):
     return {"lt":-1,"eq":0,"gt":1}[op]
@@ -3539,6 +3549,14 @@ def assess_launch_config(case):
     finally: fx.doCleanups()
 
 
+@lru_cache(maxsize=1)
+def issuer_control(module_name):
+    spec = importlib.util.spec_from_file_location(module_name, HERE.with_name(module_name + ".py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def assess_case(base,case):
     if case.rule in ("gate-entry-witness","gate-exit-witness"):
         prefix="x-g-gate-entry-" if case.rule=="gate-entry-witness" else "x-g-unobserved-exit-slope-"
@@ -3553,7 +3571,12 @@ def assess_case(base,case):
     if case.rule in ("return-code","stdout-record","x-absence"): return assess_transport(base,case)
     with tempfile.TemporaryDirectory(dir=base.parent) as tmp:
         work=Path(tmp)
-        stage=prepare_stage(base,work,case)
+        if case.rule == "tool-pair-clock":
+            stage = issuer_control("tool_pair_clock").stage(sys.modules[__name__], base, work, case)
+        elif case.rule in CONTINUATION_RULES:
+            stage = issuer_control("continuation_control").stage(sys.modules[__name__], base, work, case)
+        else:
+            stage=prepare_stage(base,work,case)
         return judge_stage(base,case,stage,work)
 
 def judge_stage(base,case,stage,work):
@@ -3581,6 +3604,9 @@ def judge_stage(base,case,stage,work):
               replay["failing_checks"],flush=True)
     primary=set(native["evidence_failures"])
     archived_classes=archive_refusal_codes(replay,primary)
+    if (case.rule == "tool-pair-clock" or case.rule in CONTINUATION_RULES) and expected != "pass":
+        native_ok &= primary == {expected}
+        replay_ok &= archived_classes == {expected}
     if native_ok and replay_ok and native["verdict"]==replay["verdict"] and primary==archived_classes: return "AGREES_PASS" if expected=="pass" else "REFUSED"
     if expected!="pass" and (accepted or replay["verdict"]=="pass"): return "FALSE_PASS"
     return "WRONG_VERDICT"
