@@ -4217,7 +4217,8 @@ raise SystemExit(run_night.main(sys.argv[3:]))
             "com.joulewise.night.plist.template": {"PATH"},
             "com.joulewise.night-probe.plist.template": {"PATH", "JOULEWISE_LAUNCHD_LABEL"},
             "com.joulewise.magistrate.plist.template": {
-                "PATH", "MAGISTRATE_SESSION_BIN", "MAGISTRATE_WATCHDOG_CUSTODY_ROOT"},
+                "PATH", "MAGISTRATE_SESSION_BIN", "MAGISTRATE_WATCHDOG_CUSTODY_ROOT",
+                "MAGISTRATE_WATCHDOG_STATUS_HOST"},
             # Block 6's loop tick (never runs the night driver; it installs night jobs by this template's sibling).
             "com.joulewise.b6loop.plist.template": {"PATH", "JW_B6_LOOP_ROOT"}}
         templates = sorted((repo / "configs/launchd").glob("*.plist.template"))
@@ -6990,7 +6991,10 @@ class CourierReapingTests(unittest.TestCase):
         from joulewise import t0_rehearsal as t0
         child = self.root / "courier.py"
         child.write_text(
-            "from pathlib import Path\nimport time\n"
+            "from pathlib import Path\nimport signal, time\n"
+            # A test worker may inherit SIG_IGN. This cooperative child must
+            # take TERM so the bounded wait tests measure the driver's budget.
+            "signal.signal(signal.SIGTERM, signal.SIG_DFL)\n"
             f"Path({str(self.night / 'courier.sent')!r}).write_text('fixture delivery')\n"
             + ("time.sleep(60)\n" if hang else f"raise SystemExit({code})\n")
         )
@@ -7001,6 +7005,13 @@ class CourierReapingTests(unittest.TestCase):
         def retain(*args, **kwargs):
             process = spawn(*args, **kwargs)
             self.children.append(process)
+            # These tests start from delivered custody. Synchronize that
+            # fixture state before a 0.2 s deadline can race Python startup.
+            ready_by = time.monotonic() + 10
+            while not (self.night / "courier.sent").exists() and process.poll() is None:
+                self.assertLess(time.monotonic(), ready_by, "fixture courier never acknowledged delivery")
+                time.sleep(0.01)
+            self.assertTrue((self.night / "courier.sent").is_file())
             return process
         started = time.monotonic()
         with t0.process_journal(self.journal, observe_only=True), \
@@ -7413,7 +7424,14 @@ class HazardPackPrimitiveTests(unittest.TestCase):
                                                   "epoch_s": now, "monotonic_ns": 1}))
         monitor = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
         self.addCleanup(process_reaper.kill_and_wait, monitor)
-        identity = self.driver.observe_identity(monitor.pid)
+        # This test owns exactly this child. Inject the native ps identity
+        # probe through the existing seam; sandbox/runner ps permissions must
+        # not decide whether the dead-man exercises actual group termination.
+        identity = Identity("LIVE", "Tue Sep 8 01:02:03 2026")
+        identity_probe = mock.patch.object(self.driver, "observe_identity",
+            side_effect=lambda pid: identity if pid == monitor.pid else Identity("DEAD"))
+        identity_probe.start()
+        self.addCleanup(identity_probe.stop)
         (night / hazard_driver.MONITOR_JOURNAL).write_text(json.dumps(
             {"event": "start", "pid": monitor.pid, "pgid": monitor.pid, "start_time": identity.start_time}) + "\n")
         self.driver.make_probes = self.probes

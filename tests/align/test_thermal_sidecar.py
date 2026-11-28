@@ -17,8 +17,12 @@ from tests.hazards.test_temperature import FakeSensors, POLICY
 from tests.align.test_apple_campaign import base_config, episode_spec
 
 ROOT = Path(__file__).resolve().parents[2]
-# joulewise/b5/harvest.py moved to 42cad8de... with the reviewed harvest-off lane d5dc1198c (docs/align/v4/HARVEST-OFF-MERGED.md): post-window harvest only.
-PINNED = {'joulewise/hazards/smc.py': 'c1896f0c4fd8510ab4a2273927d4d71d8cc7a1a6940928117ba50d8441f70351', 'joulewise/hazards/monitor.py': '9ed83410fc2fe7bdbf8e8acffcf913af5bd4442bb23adc14ed61430e0a3c957b', 'joulewise/schemas.py': '344b12ce178b8acb212059097a4ade507812a4be1673a6552ec221a83055e1d1', 'joulewise/b5/driver.py': 'd8780edb8e5806535291b32ace77cdf9a7acd7c8546a36fffebd119c311c0d5e', 'joulewise/b5/harvest.py': '42cad8dec4295eef530b71374a8e4d0158a17028f5418c1507a56678ac49ab47'}
+# Driver: admitted W1 reliability 5bb152acc, 19a862dc8, 454d78142,
+# c6d25d963 (RL-35), 5dc2d4b48 and b4a6c217f (RL-37); same byte audit
+# as e01743ae4 in test_measurement_core_boundary. No later driver differences.
+# Harvest: d5dc1198c -> 2127e00bd (RL-58) scopes the parse memo to harvest;
+# this is the only intervening commit touching harvest.py.
+PINNED = {'joulewise/hazards/smc.py': 'c1896f0c4fd8510ab4a2273927d4d71d8cc7a1a6940928117ba50d8441f70351', 'joulewise/hazards/monitor.py': '9ed83410fc2fe7bdbf8e8acffcf913af5bd4442bb23adc14ed61430e0a3c957b', 'joulewise/schemas.py': '344b12ce178b8acb212059097a4ade507812a4be1673a6552ec221a83055e1d1', 'joulewise/b5/driver.py': '88068b64d09d3e335810e3b4718246cb3164223b87f96b56c5a098349882f90b', 'joulewise/b5/harvest.py': '8bfb8a6989a51c28aeb836064e3dc5ca220d32a89274dca382b5e83d1c425d4b'}
 
 class PlacementTests(unittest.TestCase):
     def test_gate_session_reuses_the_sidecar_reader_journal_and_cleanup(self):

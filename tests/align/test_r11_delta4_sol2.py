@@ -4,6 +4,7 @@ The retry-scope, validation-cache and pushed-tip witnesses are intentionally red
 48a4d1d76. Product fixes and authority decisions belong to the lead.
 No real capture, hardware probe, model, network or external user path is used.
 """
+from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
 import copy
 import os
 from pathlib import Path
@@ -48,7 +49,7 @@ class PacketBoundaryTests(unittest.TestCase):
             return session.arm_checks(scenario.root, scenario.next_plan,
                 next_arm_triage=packet, now=lambda: now, battery_log=log,
                 obc_off_attested_by='synthetic-review',
-                runner=lambda argv: subprocess.CompletedProcess(argv, 0, '', ''),
+                watchdog_check=_watchdog_acceptance, runner=lambda argv: subprocess.CompletedProcess(argv, 0, '', ''),
                 meter_probe=lambda root: {'live': meter_live})
 
     def test_actual_arm_admits_honest_packet_and_only_ignores_the_two_named_fields(self):

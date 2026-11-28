@@ -148,8 +148,10 @@ class W1PlanTests(unittest.TestCase):
         pending["R1"]["thermal_policy"] = None
         with self.assertRaisesRegex(ValueError, "still pending for: thermal_policy"):
             check(good, pending)
-        with self.assertRaisesRegex(ValueError, "still pending"):
-            validator.validate(good)  # committed inputs.json is pending
+        # PR #886 fills the committed inputs.json: nothing is pending there, and a synthetic
+        # template that does not copy the installed values is refused as a disagreement.
+        with self.assertRaisesRegex(ValueError, "^template disagrees with registration/inputs.json on: "):
+            validator.validate(good)
 
     def test_committed_template_is_regenerated_from_the_kit_roster(self):
         self.assertEqual(TEMPLATE.read_bytes(), validator.template_bytes())
@@ -182,6 +184,13 @@ class W1PlanTests(unittest.TestCase):
         candidate = filled_template()
         candidate["align_v4"]["thermal_policy"]["window_reference"] = {"role": "capture"}
         with self.assertRaisesRegex(ValueError, "installed per member"):
+            check(candidate)
+        # RL-148 section 2, RL-156 section 3.1: the template has no receipt slot, and a filled plan with one is refused.
+        self.assertNotIn("g0_cap_receipt", template["align_v4"]["thermal_policy"])
+        candidate = filled_template()
+        candidate["align_v4"]["thermal_policy"]["g0_cap_receipt"] = {"authority": "LEAD-RULINGS-2 R10-2(a)",
+                                                                    "receipt_sha256": "e" * 64}
+        with self.assertRaisesRegex(ValueError, "g0_cap_receipt names a ruling 1\\(f\\) receipt"):
             check(candidate)
 
     def test_t_dead_follows_lead_ruling_l1_and_binds_r1_tail(self):

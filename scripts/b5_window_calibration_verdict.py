@@ -176,13 +176,18 @@ def write_create_once(path: Path, verdict: Mapping[str, Any]) -> None:
         os.fsync(handle.fileno())
 
 
-def main(argv: Sequence[str] | None = None, *,
-         verifier: Callable[[Mapping[str, Any], bytes, bytes], float] | None = None,
-         estimator_digests: Callable[[], dict[str, str] | None] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--pre-calibration-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=None,
                         help=f"default: <pre-calibration-dir>/../{VERDICT_BASENAME}")
+    return parser
+
+
+def main(argv: Sequence[str] | None = None, *,
+         verifier: Callable[[Mapping[str, Any], bytes, bytes], float] | None = None,
+         estimator_digests: Callable[[], dict[str, str] | None] | None = None) -> int:
+    parser = build_parser()
     try:
         args = parser.parse_args(argv)
     except SystemExit as exc:

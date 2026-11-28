@@ -1017,12 +1017,72 @@ class ProductionArchiveTests(NumericTestCase):
         self.assertEqual(sum(p["status"]=="computed" for p in points),2)
 
 
+CAMPAIGN_WORKERS_ENV = "JW_BYTES_CAMPAIGN_WORKERS"
+
+
+def _campaign_seed_outputs(world, seed):
+    """Build one production-shaped campaign, run the real CLI chain, read its outputs.
+
+    Module level so a spawn pool can run a world's seeds concurrently. The D3
+    check runs here on the records it needs (the same assertions on a
+    NumericTestCase instance; a failure is re-raised in the test). Every other
+    assertion runs in the test on the returned outputs, in seed order.
+    """
+    design = ba.read_json(FIXTURES / "campaign_design.json")
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        manifest = archive_campaign(root, world=world, seed=seed,
+            pass_duration_scales=design["main_campaign"]["pass_duration_scales"],
+            clock_latency_ms=design["main_campaign"]["clock_latency_ms"], release="none")
+        cli_stage_chain(root, manifest)
+        records = ba.load_records(root / "export", manifest, stage="all")
+        d3 = assert_d3_exercised(NumericTestCase(), records, manifest)
+        return (d3, ba.read_json(root/"out/unavailable.json"),
+                ba.read_json(root/"out/h1.json"), ba.read_json(root/"out/h2.json"))
+
+
+@contextlib.contextmanager
+def _campaign_runner(seed_count):
+    """Yield run(world, seeds) -> per-seed outputs in seed order.
+
+    Seeds are independent: each owns its TemporaryDirectory and its seeded
+    random streams, and no seed reads another's files. A spawn process pool
+    runs them concurrently, one worker per CPU unless JW_BYTES_CAMPAIGN_WORKERS
+    says otherwise; 1 runs every seed serially in this process.
+    """
+    import concurrent.futures
+    import multiprocessing
+    workers = min(seed_count, int(os.environ.get(CAMPAIGN_WORKERS_ENV) or os.cpu_count() or 1))
+    if workers <= 1:
+        yield lambda world, seeds: (_campaign_seed_outputs(world, seed) for seed in seeds)
+        return
+    pool = concurrent.futures.ProcessPoolExecutor(
+        max_workers=workers, mp_context=multiprocessing.get_context("spawn"))
+    try:
+        yield lambda world, seeds: pool.map(_campaign_seed_outputs, [world] * len(seeds), seeds)
+    finally:
+        pool.shutdown(wait=True, cancel_futures=True)
+
+
 class CampaignWordRates(NumericTestCase):
-    def test_twenty_production_shaped_campaigns_per_world(self):
+    # One method per world, so CI can schedule each world as its own unit. Every
+    # aggregate assertion below is per world, so none crosses a method boundary.
+    def test_twenty_production_shaped_campaigns_per_world_bytes(self):
+        self._twenty_campaigns("bytes")
+
+    def test_twenty_production_shaped_campaigns_per_world_time(self):
+        self._twenty_campaigns("time")
+
+    def test_twenty_production_shaped_campaigns_per_world_resident(self):
+        self._twenty_campaigns("resident")
+
+    def _twenty_campaigns(self, world):
         from collections import Counter
         design = ba.read_json(FIXTURES / "campaign_design.json")
+        # The three methods together cover every world the design declares.
+        self.assertEqual(set(design["seeds"]), {"bytes", "time", "resident"})
         report = []
-        for world, seeds in design["seeds"].items():
+        for world, seeds in ((world, design["seeds"][world]),):
             words, coverage = Counter(), Counter()
             method_coverage, estimates = Counter(), {}
             d3 = []
@@ -1035,20 +1095,14 @@ class CampaignWordRates(NumericTestCase):
                   .01*m["R_bytes"]/1e9*512/(m["synthetic_duration_s"] * duration_scale) for x,m in zip(xs,design["models"])]
             mx,my = statistics.fmean(xs),statistics.fmean(ys)
             epsilon = math.fsum((x-mx)*(y-my) for x,y in zip(xs,ys))/math.fsum((x-mx)**2 for x in xs)
-            for seed in seeds:
-                with tempfile.TemporaryDirectory() as directory:
-                    root = Path(directory)
-                    manifest = archive_campaign(root, world=world, seed=seed,
-                        pass_duration_scales=design["main_campaign"]["pass_duration_scales"],
-                        clock_latency_ms=design["main_campaign"]["clock_latency_ms"], release="none")
-                    cli_stage_chain(root, manifest)
-                    records = ba.load_records(root / "export", manifest, stage="all")
-                    d3.append(assert_d3_exercised(self, records, manifest))
-                    self.assertEqual(ba.read_json(root/"out/unavailable.json"),[])
-                    for row in ba.read_json(root/"out/h1.json"):
+            with _campaign_runner(len(seeds)) as run:
+                for seed, (d3_row, unavailable, h1_rows, h2_rows) in zip(seeds, run(world, seeds)):
+                    d3.append(d3_row)
+                    self.assertEqual(unavailable,[])
+                    for row in h1_rows:
                         if row["selection"]=="primary" and row["basis"]=="gross primary" and row["role"]=="heldout" and row["pass_id"]=="mean":
                             words[row["boundary"],row["model"],row["word"]] += 1
-                    for row in ba.read_json(root/"out/h2.json"):
+                    for row in h2_rows:
                         if row["selection"]=="primary" and row["basis"]=="gross primary":
                             factor = 2 if row["boundary"]=="DC input" else 1
                             for fit,truth in (("two_term",epsilon*factor),
@@ -1075,7 +1129,7 @@ class CampaignWordRates(NumericTestCase):
                                         lo, hi = fitted[alternative][1]
                                         method_coverage[*key, "offset_ruled_k"] += lo <= truth <= hi
                                     estimates.setdefault(key, []).append((coefficient, se, truth))
-                print(f"BYTES synthetic {world} seed {seed} complete",flush=True)
+                    print(f"BYTES synthetic {world} seed {seed} complete",flush=True)
             n = len(seeds)
             # R8/Addendum 4 prescribe twenty independent campaigns per world.
             self.assertGreaterEqual(n,20)

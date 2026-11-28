@@ -44,8 +44,8 @@ cp $WORK/r1_slots.json configs/campaigns/align_v4/registration/r1_slots.json
 # 5. re-derive the contrast cap/fit from it; paste both fields into registration/inputs.json R1.thermal_policy
 python3.13 -B scripts/align_w1_budget_procedure.py derive-contrast
 
-# 6. R10-2 budget procedure (writes a receipt draft when branch (a)/(b); the lead signs)
-python3.13 -B scripts/align_w1_budget_procedure.py decide --draft-out $WORK/ruling_1f_draft.json
+# 6. budget procedure (RL-148 section 2: TYPICAL-CASE, RESEARCH-LEAD or R1-RERUN; no ruling 1(f) receipt, RL-156 section 3.1)
+python3.13 -B scripts/align_w1_budget_procedure.py decide
 
 # 7. regenerate the committed kit from the new slots (smoke G2: between installing the slots and --check)
 python3.13 -B scripts/align_v4_kit.py

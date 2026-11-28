@@ -98,7 +98,8 @@ class EntryPointTests(unittest.TestCase):
     def test_b6_main_reports_stop_from_every_phase(self):
         args = SimpleNamespace(plan=Path('plan'), registration_dir=Path('registration'),
             archive_root=Path('archive'), workers=1, allow_missing_terminal=False,
-            smoke=True, pack_records_root=Path('pack'), export_dir=Path('export'), non_claim=True)
+            smoke=True, pack_records_root=Path('pack'), export_dir=Path('export'), non_claim=True,
+            profile=None, io_workers=1)
         with mock.patch.object(harvest_b6_session.registration, 'load', return_value=None), \
              mock.patch.object(harvest_b6_session, 'resolve_inputs', return_value=object()):
             self.check_main(harvest_b6_session, args, 'harvest', 3)

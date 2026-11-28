@@ -20,8 +20,10 @@ from joulewise.schemas import BenchmarkConfig
 from joulewise.b6 import registration
 from scripts import align_pilot_session as pilot, align_v4_kit as kit, align_v4_session as session
 from scripts import validate_align_v4_w1_plan as validator
+from tests.align.v4_registration_fixtures import held_window_acceptance, session_plan
 
 ROOT = Path(__file__).resolve().parents[2]
+PENDING_RECEIPT = 'registration_receipt is pending or malformed'
 
 
 _LOG_DIR = []
@@ -89,7 +91,7 @@ class KitTests(unittest.TestCase):
 
     def test_committed_bytes_reproduce_without_reading_models(self):
         for path, raw in self.files.items():
-            self.assertEqual((ROOT / path).read_bytes(), raw, path)
+            self.assertEqual(kit.sha((ROOT / path).read_bytes()), kit.sha(raw), path)
 
     def test_roster_exactly_matches_amendment_a1(self):
         expected = ['anchor'] * 4 + ['D', 'X-G', 'Y-S', 'D', 'X-S', 'Y-G',
@@ -208,7 +210,7 @@ class KitTests(unittest.TestCase):
             self.assertIs(policy['heavy'], False)
             self.assertEqual(policy['per_turn'], m['role'].endswith('G'))
 
-    def test_d_has_required_base_controls_and_explicit_pending_slots(self):
+    def test_d_has_required_base_controls(self):
         for m in self.members:
             if m['role'] != 'D':
                 continue
@@ -226,9 +228,6 @@ class KitTests(unittest.TestCase):
             self.assertTrue(spec['task_kwargs']['give_hint'])
             self.assertEqual(config.sampling.idle_seconds, 300)
             self.assertNotIn('max_episode_seconds', spec)
-            for key in ('max_episode_decode_tokens', 'deadman_s'):
-                self.assertIn(key, spec)
-                self.assertIsNone(spec[key])
             self.assertEqual(spec['chat_template_kwargs'], {'reasoning_effort': 'medium'})   # R0 re-run 11
             self.assertIs(spec['thermal']['heavy'], True)
             self.assertIs(spec['thermal']['per_turn'], True)
@@ -324,31 +323,54 @@ class KitTests(unittest.TestCase):
         self.assertEqual(verdict['powermode_mismatches'][0]['run_id'], plan['members'][7]['run_id'])
 
     def test_sizing_is_only_a_provisional_preview_until_r1_fills_the_w1_plan(self):
-        self.assertNotIn(kit.W1_PLAN, self.files)
-        self.assertNotIn(kit.KIT / 'registration/sizing_b5.json', self.files)
-        preview = json.loads(self.files[kit.KIT / 'registration/sizing_preview.json'])
+        sizing = json.loads(self.files[kit.SIZING])
+        self.assertEqual(sizing['sources']['w1_plan']['sha256'],
+                         hashlib.sha256((ROOT / kit.W1_PLAN).read_bytes()).hexdigest())
+        kit.require_sizing(ROOT)
+        self.assertTrue(self.tree['non_claim'])
+        self.assertEqual(self.tree['draft_status'], 'FOR_LEAD_REVIEW')
+        self.assertEqual(self.plan['status'], 'FOR_LEAD_REVIEW')
+
+        pending, slots = ready_inputs()
+        pending['R1']['T_dead'] = None
+        with patch.object(kit, 'read_inputs', return_value=pending), \
+                patch.object(kit, 'read_r1_slots', return_value=slots), \
+                patch.object(kit, 'read_w1_plan_bytes', return_value=None):
+            files = kit.build_files(ROOT)
+        self.assertNotIn(kit.W1_PLAN, files)
+        self.assertNotIn(kit.SIZING, files)
+        preview = json.loads(files[kit.KIT / 'registration/sizing_preview.json'])
+        self.assertEqual(preview['status'], 'PROVISIONAL_NOT_ARM_SIZING')
         self.assertEqual(preview['planning_span_s'], 26927)
         self.assertEqual(preview['planning_window_max_s'], 44640)
         self.assertEqual(preview['span_limit_s'] - preview['planning_span_s'], 13)
-        self.assertTrue(self.tree['non_claim'])
-        self.assertEqual(self.tree['draft_status'], 'PROVISIONAL_SKELETON')
+        tree = json.loads(files[kit.KIT / 'plan_tree.json'])
+        self.assertTrue(tree['non_claim'])
+        self.assertEqual(tree['draft_status'], 'PROVISIONAL_SKELETON')
+        self.assertEqual(json.loads(files[kit.KIT / 'collection_plan.json'])['pending_inputs'], ['R1.T_dead'])
 
     def test_placeholders_fail_check_and_cannot_be_hidden_by_status(self):
-        with self.assertRaisesRegex(ValueError, 'BLOCKED.*R1'):
+        with self.assertRaisesRegex(ValueError, f'^{PENDING_RECEIPT}$'):
             kit.generate(ROOT, check=True)
-        inputs = kit.read_inputs(ROOT)
-        inputs['status'] = 'ready'
-        with self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.B_D'):
-            kit.require_ready(inputs)
-        self.assertNotIn('R0.reasoning_effort', kit.pending_inputs(kit.read_inputs(ROOT)))   # filled from R0 re-run 11
-        self.assertIn('R1.T_dead', self.plan['pending_inputs'])
-        # WP18 is filled; an emptied WP18 leaf still blocks, whatever status says.
-        inputs['WP18']['X']['max_turns'] = None
-        with self.assertRaisesRegex(ValueError, 'BLOCKED.*WP18.X.max_turns'):
-            kit.require_ready(inputs)
+        self.assertEqual(kit.pending_inputs(kit.read_inputs(ROOT)), [])
+        self.assertEqual(self.plan['pending_inputs'], [])
         with redirect_stderr(io.StringIO()) as err:
             self.assertEqual(kit.main(['--check']), 1)
-        self.assertIn('BLOCKED by placeholders', err.getvalue())
+        self.assertEqual(err.getvalue(), f'align_v4_kit: {PENDING_RECEIPT}\n')
+
+        r1_pending, slots = ready_inputs()
+        wp18_pending = deepcopy(r1_pending)
+        r1_pending['R1']['B_D'] = None
+        wp18_pending['WP18']['X']['max_turns'] = None
+        for inputs, field in ((r1_pending, r'R1\.B_D'), (wp18_pending, r'WP18\.X\.max_turns')):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
+                inputs['status'] = 'ready'
+                with patch.object(kit, 'read_inputs', return_value=inputs), \
+                        patch.object(kit, 'read_r1_slots', return_value=slots), \
+                        patch.object(kit, 'read_w1_plan_bytes', return_value=None):
+                    kit.generate(tmp)
+                    with self.assertRaisesRegex(ValueError, f'BLOCKED by placeholders: {field}'):
+                        kit.generate(tmp, check=True)
 
     def test_each_missing_owner_is_independently_fail_closed(self):
         # Even if all other owners have supplied nonempty values, this owner
@@ -357,9 +379,10 @@ class KitTests(unittest.TestCase):
         # WP11 (W1-blockers lane) and WP15 (the R1 runtime argv) are supplied;
         # emptying either must still block on its own.
         # WP18 is filled from the committed fixtures; it is checked below with the supplied owners.
-        self.assertEqual(pending_owners, {'R1'})      # R0 is filled from re-run 11
+        # R1 is filled by PR #886 (R0 from re-run 11): no owner is pending, and emptying R1 still blocks.
+        self.assertEqual(pending_owners, set())
         for owner, fields in kit.read_inputs(ROOT).items():
-            if not isinstance(fields, dict) or owner not in pending_owners | {'WP11', 'WP15', 'WP18'}:
+            if not isinstance(fields, dict) or owner not in pending_owners | {'WP11', 'WP15', 'WP18', 'R1'}:
                 continue
             candidate = {k: {name: 'supplied' for name in v} for k, v in kit.read_inputs(ROOT).items()
                          if isinstance(v, dict)}
@@ -370,9 +393,15 @@ class KitTests(unittest.TestCase):
                 kit.require_ready(candidate)
 
     def test_pending_specs_refuse_runtime_deserialization(self):
-        for m in self.members[4:]:
-            config = json.loads(self.files[Path(m['config_path'])])
-            with self.assertRaises((ValueError, TypeError)):
+        inputs, slots = ready_inputs()
+        inputs['R1']['thermal_policy'] = None
+        with patch.object(kit, 'read_inputs', return_value=inputs), \
+                patch.object(kit, 'read_r1_slots', return_value=slots), \
+                patch.object(kit, 'read_w1_plan_bytes', return_value=None):
+            files = kit.build_files(ROOT)
+        for member in self.members[4:]:
+            config = json.loads(files[Path(member['config_path'])])
+            with self.subTest(ordinal=member['ordinal']), self.assertRaises((ValueError, TypeError)):
                 EpisodeSpec.from_text(config['workload_profile']['prompt_text'])
 
     def test_kit_drift_is_reported_before_readiness(self):
@@ -457,7 +486,8 @@ def ready_inputs(i_d=300.0, tail=20.0):
     return inputs, slots
 
 
-GATED_PHASES = {'G0': 120.0, 'G1': 150.0, 'H': 90.0, 'decode': 280.0, 'prefill': 120.0, 'tool': 6.0}
+# PR #777 row-2 finding 5: no hold seconds (N_chunk 4,096); G1 + H stays 240 s as before.
+GATED_PHASES = {'G0': 120.0, 'G1': 240.0, 'H': 0.0, 'decode': 280.0, 'prefill': 120.0, 'tool': 6.0}
 
 
 def r1_record(i_d, tail, *, source=kit.R1_HARDWARE_SOURCE, ac_powermode=0):
@@ -478,7 +508,9 @@ def r1_record(i_d, tail, *, source=kit.R1_HARDWARE_SOURCE, ac_powermode=0):
                                 'phases_s': dict(GATED_PHASES, tail=tail if i == 0 else tail / 2),
                                 'decode_tokens': 14000, 'turn_decode_counts': [2000]*7,
                                 'turn_completed': [True]*7, 'admitted_turns': 7, 'x7': False,
-                                'turn_counts_source_sha256': 'c'*64, 'duty_bar': {'pass': True, 'verdict': 'pass'}}
+                                'turn_counts_source_sha256': 'c'*64, 'duty_bar': {'pass': True, 'verdict': 'pass'},
+                                # RL-148/RL-149 typical-case bar: six G1 waits (240 s of G1), none timed out.
+                                'gate_waits_s': {'G1': [40.0] * 6}, 'g1_timeouts': 0}
                                for i, name in enumerate(kit.GATED_D_RUN_NAMES)],
             'budget_fit_inputs': {'r_decode_tok_per_s': 50.0, 'r_decode_step_d_tok_per_s': 50.0,
                                   'turn_cap_tokens': 4096},
@@ -648,7 +680,8 @@ class R1EvidenceBindingTests(unittest.TestCase):
         inputs, slots = ready_inputs()
         kit.require_ready(inputs, slots)
         with patch.object(kit, 'read_inputs', return_value=inputs), \
-                patch.object(kit, 'read_r1_slots', return_value=slots):
+                patch.object(kit, 'read_r1_slots', return_value=slots), \
+                patch.object(kit, 'read_w1_plan_bytes', return_value=None):
             files = kit.build_files(ROOT)
         plan = json.loads(files[kit.KIT / 'collection_plan.json'])
         for member in plan['members']:
@@ -708,12 +741,11 @@ class R1EvidenceBindingTests(unittest.TestCase):
 class R1BudgetBindingTests(unittest.TestCase):
     """Lead ruling R5-4: B_D, the thermal policy and ruling 1(f) bind to r1_slots."""
 
-    def test_b_d_may_only_be_lowered_from_the_step_d_budget(self):
+    def test_b_d_above_the_step_d_budget_is_refused(self):
         inputs, slots = ready_inputs()
-        inputs['R1']['B_D'] = 6144
         kit.require_ready(inputs, slots)
         inputs['R1']['B_D'] = 9216
-        with self.assertRaisesRegex(ValueError, 'exceeds r1_slots.slots.B_D 8192'):
+        with self.assertRaisesRegex(ValueError, 'must equal the decided step-d budget 8192'):
             kit.require_ready(inputs, slots)
 
     def test_r1_slots_without_an_admissible_step_d_budget_refuse(self):
@@ -754,13 +786,13 @@ class R1BudgetBindingTests(unittest.TestCase):
         self.assertAlmostEqual(fit['worst_s'], 600 + 240 + 126 + 12288 / 50)
         self.assertTrue(fit['fits'])
         set_decode_rate(slots, 11.0)   # FD:145's ~370 s per 4,096 tokens
-        with self.assertRaisesRegex(ValueError, r'ruling 1\(f\): B_D 8192 does not fit.*largest fitting B_D is None'):
-            kit.require_ready(inputs, slots)
+        # RL-148 section 2, RL-149 section 1.5: ruling 1(f)'s worst case no longer refuses D;
+        # require_ready asks that the typical case fits (tests/align/test_rl149_typical_case.py).
+        kit.require_ready(inputs, slots)
         set_decode_rate(slots, 37.0)   # 966 + (B_D + 4096)/37 <= 1277.0
         self.assertEqual(kit.max_fitting_b_d(slots, inputs['R1']['T_dead']), 7168)
-        with self.assertRaisesRegex(ValueError, 'largest fitting B_D is 7168'):
-            kit.require_ready(inputs, slots)
-        inputs['R1']['B_D'] = 7168
+        # RL-148 section 2, RL-149 section 1.5: ruling 1(f)'s worst case no longer refuses D;
+        # require_ready asks that the typical case fits (tests/align/test_rl149_typical_case.py).
         kit.require_ready(inputs, slots)
 
     def test_ruling_1f_needs_the_measured_inputs(self):
@@ -915,8 +947,10 @@ class Round6KitTests(unittest.TestCase):
         self.assertEqual(fit['r_decode_tok_per_s'], 10.0)
         self.assertAlmostEqual(fit['terms_s']['decode_s'], (8192 + 4096) / 10.0)
         # 966 + 12,288/10 > T_dead: step-d's rate alone would have admitted it.
-        with self.assertRaisesRegex(ValueError, r'ruling 1\(f\): B_D 8192 does not fit'):
-            kit.require_ready(inputs, slots)
+        # RL-148 section 2, RL-149 section 1.5: ruling 1(f)'s worst case no longer refuses D;
+        # the budget check asks that the typical case fits (tests/align/test_rl149_typical_case.py).
+        checked = kit.check_r1_budget_and_policy(inputs['R1'], slots, x_max_turns=12)
+        self.assertEqual((checked['fits'], checked['typical_case']['fits']), (False, True))
         # A run that decoded nothing (G0 timeout) has no rate and does not lower it.
         inputs, slots = ready_inputs()
         slots['deadman_budget'][1]['decode_tokens'] = 0
@@ -945,14 +979,15 @@ class Round6KitTests(unittest.TestCase):
     def test_an_inconclusive_step_d_is_refused_by_name(self):
         inputs, slots = ready_inputs()
         slots['inconclusive_segments'] = {kit.STEP_D_SEGMENT: 'G0 did not release, twice'}
-        with self.assertRaisesRegex(ValueError, 'step-d was INCONCLUSIVE'):
+        with self.assertRaisesRegex(ValueError, 'INCONCLUSIVE'):
             kit.require_ready(inputs, slots)
 
     def test_an_inconclusive_designed_state_refuses_w1(self):
         # Sol critique of round 6: fail closed at the kit for every R6-2 segment.
         inputs, slots = ready_inputs()
         slots['inconclusive_segments'] = {'planning_turn_R_plus_2C': 'G0 did not release, twice'}
-        with self.assertRaisesRegex(ValueError, r'INCONCLUSIVE \(R6-2\): planning_turn_R_plus_2C'):
+        # a85ee8ec6: RL-72 bars flagged/inconclusive feeding members, including X-G.
+        with self.assertRaisesRegex(ValueError, r'INCONCLUSIVE \(RL-72\): planning_turn_R_plus_2C'):
             kit.require_ready(inputs, slots)
         del slots['inconclusive_segments']
         with self.assertRaisesRegex(ValueError, 'inconclusive_segments'):
@@ -1055,13 +1090,15 @@ class Round7KitTests(unittest.TestCase):
         old_worst = 120 + 240 + 126 + (8192 + 4096) / 20
         self.assertLess(old_worst, inputs['R1']['T_dead'])
         self.assertFalse(fit['fits'])
-        with self.assertRaisesRegex(ValueError, r'ruling 1\(f\).*g0_cap_w1'):
-            kit.require_ready(inputs, slots)
+        # RL-148 section 2, RL-149 section 1.5: ruling 1(f)'s worst case no longer refuses D;
+        # require_ready asks that the typical case fits (tests/align/test_rl149_typical_case.py).
+        kit.require_ready(inputs, slots)
 
     def test_inconclusive_x_g_falls_back_and_is_admitted_when_1f_fits(self):
         inputs, slots = ready_inputs(i_d=0)
         for row in slots['deadman_budget']:
             row['phases_s'].update(G1=0, H=0)
+            row['gate_waits_s'] = {'G1': []}     # PR #777 row-2 finding 5: the waits add up to phases_s.G1
         set_decode_rate(slots, 80.0)
         slots['x_g'] = {'status': 'inconclusive', 'g0_outcome': 'timeout', 'g0_wait_s': 1200}
         cap = slots['g0_cap_w1'] = kit.w1_g0_cap(slots)
@@ -1091,7 +1128,7 @@ class Round7KitTests(unittest.TestCase):
             with self.subTest(segment=segment), self.assertRaises(ValueError) as raised:
                 kit.require_ready(inputs, slots)
             message = str(raised.exception)
-            for text in ('re-run', 'magistrate', 'no per-occurrence lead ruling', 'LEAD-RULINGS-2 R7-3'):
+            for text in ('INCONCLUSIVE', 'candidate slots', 'research lead ruling'):
                 self.assertIn(text, message)
 
     def test_missing_or_malformed_alias_groups_refuse(self):
@@ -1178,6 +1215,9 @@ class SessionParameterTests(unittest.TestCase):
         env = patch.dict(os.environ, {powermode.HOST_STATE_ENV: str(Path(host.name) / 'host-power')})
         env.start()
         self.addCleanup(env.stop)
+        held = patch.object(session, 'held_window_check', side_effect=held_window_acceptance)
+        held.start()
+        self.addCleanup(held.stop)
 
     def test_v3_defaults_and_v4_prepare_parameters(self):
         with patch.object(pilot.h, 'prepare', return_value='prepared') as prepare:
@@ -1197,9 +1237,17 @@ class SessionParameterTests(unittest.TestCase):
         self.assertEqual(pilot.SCHEMA, 'joulewise.align_pilot_desk.v3')
 
     def test_v4_prepare_refuses_before_shared_prepare_or_session_creation(self):
+        blanked, slots = ready_inputs()
+        blanked['R1']['B_D'] = None
         with tempfile.TemporaryDirectory() as tmp, patch.object(pilot, 'prepare') as prepare:
             target = Path(tmp) / 'new-session'
-            with self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.B_D'):
+            with self.assertRaisesRegex(ValueError, f'^{PENDING_RECEIPT}$'):
+                session.prepare(ROOT, target)
+            # A synthetic blanked R1 leaf still refuses before the shared prepare.
+            with patch.object(kit, 'read_inputs', return_value=blanked), \
+                    patch.object(kit, 'read_r1_slots', return_value=slots), \
+                    patch.object(kit, 'build_files', return_value={}), \
+                    self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.B_D'):
                 session.prepare(ROOT, target)
             prepare.assert_not_called()
             self.assertFalse(target.exists())
@@ -1209,6 +1257,7 @@ class SessionParameterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.object(pilot, 'prepare') as prepare, \
                 patch.object(kit, 'read_inputs', return_value=inputs), \
                 patch.object(kit, 'read_r1_slots', return_value=slots), \
+                patch.object(kit, 'read_w1_plan_bytes', return_value=None), \
                 patch.object(kit, 'build_files', return_value={}):
             target = Path(tmp) / 'new-session'
             with self.assertRaisesRegex(ValueError, r'BLOCKED: .*sizing_b5\.json is not derivable yet.*'
@@ -1218,8 +1267,16 @@ class SessionParameterTests(unittest.TestCase):
             self.assertFalse(target.exists())
 
     def test_v4_install_refuses_before_shared_installer(self):
+        blanked, slots = ready_inputs()
+        blanked['R1']['B_D'] = None
         with patch.object(pilot.h, 'read', return_value={'measurement_root': str(ROOT)}), patch.object(pilot, 'install') as install:
-            with self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.B_D'):
+            with self.assertRaisesRegex(ValueError, f'^{PENDING_RECEIPT}$'):
+                session.install('synthetic-session', w1_disk_config='/x.json')
+            # A synthetic blanked R1 leaf still refuses before the shared installer.
+            with patch.object(kit, 'read_inputs', return_value=blanked), \
+                    patch.object(kit, 'read_r1_slots', return_value=slots), \
+                    patch.object(kit, 'build_files', return_value={}), \
+                    self.assertRaisesRegex(ValueError, 'BLOCKED.*R1.B_D'):
                 session.install('synthetic-session', w1_disk_config='/x.json')
             install.assert_not_called()
 
@@ -1233,7 +1290,8 @@ class SessionParameterTests(unittest.TestCase):
         seed_series(measurement)
         (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(plan))
         (measurement / kit.R1_SLOTS).write_text(json.dumps({'ac_powermode': mode_expected}))
-        pilot.h.write(session_root / 'session.json', {'measurement_root': str(measurement)})
+        pilot.h.write(session_root / 'session.json', session_plan(session_root,
+                                                               {'measurement_root': str(measurement)}))
         return measurement, session_root
 
     def test_v4_install_reads_measurement_r1_slots_and_refuses_powermode_mismatch(self):
@@ -1470,7 +1528,10 @@ class PendingMessageTests(unittest.TestCase):
         self.assertNotIn('WP15', text)  # the R1 runtime argv is committed in inputs.json
         self.assertNotIn('WP18', text)  # filled from the committed X/Y token fixtures
         self.assertNotIn('R0.reasoning_effort', text)
-        self.assertIn('| R1: ' + kit.PENDING_REASONS['R1'], text)
+        self.assertNotIn('BLOCKED by placeholders', text)
+        self.assertNotIn('| R1: ', text)
+        self.assertEqual(text, PENDING_RECEIPT)
+        self.assertIn('| R1: ' + kit.PENDING_REASONS['R1'], self.message(R1=('B_D',)))
 
 
 class W1SizingTests(unittest.TestCase):
@@ -1478,21 +1539,19 @@ class W1SizingTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        from scripts import align_v4_w1_synthetic as dry
+
         cls.inputs, cls.slots = ready_inputs()
-        with patch.object(kit, 'read_inputs', return_value=deepcopy(cls.inputs)), \
-                patch.object(kit, 'read_r1_slots', return_value=deepcopy(cls.slots)), \
-                patch.object(kit, 'read_w1_plan_bytes', return_value=None):
-            # D config bytes depend on the R1 inputs; bind the plan to that roster.
-            cls.collection_plan = json.loads(kit.build_files(ROOT)[kit.KIT / 'collection_plan.json'])
+        # D config bytes depend on the R1 inputs; bind the plan to that roster.
+        cls.collection_plan, _, cls.preview_files = dry.build_kit(cls.inputs, cls.slots)
         cls.plan = filled_w1_plan(cls.inputs, cls.slots, collection_plan=cls.collection_plan)
         cls.raw = (json.dumps(cls.plan, indent=2, sort_keys=True) + '\n').encode()
-        with patch.object(kit, 'read_inputs', return_value=deepcopy(cls.inputs)), \
-                patch.object(kit, 'read_r1_slots', return_value=deepcopy(cls.slots)), \
-                patch.object(kit, 'read_w1_plan_bytes', return_value=cls.raw):
-            cls.files = kit.build_files(ROOT)
+        _, _, cls.files = dry.build_kit(cls.inputs, cls.slots, w1_plan=cls.plan)
         cls.sizing = json.loads(cls.files[kit.SIZING])
 
     def test_kit_derives_sizing_from_the_filled_plan_with_the_design_arithmetic(self):
+        self.assertNotIn(kit.W1_PLAN, self.preview_files)
+        self.assertNotIn(kit.SIZING, self.preview_files)
         self.assertEqual(self.files[kit.W1_PLAN], self.raw)
         sized = self.sizing['packs'][kit.PACK_ID]
         # Amendment 1 W1 arithmetic at the planning member_s.
@@ -1531,9 +1590,9 @@ class W1SizingTests(unittest.TestCase):
             kit.build_files(ROOT)
 
     def test_require_sizing_needs_the_plan_then_the_derived_file(self):
-        with self.assertRaisesRegex(ValueError, r'sizing_b5\.json is not derivable yet.*FINAL-DESIGN B8'):
-            kit.require_sizing(ROOT)
         with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, r'sizing_b5\.json is not derivable yet.*FINAL-DESIGN B8'):
+                kit.require_sizing(tmp)
             (Path(tmp) / kit.W1_PLAN).parent.mkdir(parents=True)
             (Path(tmp) / kit.W1_PLAN).write_bytes(self.raw)
             with self.assertRaisesRegex(ValueError, 'missing; regenerate'):
@@ -1614,6 +1673,9 @@ class W1HighPowerTests(unittest.TestCase):
         env = patch.dict(os.environ, {powermode.HOST_STATE_ENV: str(Path(host.name) / 'host-power')})
         env.start()
         self.addCleanup(env.stop)
+        held = patch.object(session, 'held_window_check', side_effect=held_window_acceptance)
+        held.start()
+        self.addCleanup(held.stop)
 
     def install(self, tmp, ac_powermode, *, gate_status='pass', start_mode=0):
         from joulewise.align.apple import powermode
@@ -1624,9 +1686,9 @@ class W1HighPowerTests(unittest.TestCase):
             {'runtime_requirements': {'ac_powermode': ac_powermode}}))
         session_root = Path(tmp) / 's'
         (session_root / 'staging').mkdir(parents=True, exist_ok=True)
-        (session_root / 'session.json').write_text(json.dumps(
+        (session_root / 'session.json').write_text(json.dumps(session_plan(session_root,
             {'measurement_root': str(measurement), 'inputs': {'custody_root': str(Path(tmp) / 'custody')},
-             'plan_path': str(Path(tmp) / 'custody/night_plan.json')}))
+             'plan_path': str(Path(tmp) / 'custody/night_plan.json')})))
         self.marker = Path(powermode.host_marker_path())
         self.host = FakeArmHost(mode=start_mode, marker=self.marker)
         config = W1DiskGateTests.config(self, tmp)
@@ -1779,8 +1841,11 @@ class W1DiskGateTests(unittest.TestCase):
         (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(plan))
         session_root = Path(tmp) / 's'
         (session_root / 'staging').mkdir(parents=True, exist_ok=True)
-        (session_root / 'session.json').write_text(json.dumps({'measurement_root': str(measurement)}))
-        with patch.object(kit, 'generate'), patch.object(pilot, 'install') as install:
+        (session_root / 'session.json').write_text(json.dumps(session_plan(session_root,
+                                                               {'measurement_root': str(measurement)})))
+        with patch.object(kit, 'generate'), \
+                patch.object(session, 'held_window_check', side_effect=held_window_acceptance), \
+                patch.object(pilot, 'install') as install:
             try:
                 host = FakeArmHost(mode=0)
                 session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic', **topup(), **kwargs)
@@ -1848,7 +1913,8 @@ class W1DiskGateTests(unittest.TestCase):
         self.assertEqual(seen, {'session_root': Path('s'), 'w1_disk_config': Path('/c.json'),
                                 'obc_off_attested_by': 'synthetic', 'battery_log': [Path('/b.jsonl'), Path('/c.jsonl')],
                                 'window_battery_journal': [Path('/w.jsonl')],
-                                'next_arm_triage': Path('/t.json')})
+                            'next_arm_triage': Path('/t.json'), 'weight_digests_attested': None,
+                            'runtime_stack_attested': None, 'held_window_ruling': None})
 
 
 if __name__ == '__main__':

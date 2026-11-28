@@ -57,17 +57,21 @@ from joulewise.tolerances import NEG8_ENERGY_ABS_TOL_J
 from joulewise.desk_compress import is_file as logical_is_file, read_bytes
 
 import concurrent.futures
+import contextlib
+import contextvars
 import dataclasses
 import hashlib
 import importlib
 import json
 import math
 import os
+import pickle
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -2242,9 +2246,50 @@ def strict_problems(bundle: Path, cache: dict[str, float]) -> list[str]:
     return list(validate_bundle(bundle, strict=True))
 
 
+_DOCUMENT_MEMO: contextvars.ContextVar[dict[str, bytes] | None] = contextvars.ContextVar(
+    "joulewise_harvest_document_memo", default=None)
+_DOCUMENT_MEMO_LOCK = threading.RLock()
+
+
+@contextlib.contextmanager
+def document_memo():
+    """Deduplicate document parsing only for this member's assessment context.
+
+    Member workers are separate processes. Serialize scopes in this process;
+    unrelated threads/contexts still call the original parser without a memo.
+    Nested scopes get independent caches and restore their enclosing scope.
+    """
+    from joulewise.adapters import powermetrics
+
+    with _DOCUMENT_MEMO_LOCK:
+        original = powermetrics._powermetrics_documents
+        outermost = _DOCUMENT_MEMO.get() is None
+        token = _DOCUMENT_MEMO.set({})
+
+        def parse(data):
+            memo = _DOCUMENT_MEMO.get()
+            if memo is None:
+                return original(data)
+            key = hashlib.sha256(data).hexdigest()
+            stored = memo.get(key)
+            if stored is not None:
+                return pickle.loads(stored)
+            result = original(data)
+            memo[key] = pickle.dumps(result, protocol=pickle.HIGHEST_PROTOCOL)
+            return result
+
+        try:
+            if outermost:
+                powermetrics._powermetrics_documents = parse
+            yield
+        finally:
+            if outermost:
+                powermetrics._powermetrics_documents = original
+            _DOCUMENT_MEMO.reset(token)
+
+
 def assess_member(task: Mapping[str, Any]) -> dict[str, Any]:
     """Strict validation, re-reduction, anchor recompute and identity for one bundle."""
-    from joulewise.adapters.powermetrics import document_memo
     from joulewise.desk_restore import readable_run
 
     bundle = Path(task["bundle_path"])

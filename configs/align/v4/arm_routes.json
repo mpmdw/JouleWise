@@ -11,11 +11,9 @@
         "window_max_s": 105427,
         "authority": "RUN_STATE 224 (lead ruling R13: Sol HAZARD_PACK route), 225 (arm exactly this commit), 227 (armed)"
       },
-      "ref": "lane/2026-11-08-r1-arm-fixes",
-      "commit": "20e9edbc446a9f89a68badc1bd32bb0934cbb86d",
       "receipt_class": "HAZARD_PACK",
       "runbook": "docs/align/r1_arm_runbook.md",
-      "note": "Pinned: the route lives at this commit, not on the v4 branch; arm-route verifies its files at the commit and runs its probes in a scratch clone of it. Follow RUN_STATE 225 N1, not the runbook fetch line.",
+      "note": "R1 follow-up night (RL-59/RL-64/RL-72): the route now lives on this line, beside the follow-up driver it arms, sized to RL-72 E2 (programmed_span_s 108,768, window_max_s 126,480) and with no plan ac_powermode (absent = 0). It was pinned at 20e9edbc446a9f89a68badc1bd32bb0934cbb86d (lane/2026-11-08-r1-arm-fixes) for the first R1 night; 'armed' records that night.",
       "steps": [
         {
           "id": "arm-r1",

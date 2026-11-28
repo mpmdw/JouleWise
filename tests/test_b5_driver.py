@@ -356,7 +356,10 @@ class HazardRefusalTests(unittest.TestCase):
         result = harness.result()
         self.assertEqual("REFUSED", result["verdict"])
         self.assertFalse((harness.night / "chain.started").exists())
-        self.assertEqual(before, harness.custody_digests())
+        # 19a862dc8 / c6d25d963: a night that turned NTP OFF restores ON
+        # even on refusal. The other custody bytes still remain unchanged.
+        expected = {**before, 'network_time': 'on' if off_expected else before['network_time']}
+        self.assertEqual(expected, harness.custody_digests())
         self.assertEqual([], fake_window.calls(harness.measurement))   # no chain tool ever ran
         self.assertEqual([], harness.lineage_calls)
         self.assertFalse((harness.night / b5_driver.MONITOR_JOURNAL).exists())
@@ -1315,6 +1318,9 @@ class B6ReviewRegressionTests(unittest.TestCase):
         with (
             mock.patch.object(b5_driver, "MonitorSupervisor", return_value=monitor),
             mock.patch.object(b5_driver, "await_monitor_ready", return_value=(True, [])),
+            # 454d78142 adds a first-sample meter gate. This child-free
+            # harness fakes its readiness alongside the monitor's readiness.
+            mock.patch.object(b5_driver, "await_meter_ready", return_value={"ready": True}),
             mock.patch.object(harness.driver, "_run_chain_once", side_effect=lambda *a, **kw: chain_once(harness, **kw)),
             mock.patch.object(sleep_guard, "safe_sleep_reading", side_effect=readings) if readings else contextlib.nullcontext(),
         ):

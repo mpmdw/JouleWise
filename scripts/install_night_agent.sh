@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  print "usage: $0${1:+ (invalid $1)} --plan PLAN.json [--python ABS_PATH] [--launchd-probe] [--probe-timeout-s S] [--probe-max-age-s S] [--hour H] [--minute M] [--uninstall] [--render-only DIR] [--launchctl-bin PATH] [--courier-bin ABS_PATH]" >&2
+  print "usage: $0${1:+ (invalid $1)} --plan PLAN.json [--python ABS_PATH] [--launchd-probe] [--probe-timeout-s S] [--probe-max-age-s S] [--hour H] [--minute M] [--uninstall] [--render-only DIR] [--launchctl-bin PATH] [--courier-bin ABS_PATH] [--execution-commit OID]" >&2
   exit 2
 }
 
@@ -23,6 +23,7 @@ while (( $# )); do
     --uninstall) uninstall=1; args+=("$1"); shift ;;
     --render-only) [[ $# -ge 2 && -n "$2" ]] || usage "$1"; args+=("$1" "${2:A}"); shift 2 ;;
     --courier-bin) [[ $# -ge 2 && -n "$2" ]] || usage "$1"; args+=("$1" "${2:A}"); shift 2 ;;
+    --execution-commit) [[ $# -ge 2 && -n "$2" ]] || usage "$1"; args+=("$1" "$2"); shift 2 ;;
     --launchctl-bin)
       [[ $# -ge 2 && -n "$2" ]] || usage "$1"
       if [[ "$2" == */* ]]; then

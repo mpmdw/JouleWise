@@ -134,7 +134,8 @@ class Fix416Tests(unittest.TestCase):
             source = root / 'summary_metrics.json'
             source.write_text('{"phase_energy_j":{"decode":1}}')
             emit = Mock()
-            stub = SimpleNamespace(sources={'run': source}, original={'run': harvest.tree_inventory(source)}, emit=emit)
+            stub = SimpleNamespace(sources={'run': source}, original={'run': harvest.tree_inventory(source)},
+                                   seams=harvest.Seams(), emit=emit)
             harvest._Harvest.sources_unchanged(stub)
             emit.assert_not_called()
             source.write_text('{"phase_energy_j":{"decode":2}}')

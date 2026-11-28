@@ -188,6 +188,18 @@ class WindowPlanTests(WindowPlanFixture):
         self.assertFalse((self.root / "custody").exists())
         self.assertFalse((self.root / "runs" / leaf["claim_root_leaf"]).exists())
 
+    def test_cap10_a_controls_root_never_moves_the_night_plan_off_the_custody_root(self):
+        # CAP 10 I2 (PR #896): C1 keeps its chain controls in S, but publishes
+        # its night plan where the installer admits it: night_plan_path(custody).
+        inputs = self.inputs()
+        controls = self.root / "attempt-inputs" / "controls"
+        record = self.write(inputs, controls_root=controls)
+        self.assertEqual(str(night_gate.night_plan_path(inputs["custody_root"])), record["plan"]["path"])
+        self.assertFalse((controls / night_gate.PLAN_BASENAME).exists())
+        for name in ("chain", "sidecar", "window_env"):
+            self.assertTrue(Path(record[name]["path"]).is_relative_to(controls), name)
+        self.assertEqual(record["plan"]["path"], record["driver_argv"][-1])
+
     def test_declared_ac_powermode_is_carried_into_the_night_plan(self):
         # Lead ruling R5-6: ALIGN v4 W1 under an adopted High Power declares 2.
         record = self.write(self.inputs(ac_powermode=2))

@@ -1,0 +1,94 @@
+{
+  "derivation": "ALIGN v4 W1 sizing from the R1-filled W1 plan (FINAL-DESIGN B8). member_s per member is R1's; programmed_span_s = ceil(scaffold_s + sum member_s); T_stream_max_s = max member_s (<= 1,800 s spent cap). Disk per member = ceil(pilot-3 OLS bundle_bytes(member_s) + largest positive pilot-3 residual); B = sum + measured pilot-3 scaffold bytes; two copies (FINAL-DESIGN 2.5, Amendment 1: 18.71 GB per copy at the planning member_s).",
+  "non_claim": true,
+  "packs": {
+    "align-v4": {
+      "B_D": 10240,
+      "T_stream_max_s": 1760.0,
+      "align_members": 18,
+      "align_s": 21691.28,
+      "disk_derivation": {
+        "B_bytes": 18588855587,
+        "extra_wait_peak_bytes": 0,
+        "fixed_retained_bytes": 0,
+        "formula": "ceil(pilot-3 OLS bundle_bytes(member_s) + largest positive pilot-3 residual) per member; plus measured pilot-3 scaffold; two copies",
+        "peak_copies": 2,
+        "scaffold_bytes": 4035540899
+      },
+      "disk_member_law": {
+        "intercept": 186751297.4892578,
+        "largest_abs_residual": 4286133.76241523,
+        "largest_positive_residual": 4286133.76241523,
+        "n": 24,
+        "residual_sd": 2124434.6016148976,
+        "slope": 512401.3389438561
+      },
+      "estimated_footprint_bytes": 37177711174,
+      "fits_spent_cap": true,
+      "flags": [],
+      "member_cap": {
+        "spent_s": 1800
+      },
+      "member_count": 43,
+      "member_seconds": {
+        "1": 782.82,
+        "10": 1150,
+        "11": 1760.0,
+        "12": 1150,
+        "13": 850,
+        "14": 1760.0,
+        "15": 850,
+        "16": 1150,
+        "17": 1760.0,
+        "18": 1760.0,
+        "2": 782.82,
+        "3": 782.82,
+        "4": 782.82,
+        "5": 1760.0,
+        "6": 1150,
+        "7": 850,
+        "8": 1760.0,
+        "9": 850
+      },
+      "member_upper_bytes": {
+        "1": 592155448,
+        "10": 780298972,
+        "11": 1092863788,
+        "12": 780298972,
+        "13": 626578570,
+        "14": 1092863788,
+        "15": 626578570,
+        "16": 780298972,
+        "17": 1092863788,
+        "18": 1092863788,
+        "2": 592155448,
+        "3": 592155448,
+        "4": 592155448,
+        "5": 1092863788,
+        "6": 780298972,
+        "7": 626578570,
+        "8": 1092863788,
+        "9": 626578570
+      },
+      "pack_id": "align-v4",
+      "programmed_span_s": 26687,
+      "scaffold_members": 25,
+      "scaffold_s": 4995,
+      "span_limit_s": 26940,
+      "window_max_s": 44400
+    }
+  },
+  "schema_version": "joulewise.b5_sizing.v1",
+  "sources": {
+    "disk_law": {
+      "commit": "83e2dac59",
+      "path": "configs/campaigns/align_pilot_v3/registration/sizing_b5.json",
+      "pointer": "/packs/align-pilot-v3/disk_member_law",
+      "sha256": "8e52a898c4793e56e90e496742e60cf00bf53ce3278ae292577f1ddeaef4aae6"
+    },
+    "w1_plan": {
+      "path": "configs/campaigns/align_v4/registration/w1_plan.json",
+      "sha256": "643f1b1a9279e5284eb588eb56e04b70d84ccfa9194e0172c8faedd5c8ddfc88"
+    }
+  }
+}

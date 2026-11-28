@@ -67,7 +67,7 @@ PAUSE_LIMIT_S = 7200
 SESSION_WAIT_BUDGET_S = 7200
 DEFAULT_LEDGER_RELATIVE = "runs/calibration_observation_ledger.jsonl"
 HEAD_PIN_RELATIVE = "configs/calibration/calibration_ledger_head.json"
-PLAN_BASENAME = "night_plan.json"
+PLAN_BASENAME = night_gate.PLAN_BASENAME
 CHAIN_BASENAME = "chain.zsh"
 WINDOW_ENV_BASENAME = "window.env"
 RECORD_BASENAME = "b5-window-plan-record.json"
@@ -146,6 +146,17 @@ def _require(condition: bool, detail: str) -> None:
 
 DISPATCH_SCHEMA = "joulewise.b5_stage_dispatch.v1"
 
+def canonical_repo_path(value: str) -> Path:
+    """A portable key in the staged repository namespace, with no filesystem access."""
+    path = Path(value)
+    _require(not path.is_absolute() and bool(path.parts) and ".." not in path.parts
+             and not any(char in value for char in "\0\n\r"),
+             f"staged input must name a repository-relative file or directory: {value!r}")
+    forbidden = {".git", "restricted", "night-custody", "night-archive"}
+    _require(not any(part in forbidden or part.startswith("jw-b5-") for part in path.parts),
+             f"staged input names a restricted path: {value!r}")
+    return path
+
 
 @dataclasses.dataclass(frozen=True)
 class StageDispatch:
@@ -167,7 +178,8 @@ class StageDispatch:
                 "run_ids": list(self.run_ids) if self.run_ids is not None else None, "error": self.error}
 
 
-def _dispatch_of(row: Any, repo_root: Path, bindings: Mapping[str, str] | None) -> StageDispatch:
+def _dispatch_of(row: Any, tree: Mapping[str, Any], repo_root: Path, bindings: Mapping[str, str] | None,
+                 read_manifest: Callable[[Path], bytes] | None = None, *, selection=None) -> StageDispatch:
     stage_id = str(row.get("stage_id")) if isinstance(row, Mapping) else "?"
     ordinal = row.get("ordinal") if isinstance(row, Mapping) and type(row.get("ordinal")) is int else None
     binding: str | None = None
@@ -177,32 +189,34 @@ def _dispatch_of(row: Any, repo_root: Path, bindings: Mapping[str, str] | None) 
         bound = bindings.get(binding) if bindings is not None and binding is not None else None
         return StageDispatch(stage_id, ordinal, binding, bound, config, digest, None, detail)
 
-    try:
-        commands = row["launch"]["commands"]
-        arguments = commands[0]["argv_template"]["arguments"]
-        _require(isinstance(commands, list) and len(commands) == 1 and isinstance(arguments, list),
-                 "launch has not exactly one command")
-    except (KeyError, IndexError, TypeError, WindowPlanError):
-        return failed("the collection stage has no single campaign command")
-    for flag, value in zip(arguments, arguments[1:]):
-        if isinstance(flag, Mapping) and flag.get("kind") == "literal" and flag.get("value") == "--runs-dir" \
-                and isinstance(value, Mapping) and value.get("kind") == "binding" \
-                and isinstance(value.get("value"), str):
-            if binding is not None:
-                return failed("--runs-dir appears more than once")
-            binding = value["value"]
-    first = arguments[0] if arguments else None
-    if not (isinstance(first, Mapping) and first.get("kind") == "repo_path" and isinstance(first.get("value"), str)
-            and first["value"] and not Path(first["value"]).is_absolute() and ".." not in Path(first["value"]).parts):
-        return failed("the campaign command's first argument is not a repository-relative config directory")
-    config = first["value"]
-    if binding is None:
-        return failed("the campaign command names no --runs-dir binding")
+    if selection is not None:
+        selected, binding = selection
+        config = canonical_repo_path(selected).as_posix()
+    else:
+        try:
+            commands = row["launch"]["commands"]
+            arguments = commands[0]["argv_template"]["arguments"]
+            _require(isinstance(commands, list) and len(commands) == 1 and isinstance(arguments, list),
+                     "launch has not exactly one command")
+        except (KeyError, IndexError, TypeError, WindowPlanError):
+            return failed("the collection stage has no single campaign command")
+        try:
+            selected = b5_chain.bind_argument(arguments[0], {"repo_root": "."}, tree, Path("."))
+            config = canonical_repo_path(selected).as_posix()
+        except (IndexError, KeyError, TypeError, ValueError) as exc:
+            return failed(f"the campaign command's first argument is not a repository-relative config directory: {exc}")
+        for flag, value in zip(arguments, arguments[1:]):
+            if flag == {"kind": "literal", "value": "--runs-dir"} and value.get("kind") == "binding":
+                if binding is not None:
+                    return failed("--runs-dir appears more than once")
+                binding = value["value"]
+        if binding is None:
+            return failed("the campaign command names no --runs-dir binding")
     if bindings is not None and not isinstance(bindings.get(binding), str):
         return failed(f"--runs-dir binding {binding} is not bound")
-    path = Path(repo_root) / config / "order_manifest.json"
+    path = Path(config) / "order_manifest.json"
     try:
-        raw = path.read_bytes()
+        raw = read_manifest(path) if read_manifest is not None else (repo_root / path).read_bytes()
         manifest = json.loads(raw)
     except (OSError, ValueError) as exc:
         return failed(f"order manifest {config}/order_manifest.json is unreadable: {type(exc).__name__}")
@@ -221,7 +235,8 @@ def _dispatch_of(row: Any, repo_root: Path, bindings: Mapping[str, str] | None) 
 
 
 def resolve_stage_dispatch(stage: Mapping[str, Any], *, pack_root: Path | str,
-                           repo_root: Path | str | None) -> tuple[str | None, tuple[str, ...]] | None:
+                           repo_root: Path | str | None,
+                           tree: Mapping[str, Any] | None = None) -> tuple[str | None, tuple[str, ...]] | None:
     """J3 harvest interface, using the writer's same argv-based resolution.
 
     Non-collection stages are declined. Malformed collection stages raise so
@@ -232,17 +247,20 @@ def resolve_stage_dispatch(stage: Mapping[str, Any], *, pack_root: Path | str,
     if stage["kind"] != "campaign_collection":
         return None
     root = Path(repo_root) if repo_root is not None else Path(pack_root).parents[2]
-    dispatch = _dispatch_of(stage, root, None)
+    dispatch = _dispatch_of(stage, tree or {}, root, None)
     _require(dispatch.error is None, dispatch.error or "stage dispatch unresolved")
     return dispatch.runs_root_binding, dispatch.run_ids
 
 
 def resolve_stage_dispatches(tree: Mapping[str, Any], repo_root: Path | str, *,
-                             bindings: Mapping[str, str] | None = None) -> list[StageDispatch]:
+                             bindings: Mapping[str, str] | None = None,
+                             read_manifest: Callable[[Path], bytes] | None = None,
+                             c1: bool = False) -> list[StageDispatch]:
     """Every ``campaign_collection`` stage of the plan tree, in ordinal order, resolved from its own argv.
 
     ``repo_root`` is the checkout the stage's config directory is relative to
-    (the measurement checkout, or the harvest's preserved copy). With
+    (the measurement checkout, or the harvest's preserved copy). A supplied
+    reader receives that same repository-relative manifest path. With
     ``bindings`` each runs root is also given as a path. Never raises on a
     malformed stage: its ``error`` says what could not be read and its
     ``run_ids`` is None (unresolved).
@@ -252,7 +270,21 @@ def resolve_stage_dispatches(tree: Mapping[str, Any], repo_root: Path | str, *,
     rows = [row for row in graph if isinstance(row, Mapping) and row.get("kind") == "campaign_collection"] \
         if isinstance(graph, list) else []
     rows.sort(key=lambda row: row.get("ordinal") if type(row.get("ordinal")) is int else 1 << 30)
-    return [_dispatch_of(row, Path(repo_root), bindings) for row in rows]
+    if c1:
+        stages = {stage.stage_id: stage for stage in b5_chain.stage_plan(tree, c1=True)
+                  if stage.kind == "campaign_collection"}
+        return [_dispatch_of(row, tree, Path(repo_root), bindings, read_manifest,
+                             selection=b5_chain.c1_dispatch_selection(stages[row["stage_id"]], tree))
+                for row in rows]
+    return [_dispatch_of(row, tree, Path(repo_root), bindings, read_manifest) for row in rows]
+
+
+def relocate_order_entry(row: dict, config: Path, sha256: str) -> None:
+    """Pin a staged copy at its new repository-relative config path."""
+    if "config_path" in row:
+        row["config_path"] = config.as_posix()
+    row["config"] = config.name
+    row["config_sha256"] = sha256
 
 
 def duplicate_dispatches(dispatches: Sequence[StageDispatch]) -> list[dict[str, Any]]:
@@ -580,7 +612,7 @@ def _refusal_text(exc: Exception) -> str:
     return str(getattr(code, "value", None) or exc)
 
 
-def ledger_head_status(measurement: Path) -> dict[str, Any]:
+def ledger_head_status(measurement: Path, *, c1_inputs=None) -> dict[str, Any]:
     """Read-only: the measurement checkout's calibration ledger head against its committed pin.
 
     The same snapshot the reservation authenticates
@@ -595,7 +627,7 @@ def ledger_head_status(measurement: Path) -> dict[str, Any]:
     try:
         snapshot = load_calibration_ledger_snapshot(
             ledger, pin, require_committed_pin=True, verify_custody=False, mode="read_replay",
-            repo_root=Path(measurement))
+            repo_root=Path(measurement), **({"c1_inputs": c1_inputs} if c1_inputs else {}))
     except Exception as exc:  # noqa: BLE001 - a ledger the snapshot cannot read is not reservable
         return {"physical": None, "pinned": None, "open_sessions": [],
                 "reasons": [f"snapshot_failed:{type(exc).__name__}"],
@@ -767,7 +799,8 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
                       now: Callable[[], float] = time.time,
                       pack_digest: Callable[[Path], str] | None = None,
                       threshold_defaults: Callable[[], Mapping[str, Any]] | None = None,
-                      horizon_s: int = b5_chain.CALIBRATION_HORIZON_S) -> dict[str, Any]:
+                      horizon_s: int = b5_chain.CALIBRATION_HORIZON_S,
+                      controls_root: Path | None = None, c1_inputs=None) -> dict[str, Any]:
     """Validate everything, then create the window's custody once; return the record.
 
     ``settle_s`` and ``horizon_s`` are keywords for the mock-runtime render
@@ -797,7 +830,7 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
     tree, tree_sha256 = read_plan_tree(pack_root)
     declared = declared_bindings(tree)
     try:
-        stages = b5_chain.stage_plan(tree)
+        stages = b5_chain.stage_plan(tree, c1=True) if c1_inputs else b5_chain.stage_plan(tree)
     except b5_chain.ChainRenderError as exc:
         raise WindowPlanError(f"stage graph: {exc}") from exc
     members = sum(stage.expected_count for stage in stages
@@ -809,7 +842,7 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
     spare_members = sum(max(stage.spare_sets) for stage in stages
                         if stage.in_chain and stage.kind == "campaign_collection" and stage.spare_sets
                         and inputs.get("spare_retries", True))
-    dispatches = resolve_stage_dispatches(tree, measurement)
+    dispatches = resolve_stage_dispatches(tree, measurement, c1=True) if c1_inputs else resolve_stage_dispatches(tree, measurement)
     refusal = dispatch_refusal(dispatches)
     _require(refusal is None, f"stage dispatch: {refusal}")
     planned_bytes = inputs["bytes_per_member"] * (members + spare_members)
@@ -849,7 +882,7 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
     # reservation refuses unless the ledger's physical head equals the
     # committed pin (calibration_ledger.append_bracket_session_receipt): a
     # stale pin would stop the chain at exit 10 after the whole arm.
-    ledger_status = ledger_head_status(measurement)
+    ledger_status = ledger_head_status(measurement, **({"c1_inputs": c1_inputs} if c1_inputs else {}))
     _require(not ledger_status["blocking"], ledger_head_refusal(ledger_status, measurement))
     identity_path, _ = _locator(inputs["identity_epoch_json"], "identity_epoch_json")
     t1_path, _ = _locator(inputs["t1_bindings_json"], "t1_bindings_json")
@@ -890,7 +923,11 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
     for key in ("capture_screen", "spare_retries"):
         if key in inputs:
             bindings[key] = inputs[key]
-    chain_path = custody / CHAIN_BASENAME
+    # A controls root (C1: the attempt's staged inputs) holds the chain, its
+    # sidecar and the window env. The night plan always goes to the custody
+    # root, where the installer and the driver read it (CAP 10 I2).
+    controls = controls_root or custody
+    chain_path = controls / CHAIN_BASENAME
     try:
         runbook_text = (measurement / b5_chain.RUNBOOK_RELATIVE).read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
@@ -899,7 +936,7 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
         chain_raw = b5_chain.render_chain(
             tree=tree, tree_sha256=tree_sha256, stages=stages, bindings=bindings,
             measurement_root=measurement, pack_root=pack_root, plan_id=inputs["plan_id"],
-            runbook_text=runbook_text, settle_s=settle_s, horizon_s=horizon_s)
+            runbook_text=runbook_text, settle_s=settle_s, horizon_s=horizon_s, c1_inputs=c1_inputs)
     except b5_chain.ChainRenderError as exc:
         raise WindowPlanError(f"chain: {exc}") from exc
     env_values = {
@@ -947,7 +984,7 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
         "programmed_span_s": programmed_span_s,
         "t0_stage_cap_s": T0_STAGE_CAP_S,
         "settle_s": settle_s,
-        "window_env": {"path": str(custody / WINDOW_ENV_BASENAME), "sha256": _sha256(env_raw)},
+        "window_env": {"path": str(controls / WINDOW_ENV_BASENAME), "sha256": _sha256(env_raw)},
         "registration": registration,
         "chain_deviations": list(b5_chain.DEVIATIONS),
         "disk_volumes": [str(claim_root), str(bound_root), str(custody),
@@ -986,10 +1023,11 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
         os.mkdir(root, 0o755)  # exclusive: FileExistsError if a root appeared meanwhile
     _fsync_directory(runs_parent)
     (custody / "operator-logs").mkdir()
-    window_env = _create_once(custody / WINDOW_ENV_BASENAME, env_raw)
+    controls.mkdir(parents=True, exist_ok=True)
+    window_env = _create_once(controls / WINDOW_ENV_BASENAME, env_raw)
     chain = _create_once(chain_path, chain_raw)
     sidecar = _create_once(Path(str(chain_path) + ".sha256"), b5_chain.sidecar_bytes(chain_raw, chain_path.name))
-    plan = _create_once(custody / PLAN_BASENAME, plan_raw)
+    plan = _create_once(night_gate.night_plan_path(custody), plan_raw)
     record = {
         "schema": RECORD_SCHEMA, "status": "STAGED", "plan": plan, "chain": chain, "sidecar": sidecar,
         "window_env": window_env, "runs_roots": {"claim": str(claim_root), "bound": str(bound_root)},

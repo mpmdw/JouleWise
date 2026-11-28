@@ -89,6 +89,19 @@ class FixtureOrphanCensusTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(sentinel.census(row(command), self.signatures), [])
 
+    def test_r1_smoke_part_fixture_has_a_unique_temporary_namespace(self) -> None:
+        for root in ("/private/tmp", "/tmp/ci"):
+            command = (f"/usr/bin/python3 -B {root}/jw-r1-smoke-fixture-abcd1234/measurement/"
+                       "scripts/align_r1_followup_kit.py smoke --part A --output /synthetic/new --soak-reference /synthetic/soak")
+            self.assertEqual([x["signature"] for x in sentinel.census(row(command), self.signatures)],
+                             ["r1-smoke-synthetic-part"])
+            self.assertEqual(sentinel.census(row(command, ppid=200), self.signatures), [])
+            for changed in (command.replace("jw-r1-smoke-fixture-abcd1234", "production"),
+                            command.replace("jw-r1-smoke-fixture-abcd1234", "jw-r1-smoke-fixture-production"),
+                            command.replace("/measurement/", "/production/"),
+                            command.replace("align_r1_followup_kit.py", "other.py")):
+                self.assertEqual(sentinel.census(row(changed), self.signatures), [])
+
     def test_age_start_rss_and_json_schema(self) -> None:
         start = time.mktime(time.strptime(START, "%a %b %d %H:%M:%S %Y"))
         matches = sentinel.census(row(VLLM), self.signatures, now=start + 13 * 86400 + 5.5)
@@ -176,10 +189,15 @@ class FixtureOrphanCensusTests(unittest.TestCase):
         for inventory in (row(VLLM), row("/usr/bin/sleep 30")):
             with self.subTest(inventory=inventory), mock.patch.object(sentinel, "process_inventory", return_value=inventory), mock.patch.object(
                 watchdog, "resolve_session_binary", return_value=Path("/fake/claude")
-            ), mock.patch.object(watchdog, "render_prompt", return_value="fixture"), mock.patch.object(watchdog, "ResidentSupervisor"):
+            ), mock.patch.object(watchdog, "render_prompt", return_value="fixture"), mock.patch.object(watchdog, "ResidentSupervisor"), mock.patch.object(
+                # The W1 watchdog re-reads plan and desk fences at the launch boundary. This test is
+                # about the census record, and its Mock storage has no plans to scan: no fence.
+                watchdog, "_launch_fence", return_value=None
+            ) as launch_fence:
                 watchdog.start_session(storage, deps, {})
+            launch_fence.assert_called_once()
             events = [call.args[1] for call in storage.append_jsonl.call_args_list
-                      if call.args[1].get("kind") == "fixture_orphan_census"]
+                      if isinstance(call.args[1], dict) and call.args[1].get("kind") == "fixture_orphan_census"]
             expected = sentinel.census(inventory, self.signatures)
             self.assertEqual(events[-1]["fixture_orphans"]["count"], len(expected))
             self.assertEqual([r["pid"] for r in events[-1]["fixture_orphans"]["rows"]], [r["pid"] for r in expected])

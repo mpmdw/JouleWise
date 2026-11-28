@@ -133,7 +133,8 @@ class NightLockHoldingEscapeeTests(unittest.TestCase):
         self.assertEqual(outcome["alive_after"], {"chain": False, "member": True})
         # The escapee lived on with the lock: nothing was restored under it.
         self.assertIn("ac powermode close deferred", log)
-        self.assertIn("could not be retaken", log)
+        # 19a862dc8 unifies the close and reports the lock cause explicitly.
+        self.assertIn("host night lock unavailable; a measuring night may still hold it", log)
         self.assertNotIn("restore", outcome["calls"])        # neither at admission nor at the close
         self.assertEqual((outcome["mode"], outcome["marker"]), (2, True))
 
@@ -315,7 +316,9 @@ class NightUnprovenNonInterruptCloseTests(rn.NightDriverTests):
         self.assertEqual(host.mode, 2)
         self.assertTrue(marker.exists())
         log = (self.custody / "night.log").read_text()
-        self.assertIn("exception escaping the chain wait (RuntimeError: chain wait broke)", log)
+        # 19a862dc8 preserves D8-2 in the structured close record.
+        self.assertIn('"path": "exception"', log)
+        self.assertIn('"error": "RuntimeError: chain wait broke"', log)
         self.assertIsNone(self.driver._CHAIN_TERMINATION_UNPROVEN)
 
 

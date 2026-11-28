@@ -4,6 +4,7 @@ No model, device, production process, measurement reader or network is used.
 The receipt fixtures are independent temporary Git repositories. Product fixes
 and the final registration decision remain with the lead.
 """
+from tests.git_fixture import init_git_fixture
 from contextlib import contextmanager
 from copy import deepcopy
 import hashlib
@@ -63,7 +64,7 @@ def synthetic_receipt(extra_path):
         def digest(relative):
             return hashlib.sha256((root / relative).read_bytes()).hexdigest()
 
-        git('init', '-q')
+        init_git_fixture(root, '-q')
         reviewed = commit('Synthetic reviewed candidate')
         receipt = {
             'schema': registration.RECEIPT_SCHEMA, 'status': 'registered', 'commit': reviewed,

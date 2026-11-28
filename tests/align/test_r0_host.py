@@ -1,6 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 import json
+import os
 import hashlib
 import subprocess
 import tempfile
@@ -485,8 +486,8 @@ class R0HostTest(unittest.TestCase):
         self.assertIn('heat_ordering_wide_exclusion: true', summary)
         self.assertIn('heat_ordering_exclusion_count: 2', summary)
 
-    @unittest.skipUnless(Path('/Users/edr/night-align/r0-v4-20261107T0810Z/smc/r0.json').is_file(),
-                         'recorded Mac15,9 journal is optional outside the replay bench')
+    @unittest.skipUnless(os.environ.get('JW_R0_LIVE_SMC') == '1',
+                         'JW_R0_LIVE_SMC=1 is required on the authorized replay bench')
     def test_erratum5_real_capture_has_uncensored_onset_and_prints_flags(self):
         # Offline replay of immutable capture bytes, never hardware collection.
         source = Path('/Users/edr/night-align/r0-v4-20261107T0810Z/smc')

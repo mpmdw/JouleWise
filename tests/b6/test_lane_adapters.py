@@ -1,10 +1,12 @@
 """Adapter seams and path budgets, with no live tools or measurement roots."""
 from dataclasses import replace
+import hashlib
 import json
 from pathlib import Path
 import plistlib
 import shutil
 import subprocess
+import sys
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
@@ -218,8 +220,20 @@ class AdapterTests(DeskCase):
         self.assertEqual(result.returncode, 3)
         self.assertIn('placeholder', result.stderr)
 
+    @unittest.skipUnless(sys.platform == 'darwin',
+                         'native b6_courier.sh launches the macOS Homebrew interpreter')
     def test_program_courier_records_arguments_and_stdin_locally(self):
         custody = self.root / 'session/custody'
+        night = custody / 'night'
+        night.mkdir(parents=True)
+        result_bytes = b'{"verdict":"REFUSED","chain_exit_code":null}\n'
+        (night / 'result.json').write_bytes(result_bytes)
+        # c80d4d638 / 454d78142: a file drop cannot acknowledge delivery.
+        # Supply an already authenticated synthetic delivery; no network runs.
+        (night / 'courier.delivery.json').write_text(json.dumps({
+            'transport': 'git-push', 'plan_id': 'synthetic',
+            'ref': 'refs/heads/night-results/synthetic', 'commit': 'a' * 40,
+            'result_sha256': hashlib.sha256(result_bytes).hexdigest()}))
         prompt = f'Custody root: {custody}; plan: synthetic.\n'
         result = subprocess.run(['/bin/sh', str(ROOT / 'scripts/b6_courier.sh'), '-p', prompt],
                                 input=b'synthetic stdin', capture_output=True)

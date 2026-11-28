@@ -3,6 +3,7 @@
 Run this module alone. Red assertions state the required property, rather than
 blessing the observed defect. No test invokes a harvest or a measurement job.
 """
+from tests.git_fixture import init_git_fixture
 import copy
 import json
 import os
@@ -41,7 +42,8 @@ class Scratch(unittest.TestCase):
         # Only the installed interpreter; no model, dependency installation or download.
         (root / '.venv/bin').mkdir(parents=True)
         (root / '.venv/bin/python').symlink_to(sys.executable)
-        for args in (('init', '-q'), ('add', '.'), ('commit', '-qm', 'synthetic checkout')):
+        init_git_fixture(root, '-q')
+        for args in (('add', '.'), ('commit', '-qm', 'synthetic checkout')):
             subprocess.run(['git', '-c', 'user.name=Synthetic', '-c',
                             'user.email=synthetic@example.invalid', '-C', str(root), *args],
                            check=True, capture_output=True)
@@ -314,7 +316,8 @@ class FinalityWitnesses(Scratch):
             'extra_checks': {'thermal': {'model_windows': {'tiny/C1': {
                 'U1': {'status': 'pass'}, 'U2': {'status': 'pass'}, 'U3': {'status': 'pass'}}},
                 'members': [{'id': 'member', 'excluded': False, 'calibration_exclusions': []}]}}}))
-        return SimpleNamespace(session_root=self.root, pilot=None, window_id='C1')
+        return SimpleNamespace(session_root=self.root, pilot=None, window_id='C1',
+                               unpack_receipt=None, finalized_sha256=None)
 
     def test_final_command_must_refuse_an_incomplete_pilot_adjudication(self):
         args = self.final_session(status='running_off_mbp')

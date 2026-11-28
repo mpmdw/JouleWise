@@ -190,7 +190,7 @@ class Delta6Witnesses(unittest.TestCase):
                 scenario = self.scenario('C1')
                 scenario.thermal['model_windows']['tiny/C1']['U4']['status'] = u4
                 scenario.thermal['model_windows']['tiny/C1']['U5']['status'] = 'inconclusive'
-                scenario.next_plan['members'] = scenario.next_plan['members'][:2]
+                scenario.next_plan['members'] = scenario.next_plan['members'][:-2]
                 scenario.series['sentinel_ids'] = scenario.series['sentinel_ids'][:2]
                 scenario.finish()
                 self.assertEqual(scenario.build()['checks']['sentinel_roster']['status'], expected)

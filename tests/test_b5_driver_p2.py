@@ -845,8 +845,11 @@ class SolReviewFixTests(unittest.TestCase):
         patch(self, b5_driver, "MONITOR_READY_TIMEOUT_S", 0.3)
         self.assertEqual(harness.driver.EXIT_REFUSED, harness.run())
         report = facts(harness)
-        self.assertEqual((True, ["instrument_not_sampling"]), (report["fault"], report["fault_reasons"]))
-        self.assertEqual(["instrument_not_sampling"], harness.hazard()["faults"]["reasons"])
+        # 5bb152acc (A-01) also publishes the terminal refusal as a fault.
+        self.assertEqual((True, ["instrument_not_sampling", "refusal:night_refused_instrument_not_sampling"]),
+                         (report["fault"], report["fault_reasons"]))
+        self.assertEqual(["instrument_not_sampling", "refusal:night_refused_instrument_not_sampling"],
+                         harness.hazard()["faults"]["reasons"])
 
     # F7: the terminal record's logged, ok and failed counts.
     def test_the_terminal_yield_counts_the_campaign_log(self):

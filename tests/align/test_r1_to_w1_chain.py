@@ -1,5 +1,7 @@
 """Smoke G2: the R1 -> W1 chain doc is a tested script; the kit is regenerated before --check."""
 import contextlib
+from functools import partial
+from hashlib import sha256
 import io
 import json
 from pathlib import Path
@@ -8,8 +10,11 @@ import shlex
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from scripts import align_r1_to_w1_chain as chain
+from scripts import align_w1_budget_procedure as procedure
+from tests.align.test_w1_kit_r10 import X_G_PHASES
 
 DOC = Path(__file__).resolve().parents[2] / 'docs/align/R1-TO-W1-CHAIN.md'
 
@@ -106,6 +111,148 @@ class ChainScriptTests(unittest.TestCase):
             done = json.loads((work / 'r1_slots.json').read_text())
             self.assertTrue(all(r['turn_counts_source_sha256'] for r in done['deadman_budget']))
             self.assertIn('admitted_turns', done['x_g'])
+
+
+class ContrastWriterTests(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.registration = self.root / chain.REGISTRATION
+        self.registration.mkdir(parents=True)
+        self.inputs = self.registration / 'inputs.json'
+        self.installed = self.registration / 'r1_slots.json'
+        self.slots = self.root / 'counted.json'
+        self.slots.write_text(json.dumps({
+            'x_g': {'status': 'measured', 'g0_outcome': 'released', 'g0_wait_s': 120.0,
+                    'admitted_turns': 12, 'x7': False, 'phases_s': dict(X_G_PHASES, decode=712.0)},
+        }))
+        runtime = self.root / 'configs/align/v4/r1_runtime.json'
+        runtime.parent.mkdir(parents=True)
+        runtime.write_text('{"g0_timeout_s": 1200}')
+        self.base_policy = {'g0_cap_s': 600, 'classification_sha256': 'b' * 64}
+        self.write_inputs(self.base_policy)
+        self.enterContext(patch.object(procedure.kit, 'w1_contrast_g0_cap',
+                                       partial(procedure.kit.w1_contrast_g0_cap, root=self.root)))
+        self.printed = self.derive(self.slots)
+        self.derived = json.loads(self.printed)
+        self.assertEqual(self.derived['contrast_g0_cap_s'], 238)
+        self.assertFalse(self.derived['contrast_fit']['fits'])
+
+    def write_inputs(self, policy):
+        self.inputs.write_text(json.dumps({'R1': {'thermal_policy': policy}, 'WP18': {'X': {'max_turns': 12}}},
+                                          indent=2, sort_keys=True) + '\n')
+        return self.inputs.read_bytes()
+
+    def derive(self, slots):
+        before = self.inputs.read_bytes()
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            code = procedure.main(['derive-contrast', '--r1-slots', str(slots), '--inputs', str(self.inputs)])
+        self.assertEqual(code, 0)
+        self.assertEqual(self.inputs.read_bytes(), before)
+        return out.getvalue()
+
+    def run_writer(self, *flags, child_code=0):
+        work = self.root / 'work'
+        commands = [shlex.split(command) for _, command in chain.render('RUN', 'SLOTS', str(work))]
+        calls = []
+
+        def runner(argv, **kwargs):
+            self.assertEqual(argv, commands[len(calls)])
+            step = chain.STEPS[len(calls)]
+            calls.append(step)
+            if step == 'install-slots':
+                self.installed.write_bytes(self.slots.read_bytes())
+            if step == 'derive-contrast':
+                return subprocess.CompletedProcess(argv, child_code, self.derive(self.installed), '')
+            return subprocess.CompletedProcess(argv, 0, '', '')
+
+        with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
+            code = chain.main(['--run-dir', 'RUN', '--slots', 'SLOTS', '--work', str(work), *flags],
+                              runner=runner, root=self.root)
+        self.assertEqual(self.installed.read_bytes(), self.slots.read_bytes())
+        return code, calls, out.getvalue(), err.getvalue()
+
+    def assert_preserved(self, before):
+        after = self.inputs.read_bytes()
+        self.assertEqual(sha256(after).hexdigest(), sha256(before).hexdigest())
+        self.assertEqual(after, before)
+
+    def assert_step_five_refusal(self, before, field):
+        code, calls, out, err = self.run_writer('--write-contrast')
+        self.assert_preserved(before)
+        self.assertEqual(calls, list(chain.STEPS[:5]), out)
+        self.assertNotEqual(code, 0)
+        self.assertIn('derive-contrast', err)
+        self.assertIn(field, err)
+        self.assertNotIn('Traceback', err)
+
+    def test_null_policy_is_a_controlled_refusal(self):
+        self.assert_step_five_refusal(self.write_inputs(None), 'thermal_policy')
+
+    def test_conflicting_existing_value_is_preserved(self):
+        policy = dict(self.base_policy, **self.derived)
+        policy['contrast_g0_cap_s'] = 239
+        self.assert_step_five_refusal(self.write_inputs(policy), 'contrast_g0_cap_s')
+
+    def test_matching_values_replay_without_changing_bytes(self):
+        before = self.write_inputs(dict(self.base_policy, **self.derived))
+        code, calls, _, _ = self.run_writer('--write-contrast')
+        self.assertEqual((code, calls), (0, list(chain.STEPS)))
+        self.assert_preserved(before)
+
+    def test_missing_values_are_added_to_a_present_policy(self):
+        before = self.inputs.read_bytes()
+        code, calls, _, _ = self.run_writer('--write-contrast')
+        self.assertEqual((code, calls), (0, list(chain.STEPS)))
+        expected = json.loads(before)
+        expected['R1']['thermal_policy'].update(self.derived)
+        self.assertEqual(json.loads(self.inputs.read_bytes()), expected)
+
+    def test_print_only_does_not_require_a_thermal_policy(self):
+        before = self.write_inputs(None)
+        code, calls, out, err = self.run_writer('--until', 'derive-contrast')
+        self.assertEqual((code, calls, err), (0, list(chain.STEPS[:5]), ''))
+        self.assertIn(self.printed, out)
+        self.assert_preserved(before)
+
+    def test_failed_derive_child_exit_is_returned_before_the_writer(self):
+        before = self.write_inputs(None)
+        code, calls, _, err = self.run_writer('--write-contrast', child_code=23)
+        self.assertEqual((code, calls), (23, list(chain.STEPS[:5])))
+        self.assertIn('step derive-contrast failed with exit 23', err)
+        self.assert_preserved(before)
+
+    def test_matching_values_preserve_noncanonical_formatting(self):
+        canonical = self.write_inputs(dict(self.base_policy, **self.derived))
+        before = json.dumps(json.loads(canonical), separators=(',', ':')).encode()
+        self.inputs.write_bytes(before)
+        code, calls, _, _ = self.run_writer('--write-contrast')
+        self.assertEqual((code, calls), (0, list(chain.STEPS)))
+        self.assert_preserved(before)
+
+    def test_insertion_preserves_authored_deadline_spelling(self):
+        matching_cap = dict(self.base_policy, contrast_g0_cap_s=238)
+        deadline = b'"T_dead": 1277.03797646727251'
+        before = self.write_inputs(matching_cap).replace(
+            b'"thermal_policy":', deadline + b',\n    "thermal_policy":'
+        )
+        self.inputs.write_bytes(before)
+
+        code, calls, _, err = self.run_writer('--write-contrast')
+
+        self.assertEqual((code, calls, err), (0, list(chain.STEPS), ''))
+        after = self.inputs.read_bytes()
+        self.assertIn(deadline, after)
+        expected = json.loads(before)
+        expected['R1']['thermal_policy']['contrast_fit'] = self.derived['contrast_fit']
+        self.assertEqual(json.loads(after), expected)
+
+    def test_duplicate_cap_with_missing_fit_is_refused(self):
+        matching_cap = dict(self.base_policy, contrast_g0_cap_s=238)
+        before = self.write_inputs(matching_cap).replace(
+            b'"contrast_g0_cap_s": 238', b'"contrast_g0_cap_s": 239, "contrast_g0_cap_s": 238'
+        )
+        self.inputs.write_bytes(before)
+        self.assert_step_five_refusal(before, 'duplicate JSON key')
 
 
 if __name__ == '__main__':

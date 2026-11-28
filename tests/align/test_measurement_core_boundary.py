@@ -14,13 +14,33 @@ from tests.align.test_pilot3_cache import CacheAPI, chat, fake_endpoint
 
 
 class MeasurementCoreBoundaryTests(unittest.TestCase):
+    def test_every_estimator_file_matches_issued_acceptance(self):
+        from joulewise.calibration_bracketing import (
+            ESTIMATOR_CODE_PATHS, load_calibration_acceptance_bound,
+        )
+
+        acceptance = load_calibration_acceptance_bound()
+        self.assertIsNotNone(acceptance)
+        pins = acceptance['prospective_rederivation']['estimator_code_sha256']
+        root = Path(__file__).resolve().parents[2]
+        self.assertEqual(set(pins), set(ESTIMATOR_CODE_PATHS))
+        for name in ESTIMATOR_CODE_PATHS:
+            with self.subTest(name=name):
+                self.assertEqual(hashlib.sha256((root / name).read_bytes()).hexdigest(), pins[name])
+
     def test_pilot9_measurement_core_is_unchanged(self):
         # SHA-256 of each complete file at pilot-9 c9a0a3943. No Git or
         # access to measurement data is needed to enforce this in shallow CI.
         expected = {
             'joulewise/schemas.py': '344b12ce178b8acb212059097a4ade507812a4be1673a6552ec221a83055e1d1',
-            'joulewise/b5/driver.py': 'd8780edb8e5806535291b32ace77cdf9a7acd7c8546a36fffebd119c311c0d5e',   # timing receipts (item 6): decorators/worker_target only
-            'joulewise/b5/harvest.py': '42cad8dec4295eef530b71374a8e4d0158a17028f5418c1507a56678ac49ab47',   # harvest-off R17, reviewed lane d5dc1198c (docs/align/v4/HARVEST-OFF-MERGED.md; review citations docs/align/reviews/2026-11-08-harvest-off-review-citations.md): io_workers, stage_observer, per-member document_memo; post-window harvest only, no capture path
+            # d8780edb... at 3c9c47a4e (timing receipts, item 6: decorators/worker_target only). Since then the
+            # W1 reliability rounds and RL-37 changed the driver on purpose: 5bb152acc (A-01 failed chains
+            # and R1 refusals as faults), 19a862dc8 (DC-in gate, host restore on terminal paths), 454d78142
+            # (F-01..F-13), c6d25d963 (D-02..D-06), 5dc2d4b48 (RL-37 meter outage does not stop the chain),
+            # b4a6c217f (docstring). The integrated head was accepted in RL-35 and RL-37's change in its
+            # delta review; this pin is the W1 line's driver at b4a6c217f.
+            'joulewise/b5/driver.py': '88068b64d09d3e335810e3b4718246cb3164223b87f96b56c5a098349882f90b',
+            'joulewise/b5/harvest.py': '8bfb8a6989a51c28aeb836064e3dc5ca220d32a89274dca382b5e83d1c425d4b',   # RL-58: scoped parse memo moved here from the restored estimator; post-window harvest only, no capture path
             'joulewise/hazards/smc.py': 'c1896f0c4fd8510ab4a2273927d4d71d8cc7a1a6940928117ba50d8441f70351',
             'joulewise/hazards/monitor.py': '9ed83410fc2fe7bdbf8e8acffcf913af5bd4442bb23adc14ed61430e0a3c957b',
         }
@@ -29,12 +49,33 @@ class MeasurementCoreBoundaryTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(hashlib.sha256((root/name).read_bytes()).hexdigest(), digest)
 
-    def test_mlx_core_is_byte_identical_to_pilot10(self):
-        # Complete file at 83e2dac59, before #657/0ba413d40. Earlier ALIGN
-        # extensions predate this package; no new rebind of file@c27485347.
+    def test_mlx_core_matches_pilot10_outside_rl182a_boundary(self):
+        # SHA-256 of the Pilot-10 source with just the first-yield boundary removed.
         root = Path(__file__).resolve().parents[2]
-        self.assertEqual(hashlib.sha256((root/'joulewise/adapters/mlx_runtime.py').read_bytes()).hexdigest(),
-                         '953e6fec990c1d7e0702a8abb199a55f179e50d28854f4b62d0e95302dde0c45')
+        source = (root / "joulewise/adapters/mlx_runtime.py").read_text()
+        before, boundary, rest = source.partition(
+            "                    # RL-182a: record both boundaries before constructing the events.\n"
+        )
+        self.assertTrue(boundary)
+        _, after_marker, after = rest.partition(
+            '                text_parts.append(str(getattr(response, "text", "")))\n'
+        )
+        self.assertTrue(after_marker)
+        self.assertEqual(hashlib.sha256((before + after_marker + after).encode()).hexdigest(),
+                         "0bd67dde60118ce722fd716d564b3ddc1748262b1ec32eac05a05c474e8ce829")
+
+    def test_mlx_first_yield_boundary_matches_rl182b_hash(self):
+        root = Path(__file__).resolve().parents[2]
+        lines = (root / "joulewise/adapters/mlx_runtime.py").read_bytes().splitlines(keepends=True)
+        start_line = b"                    # RL-182a: record both boundaries before constructing the events.\n"
+        end_line = b'                text_parts.append(str(getattr(response, "text", "")))\n'
+        self.assertEqual(lines.count(start_line), 1)
+        self.assertEqual(lines.count(end_line), 1)
+        start, end = lines.index(start_line), lines.index(end_line)
+        self.assertLess(start, end)
+        block = b"".join(lines[start:end])
+        self.assertEqual(hashlib.sha256(block).hexdigest(),
+                         "85ffe1a3cff318c6880d09d72b437c410a18f2dd92395ce62e08956d64c845c5")
 
     def test_disabled_checkpoint_anchor_runtime_bytes_match_pilot10_path(self):
         def pilot10_generate(runtime, stream, *args, **kwargs):
@@ -97,7 +138,7 @@ class MeasurementCoreBoundaryTests(unittest.TestCase):
         expected = {
             'scripts/run_campaign.py': '734820b2467a4296d07001ead3af4f8f0def451bb1a4ab130f3d87457716efc7',
             'joulewise/controller.py': '3f0535c976463da1ae99718cfcde2b0ef92241cda36973baaf4b1a6ebe1b12db',   # timing receipts (item 6)
-            'joulewise/adapters/__init__.py': '32917f9f483bf66158a38318e05f751dc976443dc1c234b534ccdb3ffdbad54a',
+            'joulewise/adapters/__init__.py': 'ccea835260b2f1781382394f1b745ec62a8588ab5bb502c949cd23562cccf05c',   # RL-96: resolve_telemetry builds the RL-91 reaping subclass
             'joulewise/__main__.py': 'fb8ca2a72fae8f2b3a725b457d7befd8f9761620922457166553d0eaaa95c33e',
             'joulewise/bundle.py': 'db2d7626d1b4e07148947ba5cbe7508630f9c8184caa72ba96cd04806a245dd6',   # timing receipts (item 6): one attribute
         }

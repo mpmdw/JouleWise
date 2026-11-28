@@ -208,50 +208,61 @@ jobs:
           # The Mac always sets TMPDIR and the block-6 tests use it; set it here the same way.
           TMPDIR: ${{ runner.temp }}
         run: |
-          python - <<'PY'
+          # A real script file, not stdin: spawn children re-import __main__ by path and
+          # die with FileNotFoundError: <stdin> (rt.ProcessInventory in the R1 tests).
+          cat > "$RUNNER_TEMP/ci_run_shard.py" <<'PY'
           import json
           import os
           from pathlib import Path
           import sys
 
-          sys.path.insert(0, "scripts")
-          import shard_tests
+          sys.path.insert(0, os.getcwd())
 
-          overlay = json.loads(Path("scripts/test_timings.json").read_text())
-          exclusive = frozenset(overlay["exclusive_modules"])
-          discovered = shard_tests.discover_test_modules()
-          assert exclusive <= set(discovered), (exclusive, discovered)
-          timings = shard_tests.load_timing_map()
-          ordinary = tuple(module for module in discovered if module not in exclusive)
 
-          # UNIT-atomic, not module-atomic. Modules in split_modules (today
-          # test_reduce and test_controller_g2b_attachment, each audited for
-          # per-test independence) are spread across shards at test
-          # granularity, so no single module floors the shard time. This edits no test file and
-          # skips nothing: expand_units emits one unit per declared heavy
-          # test plus ONE remainder unit holding every other test in that
-          # module, and verify_split_declaration fails the build closed if
-          # a declared id no longer exists.
-          splits = {
-              module: declaration
-              for module, declaration in shard_tests.load_split_declarations().items()
-              if module in set(ordinary)
-          }
-          unknown = shard_tests.conservative_unknown_weight()
-          units, weights = shard_tests.expand_units(
-              ordinary, timings, splits, unknown_weight=unknown
-          )
-          count = int(os.environ["SHARD_COUNT"])
-          partitions = shard_tests.partition_modules(
-              units, weights, count, unknown_weight=unknown
-          )
-          totals = shard_tests.partition_totals(
-              partitions, weights, unknown_weight=unknown
-          )
-          print("ORDINARY SHARD ESTIMATES", ",".join(f"{value:.3f}" for value in totals))
-          index = int(os.environ["SHARD_INDEX"])
-          raise SystemExit(shard_tests.run_units(partitions[index - 1], count, index))
+          def main():
+              sys.path.insert(0, "scripts")
+              import shard_tests
+
+              overlay = json.loads(Path("scripts/test_timings.json").read_text())
+              exclusive = frozenset(overlay["exclusive_modules"])
+              discovered = shard_tests.discover_test_modules()
+              assert exclusive <= set(discovered), (exclusive, discovered)
+              timings = shard_tests.load_timing_map()
+              ordinary = tuple(module for module in discovered if module not in exclusive)
+
+              # UNIT-atomic, not module-atomic. Modules in split_modules (today
+              # test_reduce and test_controller_g2b_attachment, each audited for
+              # per-test independence) are spread across shards at test
+              # granularity, so no single module floors the shard time. This edits no test file and
+              # skips nothing: expand_units emits one unit per declared heavy
+              # test plus ONE remainder unit holding every other test in that
+              # module, and verify_split_declaration fails the build closed if
+              # a declared id no longer exists.
+              splits = {
+                  module: declaration
+                  for module, declaration in shard_tests.load_split_declarations().items()
+                  if module in set(ordinary)
+              }
+              unknown = shard_tests.conservative_unknown_weight()
+              units, weights = shard_tests.expand_units(
+                  ordinary, timings, splits, unknown_weight=unknown
+              )
+              count = int(os.environ["SHARD_COUNT"])
+              partitions = shard_tests.partition_modules(
+                  units, weights, count, unknown_weight=unknown
+              )
+              totals = shard_tests.partition_totals(
+                  partitions, weights, unknown_weight=unknown
+              )
+              print("ORDINARY SHARD ESTIMATES", ",".join(f"{value:.3f}" for value in totals))
+              index = int(os.environ["SHARD_INDEX"])
+              raise SystemExit(shard_tests.run_units(partitions[index - 1], count, index))
+
+
+          if __name__ == "__main__":
+              main()
           PY
+          python "$RUNNER_TEMP/ci_run_shard.py"
 
   calibration-exits-exclusive:
     needs: [changes]
@@ -320,34 +331,45 @@ jobs:
         env:
           SHARD_INDEX: ${{ matrix.shard }}
         run: |
-          python - <<'PY'
+          # A real script file, not stdin: spawn children re-import __main__ by path and
+          # die with FileNotFoundError: <stdin> (rt.ProcessInventory in the R1 tests).
+          cat > "$RUNNER_TEMP/ci_run_shard.py" <<'PY'
           import os
           import sys
 
-          sys.path.insert(0, "scripts")
-          import shard_tests
+          sys.path.insert(0, os.getcwd())
 
-          module = "tests.test_calibration_writer_crash_matrix"
-          timings = shard_tests.load_timing_map()
-          splits = shard_tests.load_split_declarations()
-          unknown = shard_tests.conservative_unknown_weight()
-          # expand_units runs verify_split_declaration, which fails closed if
-          # the declared heavy test id no longer exists. That is the case a
-          # computed remainder would otherwise absorb in silence, handing one
-          # shard ~20 minutes of unaccounted work while the weights disagree.
-          units, weights = shard_tests.expand_units(
-              (module,), timings, {module: splits[module]}, unknown_weight=unknown
-          )
-          partitions = shard_tests.partition_modules(
-              units, weights, 2, unknown_weight=unknown
-          )
-          totals = shard_tests.partition_totals(
-              partitions, weights, unknown_weight=unknown
-          )
-          print("CRASH-MATRIX SHARD ESTIMATES", ",".join(f"{v:.3f}" for v in totals))
-          index = int(os.environ["SHARD_INDEX"])
-          raise SystemExit(shard_tests.run_units(partitions[index - 1], 2, index))
+
+          def main():
+              sys.path.insert(0, "scripts")
+              import shard_tests
+
+              module = "tests.test_calibration_writer_crash_matrix"
+              timings = shard_tests.load_timing_map()
+              splits = shard_tests.load_split_declarations()
+              unknown = shard_tests.conservative_unknown_weight()
+              # expand_units runs verify_split_declaration, which fails closed if
+              # the declared heavy test id no longer exists. That is the case a
+              # computed remainder would otherwise absorb in silence, handing one
+              # shard ~20 minutes of unaccounted work while the weights disagree.
+              units, weights = shard_tests.expand_units(
+                  (module,), timings, {module: splits[module]}, unknown_weight=unknown
+              )
+              partitions = shard_tests.partition_modules(
+                  units, weights, 2, unknown_weight=unknown
+              )
+              totals = shard_tests.partition_totals(
+                  partitions, weights, unknown_weight=unknown
+              )
+              print("CRASH-MATRIX SHARD ESTIMATES", ",".join(f"{v:.3f}" for v in totals))
+              index = int(os.environ["SHARD_INDEX"])
+              raise SystemExit(shard_tests.run_units(partitions[index - 1], 2, index))
+
+
+          if __name__ == "__main__":
+              main()
           PY
+          python "$RUNNER_TEMP/ci_run_shard.py"
 
   build:
     runs-on: ubuntu-latest

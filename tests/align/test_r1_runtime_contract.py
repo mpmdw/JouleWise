@@ -81,12 +81,14 @@ class Round6ContractTests(unittest.TestCase):
         quiet = {"cpu_busy_cores": [0.1], "cpu_busy_t_s": [0.0], "census": [{}]}
         result = {**quiet, "segment_status": "inconclusive", "g0_released": False, "g0_outcome": "timeout",
                   "g0_wait_s": 1200.0, "g0_timeout_s": 1200}   # R7-2
-        for kind in ("step-d", *contract.PLANNING_KINDS):
+        for kind in ("step-30b", "step-d", *contract.PLANNING_KINDS):
             self.assertEqual(contract.missing_fields(kind, result, quiet=True), [], kind)
             # Without segment_status the measured fields are required.
-            self.assertIn("energy_j" if kind != "step-d" else "slots", contract.missing_fields(kind, quiet, quiet=True))
-        # Other kinds have no INCONCLUSIVE result: their full fields stay required.
-        self.assertIn("thermometry.status", contract.missing_fields("step-30b", result, quiet=True))
+            self.assertIn({"step-d": "slots", "step-30b": "thermometry.status"}.get(kind, "energy_j"),
+                          contract.missing_fields(kind, quiet, quiet=True))
+        # a85ee8ec6 implements RL-72 E3: step-30b may time out flagged,
+        # or report an inconclusive member when no turn was observed.
+        self.assertEqual(contract.missing_fields("step-30b", result, quiet=True), [])
         self.assertIn("energy_j", contract.missing_fields("d-bank-benign-s1", result, quiet=False))
 
 

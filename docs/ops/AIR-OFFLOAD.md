@@ -15,7 +15,7 @@ LaunchAgent was created. The operator steps in §3 need Ed (sudo on the Air) and
 
 ## 0. Bottom line
 
-- **Where it runs:** on the MBP at the start of cool-down, after finalize, commit and push, and only then. It
+- **Where it runs:** on the MBP at the start of cool-down, after finalize. For v4, release separately checks the pushed final record. It
   refuses to start, or stops resumably, so that all of its activity ends at least 120 s before the dwell.
 - **One pack per window (lead ruling 2026-11-08).** An ALIGN v4 session (a `finalized_manifest.v2` record) is
   packed once, by the harvest-off lane (`harvest_offload.pack`, step 1c of its runbook). This tool **consumes that
@@ -35,6 +35,7 @@ LaunchAgent was created. The operator steps in §3 need Ed (sudo on the Air) and
   hashed through its own no-follow fd against its bound digest, a link must still be a link with its bound text;
   each object is then detached into a private quarantine and re-verified there (type, inode identity or digest)
   before it is unlinked, so a concurrent replacement is never deleted (§1c). Any difference refuses the release.
+  V4 also requires a matching final desk record on the pushed records ref (§4).
   Everything runs under one global single-instance lock per state root. The deletion is journaled and resumable.
   **There is no pressure route:** under disk pressure the policy is HOLD, never a deletion without two verified,
   restorable copies.
@@ -53,7 +54,7 @@ LaunchAgent was created. The operator steps in §3 need Ed (sudo on the Air) and
 | 1 | Interlock (Sol) | `Lease` client: takes the magistrate's **existing** persistent loop lock (`flock`, never creates the file), reads the lease `joulewise.air_offload_gate.v1` and the watchdog state before every stage (each part, each upload, verify, release): `phase == cooldown`, not armed or measuring, same `generation`, same `record_manifest_sha256`, `record_committed` and `record_pushed`, `fenced_checkouts == []`. Its deadline is `min(quiet_dwell, expires) − 120 s`. The probe always runs too. The span records `interlock.mode` (`probe_only` or `lease+loop_lock+probe`) |
 | 2 | Terminal evidence (Sol) | `--terminal <record-relative result.json>` (or an absolute path, see below) is required. Before pack: the file is listed and its bytes match the manifest digest; `plan_id`, a known verdict (`GO`, `ABORTED`, `COLLECTED`, `CHAIN_STOPPED`, `REFUSED`) and a past `ended_epoch_s`; `chain.started` has `chain.exited` (or a zero-capture `REFUSED` with neither); no `chain.unkilled`; `courier.sent`. Every marker must be a listed regular file. `--no-terminal-check` is accepted only for window ids starting `smoke-` or `bench-` |
 | 3 | Complete envelope (Sol) | The record tree must equal the manifest's envelope. Unlisted file, unlisted symlink, unlisted directory (v2 lists all), special file, hard link (`st_nlink != 1`), `.git` or `restricted` member: exit 2, before any pack or network. The walk never enters a `.git` or `restricted` directory. A listed entry that is missing, of another type, another size or another link target: exit 3. A manifest that lives inside the record (for example `ssd-closed.json`) travels as a file under its pinned digest |
-| 4 | Fresh receipts, cheap (Sol, Opus cost) | `receipts W NONCE`: the Air re-hashes the custody objects (the compressed parts, `offload-manifest.json`, `record-manifest.bin`, read with `F_NOCACHE`), re-reads and re-checks the sealed second-copy receipt, and returns a sealed fresh receipt bound to the nonce and both receipt hashes. The raw tree is a derived convenience and is not re-hashed. A replayed answer or a decayed part refuses (exit 3) and nothing is deleted |
+| 4 | Fresh receipts, cheap (Sol, Opus cost) | `receipts-v4 W NONCE` for v4 and `receipts W NONCE` for legacy. The Air re-hashes the custody objects (the compressed parts, `offload-manifest.json`, `record-manifest.bin`, read with `F_NOCACHE`), re-reads and re-checks the sealed second-copy receipt, and returns a sealed fresh receipt bound to the nonce and both receipt hashes. The raw tree is a derived convenience and is not re-hashed. A replayed answer or a decayed part refuses (exit 3) and nothing is deleted |
 | 5 | Confinement (Sol) | `scripts/offload_setup_air.sh`: dedicated hidden non-admin account `jw-offload`, root-owned gate script in `/usr/local/libexec/jw-offload/`, root-owned `authorized_keys` and binding in `/usr/local/etc/jw-offload/`, an sshd `Match User jw-offload` block (`ForceCommand`, publickey only, no TTY or forwarding). MBP ssh uses `-F /dev/null`, an explicit `UserKnownHostsFile`, `GlobalKnownHostsFile=/dev/null`, `StrictHostKeyChecking=yes`, `BatchMode` |
 | 6 | Deadline mechanism (Sol) with the Opus margin | The deadline is held on the monotonic clock (a wall-clock step cannot extend it). A `SIGALRM` backstop at the deadline interrupts blocking I/O; `SIGTERM` unwinds the same way; both exit 4 with state kept. ssh and zstd run in their own process groups, killed as a group on any exit path. The 120 s pre-dwell margin and the `rates.json` × 1.5 admission are kept |
 | 7 | Deletion journal (Sol) | `deleting.json` (state `deleting`, the inventory of every file and link to delete with size and mtime or link text, the fresh receipt's hash) is written outside the record before the first unlink, and set to `deleted` at the end. A resumed release re-checks every remaining entry and refuses any new file in the record |
@@ -69,6 +70,14 @@ append-only resumable `put`/`commit` transport, and the timing receipts `timing/
 
 ### 1a. finalized_manifest.v2 records: one pack, consumed (lead ruling 2026-11-08)
 
+An attempt ID or authenticated terminal plan identifying a post-R1 v4 window requires the v4 finalized manifest and
+harvest pack. An R1-format manifest with either identity is refused at pack, resume, Air verification, receipt refresh
+and release.
+
+For a v4 pack, the Air authenticates and checks the finalized manifest's pre-desk inventory before returning
+a cached verification receipt or refreshing the receipts. A legacy `receipts` request for a v4 window refuses
+even when both copies are verified. The reviewed MBP client requests `receipts-v4` after checking the pushed record.
+
 The harvest-off pack directory (`$OUT/offload`: `payload.tar.zst` + `MANIFEST.json`, schema
 `joulewise.align_v4.harvest_offload.v1`) is the record's only pack. `run --harvest-pack $OUT/offload` does, with
 no raw or payload hashing on the MBP:
@@ -80,22 +89,27 @@ no raw or payload hashing on the MBP:
    `finalized_manifest_sha256 == H`, the same `source_root`, its entries equal the finalize entries exactly, every
    `.external/NNNN` member is a declared closure input with the bound bytes, and the payload has its recorded size.
    Any difference is exit 3 and nothing is sent.
+   V4 adoption and Air verification refuse `archive/`, `PILOT.json` and `desk.json` in the tree or carried external inventory.
 3. The payload, `MANIFEST.json`, the finalize manifest (as `record-manifest.bin`) and the offload manifest are
-   pushed under their sealed digests. The Air's `commit` re-hashes each one.
+   transferred directly to the Air store outside Git. The Air's `commit` re-hashes each one.
 4. The Air verify re-derives every expected row from the pinned finalize manifest (not from the MBP's offload
    manifest), re-checks `MANIFEST.json` against it, then streams the payload and checks every member: files by
    sha256 and size, links by text, directories, and the bound external inputs. A member outside the finalize
    manifest is exit 3. It writes **no raw tree**: for a v4 session the raw tree is the harvest restore at the
    session's own path.
-5. The custody objects (payload, `MANIFEST.json`, both manifests) are second-copied, rechecked fresh at release
-   and, after two copies, deleted from the pack directory together with the session's files (the directory goes if
-   empty). The closure's external inputs (the calibration ledger) are never moved here and never deleted.
+5. Release requires two verified copies, a fresh recheck and a pushed final record for the window (RL-168 finding 3).
+   The pack and MBP originals stay until all checks pass. Release deletes those bound objects and leaves the closure inputs in place.
 
 **The harvest restore reads the verified copy in place.** The store keeps the harvest names, so on the Air:
 `$RUN unpack --offload /Volumes/JW-EXT/jw-offload/inbox/$K --finalized-manifest
-/Volumes/JW-EXT/jw-offload/inbox/$K/record-manifest.bin --finalized-sha256 $H`. This replaces the separate
+/Volumes/JW-EXT/jw-offload/inbox/$K/record-manifest.bin --finalized-sha256 $H
+--window-id "$K" --receipt-out "$OUT/unpack_receipt.json"`. This replaces the separate
 transfer of `$OUT/offload` in the harvest-off runbook's step 1d. Checked end to end with the real
 `harvest_offload.unpack` (§9).
+
+Commit the finalized manifest digest and the four-field `unpack_receipt.json` as directed in the magistrate
+runbook. Keep the manifest body, Air and second-copy receipts, and command diagnostics in private state until
+the series release. Use only the `offload triage` decision below for the offload portion of quiet-start evidence.
 
 **Terminal evidence (lead ruling 2026-11-08).** `result.json`, `chain.*` and `courier.sent` must be inside the
 finalize manifest's closure: either files of the session root (`--terminal night/result.json`, record-relative),
@@ -149,12 +163,12 @@ pipeline writes into a finalized record.
 ## 2. Design
 
 ```
-MBP (after finalize, commit, push; start of cool-down)        Air (on 24/7; /Volumes/JW-EXT/jw-offload)
+MBP (after finalize; start of cool-down)                      Air (on 24/7; /Volumes/JW-EXT/jw-offload)
  run --terminal night/result.json --deadline-epoch <dwell - 120 s>
      [--lease L --watchdog-state W --loop-lock K]  (once wired)
   1 loop lock + lease (if given); probe (always)
   2 predict from rates.json (seeded); refuse if x1.5 does not fit
-  3 release older windows: receipts W NONCE ----------------->  re-hash parts + manifests (F_NOCACHE),
+  3 release eligible older windows: receipts[-v4] W NONCE --->  re-hash parts + manifests (F_NOCACHE),
        journal deleting -> unlink -> journal deleted              re-read the sealed second receipt
   4 envelope + terminal check; pack: tar parts -> zstd -3 -T4
   5 push: hello, stat, put/commit per file  ------------------>  store check (mounted, UUID, marker, floor);
@@ -162,7 +176,7 @@ MBP (after finalize, commit, push; start of cool-down)        Air (on 24/7; /Vol
   6 verify ---------------------------------------------------->  re-hash parts, decompress, check EVERY raw
                                                                  file (and link, dir) against the record
                                                                  manifest; raw tree; sealed receipt; queue
-  7 release this window if a second copy exists (usually next turnaround)
+  7 release this window when the release checks pass (§4)
   8 timing/offload-span.json                                   air-icloud (Ed's LaunchAgent, every 5 min):
                                                                  copy custody objects to iCloud Drive, evict,
                                                                  download, sha256 match -> sealed receipt in
@@ -179,8 +193,9 @@ point, volume UUID, store id and free floor.
 
 ### 3a. Air, Ed, once (sudo), about 10 min
 
-1. Make a clean checkout of this branch at the **reviewed** sha (for example
-   `~/code/CapstoneProject/jw-wt/offload-gate`), outside a window.
+1. For v4, make a clean checkout at the **reviewed desk-seal successor** SHA named in the
+   [magistrate runbook §1d](../align/v4/HARVEST-OFF-MAGISTRATE-RUNBOOK.md#1-mbp-right-after-terminal-completion-and-finalize-before-cool-down-counts-as-quiet)
+   (for example `~/code/CapstoneProject/jw-wt/offload-gate`), outside a window.
 2. On the MBP first (3b step 1), get `jw_offload_ed25519.pub` and the MBP's LAN address, and copy the public key to
    the Air (AirDrop is fine; it is not secret).
 3. Run, from that checkout:
@@ -197,7 +212,8 @@ point, volume UUID, store id and free floor.
    - Creates the hidden, non-admin account `jw-offload` (shell `/bin/sh` so `ForceCommand` can run; root-owned home,
      so no rc files or keys), and adds it to `com.apple.access_ssh` if that group exists.
    - Installs `offload_window.py` root-owned at `/usr/local/libexec/jw-offload/` (it refuses a checkout whose copy
-     differs from HEAD) and prints its sha256.
+     differs from HEAD) and prints its sha256. Compare that hash to `shasum -a 256 scripts/offload_window.py`
+     from the reviewed checkout before use. Repeat this step for a new signing revision with a different file hash.
    - Runs `init-store` (binds `/Volumes/JW-EXT/jw-offload` to the volume UUID, refuses an internal disk or a volume
      that ignores ownership, free floor 100 GiB), then hands the store to `jw-offload:staff` (0750) and `second/` to
      Ed.
@@ -234,17 +250,26 @@ point, volume UUID, store id and free floor.
 
 ## 4. Per-window magistrate sequence
 
+Use the exact attempt ID from the record as `K`. Numbered series retries such as `C3#2` keep their suffix in the
+offload state and Air store. Retry IDs require the updated offload tool on both machines.
+For v4, `offload` below refers to the pinned-checkout function from the magistrate runbook §1d.
+
 | When | MBP step | Notes |
 |---|---|---|
-| Window terminal | finalize, hash, commit and push (unchanged), including the record manifest whose sha256 the record pins | For ALIGN v4: the harvest-off runbook's 1b (`finalize-manifest`, digest `H`) and 1c (`pack --threads 4`, the single pack; the CLI's default `--threads 0` uses every core) |
-| Cool-down start `t_c` | v4: `offload_window.py run --state-root S --window-id K --record-root <session root> --record-manifest $OUT/finalized_manifest.json --record-manifest-sha256 H --harvest-pack $OUT/offload --terminal <result.json> --deadline-epoch <planned dwell start − 120>`. R1 or legacy: the same with `--pack` instead of `--harvest-pack` | One call; prints the span. Exit 0 = verified on the Air. Without a planned dwell start, `t_c + 900 − 120` is safe |
-| Right after | Commit `S/K/timing/offload-span.json` into the record branch | `window_timing --span offload=<path>` reads it; `kind: backup` maps to `offload` |
-| Pre-arm checks | `offload_window.py triage --state-root S --window-id K --dwell-start-epoch <planned>` | Evidence for `quiet_start_state`; exit 2 if an offload is running, started without an end receipt, or ended within 120 s of the dwell |
+| Window terminal | v4: finalize to the private output directory and make the single pack. Carry digest `H` into the pushed record. R1 and legacy use their existing manifest publication procedure. | For v4 keep the canonical manifest body on the MBP and with the Air restore outside Git until release (RL-163 §1). Follow harvest-off runbook §1b–c. |
+| Cool-down start `t_c` | v4: `offload run --state-root S --window-id K --record-root <session root> --record-manifest $OUT/finalized_manifest.json --record-manifest-sha256 H --harvest-pack $OUT/offload --terminal <result.json> --deadline-epoch <planned dwell start − 120>`. R1 or legacy: the same with `--pack` instead of `--harvest-pack` | One call; prints the span. Exit 0 = verified on the Air. Without a planned dwell start, `t_c + 900 − 120` is safe |
+| Right after | Keep `S/K/timing/offload-span.json` and the state-wide activity receipts in private offload state. | The spans include sizes or timestamps. `window_timing --span offload=<path>` may read the offload span locally. |
+| Pre-arm checks | `offload triage --state-root S --window-id K --dwell-start-epoch <planned>` | Use its stdout JSON for the offload check in `quiet_start_state`. Exit 2 if an offload is running, started without an end receipt, or ended within 120 s of the dwell. |
 | Dwell, arm | unchanged | |
 
-The next turnaround's `run` releases older windows whose second copy has landed (`release_older`), each with a
-fresh receipt and the content proof. `release --state-root S --window-id K --deadline-epoch <dwell − 120>` does the
-same for one window by hand, under the same lock, receipts and deadline as `run` (triage sees it).
+Current and older v4 windows are held for the pushed-record check on every deletion route. Once the desk record
+is pushed, refresh the desk checkout's remote-tracking ref. Pass `--records-repo "$DESK_REPO" --pushed-ref
+refs/remotes/origin/records --record-path "records/$LATEST/record.json"` to `run` or `release`. `$LATEST` is the
+latest record on that ref. The tool walks its committed chain, matches the window, plan and finalized digest to
+the pack, and applies the same finality check as next-arm, including a successor's `previous_final`.
+`offload release --state-root S --window-id K --deadline-epoch <dwell − 120>` with those flags releases one v4 window
+under the same lock, receipts and deadline as `run`. A held v4 release keeps the verified transfer available.
+The timing lease's close-record flags authorize transport only. Legacy release uses the existing two-copy gate.
 
 ## 5. Interlock: active today, and the magistrate contract
 
@@ -291,10 +316,14 @@ lease is the primary exclusion and the probe a second opinion. The contract (fro
 
 | Exit | Meaning | Magistrate action |
 |---|---|---|
-| 0 | Verified on the Air (release may be held for the second copy) | Commit the span |
+| 0 | Verified on the Air (release may be held for a copy or a pushed final record) | Keep v4 spans in private offload state |
 | 2 `window_armed` / `window_measuring` / `lease_*` / `loop_lock_busy` | Not in a clean cool-down | Do not offload now; the next turnaround retries |
 | 2 `envelope_*` / `terminal_*` / `record_is_not_terminal` / `record_manifest_unsupported` | The record is not a closed, terminal envelope | Fix the finalize manifest (lead); nothing was sent |
 | 2 `offload_already_running` | Another run holds the lock | Wait; triage refuses the arm until it ends |
+| 2 or 3 `v4_window_needs_finalized_manifest_v2` | A post-R1 v4 window or plan is paired with a legacy format | Retain the originals. Use the v4 pre-desk manifest and its harvest pack for that window. |
+| 2 `v4_release_*` | A matched pushed final record could not be established | Keep the pack and originals. After the desk is final and the record is pushed, refresh the records ref and retry release. |
+| 3 `air:v4_release_needs_v4_receipts` | The MBP client used the legacy release request for a v4 window | Keep both copies and run the reviewed client from the pinned checkout in the magistrate runbook §1d. |
+| 3 `harvest_pack_contains_desk_artifact` | The v4 pack inventory includes a forbidden entry | Preserve the pack and originals and report the refusal to the lead. |
 | 3 `*_mismatch`, `record_changed*`, `raw_digest:*`, `air_part_decayed:*`, `fresh_receipt_*`, `content_differs_*`, `type_or_link_changed:*`, `local_pack_changed:*`, `changed_during_deletion:*…:kept_at:<path>`, `quarantine_holds_unbound_object:*`, `window_id_conflict*` | Integrity failure; nothing unverified is deleted | Keep everything. A kept object is at its original path or in the named `.jw-offload-q-*` directory beside its root. Report to the lead with the span and `offload-journal.jsonl`. Do not retry blindly |
 | 4 `deadline:*`, `deadline_alarm`, `interrupted_sigterm` | Predicted or actual overrun, or killed | State kept; the next turnaround resumes |
 | 5 `air:store_*`, `air_ssd_space`, `transport_*` | Air asleep or unreachable, SSD unmounted or a different volume, below the free floor | The MBP keeps the window; the next turnaround resumes. A UUID mismatch needs Ed |

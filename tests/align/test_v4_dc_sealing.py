@@ -34,15 +34,15 @@ class SealTests(unittest.TestCase):
         self.assertEqual(sealed['members']['benign-1']['dc_in_residual_j'], 4.5)
         for rid in ('sab-1', 'odd-1'):             # a missing condition is sealed too (fail closed)
             self.assertTrue(sealed['members'][rid]['sealed'])
-            self.assertEqual(len(sealed['members'][rid]['sealed_sha256']), 64)
+            self.assertEqual(len(sealed['members'][rid]['sealed_hmac_sha256']), 64)
         text = json.dumps(sealed)
         self.assertNotIn(str(SECRET), text)
         self.assertNotIn('dc_in_residual_j', json.dumps(sealed['members']['sab-1']))
         # auditable: the hash changes with the hidden value, so the sealed row can be checked later
         other = self.report()
         other['members']['sab-1'] = row(SECRET+1, SECRET)
-        self.assertNotEqual(meter.seal_non_benign(other, self.plan())['members']['sab-1']['sealed_sha256'],
-                            sealed['members']['sab-1']['sealed_sha256'])
+        self.assertNotEqual(meter.seal_non_benign(other, self.plan())['members']['sab-1']['sealed_hmac_sha256'],
+                            sealed['members']['sab-1']['sealed_hmac_sha256'])
 
     def test_desk_prints_benign_dc_values_and_no_sabotage_dc_value(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -63,7 +63,7 @@ class SealTests(unittest.TestCase):
             self.assertIn('benign-1', printed)
             self.assertIn('4.5', printed)
             self.assertIn('sab-1', printed)
-            self.assertIn('sealed_sha256', printed)
+            self.assertIn('sealed_hmac_sha256', printed)
             self.assertNotIn(str(SECRET), printed)
             self.assertNotIn(str(SECRET), json.dumps(desk, default=str))
             self.assertTrue(desk['km003c']['members']['sab-1']['sealed'])

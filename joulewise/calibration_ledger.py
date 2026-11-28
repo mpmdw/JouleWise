@@ -1327,7 +1327,17 @@ def _head_pin(value: object) -> tuple[int, str] | None:
     return sequence, str(digest)
 
 
-def _committed_pin_bytes(path: Path, repo_root: Path) -> bytes | None:
+def _committed_pin_bytes(path: Path, repo_root: Path, *, c1_inputs=None) -> bytes | None:
+    from joulewise.align.apple.v4_registration import git, key, runtime_input_context
+
+    if context := c1_inputs or runtime_input_context():
+        try:
+            relative = key(Path(path).resolve(strict=True).relative_to(context["repo"]).as_posix())
+            raw = git(context["git"], "show", context["execution_commit"] + ":" + relative)
+        except (OSError, ValueError):
+            return None
+        return ingest_git_authentication_input(
+            relative, raw, grammar="json", label="Git-committed calibration ledger head pin")
     try:
         relative = Path(path).resolve().relative_to(Path(repo_root).resolve()).as_posix()
     except (OSError, ValueError):
@@ -2595,6 +2605,7 @@ def load_calibration_ledger_snapshot(
     calibration_custody_store: Path | None = None,
     mode: Literal["read_replay", "issuing"] = "issuing",
     custody_deadline: CustodyDeadline | None = None,
+    c1_inputs=None,
 ) -> CalibrationLedgerSnapshot:
     """Load, authenticate, and freeze exactly one ledger snapshot.
 
@@ -2606,7 +2617,8 @@ def load_calibration_ledger_snapshot(
     writer or a rewrite of both Git and the full ledger history.
     """
 
-    ledger_path = Path(ledger_path)
+    from joulewise.align.apple.v4_registration import check_ledger, runtime_ledger
+    ledger_path = check_ledger(ledger_path, c1_inputs["ledger"]) if c1_inputs else runtime_ledger(ledger_path)
     head_pin_path = Path(head_pin_path)
     reasons: set[str] = set()
     try:
@@ -2649,7 +2661,7 @@ def load_calibration_ledger_snapshot(
         # circular "commit before tests" bootstrap. Any physical byte or any
         # non-genesis pin remains strictly commit-authenticated.
         and not genesis_development_bootstrap
-        and _committed_pin_bytes(head_pin_path, repo_root) != pin_raw
+        and _committed_pin_bytes(head_pin_path, repo_root, **({"c1_inputs": c1_inputs} if c1_inputs else {})) != pin_raw
     ):
         reasons.add("calibration_ledger_head_uncommitted")
     receipts, parse_reasons = _parse_ledger(raw)
@@ -3680,7 +3692,8 @@ class CalibrationWriterLease:
     """
 
     def __init__(self, ledger_path: Path = DEFAULT_LEDGER_PATH) -> None:
-        self.ledger_path = Path(ledger_path)
+        from joulewise.align.apple.v4_registration import runtime_ledger
+        self.ledger_path = runtime_ledger(ledger_path)
         self.identity: LedgerLeaseIdentity | None = None
         self.slot_descriptor: int | None = None
         self._owner_thread: int | None = None
@@ -4520,7 +4533,8 @@ def inspect_calibration_ledger(
 ) -> CalibrationLedgerInspection:
     """Inspect physical recovery state without changing any byte."""
 
-    ledger = Path(ledger_path)
+    from joulewise.align.apple.v4_registration import runtime_ledger
+    ledger = runtime_ledger(ledger_path)
     try:
         raw = (
             read_authentication_input(
@@ -4664,7 +4678,8 @@ def _locked_append(
     stage_boundary: Any | None = None,
     conflict_code: RefusalCode = RefusalCode.LEDGER_OPERATION_CONFLICT,
 ) -> Mapping[str, Any]:
-    ledger_path = Path(ledger_path)
+    from joulewise.align.apple.v4_registration import runtime_ledger
+    ledger_path = runtime_ledger(ledger_path)
     ledger_path.parent.mkdir(parents=True, exist_ok=True)
     with _ledger_lock(ledger_path, nonblocking=nonblocking):
         descriptor = _open_ledger_append_descriptor(ledger_path)
@@ -4884,6 +4899,8 @@ def append_bracket_session_receipt(
     chain) still refuses ``RESERVATION_HEAD_MISMATCH``.
     """
 
+    from joulewise.align.apple.v4_registration import runtime_ledger
+    ledger_path = runtime_ledger(ledger_path, starting=True)
     session_identity, normalized_slots = validate_bracket_session_reservation_inputs(
         session_id=session_id,
         window_id=window_id,
@@ -5619,8 +5636,13 @@ def calibration_session_status(
     custody_deadline: CustodyDeadline | None = None,
     custody_mode: Literal["read_replay", "issuing"] | None = None,
     custody_state_scope: Literal["declared_slots", "next_slot"] = "declared_slots",
+    probe_live_writer: bool = True,
 ) -> dict[str, Any]:
     """Derive session progress solely from durable ledger/plan/custody state.
+
+    ``probe_live_writer=False`` skips the contention probe, which acquires a
+    writer lease and so creates the lock file beside the ledger; it reports
+    ``live_writer`` False. Only the read-only C1 arm preflight passes it.
 
     ``custody_state_scope`` chooses WHICH declared slots have their custody
     state read. ``declared_slots`` (the default) reads every slot the open
@@ -5703,7 +5725,7 @@ def calibration_session_status(
             "custody_state": custody_state,
             "finalized": slot in session.finalized_slots,
         }
-    live_writer = writer_lease_is_live(ledger_path)
+    live_writer = writer_lease_is_live(ledger_path) if probe_live_writer else False
     actionable: RefusalCode | None = None
     unexpected = set(snapshot.refusal_reasons) - {
         RefusalCode.LEDGER_BRACKET_SESSION_OPEN.value,
@@ -5771,6 +5793,7 @@ def calibration_readiness(
     custody_deadline: CustodyDeadline | None = None,
     verify_custody: bool | None = None,
     allow_stale_pin: bool = False,
+    probe_live_writer: bool = True,
 ) -> CalibrationReadiness:
     """Evaluate the D-117 composite readiness predicate for one exact phase.
 
@@ -5787,6 +5810,11 @@ def calibration_readiness(
     (:attr:`CalibrationLedgerSnapshot.is_open_bracket_extension_past_stale_pin`).
     Rollback, a divergent chain, an open session at ``pre-reserve``, recovery
     and writer contention still refuse.
+
+    ``probe_live_writer=False`` skips the contention probe, which acquires a
+    writer lease and so creates the lock file beside the ledger. Only a
+    read-only caller passes it: the C1 arm preflight, whose reservation
+    repeats the full check under its own lease at use.
     """
 
     if phase not in {"pre-reserve", "pre-slot", "terminal"}:
@@ -5815,7 +5843,7 @@ def calibration_readiness(
     common_blocked = inspection.state != "clean" or inspection.legacy_journal_path is not None
     live_writer = (
         False
-        if enforcing_under_lease
+        if enforcing_under_lease or not probe_live_writer
         else writer_lease_is_live(ledger_path)
     )
     refusal: RefusalCode | None = None

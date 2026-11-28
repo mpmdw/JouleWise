@@ -4,6 +4,7 @@ Required-property assertions stay red for unresolved findings. Git probes use
 temporary repositories; interpreter identity is an explicit synthetic seam.
 No measurement fixture, model, home custody or network is used.
 """
+from tests.git_fixture import init_git_fixture
 from contextlib import redirect_stderr, redirect_stdout
 import io
 import json
@@ -39,7 +40,8 @@ class Scratch(unittest.TestCase):
         (checkout / '.venv/bin/python').write_text('never executed: identity seam')
         (checkout / 'runs').mkdir()
         (checkout / 'runs/ledger.jsonl').write_bytes(b'{"synthetic_ledger":1}\n')
-        for args in (('init', '-q'), ('add', '.'), ('commit', '-qm', 'synthetic checkout')):
+        init_git_fixture(checkout, '-q')
+        for args in (('add', '.'), ('commit', '-qm', 'synthetic checkout')):
             subprocess.run(['git', '-c', 'user.name=Synthetic', '-c',
                             'user.email=synthetic@example.invalid', '-C', str(checkout), *args],
                            check=True, capture_output=True)
@@ -99,7 +101,8 @@ class ProductionPolicyTests(Scratch):
             mutate(extra)
         self.assertEqual(runner.checkout_identity(checkout, run=self.run_identity), identity)
         code, _, error = self.cli('unpack', '--offload', transport, '--finalized-manifest', finalized_path,
-                                  '--finalized-sha256', off.manifest_sha256(final))
+                                  '--finalized-sha256', off.manifest_sha256(final), '--window-id', 'W1',
+                                  '--receipt-out', self.root / 'receipt.json')
         if code:
             self.assertFalse(session.exists(), 'a refused restore must not publish the session')
             return 'unpack refused', error

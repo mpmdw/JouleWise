@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import shlex
 import subprocess
 import tempfile
@@ -39,6 +40,13 @@ MAINTENANCE_ON_EXCEPTIONS = {
         "CalibrationExitReliabilityTests.test_forced_auto_maintenance_mutation_reproduces_cleanup_race",
     },
 }
+
+
+# Row 23's supplied offline acceptance package is frozen byte for byte.
+# Its bounded history and seed constructors own exactly these two init calls.
+FROZEN_C1_FIXTURE = "tests/align/c1_closure_lite/suite/filesystem.py"
+FROZEN_C1_FIXTURE_SHA256 = "1ea1ad6858ec7a93396ab8bfd45fb253ef5fad793e19cc50acb61f105a15b623"
+FROZEN_C1_INIT_SITES = {"history": 53, "seed": 71}
 
 
 def _string_literals(node: ast.AST) -> tuple[str, ...]:
@@ -157,7 +165,10 @@ def _direct_git_init_lines(
 ) -> tuple[int, ...]:
     """Return direct Git initialization sites that bypass the shared helper."""
 
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    raw = path.read_bytes()
+    tree = ast.parse(raw, filename=str(path))
+    frozen = (repo_relative_path == FROZEN_C1_FIXTURE
+              and hashlib.sha256(raw).hexdigest() == FROZEN_C1_FIXTURE_SHA256)
     parents = {
         child: parent
         for parent in ast.walk(tree)
@@ -188,6 +199,8 @@ def _direct_git_init_lines(
     for node in direct_calls:
         scope = _scope_name(node, parents)
         if scope in MAINTENANCE_ON_EXCEPTIONS.get(repo_relative_path, set()):
+            continue
+        if frozen and FROZEN_C1_INIT_SITES.get(scope) == node.lineno:
             continue
         function = next(
             (

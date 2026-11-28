@@ -135,7 +135,8 @@ class RegistrationAndScreenTests(unittest.TestCase):
                 candidate.receipt['commit'] = candidate.commit('Synthetic review case ' + change)
                 candidate.receipt['artifacts'][bar_path] = candidate.digest(bar_path)
                 candidate.write(receipt_path, json.dumps(candidate.receipt))
-                with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'U3'):
+                with self.subTest(change=change), candidate.executed_sources_unchecked(), \
+                        self.assertRaisesRegex(ValueError, 'U3'):
                     v4_registration.require_registration(candidate.root)
 
     def test_missing_and_failed_r1_screen_keep_30b_but_block_d_and_full_desk(self):

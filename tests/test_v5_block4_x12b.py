@@ -7,6 +7,7 @@ code. No privileged command is executed; none of this is live qualification.
 """
 import ast
 import base64
+import hashlib
 import inspect
 import io
 import itertools
@@ -17,6 +18,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 from unittest import mock
@@ -35,6 +37,32 @@ from tests import test_run_night as driver_fixture
 from scripts import run_night as driver, v5_s1_desk_closeout as desk
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def qualification_source_sha256(relative_path):
+    return hashlib.sha256((ROOT / relative_path).read_bytes()).hexdigest()
+
+
+def rl87_unregistered_calls():
+    """Record the closed qualification path's debt only off its sealed driver.
+
+    Rows name the module, exact source expression, introducing commit and kind.
+    The courier prefix is partial-vector data, not an executable command.
+    """
+    sealed = q.read(ROOT / 'configs/campaigns/v5_claim_25g83/sealed_inventory.json')['files']
+    if qualification_source_sha256('scripts/run_night.py') == sealed['scripts/run_night.py']:
+        return []
+    return [
+        ('scripts.run_night',
+         "('/usr/bin/sudo', '-n', '/usr/sbin/systemsetup', '-getusingnetworktime')",
+         '19a862dc8', 'command'),
+        ('scripts.run_night', "['git', 'init', '--bare', '-q', str(repository)]",
+         'c80d4d638', 'command'),
+        ('scripts.run_night',
+         "['git', '--git-dir=' + str(repository), '-c', 'user.name=JouleWise courier', "
+         "'-c', 'user.email=joulewise-courier@example.invalid']",
+         'c80d4d638', 'partial vector: data, not a command'),
+    ]
 
 
 def governed_callsite_inventory():
@@ -76,10 +104,30 @@ def governed_callsite_inventory():
 
 
 class RegisteredRosterTests(unittest.TestCase):
+    def test_qualification_registry_matches_sealed_inventory(self):
+        sealed = q.read(ROOT / 'configs/campaigns/v5_claim_25g83/sealed_inventory.json')['files']
+        self.assertEqual(qualification_source_sha256('joulewise/t0_rehearsal.py'),
+                         sealed['joulewise/t0_rehearsal.py'],
+                         'RL-87: qualification registry must stay at its sealed bytes')
+
+    def test_current_driver_differs_from_sealed_qualification_driver(self):
+        sealed = q.read(ROOT / 'configs/campaigns/v5_claim_25g83/sealed_inventory.json')['files']
+        self.assertNotEqual(qualification_source_sha256('scripts/run_night.py'),
+                            sealed['scripts/run_night.py'],
+                            'RL-87: unregistered calls require a driver outside the qualification seal')
+
     def test_governed_calls_and_dynamic_builders_have_reviewed_inventory(self):
         expected = q.read(ROOT / 'tests/fixtures/v5_qualification/process_argv_inventory.json')
+        # The walker records the courier's nested forwarding helper under both
+        # its enclosing function and itself. These are the only extra rows.
+        courier_rows = [
+            (['_publish_terminal_result', 'observed_run', 'args'], 'c80d4d638'),
+            (['run', 'observed_run', 'args'], 'c80d4d638'),
+        ] if rl87_unregistered_calls() else []
+        expected['scripts.run_night'] = sorted(expected['scripts.run_night']
+            + [row for row, _commit in courier_rows])
         self.assertEqual(governed_callsite_inventory(), expected,
-            'governed argv changed: derive its consumer outcome and register it beside G1, then refresh the inventory')
+            'RL-87: governed argv changed beyond the exact reviewed inventory and two courier rows')
 
     def test_exact_argv_outcomes_follow_consumers(self):
         cases = [(('/usr/bin/pgrep', '-lf', af.t0._prewindow.CONTAMINANTS), (0, 1)),
@@ -113,6 +161,7 @@ class RegisteredRosterTests(unittest.TestCase):
         from scripts import run_night
         modules = (author, capture, run_night, night_gate)
         seen = []
+        missing = []
         for module in modules:
             tree = ast.parse(inspect.getsource(module))
             def value(node):
@@ -165,9 +214,70 @@ class RegisteredRosterTests(unittest.TestCase):
                 if any(isinstance(item, ast.Starred) for item in node.elts):
                     continue
                 seen.append((module.__name__, node.lineno, argv))
-                self.assertIsNotNone(t0.qualification_process_registration(argv),
-                                     f'{module.__name__}:{node.lineno}: {argv}')
+                if t0.qualification_process_registration(argv) is None:
+                    missing.append((module.__name__, ast.unparse(node)))
         self.assertGreater(len(seen), 25)
+        expected = [(module, expression) for module, expression, _commit, _kind
+                    in rl87_unregistered_calls()]
+        self.assertEqual(sorted(missing), sorted(expected),
+                         'RL-87: unregistered source expressions must equal the exact three-call record')
+
+    def _assert_driver_source_mutant_fails(self, source):
+        getsource = inspect.getsource
+        with tempfile.TemporaryDirectory(prefix='x12b-rl87-') as temporary:
+            copy = Path(temporary) / 'run_night.py'
+            copy.write_text(source)
+            with mock.patch.object(inspect, 'getsource', side_effect=lambda module:
+                    copy.read_text() if module is driver else getsource(module)):
+                with self.assertRaisesRegex(AssertionError, 'RL-87: unregistered source expressions'):
+                    self.test_ast_literal_argv_census_has_no_missing_registration()
+
+    def test_fourth_unregistered_call_is_detected(self):
+        self._assert_driver_source_mutant_fails(inspect.getsource(driver) + '\n'
+            'def _rl87_fourth_call():\n'
+            "    return t0_rehearsal.observed_run(['/usr/bin/pgrep', '-lf', 'rl87-fourth-call'])\n")
+
+    def test_disappearing_listed_call_is_detected(self):
+        tree = ast.parse(inspect.getsource(driver))
+        tree.body = [node for node in tree.body if not (isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == 'NETWORK_TIME_QUERY_ARGV'
+                    for target in node.targets))]
+        self._assert_driver_source_mutant_fails(ast.unparse(tree))
+
+    def test_sealed_driver_disallows_nonempty_unregistered_record(self):
+        sealed = q.read(ROOT / 'configs/campaigns/v5_claim_25g83/sealed_inventory.json')['files']
+        with mock.patch(__name__ + '.qualification_source_sha256',
+                        return_value=sealed['scripts/run_night.py']):
+            self.assertEqual(rl87_unregistered_calls(), [])
+            with self.assertRaisesRegex(AssertionError, 'RL-87: unregistered source expressions'):
+                self.test_ast_literal_argv_census_has_no_missing_registration()
+            with self.assertRaisesRegex(AssertionError, 'RL-87: governed argv changed'):
+                self.test_governed_calls_and_dynamic_builders_have_reviewed_inventory()
+
+    def test_changed_qualification_registry_bytes_break_seal(self):
+        read_bytes = Path.read_bytes
+        target = ROOT / 'joulewise/t0_rehearsal.py'
+        def mutated_bytes(path):
+            data = read_bytes(path)
+            return data + b'\n# RL-87 seal mutant\n' if path == target else data
+        with mock.patch.object(Path, 'read_bytes', mutated_bytes):
+            with self.assertRaisesRegex(AssertionError, 'RL-87: qualification registry'):
+                self.test_qualification_registry_matches_sealed_inventory()
+
+    def test_courier_inventory_rows_are_exact(self):
+        actual = governed_callsite_inventory()
+        for change in ('extra', 'missing', 'duplicate'):
+            with self.subTest(change=change):
+                mutated = {module: list(rows) for module, rows in actual.items()}
+                rows = mutated['scripts.run_night']
+                if change == 'missing':
+                    rows.remove(['run', 'observed_run', 'args'])
+                else:
+                    rows.append(['run' if change == 'duplicate' else '_rl87_fourth_call',
+                                 'observed_run', 'args'])
+                with mock.patch(__name__ + '.governed_callsite_inventory', return_value=mutated):
+                    with self.assertRaisesRegex(AssertionError, 'RL-87: governed argv changed'):
+                        self.test_governed_calls_and_dynamic_builders_have_reviewed_inventory()
 
     def test_stage_builder_roster_is_registered(self):
         from types import SimpleNamespace

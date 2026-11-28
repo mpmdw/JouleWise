@@ -13,6 +13,7 @@ import math
 import json
 import os
 from pathlib import Path
+import shutil
 import tempfile
 import time
 from types import SimpleNamespace
@@ -28,6 +29,7 @@ from joulewise.b5 import plan
 from joulewise.b6 import registration
 from tests.test_b5_driver import Harness, fake_monitor_argv
 from tests.align.test_v4_cadence import arm_seams
+from tests.align.v4_registration_fixtures import fixture_c1_preflight, span_aware_watchdog
 from tests.align.test_v4_kit import ROOT, FakeArmHost
 
 
@@ -76,6 +78,55 @@ def freeze_test(root, history):
     admission = json.loads(path.read_bytes()) if path.exists() else {}
     admission.setdefault('evidence', {})['test_threshold_freeze'] = ref(freeze)
     write(root, s.ADMISSION, admission)
+
+
+class FilledSizingTests(unittest.TestCase):
+    def test_c1_footprint_and_span_use_filled_synthetic_plan(self):
+        # Keep this independent of the committed W1 registration inputs and plan.
+        configs = [w1.KIT / f'synthetic-{i}.json' for i in range(1, 6)]
+        launch = dict(commands=[dict(argv_template=dict(arguments=[dict(value='')]))])
+        stage_graph = [dict(stage_id=f'synthetic-episodes-{half}', kind='campaign_collection', launch=launch)
+                       for half in ('a', 'b')]
+        stage_graph.append(dict(stage_id='scaffold', kind='campaign_collection', expected_count=25))
+        base = {
+            w1.KIT / 'plan_tree.json': s.raw_json(dict(stage_graph=stage_graph, science=[{}])),
+            w1.KIT / 'collection_plan.json': s.raw_json(dict(
+                members=[dict(config_path=str(path)) for path in configs],
+                runtime_requirements=dict(ac_powermode=0, window_reference=dict(capture_ordinal=5)))),
+        }
+        for i, path in enumerate(configs, 1):
+            spec = dict(max_turns=12, task_kwargs={})
+            if i == 5:
+                spec['thermal'] = {}
+            base[path] = s.raw_json(dict(run_id=f'synthetic-{i}', run_metadata={},
+                                        workload_profile=dict(prompt_text=json.dumps(spec))))
+        members = [dict(ordinal=i, role='anchor' if i <= 4 else 'D', member_s=700 + i if i <= 4 else 1500 + i)
+                   for i in range(1, 19)]
+        filled = s.raw_json(dict(align_v4=dict(members=members)))
+        disk = s.raw_json(dict(packs={'align-pilot-v3': dict(
+            disk_member_law=dict(intercept=20, slope=3, largest_positive_residual=5),
+            disk_derivation=dict(scaffold_bytes=10000))}))
+        with tempfile.TemporaryDirectory() as td, ExitStack() as stack:
+            root = Path(td)
+            write(root, w1.W1_PLAN, filled)
+            stack.enter_context(patch.object(w1, 'build_files', return_value=base))
+            stack.enter_context(patch.object(w1, 'frozen', return_value=disk))
+            stack.enter_context(patch.object(w1, 'read_inputs', return_value={}))
+            stack.enter_context(patch.object(w1, '_identities'))
+            stack.enter_context(patch.object(w1, 'bundle_config_bytes', side_effect=s.raw_json))
+            stack.enter_context(patch('joulewise.schemas.BenchmarkConfig.from_mapping', side_effect=lambda value: value))
+            stack.enter_context(patch.object(s.chain, 'stage_plan'))
+            files = s.build_files(root, s.candidate(), 'C1')
+            path = s.kit_path('C1') / 'registration/sizing_b5.json'
+            sizing = registration.load_sizing(write(root, path, files[path]))
+        sized = sizing['packs']['align-v4-c1']
+        self.assertEqual(sizing['sources']['w1_plan_sha256'], hashlib.sha256(filled).hexdigest())
+        self.assertEqual(sized['flags'], [])
+        self.assertEqual((sized['align_members'], sized['member_count']), (22, 47))
+        self.assertEqual(sized['programmed_span_s'], 35129)  # 4995 + sum(701..704) + 18 * 1518
+        self.assertEqual(sized['estimated_footprint_bytes'], 201904)  # two copies of scaffold and all members
+        self.assertLessEqual(sized['window_max_s'], 59520)
+        self.assertEqual(sized['window_ceiling_s'], 59520)
 
 
 class ManifestTests(unittest.TestCase):
@@ -166,8 +217,15 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual({seconds[str(i)] for i in range(5, 23)}, {1518.0})
 
     def test_kit_has_real_scaffold_configs_reference_custody_identity_and_sizing(self):
-        f = self.files
         directory = s.kit_path('C1')
+        sizing_path = directory / 'registration/sizing_b5.json'
+        sizing = json.loads(self.files[sizing_path])
+        self.assertEqual(sizing['sources']['w1_plan_sha256'],
+                         hashlib.sha256((ROOT / w1.W1_PLAN).read_bytes()).hexdigest())
+        self.assertEqual(sizing['packs']['align-v4-c1']['flags'], [])
+
+        with patch.object(w1, 'read_w1_plan_bytes', return_value=None):
+            f = s.build_files(ROOT, self.manifest, 'C1')
         collection = json.loads(f[directory / 'collection_plan.json'])
         tree = json.loads(f[directory / 'plan_tree.json'])
         w1.check_window_reference_roles(collection)
@@ -408,7 +466,14 @@ class FakeWorld:
                 target.symlink_to(path, target_is_directory=path.is_dir())
         for path in (ROOT / 'configs/campaigns').iterdir():
             target = m / 'configs/campaigns' / path.name
-            if path.name != 'align_v4' and not target.exists():
+            if name == 'C1' and path.name in ('neg8_reference_corpus_v5', 'window_references_v5'):
+                # Harness already links auxiliary packs out of the fixture.
+                # K2/K3 read their contents inside the fixture's own root.
+                if target.is_symlink():
+                    target.unlink()
+                if not target.exists():
+                    shutil.copytree(path, target)
+            elif path.name != 'align_v4' and not target.exists():
                 target.symlink_to(path, target_is_directory=path.is_dir())
         # This existing policy directory needs an additional safe repo fixture.
         target = m / 'configs/campaign_policies/quiet_mac_p2_b5.json'
@@ -422,6 +487,9 @@ class FakeWorld:
         source_path = Path('scripts/zero_ntp_frequency.c')
         source_raw = (ROOT / source_path).read_bytes()
         write(m, source_path, source_raw)
+        if name == 'C1':
+            # Desk-stage argv names a backup tool even though the arm witness never runs it.
+            write(m, 'scripts/backup_runs.sh', b'#!/bin/sh\nexit 97\n')
         receipt_path = Path(v4_registration.REGISTRATION) / 'registration_receipt.json'
         receipt = json.loads((m / receipt_path).read_bytes()) if (m / receipt_path).exists() else {}
         receipt.setdefault('artifacts', {})[source_path.as_posix()] = s.sha(source_raw)
@@ -507,11 +575,23 @@ class FakeWorld:
                     return {'artifacts': {uid: {'inventory': [{'path': 'weight'}]} for uid in pins['units']}}
                 return original_read(path, *args)
             stack.enter_context(patch.object(registration, 'load_identity_pins', side_effect=physical_pins))
+            stack.enter_context(patch.object(session, '_prepare_weight_digests',
+                                            return_value={'ok': True, 'synthetic': True}))
+            stack.enter_context(patch.object(session, 'runtime_stack_preflight',
+                return_value={'ok': True, 'reasons': [], 'synthetic': True}))
+            stack.enter_context(patch.object(session, 'held_window_check',
+                return_value={'ok': True, 'reasons': [], 'synthetic': True}))
             stack.enter_context(patch.object(h, 'read', side_effect=physical_inventory))
             # The chain replay stages t0 in the past to avoid an eight-minute
             # wait. The pre-arm clock is earlier; the real preflight still reads
             # and verifies the actual writer's plan and budget.
             stack.enter_context(patch.object(session, 'time', SimpleNamespace(**(vars(time) | {'time': lambda: time.time() - 600}))))
+            shared_prepare = h.prepare
+
+            def replay_prepare(*args, attempt_c1=False, **kwargs):
+                return shared_prepare(*args, **kwargs)
+
+            stack.enter_context(patch.object(h, 'prepare', side_effect=replay_prepare))
             state = session.prepare(m, self.session, window_id=self.name, run=self.run_process,
                 now=lambda: time.time() - 480, statvfs=lambda _: SimpleNamespace(f_bavail=10**12, f_frsize=1),
                 capacity=lambda _: None, frequency_reader=lambda: frequency_probe(0),
@@ -528,11 +608,16 @@ class FakeWorld:
             host = FakeArmHost(0)
             stack.enter_context(patch.object(session, 'w1_disk_check', return_value={'admitted': True}))
             stack.enter_context(patch.dict(os.environ, {'JOULEWISE_HOST_STATE_DIR': str(self.root / 'host-state')}))
+            seams = {**arm_seams(), 'watchdog_check': span_aware_watchdog}
+            if self.name == 'C1':
+                stack.enter_context(patch.object(session, 'c1_arm_preflight',
+                                                 side_effect=fixture_c1_preflight(state, packet, seams['packet_builder'])))
+                seams['c1_handoff'] = {'window': 'C1'}
             installed = session.install(self.session, run=self.run_process, runner=host, volume_runner=host,
                 now=lambda: state['t0_epoch_s'] - 1, next_arm_triage=packet,
                 obc_off_attested_by='SYNTHETIC operator', battery_log=self.battery_log(state),
                 frequency_reader=lambda: frequency_probe(0),
-                **arm_seams())
+                **seams)
             test.assertEqual(installed['exit_code'], 0)
             test.assertEqual(len(self.installer_calls), 1)
             harness.plan_path = Path(state['plan_path'])

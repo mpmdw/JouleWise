@@ -655,7 +655,10 @@ class HazardWindowRefusalTests(_SentinelMixin, unittest.TestCase):
             bundle_module._writer_launch_lineage(w.claim, config)
         # Through the controller: the pre-slot route admits no unauthenticated
         # member, so the run is refused before any bundle directory exists.
-        with self.assertRaisesRegex(ValueError, "revision_five"):
+        # The lineage records the pack digest, so the one pack predicate
+        # refuses the flipped byte at the pre-slot route itself, before the
+        # later instrument-calibration match could ("revision_five").
+        with self.assertRaisesRegex(ValueError, "pack_inadmissible"):
             run_member(w, w.member_path, config=config)
         self.assertFalse((w.claim / config.run_id).exists())
         self.assertEqual(sorted(p.name for p in w.claim.iterdir()),

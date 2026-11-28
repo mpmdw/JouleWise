@@ -1,0 +1,233 @@
+[
+  {
+    "name": "audit7-derivation-binding",
+    "fixture": "derivation",
+    "forms": [
+      "repo_path",
+      "repo_root"
+    ],
+    "variants": [
+      "clean",
+      "modified",
+      "unbound"
+    ]
+  },
+  {
+    "name": "audit8-bare-ledger",
+    "fixture": "ledger",
+    "forms": [
+      "explicit",
+      "bare",
+      "default"
+    ],
+    "variants": [
+      "clean",
+      "modified",
+      "unbound"
+    ]
+  },
+  {
+    "name": "audit8-default-policy",
+    "fixture": "policy",
+    "forms": [
+      "explicit",
+      "default",
+      "equals"
+    ],
+    "variants": [
+      "clean",
+      "modified",
+      "unbound"
+    ]
+  },
+  {
+    "name": "audit8-session-kind-bracket",
+    "fixture": "session_kind",
+    "forms": [
+      "default",
+      "explicit"
+    ]
+  },
+  {
+    "name": "audit1-relabeled-sentinels",
+    "fixture": "ordinary22_relabel",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "audit1-wrong-ordinals",
+    "fixture": "sentinels_wrong_positions",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "audit2-w1-desk-from-r1",
+    "fixture": "stale_w1_desk_r1_pointer",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "audit2-ordered-legacy-projection",
+    "fixture": "ordered_projection_no_ordinals",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "audit3-swapped-kit",
+    "fixture": "swap_24_kit_to_22",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "audit4-swapped-order",
+    "fixture": "swap_second_order_to_22",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "audit5-changed-derivation",
+    "fixture": "edit_derivation_after_build",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "audit6-absent-from-stage-and-selection",
+    "fixture": "drop_required_derivation_before_build",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "missing-ledger-and-row",
+    "fixture": "drop_initial_ledger_before_build",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "missing-policy-and-blob",
+    "fixture": "drop_default_policy_before_build",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "semantic-desk-and-ready-forgery",
+    "fixture": "pending_desk_forged_status_and_ready",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "expired-packet",
+    "fixture": "expired_141",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "wrong-predecessor",
+    "fixture": "wrong_predecessor_hash",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "outside-default-ancestor",
+    "fixture": "ambient_parent_manifest",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "outside-env-ledger",
+    "fixture": "external_calibration_ledger",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "outside-config-ref",
+    "fixture": "absolute_external_sidecar",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "outside-unknown-binding",
+    "fixture": "unrecognized_binding_kind",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "preflight-routing",
+    "fixture": "session_downgrade",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "same-root-direct-arm",
+    "fixture": "unclosed_legacy_source_equals_view",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "default-head-pin",
+    "fixture": "head_pin",
+    "forms": [
+      "default",
+      "explicit"
+    ],
+    "variants": [
+      "clean",
+      "modified",
+      "unbound"
+    ]
+  },
+  {
+    "name": "ambient-shade-cache",
+    "fixture": "ambient_shade_only",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "staging-link-and-copy",
+    "fixture": "valid_24_closure",
+    "forms": [
+      "link",
+      "copy"
+    ]
+  },
+  {
+    "name": "reservation-start-digest",
+    "fixture": "wrong_start_digest",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "external-arm-record",
+    "fixture": "installed_frequency_helper",
+    "forms": [
+      "normal"
+    ]
+  },
+  {
+    "name": "dispatch-roster-with-closed-stage",
+    "fixture": "closed_stage_wrong_order",
+    "forms": [
+      "normal"
+    ]
+  }
+]

@@ -9,10 +9,13 @@ from tests.fixtures.b5_plan import corpus18_render
 
 
 class ChainScreenTests(unittest.TestCase):
-    def test_sealed_plans_without_screen_are_byte_identical(self):
-        hashes = {"alpha": "0400e2f0b7c74d957f9fb57216c30cc4fc7bb55d6f347fa9fd2958527194afe8",
-                  "beta": "f95f4875f88c2bcb97f1ea7f9d2d43fa76b9506343c83d7a9a4a17297d4cc217",
-                  "gamma": "7ed69d6068f29d36bc8c8690f9817aec734fc6e07e338a46ae440c65281d3c2e"}
+    def test_plans_without_screen_match_admitted_timing_bytes(self):
+        # Historical renders at 2b2bea4cc and d9ce14fcb reproduce the original
+        # three pins. Only ed9fd3ca1 and f45536616 change their rendered bytes:
+        # boundary timing receipts and their reviewed settle-marker correction.
+        hashes = {"alpha": "5781113534a58303ba32dec7221a65a0903e0df624e26156a56289d29bd93729",
+                  "beta": "8b1e994a5b1ffa6baddd2923d58b5e5b436cbe1a13aac8646e5c002b5ee48618",
+                  "gamma": "de3aaa861280c26b73f20f8b2f194ae26d6a49a798da09ce48e4c4351d1a26e3"}
         for pack, expected in hashes.items():
             raw, *_ = corpus18_render.render_pack(pack, Path('/private/tmp/b6-baseline') / pack)
             normalized = raw.replace(str(corpus18_render.ROOT).encode(), b'REPO_ROOT')

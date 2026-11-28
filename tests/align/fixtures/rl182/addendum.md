@@ -1,0 +1,3 @@
+- **E2, first bullet (P4:1188).** It reads: "A decode-only row runs from the turn's first-token stamp to the row's end as RL-149 §1.3 defines it. The first-token stamp is the record's `Turn.first_token_ns`: the end of prefill as the runtime reports it, which the pinned runtime writes when its stream yields the first generated token. State, clock clause, guard and `after_hot_turn` are unchanged."
+- **E10 (P4:1283).** B2a's outcome reads "…from turn 0's first-token stamp (B2) to the member's end."
+- **AM:47.** "from the turn's first generated token" reads "from the end of the turn's prefill, when the first generated token arrives".

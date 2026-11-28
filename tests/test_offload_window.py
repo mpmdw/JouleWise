@@ -22,6 +22,9 @@ import time
 from contextlib import redirect_stderr as contextlib_redirect_stderr
 from types import SimpleNamespace
 import unittest
+from unittest.mock import Mock, patch
+
+from tests.git_fixture import init_git_fixture
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("offload_window", ROOT / "scripts/offload_window.py")
@@ -117,6 +120,65 @@ def sha(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
+def write_r1_format(case, plan_id, artifact=None):
+    terminal = json.loads(case.files[TERMINAL])
+    case.put_file(TERMINAL, json.dumps({**terminal, 'plan_id': plan_id}).encode())
+    if artifact is not None:
+        case.put_file(artifact, b'{}')
+    doc = {'schema': ow.SCHEMA_R1, 'root': str(case.record),
+           'files': {rel: sha(raw) for rel, raw in case.files.items()}}
+    raw = (json.dumps(doc, indent=2, sort_keys=True) + '\n').encode()
+    case.manifest.write_bytes(raw)
+    return {'record_manifest_sha256': sha(raw), 'codec': 'gzip'}
+
+
+class Runbook(unittest.TestCase):
+    def test_magistrate_runbook_runs_only_the_reviewed_offload_checkout(self):
+        runbook = (ROOT / 'docs/align/v4/HARVEST-OFF-MAGISTRATE-RUNBOOK.md').read_text()
+        section = runbook.split('**1d.', 1)[1].split('## 2.', 1)[0]
+        blocks = [block.split('\n```', 1)[0] for block in section.split('\n```sh\n')[1:]]
+        self.assertEqual(len(blocks), 1)
+        command, = blocks
+        with tempfile.TemporaryDirectory(dir=TMP_BASE) as scratch:
+            scratch = Path(scratch)
+            checkout = scratch / 'reviewed checkout'
+            script = checkout / 'scripts/offload_window.py'
+            script.parent.mkdir(parents=True)
+            reviewed = 'import sys\nprint("reviewed", *sys.argv[1:3])\n'
+            script.write_text(reviewed)
+            path_client = scratch / 'offload_window.py'
+            path_client.write_text('#!/bin/sh\necho stale-client\n')
+            path_client.chmod(0o755)
+
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(checkout), *args], text=True).strip()
+
+            init_git_fixture(checkout, '-q')
+            git('add', 'scripts/offload_window.py')
+            git('-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.invalid',
+                'commit', '-qm', 'synthetic reviewed checkout')
+            expected = git('rev-parse', 'HEAD')
+
+            def invoke(shell, pin):
+                env = dict(os.environ, OFFLOAD_REPO=str(checkout), OFFLOAD_COMMIT=pin,
+                           PATH=f'{scratch}{os.pathsep}{os.environ["PATH"]}')
+                return subprocess.run([shell, '-f', '-c', command], cwd=scratch, env=env,
+                                      text=True, capture_output=True)
+
+            for shell in ('bash', 'zsh'):
+                with self.subTest(shell=shell):
+                    script.write_text(reviewed)
+                    good = invoke(shell, expected)
+                    self.assertEqual((good.returncode, good.stdout), (0, 'reviewed run --state-root\n'), good.stderr)
+                    stale = invoke(shell, '0' * 40)
+                    self.assertNotEqual(stale.returncode, 0)
+                    self.assertEqual(stale.stdout, '')
+                    script.write_text('print("dirty script")\n')
+                    dirty = invoke(shell, expected)
+                    self.assertNotEqual(dirty.returncode, 0)
+                    self.assertEqual(dirty.stdout, '')
+
+
 class _redirect:
     def __init__(self, sink):
         self.sink = sink
@@ -200,8 +262,10 @@ class Fixture(unittest.TestCase):
                                   now=self.clock, mono=self.clock, lease=lease)
 
     def offload(self, window="w1-test"):
+        # These direct-release fixtures exercise the transport receipts and deletion journal.
+        # The audit regression below exercises the actual pushed-record check separately.
         return ow.Offload(self.state, window, runner=self.transport, now=self.clock, mono=self.clock,
-                          state_probe=lambda: self.probe_state)
+                          state_probe=lambda: self.probe_state, pushed_records=Mock(spec=ow.PushedFinalRecords))
 
     def span(self, window="w1-test", state=None):
         return json.loads(((state or self.state) / window / "timing/offload-span.json").read_text())
@@ -216,6 +280,62 @@ class Fixture(unittest.TestCase):
 
 
 class HappyPath(Fixture):
+    def test_audit_w1_cannot_use_legacy_pack_to_escape_retention(self):
+        self.assertEqual(self.run_offload(window_id='W1'), 2)
+        self.assertIn('v4_window_needs_finalized_manifest_v2', self.span('W1')['reason'])
+        self.assertEqual(self.transport.calls, [])
+        self.assert_nothing_deleted()
+
+    def test_audit_round2_r1_format_cannot_override_v4_window_or_plan_identity(self):
+        cases = [('W1', 'align-v4-W1', rel) for rel in (None, 'archive/synthetic.txt', 'PILOT.json', 'desk.json')]
+        cases += [('W1', 'plan-without-a-v4-prefix', None), ('R1', 'align-v4-W1', None),
+                  ('alternate-window', 'align-v4-W1', None)]
+        for window, plan_id, artifact in cases:
+            with self.subTest(window=window, plan_id=plan_id, artifact=artifact):
+                case = Fixture()
+                case.setUp()
+                try:
+                    options = write_r1_format(case, plan_id, artifact)
+
+                    def confirm_after_verify(command, reply):
+                        if command == f'verify {window}':
+                            self.assertEqual(case.confirm_second_copy(), [window])
+                        return reply
+
+                    case.transport.replace_reply = confirm_after_verify
+                    status = case.run_offload(window_id=window, **options)
+                    case.assert_nothing_deleted()
+                    self.assertEqual(status, 2)
+                    self.assertIn('v4_window_needs_finalized_manifest_v2', case.span(window)['reason'])
+                    self.assertFalse((case.state / window / 'plan.json').exists())
+                    self.assertEqual(case.transport.calls, [])
+                finally:
+                    case.doCleanups()
+
+    def test_audit_round2_cached_r1_format_v4_refuses_resume_verify_and_release(self):
+        options = write_r1_format(self, 'align-v4-W1', 'archive/synthetic.txt')
+        # Represent an offload staged and verified by the old implementation. The live release gate
+        # still holds it even while seeding the older envelope, so the fixture acquires two intact copies.
+        with patch.object(ow, 'check_offload_format'):
+            self.assertEqual(self.run_offload(window_id='W1', **options), 0)
+        self.assertEqual(self.confirm_second_copy(), ['W1'])
+        self.assert_nothing_deleted()
+        self.transport.calls.clear()
+
+        self.assertEqual(self.run_offload(window_id='W1', **options), 3)
+        self.assertIn('v4_window_needs_finalized_manifest_v2', self.span('W1')['reason'])
+        with self.assertRaisesRegex(ow.Mismatch, 'v4_window_needs_finalized_manifest_v2'):
+            self.offload('W1').release()
+        self.assertEqual(self.transport.calls, [])
+
+        for command in ('verify W1', f'receipts W1 {"a" * 32}'):
+            with self.subTest(command=command):
+                rc, reply, _ = self.transport(command)
+                self.assertEqual(rc, 3)
+                self.assertIn('v4_window_needs_finalized_manifest_v2', json.loads(reply)['error'])
+        self.assert_nothing_deleted()
+        self.assertFalse((self.state / 'W1/deleting.json').exists())
+
     def test_round_trip_verify_second_copy_release(self):
         self.assertEqual(self.run_offload(), 0)
         span = self.span()
@@ -265,11 +385,7 @@ class HappyPath(Fixture):
         self.assertFalse((self.record / "members/m01/raw/powermetrics.plist").exists())
 
     def test_r1_harvest_manifest_and_gzip_fallback(self):
-        doc = {"schema": ow.SCHEMA_R1, "root": str(self.record),
-               "files": {rel: sha(raw) for rel, raw in self.files.items()}}
-        raw = (json.dumps(doc, indent=2, sort_keys=True) + "\n").encode()
-        self.manifest.write_bytes(raw)
-        self.assertEqual(self.run_offload(record_manifest_sha256=sha(raw), codec="gzip"), 0)
+        self.assertEqual(self.run_offload(**write_r1_format(self, 'align-v4-r1-rehearsal')), 0)
         manifest = json.loads((self.state / "w1-test/offload-manifest.json").read_text())
         self.assertEqual(manifest["codec"]["name"], "gzip")
         self.assertEqual(manifest["record_format"], "r1_harvest_manifest.v1")
@@ -537,6 +653,170 @@ class FinalizedManifestV2(Fixture):
         self.assertEqual(list(self.record.iterdir()), [])
         self.assertFalse(self.pack_dir.exists())  # payload and MANIFEST.json gone; the empty directory too
         self.assertTrue(self.ledger.exists())     # a closure input is never deleted
+
+    def test_audit_round2_retry_id_is_preserved_through_verify_and_release(self):
+        from tests.align.test_v4_next_arm_packet import Scenario
+
+        window = 'C3#2'
+        plan_id = 'align-v4-c3-retry-2'
+        terminal = json.loads(self.files[TERMINAL])
+        self.put_file(TERMINAL, json.dumps({**terminal, 'plan_id': plan_id}).encode())
+        self.assertEqual(self.run_offload(**self.packed(window_id=window)), 0)
+        self.assertEqual(self.span(window)['release_held'], 'v4_release_needs_final_pushed_record')
+        self.assertEqual(self.confirm_second_copy(), [window])
+        self.assertIn(f'verify {window}', self.transport.calls)
+        self.assertTrue((self.store / 'second' / window / ow.SECOND_RECEIPT).is_file())
+        self.assertTrue(self.pack_dir.exists())
+        self.assert_nothing_deleted()
+
+        repo = self.tmp / 'records'
+        repo.mkdir()
+        record = Scenario(repo, window)
+        for source in ('plan', 'desk', 'pilot'):
+            record.sources[source]['plan_id'] = plan_id
+        record.record['finalized_manifest'] = self.v2_sha
+        record.finish()
+        ref = 'refs/remotes/synthetic/records'
+        proof = ow.PushedFinalRecords(repo, ref, record.record_path)
+        result, = ow.release_older(self.state, 'C4', self.transport, self.clock, self.clock,
+                                   self.clock() + 600, lambda: self.probe_state, None, proof)
+        self.assertEqual(result['window_id'], window)
+        self.assertFalse(self.pack_dir.exists())
+        self.assertFalse((self.record / 'empty.txt').exists())
+
+    def test_retry_grammar_refuses_other_hash_suffixes(self):
+        from joulewise.align.apple.v4_cadence import WINDOW_ID as CADENCE_WINDOW_ID
+
+        for window in ('C3#2', 'D12#19', 'T5#10'):
+            self.assertIsNotNone(CADENCE_WINDOW_ID.fullmatch(window))
+            self.assertEqual(ow.valid_window(window), window)
+        for window in ('C3#0', 'C3#02', 'C3#2#3', 'C3#2/..', 'C3#2\n', 'W1#2', 'smoke-test#2', 'C3#' + '2' * 126):
+            with self.subTest(window=window), self.assertRaisesRegex(ow.Refusal, 'bad_window_id'):
+                ow.valid_window(window)
+
+    @unittest.skipUnless(ow.zstd_cli(), 'native harvest pack requires zstd')
+    def test_audit_w1_two_verified_copies_hold_until_the_final_record_is_pushed(self):
+        from joulewise.align.apple import harvest_offload
+        from tests.align.test_v4_next_arm_packet import Scenario
+
+        # Audit reproduction: use the actual harvest pack and make the second copy ready before release.
+        (self.record / 'view').unlink()
+        (self.record / 'view').symlink_to('members')
+        mirror = {'root': str(self.ledger.parents[1]), 'identity': {'fixture': 'synthetic'}}
+        finalized = harvest_offload.finalized_manifest(self.record, mirror=mirror, inputs=(self.ledger,))
+        raw = harvest_offload._canonical_bytes(finalized)
+        body = self.tmp / 'mbp/finalized_manifest.json'
+        body.write_bytes(raw)
+        digest = sha(raw)
+        harvest_offload.pack(self.record, self.pack_dir, finalized=finalized, external=(self.ledger,),
+                             mirror_identity=mirror['identity'])
+        packed = dict(window_id='W1', record_manifest=body, record_manifest_sha256=digest,
+                      harvest_pack=self.pack_dir, pack=False)
+
+        def confirm_after_verify(command, reply):
+            if command == 'verify W1':
+                self.assertEqual(self.confirm_second_copy(), ['W1'])
+            return reply
+
+        self.transport.replace_reply = confirm_after_verify
+        self.assertEqual(self.run_offload(**packed), 0)
+        self.assertEqual(self.span('W1')['outcome'], 'verified_on_air')
+        self.assertEqual(self.span('W1')['release_held'], 'v4_release_needs_final_pushed_record')
+        self.assertTrue((self.store / 'second/W1' / ow.SECOND_RECEIPT).exists())
+        self.assertTrue(self.pack_dir.exists())
+        self.assert_nothing_deleted()
+
+        # The obsolete runbook client reaches this exact request in both run and release, even
+        # when the current gate has verified two copies. It cannot obtain fresh deletion proof.
+        rc, reply, _ = self.transport(f'receipts W1 {"a" * 32}')
+        self.assertEqual(rc, 3)
+        self.assertEqual(json.loads(reply)['error'], 'v4_release_needs_v4_receipts')
+        self.assert_nothing_deleted()
+        self.assertTrue(self.pack_dir.exists())
+        self.assertFalse((self.state / 'W1/deleting.json').exists())
+
+        # Explicit release and the older-window sweep run through the same guard.
+        with _redirect(io.StringIO()):
+            rc = ow.run_release(self.args(window_id='W1'), runner=self.transport,
+                                state_probe=lambda: self.probe_state, now=self.clock, mono=self.clock, alarm=False)
+        self.assertEqual(rc, 2)
+        self.assertEqual(ow.release_older(self.state, 'C1', self.transport, self.clock, self.clock,
+                                          self.clock() + 600, lambda: self.probe_state, None),
+                         [{'window_id': 'W1', 'held': 'v4_release_needs_final_pushed_record'}])
+        self.assert_nothing_deleted()
+
+        repo = self.tmp / 'records'
+        repo.mkdir()
+        r1 = Scenario(repo, 'R1').finish()
+        w1 = Scenario(repo, 'W1', previous=r1, provisional=True)
+        for source in ('plan', 'desk', 'pilot'):
+            w1.sources[source]['plan_id'] = 'plan-w1'
+        w1.record['finalized_manifest'] = digest
+        w1.finish()
+        ref = 'refs/remotes/origin/records'
+        w1.git('update-ref', ref, w1.record_commit)
+        c1 = Scenario(repo, 'C1', previous=w1, previous_final=True).finish()
+        proof = dict(records_repo=repo, pushed_ref=ref)
+        self.assertEqual(self.run_offload(**packed, **proof, record_path=w1.record_path), 0)
+        self.assertEqual(self.span('W1')['release_held'], 'v4_release_desk_not_final')
+        self.assertEqual(self.run_offload(**packed, **proof, record_path=c1.record_path), 0)
+        self.assertEqual(self.span('W1')['release_held'], 'v4_release_pushed_records_unreadable')
+        self.assert_nothing_deleted()
+        self.assertTrue(self.pack_dir.exists())
+        self.assertFalse((self.state / 'W1/deleting.json').exists())
+
+        c1.git('update-ref', ref, c1.record_commit)
+        self.assertEqual(self.run_offload(**packed, **proof, record_path=c1.record_path), 0)
+        self.assertIsNone(self.span('W1')['release_held'])
+        self.assertFalse(self.pack_dir.exists())
+        self.assertFalse((self.record / 'empty.txt').exists())
+
+    def test_audit_offload_refuses_packs_that_carry_desk_artifacts_before_upload(self):
+        for name in ('archive', 'PILOT.json', 'desk.json'):
+            with self.subTest(name=name):
+                artifact = self.record / name
+                if name == 'archive':
+                    artifact.mkdir()
+                else:
+                    artifact.write_text('{}')
+                self.pack_dir = self.tmp / 'mbp' / f'pack-with-{name}'
+                self.assertEqual(self.run_offload(**self.packed(window_id='W1')), 3)
+                self.assertIn('harvest_pack_contains_desk_artifact', self.span('W1')['reason'])
+                self.assertEqual(self.transport.calls, [])
+                self.assertTrue(self.pack_dir.exists())
+                self.assert_nothing_deleted()
+                if name == 'archive':
+                    artifact.rmdir()
+                else:
+                    artifact.unlink()
+
+    def test_audit_round3_air_refuses_cached_packs_that_carry_desk_artifacts(self):
+        for name in ('archive', 'PILOT.json', 'desk.json'):
+            with self.subTest(name=name):
+                case = FinalizedManifestV2()
+                case.setUp()
+                try:
+                    if name == 'archive':
+                        (case.record / name).mkdir()
+                    else:
+                        case.put_file(name, b'{}')
+                    options = case.packed(window_id='W1')
+                    # Seed a genuine pair of receipts through the former inventory policy.
+                    with patch.object(ow, 'check_pre_desk_inventory'):
+                        self.assertEqual(case.run_offload(**options), 0)
+                        self.assertEqual(case.confirm_second_copy(), ['W1'])
+                    nonce = 'a' * 32
+                    for command in ('verify W1', f'receipts W1 {nonce}', f'receipts-v4 W1 {nonce}'):
+                        with self.subTest(command=command):
+                            rc, reply, _ = case.transport(command)
+                            self.assertEqual(rc, 3)
+                            self.assertEqual(json.loads(reply)['error'], 'harvest_pack_contains_desk_artifact')
+                    self.assertEqual(case.run_offload(**options), 3)
+                    self.assertIn('harvest_pack_contains_desk_artifact', case.span('W1')['reason'])
+                    case.assert_nothing_deleted()
+                    self.assertTrue(case.pack_dir.exists())
+                finally:
+                    case.doCleanups()
 
     def test_pack_mode_refuses_a_v2_record(self):
         path, digest = self.v2()

@@ -30,6 +30,25 @@ class _Ctx(unittest.TestCase):
     NEXT = 'w1'
 
     def setUp(self):
+        from scripts import align_v4_session
+        # Harness probes must supply their own explicit synthetic seam. Fail
+        # before any real LaunchAgents read if that adapter is missing.
+        watchdog = mock.patch.object(align_v4_session, 'watchdog_acceptance',
+                                     side_effect=AssertionError('PREQUAL omitted synthetic watchdog'))
+        watchdog.start()
+        self.addCleanup(watchdog.stop)
+        preflight = align_v4_session.frequency_word_preflight
+
+        def synthetic_preflight(*args, **kwargs):
+            if kwargs.get('reader') is None:
+                raise AssertionError('PREQUAL omitted synthetic frequency reader')
+            return preflight(*args, **kwargs)
+
+        for name, seam in (('frequency_word_preflight', synthetic_preflight),
+                           ('frequency_word_pre_t0', AssertionError('PREQUAL omitted synthetic frequency'))):
+            frequency = mock.patch.object(align_v4_session, name, side_effect=seam)
+            frequency.start()
+            self.addCleanup(frequency.stop)
         self.tmp = Path(tempfile.mkdtemp(prefix='w1pq-test-'))
         self.addCleanup(shutil.rmtree, self.tmp, True)
         env = mock.patch.dict(os.environ, {'JOULEWISE_HOST_STATE_DIR': str(self.tmp / 'host-state')})
@@ -46,11 +65,122 @@ class _Ctx(unittest.TestCase):
 
 
 class ArmCliTests(_Ctx):
+    def test_synthetic_plan_carries_production_clock_budget(self):
+        import time
+        from joulewise.b6 import plan_inputs
+        from scripts import align_v4_kit as kit, bytes_h_session as h
+        now = time.time()
+        _, session, _ = wp.arm_fixture(self.ctx, 'clock-plan', now=now)
+        state = h.read(session / 'session.json')
+        plan = h.read(state['plan_path'])
+        w1, _, _ = wp.synthetic_w1_plan(self.ctx)
+        stream_max = max(member['member_s'] for member in w1['align_v4']['members'])
+        clock = plan_inputs.thresholds(ROOT, ROOT / kit.KIT / 'registration')['clock']
+        clock['t_stream_max_s'] = stream_max
+        self.assertEqual(plan['hazard_window']['thresholds']['clock'], clock)
+        self.assertEqual(plan['hazard_window']['T_stream_max_s'], stream_max)
+
+    def test_missing_hazard_window_is_refused_before_installer(self):
+        import time
+        from scripts import bytes_h_session as h
+        now = time.time()
+        base, session, disk = wp.arm_fixture(self.ctx, 'missing-clock-plan', now=now)
+        state = h.read(session / 'session.json')
+        plan = h.read(state['plan_path'])
+        packet = wp.valid_packet(self.ctx, base, now)
+        plan.pop('hazard_window', None)
+        h.write(state['plan_path'], plan)
+        state['plan_sha256'] = h.locator(state['plan_path'])['sha256']
+        h.write(session / 'session.json', state)
+        host = wp.FakeHost(now=now)
+        out = wp.run_install(self.ctx, session, disk, packet, host=host, now=now,
+                             frequency_preflight=host.frequency_plan_check)
+        self.assertNotEqual(out['rc'], 0)
+        self.assertFalse(out['arm']['admitted'])
+        self.assertEqual(out['installer_calls'], [])
+        self.assertEqual(out['arm']['reasons'], [
+            "clock.frequency_plan_invalid: ValueError: plan clock budget unavailable: 'hazard_window'"])
+
+    def test_named_weight_digest_check_passes_matching_and_trips_mismatch(self):
+        self.assertIn('weight-digest-preflight', wp.CHECKS)
+        row = self.probe('weight-digest-preflight')
+        self.assertEqual(row['status'], wp.PASS, row)
+        self.assertTrue(row['evidence']['matching_prepare_and_arm'])
+        self.assertTrue(row['evidence']['mismatch_refused'])
+        self.assertIn('weight_digest_preflight: digest_mismatch:', row['evidence']['refusal'])
+
+    def test_named_runtime_stack_and_held_window_cases(self):
+        for name in ('runtime-stack-preflight', 'held-window'):
+            with self.subTest(name=name):
+                self.assertIn(name, wp.CHECKS)
+                row = self.probe(name)
+                self.assertEqual(row['status'], wp.PASS, row)
+                self.assertTrue(row['evidence']['matching'])
+                self.assertTrue(row['evidence']['refused'])
+
+    def test_synthetic_watchdog_models_nested_session_plan_outside_scan(self):
+        import time
+        from scripts import bytes_h_session as h
+        now = time.time()
+        base, session, disk = wp.arm_fixture(self.ctx, 'nested-layout', now=now)
+        state = h.read(session / 'session.json')
+        self.assertEqual(Path(state['plan_path']), session / 'custody/night_plan.json')
+        host = wp.FakeHost(now=now)
+        out = wp.run_install(self.ctx, session, disk, wp.valid_packet(self.ctx, base, now), host=host, now=now)
+        self.assertEqual(out['rc'], 0, out['stderr'])
+        pre = out['arm']['watchdog_acceptance']['plan_identity']
+        self.assertEqual(pre['source'], 'installed_parser_on_plan_file')
+        self.assertFalse(pre['discovered_by_scan'])
+        self.assertTrue(pre['ok'])
+        dwell = h.read(sorted((session / 'staging').glob('v4-arm-*.dwell.json'))[-1])
+        post = dwell['quiet_dwell']['watchdog_post_install']['plan_identity']
+        self.assertEqual(post['source'], 'installed_load_plans')
+        self.assertTrue(post['found'])
+        missing = wp.FakeHost(now=now).watchdog_check(phase='post_install', plan=h.read(state['plan_path']))
+        self.assertFalse(missing['ok'])
+        self.assertIn('arm plan missing', missing['reason'])
+
+    def test_named_watchdog_hold_check_is_registered_and_proves_rollback(self):
+        self.assertIn('watchdog-hold-rollback', wp.CHECKS)
+        row = self.probe('watchdog-hold-rollback')
+        self.assertEqual(row['status'], wp.PASS, row)
+        cases = {case['phase']: case for case in row['evidence']['cases']}
+        self.assertTrue(cases['pre_install']['refused'])
+        self.assertFalse(cases['pre_install']['installer_called'])
+        for key in ('refused', 'uninstalled_this_plan', 'both_labels_verified_absent', 'automatic_restored'):
+            self.assertTrue(cases['post_install'][key], key)
+        report = wp.run_all(self.ctx, spawn=lambda name: dict(row) if name == row['check'] else
+            {'check': name, 'status': wp.PASS, 'detail': '', 'evidence': {}})
+        self.assertIn('| watchdog-hold-rollback | PASS | w1 | yes |', wp.table(report))
+
+    def test_synthetic_watchdog_holding_refuses_with_w1_reason(self):
+        import time
+        now = time.time()
+        base, session, disk = wp.arm_fixture(self.ctx, 'watchdog-hold', now=now)
+        packet = wp.valid_packet(self.ctx, base, now)
+        control = wp.run_install(self.ctx, session, disk, packet, host=wp.FakeHost(now=now), now=now)
+        self.assertEqual(control['rc'], 0, control['stderr'])
+        self.assertTrue(control['arm']['admitted'])
+        self.assertEqual(len(control['installer_calls']), 1)
+        host = wp.FakeHost(now=now, watchdog_state='HOLD_PLAN_MALFORMED')
+        row = wp.run_install(self.ctx, session, disk, packet, host=host, now=now)
+        self.assertNotEqual(row['rc'], 0)
+        self.assertFalse(row['arm']['admitted'])
+        self.assertIn('watchdog_acceptance: pre_install: HOLD_PLAN_MALFORMED:',
+                      '\n'.join(row['arm']['reasons']))
+        self.assertEqual(row['installer_calls'], [])
+        with mock.patch.object(wp, 'FakeHost', return_value=host):
+            arm = wp._arm_on_records(self.ctx, base / 'measurement', packet, now=now)
+        self.assertFalse(arm['admitted'])
+        self.assertIn('watchdog_acceptance: pre_install: HOLD_PLAN_MALFORMED:', '\n'.join(arm['reasons']))
+
     def test_production_cli_admits_the_control_and_refuses_every_fault_before_the_installer(self):
         row = self.probe('arm-cli')
         self.assertEqual(row['status'], wp.PASS, row['detail'])
         cases = {c['case']: c for c in row['evidence']['cases']}
         self.assertTrue(cases['control']['admitted'] and cases['control']['installer_called'])
+        self.assertEqual(cases['plan-hazard-window-missing']['reasons'], [
+            "clock.frequency_plan_invalid: ValueError: plan clock budget unavailable: 'hazard_window'"])
         for name, case in cases.items():
             if name != 'control':
                 self.assertFalse(case['installer_called'], name)
@@ -310,11 +440,24 @@ class PortedSolTests(_Ctx):
 
 class SizingTests(_Ctx):
     def test_window_max_paths_agree_and_the_committed_plan_is_pending_before_w1(self):
-        row = self.probe('w1-window-max', next='r1')
+        from scripts import align_v4_kit as kit
+
+        row = self.probe('w1-window-max', next='w1')
         self.assertEqual(row['status'], wp.PASS, row['detail'])
         self.assertEqual(row['evidence']['validator_window_max_s'], row['evidence']['writer_window_max_s'])
         self.assertEqual(row['evidence']['unplanned_wait_sources'], [])
-        at_gate = self.probe('w1-window-max', next='w1')
+        self.assertIn('committed_w1_plan', row['evidence'])
+
+        pending = self.tmp / 'pending-kit'
+        for relative in (kit.KIT / 'collection_plan.json', kit.KIT / 'registration/sizing_preview.json'):
+            path = pending / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / relative, path)
+        with mock.patch.object(wp, 'executed_closure', return_value=set()):
+            before_gate = self.probe('w1-window-max', repo=pending, next='r1')
+            at_gate = self.probe('w1-window-max', repo=pending, next='w1')
+        self.assertEqual(before_gate['status'], wp.PASS, before_gate['detail'])
+        self.assertNotIn('committed_w1_plan', before_gate['evidence'])
         self.assertEqual(at_gate['status'], wp.FAIL)        # PENDING at its own gate fails
         self.assertIn('not committed yet', at_gate['detail'])
 
@@ -430,11 +573,30 @@ class ReceiptTests(_Ctx):
 
 class ChainTests(_Ctx):
     def test_chain_runs_every_cli_step_on_a_lane_shaped_record(self):
-        row = self.probe('r1-w1-chain')
+        from joulewise.align.apple import r1_runtime
+        from scripts import align_v4_kit as kit
+        from tests.align.test_v4_kit import ready_inputs
+
+        source = self.tmp / 's6-registration.json'
+        source.write_bytes(kit.raw_json({'slots': {'S6': 1.5}, 's6_tuning': {'status': 'adopted'}}))
+        scratch_clone = wp.scratch_clone
+
+        def synthetic_clone(ctx, name):
+            clone = scratch_clone(ctx, name)
+            inputs, _ = ready_inputs()
+            inputs['R0']['record_sha256'] = None
+            (clone / kit.INPUTS).write_bytes(kit.raw_json(inputs))
+            (clone / kit.R1_PLANNING_RELEASE).unlink(missing_ok=True)
+            return clone
+
+        with mock.patch.object(r1_runtime, 'R1_REGISTRATION', source), \
+                mock.patch.object(wp, 'scratch_clone', side_effect=synthetic_clone):
+            row = wp.probe('r1-w1-chain', self.ctx)
         steps = {s['step']: s for s in row['evidence'].get('steps', [])}
-        for name in ('export', 'backfill-x-g', 'backfill-turn-counts', 'derive-contrast', 'decide'):
-            self.assertEqual(steps[name]['rc'], 0, (name, row['detail']))
-        self.assertIn('kit.require_ready(backfilled record)', steps)
+        for name in ('export', 'backfill-x-g', 'backfill-turn-counts', 'derive-contrast', 'decide',
+                     'kit.require_ready(backfilled record)'):
+            self.assertIn(name, steps, row['detail'])
+            self.assertEqual(steps[name]['rc'], 0, name)
         self.assertIn(row['status'], (wp.PASS, wp.FAIL))
         if row['status'] == wp.FAIL:      # only the runbook-drift finding or a pending refusal may remain
             self.assertIn('R1-TO-W1-CHAIN.md as written', row['detail'])

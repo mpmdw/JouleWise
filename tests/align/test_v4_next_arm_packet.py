@@ -4,20 +4,33 @@ The arm rebuilds the packet from the identities the supplied one names (a packet
 never trusted data), judges its own build, and refuses a supplied packet that differs. No
 measurements, probes, models or network.
 """
+from tests.git_fixture import init_git_fixture
+from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
+from tests.align.v4_registration_fixtures import projection_arm_checks, session_plan
+import builtins
 import contextlib
 import copy
 import hashlib
 import io
+from itertools import combinations
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from scripts import align_v4_next_arm_packet as builder
+from scripts import align_v4_kit as w1_kit, align_v4_next_arm_packet as builder
+from scripts import align_v4_series as series
+from scripts import align_v4_session as session
+from scripts import bytes_h_session as staging
+from joulewise.b5.chain import SPARE_RETRY_SCHEMA, TOOLS, stage_argv, stage_plan
+from joulewise.b5.plan import resolve_stage_dispatches
+from joulewise.schemas import BenchmarkConfig, CONFIG_SCHEMA_VERSION
 from joulewise.align.apple import v4_cadence as cad
 from joulewise.align.apple import v4_registration as registration
 
@@ -27,6 +40,143 @@ IDENTITY = {'model_source': 'synthetic-tiny', 'model_revision': 'fixture',
             'runtime_sha256': 'a'*64, 'execution_policy_sha256': 'b'*64}
 NOW = 111.0
 CODE_PATH = 'scripts/run_night.py'      # a bound artifact: its bytes move the artifact-set digest
+DERIVATION_INPUT = Path('configs/campaigns/fixture-derivation/settled_corpus.json')
+C1_PACKET_PATH = Path('series/c1-next-arm.json')
+
+
+def fixture_next_members(manifest, *, extra_sentinels=True):
+    window = series.selected(manifest, 'C1')
+    allocations = window['members'] + (series.escalation_allocations(window) if extra_sentinels else [])
+    roster = []
+    for allocation in allocations:
+        ordinal, pool = allocation['ordinal'], allocation['pool']
+        # The producer preserves the anchors' original IDs.
+        run_id = (f'align-pilot-v3-episodes-a-e{ordinal:02}' if pool == 'anchor'
+                  else f'{series.pack_id("C1")}-e{ordinal:02}')
+        role = {'sentinel': 'sentinel', 'anchor': 'anchor'}.get(pool, 'D')
+        roster.append({'ordinal': ordinal, 'run_id': run_id, 'role': role})
+    return roster
+
+
+def synthetic_stage_graph():
+    layout = [
+        ("reservation", "bracket_reservation", "bracket_reserver", ["fixture"]),
+        ("pre", "calibration_capture", "fiducial_capture", ["--slot", "pre"]),
+        ("episodes-a", "campaign_collection", "campaign_runner", ["fixture"]),
+        ("episodes-b", "campaign_collection", "campaign_runner", ["fixture"]),
+        ("derive", "bound_derivation", "campaign_runner", ["fixture"]),
+        ("post", "calibration_capture", "fiducial_capture", ["--slot", "post"]),
+    ]
+    names = ["align-pilot-v3-" + row[0] for row in layout]
+    graph = []
+    for pos, ((_, kind, tool, args), name) in enumerate(zip(layout, names, strict=True)):
+        argv = [{"kind": "literal", "value": value} for value in args]
+        if kind == "campaign_collection":
+            argv = [dict(kind="repo_path", value="fixture"), dict(kind="literal", value="--runs-dir"),
+                    dict(kind="binding", value="claim_runs_root")]
+        if kind == "bracket_reservation":
+            argv = [dict(kind="literal", value="--plan"), dict(kind="repo_path", value="fixture-plan.json")]
+        if kind == "bound_derivation":
+            argv = [dict(kind="literal", value="--derive-neg8-drift-bound"),
+                    dict(kind="repo_path", value=DERIVATION_INPUT.as_posix())]
+        graph.append(dict(
+            stage_id=name, kind=kind, ordinal=pos + 1, expected_count=1,
+            predecessor=names[pos - 1] if pos else None,
+            successor=names[pos + 1] if pos + 1 < len(names) else None,
+            launch=dict(schema_version="joulewise.stage_launch.v1", commands=[dict(
+                command_id=name, cwd=dict(kind="binding", value="repo_root"), success_exit_codes=[0],
+                argv_template=dict(tool_id=tool, interface_id=TOOLS[tool].interface_id, arguments=argv))]),
+        ))
+    return {"stage_graph": graph}
+
+
+def synthetic_stage_config(run_id):
+    config = dict(
+        schema_version=CONFIG_SCHEMA_VERSION, run_id=run_id,
+        model=dict(name="synthetic-anchor"), quantization=dict(name="fixture"),
+        hardware_target=dict(id="fixture", transport="local", runtime_backend="mock", telemetry_backend="mock"),
+        workload_profile=dict(name=staging.ALIGN_EPISODE, prompt_text=json.dumps(dict(max_turns=12, task_kwargs={}))),
+        run_metadata=dict(tags=['align-model=invented-anchor']),
+    )
+    return w1_kit.bundle_config_bytes(BenchmarkConfig.from_mapping(config))
+
+
+def seed_materializer(scenario):
+    """Invent the v3 inputs used by the normal v4 materializer."""
+    write = scenario.write
+    for i in range(1, 5):
+        run_id = f"align-pilot-v3-episodes-a-e{i:02}"
+        write(w1_kit.SOURCE_KIT / "stages/episodes-a" / (run_id + ".json"), synthetic_stage_config(run_id))
+    for i in (18, 25):
+        run_id = f"align-pilot-v3-episodes-b-e{i:02}"
+        write(w1_kit.SOURCE_KIT / "stages/episodes-b" / (run_id + ".json"), synthetic_stage_config(run_id))
+    tree = synthetic_stage_graph()
+    write(w1_kit.SOURCE_KIT / "plan_tree.json", tree)
+    for stage in tree['stage_graph']:
+        tool = stage['launch']['commands'][0]['argv_template']['tool_id']
+        write(TOOLS[tool].program, b'# invented executable identity; never invoked\n')
+    write(DERIVATION_INPUT, {'members': [{'bundle_path': f'invented-{n:02}'} for n in range(1, 13)]})
+    write(staging.plan.HEAD_PIN_RELATIVE, b'invented fixture pin\n')
+    write('configs/campaigns/bytes_v1/roster.json', {'models': []})
+    write('configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json',
+          {'arm_attachments': {'launch': {'bindings': []}}, 'external_inputs': {'manifests': []}})
+    reg = w1_kit.SOURCE_KIT / "registration"
+    write(reg / "identity_pins.json", dict(units=dict(neg8_reference={}, mock={}), runtime_versions={}))
+    write(reg / "model_artifact_inventory.json", dict(artifacts=dict(neg8_reference={}, mock={})))
+    write(reg / "sizing_b5.json", {"packs": {"align-pilot-v3": dict(
+        disk_member_law=dict(intercept=1, slope=1, largest_positive_residual=0),
+        disk_derivation=dict(scaffold_bytes=1))}})
+    commit = scenario.commit()
+    for pin in (w1_kit.ANCHOR_COMMIT, w1_kit.CONTRAST_COMMIT):
+        scenario.git("tag", pin, commit)
+    write(w1_kit.R1_SLOTS, dict(ac_powermode=0))
+    write(w1_kit.INPUTS, dict(
+        R0=dict(reasoning_effort=None), R1=dict(B_D=None, T_dead=None, thermal_policy=None),
+        WP11=dict(identity_unit=dict(model_source="fixture"), artifact_inventory={}, local_file_verification=None),
+        WP15=dict(runtime_entrypoint=None), WP18=dict(X=dict(max_turns=12), Y=dict(max_turns=12)),
+    ))
+    write(series.MANIFEST, series.raw_json(series.candidate()))
+
+
+def write_c1_fixture_kit(scenario, files):
+    """Carry the generated C1 science kit with invented scaffold dispatches."""
+    directory = series.kit_path('C1')
+    for path, raw in files.items():
+        scenario.write(path, raw)
+    tree = json.loads(files[directory / 'plan_tree.json'])
+    manifests = []
+    for stage in stage_plan(tree):
+        for command in stage.commands:
+            scenario.write(TOOLS[command.tool_id].program, b'# invented tool identity; never executed\n')
+        if stage.kind != 'campaign_collection':
+            continue
+        config_dir = Path(stage.commands[0].arguments[0]['value'])
+        if config_dir.is_relative_to(directory):
+            continue
+        rows = []
+        for position in range(1, stage.expected_count + 1):
+            run_id = f'fixture-{stage.stage_id}-{position}'
+            name = run_id + '.json'
+            scenario.write(config_dir / name, synthetic_stage_config(run_id))
+            rows.append({'run_id': run_id, 'config': name, 'index': position})
+        manifest = (config_dir / 'order_manifest.json').as_posix()
+        scenario.write(manifest, {'manifest_id': stage.stage_id, 'executed_order': rows})
+        manifests.append({'manifest': {'path': manifest}, 'external_input_id': stage.stage_id})
+    scenario.write(staging.plan.HEAD_PIN_RELATIVE, b'invented fixture pin\n')
+    for stage in tree['stage_graph']:
+        descriptor = stage.get('input') or {}
+        if 'sha256' in descriptor:
+            path = staging.plan.canonical_repo_path(descriptor['path'])
+            if not (scenario.root / path).is_file() and stage['kind'] == 'bound_derivation':
+                scenario.write(path, {'members': [{'bundle_path': 'invented-reference'}]})
+            raw = (scenario.root / path).read_bytes()
+            descriptor['sha256'] = builder.digest(raw)
+            if descriptor['kind'] == 'manifest':
+                descriptor['manifest_id'] = json.loads(raw)['manifest_id']
+    scenario.write(directory / 'plan_tree.json', series.raw_json(tree))
+    scenario.write('configs/campaigns/bytes_v1/roster.json', {'models': []})
+    scenario.write('configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json',
+                   {'arm_attachments': {'launch': {'bindings': []}}, 'external_inputs': {'manifests': manifests}})
 
 
 class Scenario:
@@ -36,7 +186,7 @@ class Scenario:
                  b_bar=True, provisional=False, previous_final=False):
         self.root = Path(directory)
         if previous is None:
-            self.git('init', '-q')
+            init_git_fixture(self.root, '-q')
         self.previous = previous
         self.window = window
         self.dir = 'w-' + window.replace('#', '_')
@@ -66,7 +216,7 @@ class Scenario:
                 'km003c': {'members': {i: {'status': 'available', 'flags': []} for i in ids}}}},
             'desk': {'plan_id': plan_id, 'pilot_status': 'instrument_ok',
                      'checks': {'synthetic_check': True, 'v4_B_bar': b_bar}, 'harvest_status': 'ok'},
-            'exclusions': {'members_excluded': []}}
+            'exclusions': {'members_excluded': [], 'reasons': [], 'claim_usable': True}}
         if window not in ('W1', 'R1'):
             # The desk's committed provisional counts: a permissive upper bound by default (7 per pair).
             self.sources['pilot']['extra_checks']['series_desk_row'] = {
@@ -80,11 +230,13 @@ class Scenario:
         self.next_plan = {'role': 'calibration', 'window': 'C1',
                           'configuration': {**CONFIG, 'cohort_identity': dict(IDENTITY)},
                           'thermal_policy': dict(self.policy),
-                          'members': [{'run_id': f'sentinel-{i}', 'role': 'sentinel'} for i in range(4)]}
+                          'members': fixture_next_members(series.candidate())}
+        self.next_plan_slot = 'C1'
         self.series = {'schema': builder.SERIES_SCHEMA,
                        'quiet_requirements': {'cooldown_s': 300, 'display_off_s': 60, 'dwell_s': 60, 'max_age_s': 30},
                        'lead_rulings': [], 'pool_members': [],
-                       'sentinel_ids': [f'sentinel-{i}' for i in range(4)], 'escalations': []}
+                       'sentinel_ids': [m['run_id'] for m in self.next_plan['members'] if m['role'] == 'sentinel'],
+                       'escalations': []}
         self.absent_captures = set() if captured else set(ids)
         self.omit_sources = set()
         self.raw_custody = False
@@ -117,16 +269,44 @@ class Scenario:
         self.git('commit', '-qm', 'synthetic evidence', '--allow-empty')
         return self.git('rev-parse', 'HEAD')
 
+    def unpack_receipt(self, sha256, **override):
+        receipt = {'schema': builder.light_triage.UNPACK_RECEIPT_SCHEMA, 'window': self.window,
+                   'plan_id': self.sources['plan']['plan_id'], 'finalized_manifest_sha256': sha256}
+        return json.dumps({**receipt, **override}, sort_keys=True, separators=(',', ':')).encode()
+
+    def retarget_next_members(self):
+        """Keep fixture member IDs in the named slot, preserving roster mutations."""
+        slot = series.slot_of(self.next_plan['window'])
+        if slot in (self.next_plan_slot, 'W1'):
+            return
+        previous_pack, pack = series.pack_id(self.next_plan_slot), series.pack_id(slot)
+
+        def retarget(run_id):
+            return pack + run_id[len(previous_pack):] if run_id.startswith(previous_pack + '-e') else run_id
+
+        for member in self.next_plan['members']:
+            member['run_id'] = retarget(member['run_id'])
+        self.series['sentinel_ids'] = [retarget(run_id) for run_id in self.series['sentinel_ids']]
+        self.next_plan_slot = slot
+
     def finish(self, *, change_code=False, code=b'synthetic-code-v1\n'):
+        self.retarget_next_members()
+        if not (self.root / series.MANIFEST).exists():
+            self.write(series.MANIFEST, series.raw_json(series.candidate()))
         self.write(CODE_PATH, code)
         self.record['code_commit'] = self.code_commit = self.commit()
         d = self.dir
         self.sources['watchdog_state'].setdefault('released_terminal_windows', [
             f"{self.sources['plan']['plan_id']}:/DO-NOT-FOLLOW/custody:"
             f"{builder.digest((json.dumps(self.sources['result'], sort_keys=True) + chr(10)).encode())}"])
+        if self.window != 'R1' and not getattr(self, 'omit_finalized_manifest', False):
+            finalized_sha = self.record.setdefault('finalized_manifest', builder.digest(f'synthetic tree {d}'.encode()))
+            if any(m['run_id'] not in self.absent_captures for m in self.members):
+                self.sources.setdefault('unpack_receipt', self.unpack_receipt(finalized_sha))
         if self.provisional:
             # R17: committed before the Air full desk finished; the light triage stands in.
-            self.final_sources = {k: copy.deepcopy(self.sources[k]) for k in builder.FINAL_SOURCES}
+            self.final_sources = {k: copy.deepcopy(self.sources[k])
+                                  for k in builder.FINAL_SOURCES_WITH_RECEIPT if k in self.sources}
             light_thermal = copy.deepcopy(self.thermal)
             for m in light_thermal['members']:
                 m['excluded'] = bool(m['calibration_exclusions'])
@@ -135,7 +315,7 @@ class Scenario:
                 'km003c': self.sources['pilot']['extra_checks']['km003c'],
                 'series_desk_row': self.sources['pilot']['extra_checks'].get('series_desk_row')}
             self.sources['desk'] = {'plan_id': self.sources['plan']['plan_id'], 'status': 'running_off_mbp'}
-            self.omit_sources.update(('pilot', 'exclusions'))
+            self.omit_sources.update(('pilot', 'exclusions', 'unpack_receipt'))
         if self.previous_final:
             prior = self.previous
             self.record['previous_final'] = {'record_sha256': prior.link['sha256'], 'sources': {
@@ -148,14 +328,6 @@ class Scenario:
             if self.raw_custody else self.write(f'{d}/captures/{i}.jsonl', b'{"monotonic_ns":1,"power_w":1}\n'))
             for i in pairs}
         self.record['raw_evidence'] = [self.write(f'{d}/raw/sidecar.jsonl', b'{"temperature_c":30}\n')]
-        if self.window != 'R1' and not getattr(self, 'omit_finalized_manifest', False):
-            # R17 review F2: the record binds the finalized (record-bound) tree manifest, canonical bytes.
-            finalized = {'schema': builder.FINALIZED_MANIFEST_SCHEMA, 'source_root': '/DO-NOT-FOLLOW/session-' + d,
-                         'entries': {'raw/sidecar.jsonl': {'sha256': 'f' * 64, 'size': 21}},
-                         'closure': {'links': {}, 'files': {}, 'inputs': [], 'mirror': None}}
-            self.record['finalized_manifest'] = self.write(
-                f'{d}/evidence/finalized_manifest.json',
-                json.dumps(finalized, sort_keys=True, separators=(',', ':')).encode())
         if self.raw_custody:
             self.record['raw_evidence'].extend(self.record['captures'].values())
         self.record_path = f'{d}/record.json'
@@ -232,6 +404,499 @@ class Base(unittest.TestCase):
                                b_bar=rest[0] if rest else True).finish()
             previous = current
         return previous
+
+
+class C1PacketRebuildTests(Base):
+    """The W1 -> C1 handoff through the CLI, an independent rebuild and the frozen series."""
+
+    def setUp(self):
+        self.real_arm = session.arm_checks
+        self.fixture_roots = set()
+        self.output_dir = Path(self.enterContext(tempfile.TemporaryDirectory(prefix='jw-c1-packets-')))
+        self.output_number = 0
+        self.enterContext(patch.dict(os.environ, {
+            'GIT_AUTHOR_DATE': '2001-01-01T00:00:00+00:00', 'GIT_COMMITTER_DATE': '2001-01-01T00:00:00+00:00',
+            'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_DEFAULT_HASH': 'sha1',
+            'GIT_TEMPLATE_DIR': '',
+        }))
+        for module, names in ((builtins, ('open',)), (io, ('open',)),
+                              (os, ('open', 'stat', 'lstat', 'readlink', 'listdir', 'scandir'))):
+            for name in names:
+                original = getattr(module, name)
+
+                def guarded(path='.', *args, operation=original, **kwargs):
+                    if not isinstance(path, int) and path is not None:
+                        self.assertNotIn('DO-NOT-FOLLOW', os.fsdecode(path), 'custody locator was followed')
+                    return operation(path, *args, **kwargs)
+
+                self.enterContext(patch.object(module, name, new=guarded))
+        popen = subprocess.Popen
+
+        def fixture_git(argv, *args, **kwargs):
+            if isinstance(argv, (tuple, list)) and argv and argv[0] == 'git':
+                root = argv[argv.index('-C') + 1] if '-C' in argv else kwargs.get('cwd')
+                if root is not None and Path(root) in self.fixture_roots and not kwargs.get('shell'):
+                    self.assertTrue(all('DO-NOT-FOLLOW' not in arg for arg in argv))
+                    return popen(argv, *args, **kwargs)
+            self.fail(f'only fixture-local Git subprocesses are allowed: {argv!r}')
+
+        self.enterContext(patch.object(subprocess, 'Popen', new=fixture_git))
+        for target in (
+            'scripts.align_v4_session.prepare', 'scripts.align_v4_session._arm_and_install',
+            'scripts.align_v4_session.arm_checks', 'scripts.align_v4_session._probe_meter_live',
+            'joulewise.align.apple.powermode.admit_ac_powermode', 'joulewise.align.apple.external_volume.census',
+            'joulewise.align.apple.external_volume.arm_check', 'joulewise.battery_float.observe',
+        ):
+            trap = self.enterContext(patch(target, side_effect=AssertionError(f'physical probe or arm: {target}')))
+            self.addCleanup(trap.assert_not_called)
+
+    def c1_scenario(self, *, bad_history_link=False, older_desk=False, desk='passed', extra_sentinels=True,
+                    wrong_cohort=False, receipt=None, materialized=False):
+        root = Path(self.enterContext(tempfile.TemporaryDirectory(prefix='jw-c1-records-')))
+        self.fixture_roots.add(root)
+        self.enterContext(patch.dict(os.environ, {'JOULEWISE_HOST_STATE_DIR': str(root / 'host')}))
+        r1 = Scenario(root, 'R1')
+        if materialized:
+            seed_materializer(r1)
+        manifest = series.candidate()
+        manifest_ref = r1.write(series.MANIFEST, series.raw_json(manifest))
+        r1.finish(code=b'synthetic-code-v0\n' if older_desk else b'synthetic-code-v1\n')
+
+        w1 = Scenario(root, 'W1', previous=r1)
+        w1.raw_custody = True
+        w1.manifest_sha256 = manifest_ref['sha256']
+        w1.series['pool_members'] = [member['run_id'] for member in w1.members]
+        planned_roster = fixture_next_members(manifest, extra_sentinels=extra_sentinels)
+        if materialized:
+            plan = self.materialize_c1(w1, 2 if extra_sentinels else 0)
+            planned_roster = [{'run_id': row['run_id'],
+                               'role': 'sentinel' if row['pool_role'] == 'sentinel' else row['role']}
+                              for row in plan['members']]
+        w1.next_plan['members'] = planned_roster
+        # The omission control must fail the U4 minimum with a consistent plan and ledger.
+        w1.series['sentinel_ids'] = [row['run_id'] for row in planned_roster if row['role'] == 'sentinel']
+        if bad_history_link:
+            w1.record['previous_record'] = {**r1.link, 'sha256': '0' * 64}
+        if wrong_cohort:
+            w1.next_plan['configuration']['cohort_identity']['model_revision'] = 'different-fixture'
+        if desk == 'missing':
+            w1.omit_sources.add('desk')
+        elif desk == 'pending':
+            w1.sources['desk'] = {'plan_id': w1.sources['plan']['plan_id'], 'status': 'running_off_mbp'}
+        if receipt is not None:
+            w1.sources['registration_receipt'] = receipt
+            w1.write(registration.REGISTRATION + 'registration_receipt.json', receipt)
+        w1.finish()
+        w1.series_sha256 = builder.digest((root / w1.series_path).read_bytes())
+        if older_desk:
+            # The W1 desk first passes on the current bytes. Only the ledger's last-pass link then moves.
+            self.ready_packet(w1)
+        if older_desk or desk == 'pending':
+            w1.series['last_passed_record'] = dict(r1.link)
+            self.commit_series(w1)
+        return w1
+
+    def commit_series(self, scenario):
+        scenario.series_sha256 = scenario.write(scenario.series_path, scenario.series)['sha256']
+        scenario.series_commit = scenario.commit()
+
+    def recommit_predecessor(self, scenario):
+        record_sha = scenario.write(scenario.record_path, scenario.record)['sha256']
+        scenario.record_commit = scenario.commit()
+        scenario.link = {'commit': scenario.record_commit, 'path': scenario.record_path, 'sha256': record_sha}
+        scenario.git('update-ref', scenario.identities()['pushed_ref'], scenario.record_commit)
+        scenario.series.update(previous_record=dict(scenario.link), last_passed_record=dict(scenario.link))
+        self.commit_series(scenario)
+
+    def cli_packet(self, scenario, *, now=NOW, **changes):
+        self.output_number += 1
+        path = self.output_dir / f'packet-{self.output_number}.json'
+        args = ['--repo', str(scenario.root), '--output', str(path)]
+        for name, value in scenario.identities(**changes).items():
+            args.extend(['--' + name.replace('_', '-'), value])
+        error = io.StringIO()
+        with patch('time.time', return_value=now), contextlib.redirect_stderr(error):
+            code = builder.main(args)
+        output = json.loads(path.read_bytes()) if path.exists() else None
+        return code, output, error.getvalue()
+
+    def ready_packet(self, scenario):
+        code, packet, error = self.cli_packet(scenario)
+        self.assertEqual(code, 0, (error, packet and packet['packet_preflight']['reasons']))
+        self.assertTrue(packet['packet_preflight']['ready'])
+        return packet
+
+    def refused_packet(self, scenario, *, now=NOW):
+        code, packet, error = self.cli_packet(scenario, now=now)
+        self.assertEqual(code, 2)
+        self.assertIsNotNone(packet, error)
+        self.assertFalse(packet['packet_preflight']['ready'])
+        return packet
+
+    def rebuild(self, scenario, supplied, *, now=NOW):
+        return builder.rebuild_and_compare(scenario.root, supplied, now_epoch_s=now,
+                                           current_artifact_set_sha256=registration.artifact_set_digest(scenario.root))
+
+    def triage(self, scenario, packet, *, now=NOW):
+        return cad.next_arm_triage(packet, {}, {
+            'artifact_set_sha256': registration.artifact_set_digest(scenario.root),
+            'record_commit_exists': session._commit_exists(scenario.root, packet['record_commit']),
+            'record_bound': session._record_bound(scenario.root, packet),
+        }, now_epoch_s=now)
+
+    def assert_packet_failure(self, packet, check, text):
+        self.assertEqual(packet['checks'][check]['status'], 'fail')
+        self.assertIn(text, packet['checks'][check]['basis'])
+        self.assertIn(f'triage {check} failed', packet['packet_preflight']['reasons'])
+
+
+    def materialize_c1(self, scenario, extras):
+        directory = scenario.root / series.kit_path('C1')
+        if directory.exists():
+            shutil.rmtree(directory)
+        args = ['--root', str(scenario.root), '--window-id', 'C1', '--extra-sentinels', str(extras)]
+        with patch.object(w1_kit, 'r0_heatsink_key', return_value='T002'), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(series.main(['materialize', *args]), 0)
+            self.assertEqual(series.main(['materialize', *args, '--check']), 0)
+        return json.loads((directory / 'collection_plan.json').read_bytes())
+
+    def test_committed_w1_rebuild_binds_c1_with_live_checks_pending(self):
+        w1 = self.c1_scenario()
+        supplied = self.ready_packet(w1)
+        rebuilt, matches = self.rebuild(w1, supplied)
+        self.assertTrue(matches)
+        self.assertIs(series.bind_packet(w1.root, 'C1', rebuilt, authenticated_by_rebuild=True), rebuilt)
+        self.assertTrue(session._record_bound(w1.root, rebuilt))
+        self.assertEqual((rebuilt['previous_window'], rebuilt['next_window_id'], rebuilt['next_window_role']),
+                         ('W1', 'C1', 'calibration'))
+        self.assertEqual(builder.identities(rebuilt), w1.identities())
+        self.assertEqual(rebuilt['record_sha256'], w1.link['sha256'])
+        self.assertEqual(rebuilt['series_sha256'], w1.series_sha256)
+        self.assertEqual(rebuilt['series_manifest_sha256'], w1.manifest_sha256)
+        self.assertEqual(rebuilt['window_chain'], [
+            {'window': 'R1', **w1.previous.link, 'previous_sha256': None},
+            {'window': 'W1', **w1.link, 'previous_sha256': w1.previous.link['sha256']},
+        ])
+        self.assertEqual(rebuilt['series_history'], [])
+        self.assertEqual(rebuilt['calibration_windows'], [])
+        stop = rebuilt['calibration_decision']
+        self.assertEqual((stop['decision'], stop['attempted'], stop['windows'], stop['target_per_pair']),
+                         ('continue', 0, 8, 39))
+        self.assertEqual(stop['eligible_by_pair'], {'spam': 0, 'bank': 0})
+        self.assertEqual(stop['replacements_used'], 0)
+        self.assertEqual(rebuilt['checks']['cohort_pool_rules']['status'], 'pass')
+        self.assertEqual(rebuilt['checks']['cohort_pool_rules']['eligible_benign'], {'spam': 1, 'bank': 1})
+        roster = w1.next_plan['members']
+        self.assertEqual([row['ordinal'] for row in roster], list(range(1, 25)))
+        sentinels = rebuilt['checks']['sentinel_roster']
+        self.assertEqual(sentinels['status'], 'pass')
+        self.assertEqual(sentinels['sentinel_ids'], ['align-v4-c1-e05', 'align-v4-c1-e22',
+                                                     'align-v4-c1-e23', 'align-v4-c1-e24'])
+        self.assertEqual(rebuilt['checks']['full_desk_gate']['status'], 'pass')
+        self.assertEqual(rebuilt['last_desk_passed_artifact_set_sha256'],
+                         registration.artifact_set_digest_at(w1.root, w1.code_commit))
+        self.assertEqual(rebuilt['last_desk_passed_artifact_set_sha256'],
+                         registration.artifact_set_digest(w1.root))
+        self.assertIn(f'{w1.record_commit}:{w1.record["sources"]["desk"]["path"]}',
+                      rebuilt['checks']['full_desk_gate']['sources'])
+        raw_inventory = [row for row in rebuilt['evidence'] if 'locator' in row]
+        self.assertCountEqual(raw_inventory, [
+            {'commit': w1.record_commit, 'path': w1.record_path, **raw,
+             'verification': 'committed_digest_inventory_only'} for raw in w1.record['captures'].values()
+        ])
+        live = ['series_powermode', 'external_volume', 'charging_battery', 'meter_reader_live']
+        self.assertCountEqual(rebuilt['arm_pending'], live)
+        self.assertCountEqual(rebuilt['packet_preflight']['arm_checks_still_required'], live)
+        self.assertTrue(set(live).isdisjoint(rebuilt['checks']))
+        self.assertTrue(rebuilt['packet_preflight']['ready'])
+
+    def test_r1_pointer_cannot_replace_w1_in_the_series_ledger(self):
+        w1 = self.c1_scenario()
+        wrong = dict(record_commit=w1.previous.record_commit, record_path=w1.previous.record_path)
+        code, output, error = self.cli_packet(w1, **wrong)
+        self.assertEqual((code, output), (2, None))
+        self.assertIn('series previous record binding mismatch', error)
+        supplied = {**self.ready_packet(w1), **wrong}
+        with self.assertRaisesRegex(ValueError, 'series previous record binding mismatch'):
+            self.rebuild(w1, supplied)
+
+    def test_an_independently_rebuilt_r1_cannot_bind_c1(self):
+        w1 = self.c1_scenario()
+        supplied = self.ready_packet(w1.previous)
+        rebuilt, matches = self.rebuild(w1, supplied)
+        self.assertTrue(matches)
+        self.assertEqual((rebuilt['previous_window'], rebuilt['next_window_id']), ('R1', 'C1'))
+        with self.assertRaisesRegex(ValueError, r'triage does not arm the next frozen window \(C1\)'):
+            series.bind_packet(w1.root, 'C1', rebuilt, authenticated_by_rebuild=True)
+
+    def test_forged_w1_digest_in_committed_series_state_refuses(self):
+        w1 = self.c1_scenario()
+        w1.series['previous_record']['sha256'] = '0' * 64
+        self.commit_series(w1)
+        code, output, error = self.cli_packet(w1)
+        self.assertEqual((code, output), (2, None))
+        self.assertIn('series previous record binding mismatch', error)
+
+    def test_corrupt_committed_history_link_refuses(self):
+        w1 = self.c1_scenario(bad_history_link=True)
+        packet = self.refused_packet(w1)
+        self.assertEqual(packet['calibration_error'], 'series history link digest mismatch')
+        self.assertIn('calibration history: series history link digest mismatch',
+                      packet['packet_preflight']['reasons'])
+
+    def test_edits_to_the_supplied_hash_evidence_or_history_fail_canonical_comparison(self):
+        for field in ('record_sha256', 'evidence', 'series_history'):
+            with self.subTest(field=field):
+                w1 = self.c1_scenario()
+                supplied = self.ready_packet(w1)
+                changed = {'record_sha256': '0' * 64, 'evidence': [],
+                           'series_history': [{'window_id': 'C1'}]}
+                rebuilt, matches = self.rebuild(w1, {**supplied, field: changed[field]})
+                self.assertFalse(matches)
+                self.assertEqual(rebuilt, supplied)
+                self.assertTrue(rebuilt['packet_preflight']['ready'])
+
+    def test_a_passing_desk_on_an_older_artifact_set_is_refused(self):
+        w1 = self.c1_scenario(older_desk=True)
+        packet = self.refused_packet(w1)
+        older_digest = registration.artifact_set_digest_at(w1.root, w1.previous.code_commit)
+        self.assertNotEqual(older_digest, registration.artifact_set_digest(w1.root))
+        self.assertEqual(packet['last_desk_passed_artifact_set_sha256'], older_digest)
+        self.assert_packet_failure(packet, 'full_desk_gate', 'different code/config state')
+
+    def test_missing_or_pending_w1_full_desk_refuses(self):
+        for desk, reason in (('missing', 'no final sources'), ('pending', 'full desk must complete and pass')):
+            with self.subTest(desk=desk):
+                w1 = self.c1_scenario(desk=desk)
+                packet = self.refused_packet(w1)
+                self.assert_packet_failure(packet, 'full_desk_gate', reason)
+
+    def test_omitting_only_the_two_supplemental_sentinels_refuses(self):
+        w1 = self.c1_scenario(extra_sentinels=False)
+        self.assertEqual([row['ordinal'] for row in w1.next_plan['members']], list(range(1, 23)))
+        packet = self.refused_packet(w1)
+        self.assertEqual(packet['checks']['full_desk_gate']['status'], 'pass')
+        self.assert_packet_failure(packet, 'sentinel_roster', 'two extra sentinels after a U4 inconclusive')
+
+    def assert_wrong_sentinel_positions_refuse(self, *, use_frozen_names):
+        w1 = self.c1_scenario(extra_sentinels=False)
+        roster = w1.next_plan['members']
+        for ordinal, name in zip((20, 21, 22), (22, 23, 24), strict=True):
+            member = roster[ordinal - 1]
+            member['role'] = 'sentinel'
+            if use_frozen_names:
+                member['run_id'] = f'align-v4-c1-e{name:02}'
+        self.assertEqual(len(roster), 22)
+        self.assertEqual([m['ordinal'] for m in roster if m['role'] == 'sentinel'], [5, 20, 21, 22])
+        w1.series['sentinel_ids'] = [m['run_id'] for m in roster if m['role'] == 'sentinel']
+        w1.series['next_plan'] = w1.write(w1.series['next_plan']['path'], w1.next_plan)
+        self.commit_series(w1)
+
+        packet = self.refused_packet(w1)
+        rebuilt, matches = self.rebuild(w1, packet)
+        self.assertTrue(matches)
+        self.assertTrue(session._record_bound(w1.root, rebuilt))
+        self.assertFalse(rebuilt['packet_preflight']['ready'])
+        self.assertEqual(rebuilt['checks']['full_desk_gate']['status'], 'pass')
+        self.assert_packet_failure(rebuilt, 'sentinel_roster', 'two extra sentinels after a U4 inconclusive')
+
+    def test_relabelled_ordinary_members_cannot_substitute_for_escalation_sentinels(self):
+        self.assert_wrong_sentinel_positions_refuse(use_frozen_names=False)
+
+    def test_canonical_sentinel_ids_at_wrong_ordinals_refuse(self):
+        self.assert_wrong_sentinel_positions_refuse(use_frozen_names=True)
+
+    def test_only_the_frozen_pair_of_supplemental_ordinals_passes(self):
+        w1 = self.c1_scenario()
+        manifest = json.loads((w1.root / series.MANIFEST).read_bytes())
+        expected = w1.series['sentinel_ids']
+        base = w1.next_plan['members']
+        candidates = [m['ordinal'] for m in base]
+        sets = [*combinations(candidates, 2), (), (23,), (24,), (20, 23, 24), tuple(candidates)]
+        for positions in sets:
+            with self.subTest(positions=positions):
+                members = [dict(m, role=(
+                    'sentinel' if m['ordinal'] in (5, 22, *positions) else 'D' if m['role'] == 'sentinel' else m['role']
+                )) for m in base]
+                plan = {**w1.next_plan, 'members': members}
+                if positions == (23, 24):
+                    self.assertEqual(builder.frozen_sentinel_ids(manifest, plan, needs_supplemental=True), expected)
+                else:
+                    with self.assertRaisesRegex(ValueError, 'two extra sentinels after a U4 inconclusive'):
+                        builder.frozen_sentinel_ids(manifest, plan, needs_supplemental=True)
+
+    def test_frozen_sentinel_ids_cannot_swap_slots(self):
+        w1 = self.c1_scenario()
+        first, second = w1.next_plan['members'][-2:]
+        first['run_id'], second['run_id'] = second['run_id'], first['run_id']
+        w1.series['sentinel_ids'][-2:] = [first['run_id'], second['run_id']]
+        w1.series['next_plan'] = w1.write(w1.series['next_plan']['path'], w1.next_plan)
+        self.commit_series(w1)
+        self.assert_packet_failure(self.refused_packet(w1), 'sentinel_roster',
+                                   'two extra sentinels after a U4 inconclusive')
+
+    def test_w1_receipt_digest_carries_through_the_rebuild(self):
+        receipt = {'schema': registration.RECEIPT_SCHEMA, 'signer': 'invented fixture'}
+        w1 = self.c1_scenario(receipt=receipt)
+        packet = self.ready_packet(w1)
+        rebuilt, matches = self.rebuild(w1, packet)
+        self.assertTrue(matches)
+        sources = w1.record['sources']
+        full_desk = rebuilt['checks']['full_desk_gate']
+        self.assertEqual(full_desk['desk_sha256'], sources['desk']['sha256'])
+        self.assertEqual(full_desk['registration_receipt_sha256'], sources['registration_receipt']['sha256'])
+        self.assertEqual(rebuilt['last_desk_passed_artifact_set_sha256'],
+                         registration.artifact_set_digest_at(w1.root, w1.code_commit))
+        w1.write(registration.REGISTRATION + 'registration_receipt.json', {'edited': True})
+        self.assertEqual(self.ready_packet(w1), packet)
+
+    def commit_projection(self, w1):
+        w1.series['next_plan'] = w1.write(w1.series['next_plan']['path'], w1.next_plan)
+        self.commit_series(w1)
+
+    def test_v3_w1_desk_cannot_borrow_r1_artifact_state(self):
+        w1 = self.c1_scenario(older_desk=True, receipt={'signer': 'invented W1'})
+        w1.write(CODE_PATH, b'synthetic-code-v0\n')
+        r1_digest = registration.artifact_set_digest_at(w1.root, w1.previous.code_commit)
+        w1_digest = registration.artifact_set_digest_at(w1.root, w1.code_commit)
+        self.assertEqual(registration.artifact_set_digest(w1.root), r1_digest)
+        self.assertNotEqual(w1_digest, r1_digest)
+
+        w1.series['last_passed_record'] = dict(w1.link)
+        self.commit_series(w1)
+        control = w1.series_commit
+        self.assert_packet_failure(self.refused_packet(w1), 'full_desk_gate', 'different code/config state')
+
+        w1.series['last_passed_record'] = dict(w1.previous.link)
+        self.commit_series(w1)
+        self.assertEqual(w1.git('diff', '--name-only', control, w1.series_commit), w1.series_path)
+        code, supplied, error = self.cli_packet(w1)
+        self.assertIsNotNone(supplied, error)
+        rebuilt, matches = self.rebuild(w1, supplied)
+        self.assertTrue(matches)
+        self.assertTrue(session._record_bound(w1.root, rebuilt))
+        self.assertEqual(rebuilt['checks']['sentinel_roster']['status'], 'pass')
+        desk = rebuilt['checks']['full_desk_gate']
+        self.assertEqual(code, 2, {
+            'ready': rebuilt['packet_preflight']['ready'],
+            'full_desk': desk['status'],
+            'desk_matches_w1': desk.get('desk_sha256') == w1.record['sources']['desk']['sha256'],
+            'artifact_digest_matches_r1': rebuilt['last_desk_passed_artifact_set_sha256'] == r1_digest,
+        })
+        self.assertFalse(rebuilt['packet_preflight']['ready'])
+        self.assertEqual(desk['status'], 'fail')
+        self.assertIn('triage full_desk_gate failed', rebuilt['packet_preflight']['reasons'])
+
+    def test_v3_genuine_projection_binds_w1_desk_and_receipt_copies(self):
+        receipt = {'schema': registration.RECEIPT_SCHEMA, 'signer': 'invented W1'}
+        w1 = self.c1_scenario(receipt=receipt)
+        supplied = self.ready_packet(w1)
+        rebuilt, matches = self.rebuild(w1, supplied)
+        self.assertTrue(matches)
+        self.assertIs(series.bind_packet(w1.root, 'C1', rebuilt, authenticated_by_rebuild=True), rebuilt)
+        self.assertEqual(w1.series['last_passed_record'], w1.link)
+        desk = rebuilt['checks']['full_desk_gate']
+        self.assertEqual(desk['desk_sha256'], w1.record['sources']['desk']['sha256'])
+        self.assertEqual(desk['registration_receipt_sha256'],
+                         w1.record['sources']['registration_receipt']['sha256'])
+        self.assertEqual(rebuilt['last_desk_passed_artifact_set_sha256'],
+                         registration.artifact_set_digest_at(w1.root, w1.code_commit))
+
+        w1.write(registration.REGISTRATION + 'registration_receipt.json', {**receipt, 'different': True})
+        w1.record['finalized_at_epoch_s'] += 1
+        self.recommit_predecessor(w1)
+        self.assert_packet_failure(self.refused_packet(w1), 'full_desk_gate', 'source SHA-256 mismatch')
+
+    def test_v3_full_ordered_legacy_projection_is_admitted(self):
+        w1 = self.c1_scenario()
+        for row in w1.next_plan['members']:
+            del row['ordinal']
+        self.commit_projection(w1)
+        supplied = self.ready_packet(w1)
+        rebuilt, matches = self.rebuild(w1, supplied)
+        self.assertTrue(matches)
+        self.assertEqual(rebuilt, supplied)
+        self.assertEqual(rebuilt['checks']['sentinel_roster']['sentinel_ids'], w1.series['sentinel_ids'])
+        self.assertIs(series.bind_packet(w1.root, 'C1', rebuilt, authenticated_by_rebuild=True), rebuilt)
+        self.assertCountEqual(rebuilt['packet_preflight']['arm_checks_still_required'], INTERNAL)
+        self.assertTrue(set(INTERNAL).isdisjoint(rebuilt['checks']))
+
+    def test_v3_legacy_projection_cannot_move_or_duplicate_sentinel_ids(self):
+        for defect in ('moved', 'duplicate'):
+            with self.subTest(defect=defect):
+                w1 = self.c1_scenario()
+                members = w1.next_plan['members']
+                for row in members:
+                    del row['ordinal']
+                if defect == 'moved':
+                    members[19], members[22] = members[22], members[19]
+                    members[20], members[23] = members[23], members[20]
+                else:
+                    members[19]['run_id'] = members[22]['run_id']
+                w1.series['sentinel_ids'] = [row['run_id'] for row in members if row['role'] == 'sentinel']
+                self.commit_projection(w1)
+                self.assert_packet_failure(self.refused_packet(w1), 'sentinel_roster', 'two extra sentinels')
+
+    def test_v3_explicit_ordinal_cannot_contradict_ordered_position(self):
+        for bad in (20, True, '23'):
+            with self.subTest(bad=bad):
+                w1 = self.c1_scenario()
+                w1.next_plan['members'][22]['ordinal'] = bad
+                self.commit_projection(w1)
+                self.assert_packet_failure(self.refused_packet(w1), 'sentinel_roster', 'two extra sentinels')
+
+    def test_a_changed_next_plan_cohort_cannot_carry_the_w1_pool(self):
+        w1 = self.c1_scenario(wrong_cohort=True)
+        packet = self.refused_packet(w1)
+        self.assertEqual(packet['checks']['sentinel_roster']['status'], 'pass')
+        self.assert_packet_failure(packet, 'cohort_pool_rules', 'pool crosses a changed configuration or identity')
+
+    def test_uncommitted_edits_cannot_replace_the_bound_w1_predecessor(self):
+        w1 = self.c1_scenario()
+        supplied = self.ready_packet(w1)
+        w1.write(w1.record_path, w1.previous.record)
+        w1.write(w1.series_path, {**w1.series, 'previous_record': w1.previous.link})
+        w1.write(w1.record['sources']['desk']['path'], {'status': 'running_off_mbp'})
+        self.assertEqual(self.ready_packet(w1), supplied)
+        rebuilt, matches = self.rebuild(w1, supplied)
+        self.assertTrue(matches)
+        self.assertEqual(rebuilt, supplied)
+        self.assertTrue(session._record_bound(w1.root, rebuilt))
+
+    def test_stale_pointer_rebuilds_but_fails_current_record_binding(self):
+        w1 = self.c1_scenario()
+        supplied = self.ready_packet(w1)
+        self.assertTrue(session._record_bound(w1.root, supplied))
+        w1.record['finalized_at_epoch_s'] += 1
+        self.recommit_predecessor(w1)
+        self.assertTrue(session._record_bound(w1.root, self.ready_packet(w1)))
+        rebuilt, matches = self.rebuild(w1, supplied)
+        self.assertTrue(matches)
+        self.assertTrue(rebuilt['packet_preflight']['ready'])
+        result = self.triage(w1, rebuilt)
+        self.assertFalse(result['admitted'])
+        self.assertFalse(result['derived']['record_bound'])
+        self.assertIn('a stale packet refuses', result['checks']['record_committed']['basis'])
+        self.assertIn('triage record_committed failed', result['reasons'])
+
+    def test_expired_pointer_and_missing_expiry_are_refused(self):
+        w1 = self.c1_scenario()
+        supplied = self.ready_packet(w1)
+        self.assertEqual(supplied['valid_until_epoch_s'], 140)
+        late = 141.0
+        self.assertIn('packet expired before this arm', self.triage(w1, supplied, now=late)['reasons'])
+        rebuilt, matches = self.rebuild(w1, supplied, now=late)
+        self.assertFalse(matches)
+        self.assertEqual(rebuilt, self.refused_packet(w1, now=late))
+        self.assert_packet_failure(rebuilt, 'quiet_start_state', 'quiet start evidence stale')
+
+        w1 = self.c1_scenario()
+        supplied = self.ready_packet(w1)
+        del supplied['valid_until_epoch_s']
+        rebuilt, matches = self.rebuild(w1, supplied)
+        self.assertFalse(matches)
+        self.assertEqual(rebuilt['valid_until_epoch_s'], 140)
+        self.assertTrue(rebuilt['packet_preflight']['ready'])
 
 
 class PacketTests(Base):
@@ -596,7 +1261,7 @@ class SentinelTriggerTests(Base):
 
     def roster_check(self, u4, u5):
         s = self.calibration_series([('C1', True, True)])
-        s.next_plan['members'] = s.next_plan['members'][:2]                   # the ordinary two sentinels only
+        s.next_plan['members'] = s.next_plan['members'][:-2]                  # the ordinary roster
         s.series['sentinel_ids'] = s.series['sentinel_ids'][:2]
         s.thermal['model_windows']['tiny/C1']['U4']['status'] = u4
         s.thermal['model_windows']['tiny/C1']['U5']['status'] = u5
@@ -679,13 +1344,15 @@ def first_commit(scenario):
 class ArmRebuildTests(Base):
     """The arm calls the builder itself; a supplied packet is a pointer, never trusted data."""
 
-    def arm(self, s, packet, *, now=NOW, **kwargs):
+    def arm(self, s, packet, *, now=NOW, pointer=None, **kwargs):
         from scripts import align_v4_session as session
         from tests.align.test_v4_cadence import write_battery_log
-        path = s.root / 'supplied-packet.json'
-        if path.exists():
-            path.unlink()
-        path.write_text(json.dumps(packet, indent=2))
+        path = pointer
+        if path is None:
+            path = s.root / 'supplied-packet.json'
+            if path.exists():
+                path.unlink()
+            path.write_text(json.dumps(packet, indent=2))
         good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
                     current_capacity_pct=100, instant_amperage_ma=0, update_age_s=1)
         with patch('joulewise.align.apple.powermode.admit_ac_powermode', return_value={'admitted': True}), \
@@ -694,7 +1361,7 @@ class ArmRebuildTests(Base):
              patch('joulewise.battery_float.observe', return_value=(good, b'raw')):
             log = write_battery_log(Path(tempfile.mkdtemp(dir=s.root.parent)) / 'battery.jsonl', now)
             return session.arm_checks(s.root, {}, next_arm_triage=path, now=lambda: now, battery_log=log,
-                                      runner=lambda argv: subprocess.CompletedProcess(argv, 0, 'pmset', ''),
+                                      watchdog_check=_watchdog_acceptance, runner=lambda argv: subprocess.CompletedProcess(argv, 0, 'pmset', ''),
                                       obc_off_attested_by='synthetic',
                                       meter_probe=kwargs.pop('meter_probe', lambda root: {'live': True, 'samples': 40}),
                                       **kwargs)
@@ -823,7 +1490,10 @@ class ArmOrderWitness(Base):
         from tests.align.test_v4_cadence import write_battery_log
         from scripts import align_v4_series as series
         s = self.scenario()
-        s.write(series.MANIFEST.as_posix(), series.raw_json(series.candidate()))   # W1 -> C1 binds the frozen series
+        seed_materializer(s)
+        with patch.object(kit, 'r0_heatsink_key', return_value='T002'):
+            series.generate(s.root, 'C1', extra_sentinels=2)
+        plan = json.loads((s.root / series.kit_path('C1') / 'collection_plan.json').read_bytes())
         s.finish()
         packet = s.build()
         target = Path(tempfile.mkdtemp(dir=s.root.parent)) / 'session'
@@ -845,11 +1515,8 @@ class ArmOrderWitness(Base):
             elif event in ('os.rename', 'os.replace', 'os.remove', 'os.mkdir', 'shutil.copyfile'):
                 events.append(('write', f'{event}:{args[0]}'))
         sys.addaudithook(hook)
-        real_usage = shutil.disk_usage
-
         def usage(path):
             events.append(('disk_usage', str(path)))
-            return real_usage(path)
 
         def seam(name, value):
             def call(*_args, **_kwargs):
@@ -867,7 +1534,8 @@ class ArmOrderWitness(Base):
             return time.monotonic_ns()
         good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
                     current_capacity_pct=100, instant_amperage_ma=0, update_age_s=1)
-        arm_state = {'v4_series': {'window_id': 'C1'}, 'source_measurement_root': str(s.root)}
+        arm_state = session_plan(target, {'v4_series': {'window_id': 'C1'}, 'source_measurement_root': str(s.root)},
+                                 now=NOW)
         with patch.dict(os.environ, {'JOULEWISE_HOST_STATE_DIR': str(target.parent / 'host')}), \
              patch('joulewise.align.apple.powermode.admit_ac_powermode',
                    side_effect=seam('powermode', {'admitted': True, 'observed': 0})), \
@@ -876,13 +1544,14 @@ class ArmOrderWitness(Base):
                    return_value={'verdict': 'PASS', 'reasons': []}), \
              patch('joulewise.battery_float.observe', side_effect=seam('battery', (good, b'synthetic'))), \
              patch.object(kit, 'arm_powermode_check', side_effect=seam('powermode_check', None)), \
+             patch.object(session, 'arm_checks', side_effect=projection_arm_checks(session.arm_checks)), \
              patch.object(session, 'w1_disk_check', side_effect=disk_gate), \
              patch('shutil.disk_usage', side_effect=usage), \
              patch.object(session.pilot, 'install', side_effect=seam('INSTALL', {'synthetic': True})):
             state['on'] = True
             try:
-                session._arm_and_install(target, arm_state, s.root, s.next_plan, None,
-                    runner=lambda argv: subprocess.CompletedProcess(argv, 0, '', ''), volume_runner=None,
+                session._arm_and_install(target, arm_state, s.root, plan, None,
+                    watchdog_check=_watchdog_acceptance, runner=lambda argv: subprocess.CompletedProcess(argv, 0, '', ''), volume_runner=None,
                     now=lambda: NOW, w1_disk_config=None, disk_gate=None, battery_log=log,
                     obc_off_attested_by='synthetic', next_arm_triage=packet,
                     meter_probe=seam('meter_probe', {'live': True, 'samples': 40}), dwell_start=stamp)
@@ -1010,11 +1679,9 @@ class R17ReviewFinalityTests(Base):
         self.addCleanup(temp.cleanup)
         return temp.name
 
-    def test_constants_match_the_runner_and_the_offload_module(self):
-        from joulewise.align.apple import harvest_offload
+    def test_finality_constants_match_the_runner(self):
         from scripts import align_v4_harvest_off as runner
         self.assertEqual(builder.COMPLETED_HARVEST, runner.COMPLETED_HARVEST)
-        self.assertEqual(builder.FINALIZED_MANIFEST_SCHEMA, harvest_offload.FINALIZED_SCHEMA)
 
     def light_with_stale_final_sources(self, root, w1):
         # F4: PILOT/exclusions present, desk still running off the MBP, honest light triage.
@@ -1092,21 +1759,79 @@ class R17ReviewFinalityTests(Base):
                 self.assertIn('R17: final eligibility of C1', packet['calibration_error'])
                 self.assertFalse(evaluate(c2, packet)['admitted'])
 
-    def test_record_must_bind_a_canonical_finalized_manifest(self):
+    def test_record_requires_only_the_finalized_manifest_digest(self):
         root = self.root()
         w1 = Scenario(root, 'W1').finish()
         c1 = Scenario(root, 'C1', previous=w1)
         c1.omit_finalized_manifest = True
         c1.finish()
-        with self.assertRaisesRegex(ValueError, 'must bind the finalized tree manifest'):
+        with self.assertRaisesRegex(ValueError, 'finalized_manifest must be a lowercase SHA-256 digest'):
             c1.build()
         c1b = Scenario(self.root(), 'W1')
         c1b.omit_finalized_manifest = True
-        c1b.record['finalized_manifest'] = c1b.write('w-W1/evidence/finalized_manifest.json', {
-            'schema': builder.FINALIZED_MANIFEST_SCHEMA, 'source_root': '/x', 'entries': {}, 'closure': {}})
+        c1b.record['finalized_manifest'] = {'path': 'unused-manifest.json', 'sha256': 'a' * 64}
         c1b.finish()
-        with self.assertRaisesRegex(ValueError, 'not a canonical'):
+        with self.assertRaisesRegex(ValueError, 'finalized_manifest must be a lowercase SHA-256 digest'):
             c1b.build()
+
+
+class UnpackReceiptTests(Base):
+    @staticmethod
+    def record(scenario):
+        return builder.WindowRecord(builder.GitEvidence(scenario.root), scenario.record_commit, scenario.record_path)
+
+    def test_rl183b_committed_final_rejects_wrong_identity_and_receipt_encoding(self):
+        sha = 'a' * 64
+        for change, reason in (({'window': 'C1'}, 'another window'),
+                               ({'plan_id': 'other-plan'}, 'another plan'),
+                               ({'finalized_manifest_sha256': 'b' * 64}, 'manifest digest'),
+                               ({'file_count': 1}, 'exactly'), (None, 'not canonical')):
+            with self.subTest(change=change):
+                s = self.scenario()
+                s.record['finalized_manifest'] = sha
+                s.sources['unpack_receipt'] = (s.unpack_receipt(sha, **change) if change
+                                                else s.unpack_receipt(sha) + b'\n')
+                s.finish()
+                self.assertIn(reason, self.record(s).final_evidence())
+        s = self.scenario()
+        s.omit_sources.add('unpack_receipt')
+        s.finish()
+        self.assertIn('unpack receipt missing', self.record(s).final_evidence())
+
+    def test_rl183b_previous_final_checks_the_predecessor_digest(self):
+        w1 = self.scenario().finish()
+        c1 = Scenario(w1.root, 'C1', previous=w1, provisional=True).finish()
+        c2 = Scenario(w1.root, 'C2', previous=c1, previous_final=True)
+        c2.record['finalized_manifest'] = 'b' * 64
+        self.assertNotEqual(c1.record['finalized_manifest'], c2.record['finalized_manifest'])
+        c1.final_sources['unpack_receipt'] = c1.unpack_receipt(c2.record['finalized_manifest'])
+        c2.finish()
+        predecessor, successor = self.record(c1), self.record(c2)
+        predecessor.bind_final(successor)
+        self.assertTrue(successor.is_final())
+        self.assertIn('manifest digest', predecessor.final_evidence())
+        self.assertFalse(predecessor.is_final())
+        self.assertIn('final eligibility of C1', c2.build()['checks']['member_eligibility']['basis'])
+
+    def test_rl183b_zero_capture_light_triage_and_r1_are_exempt(self):
+        w1 = self.scenario().finish()
+        zero = Scenario(w1.root, 'C1', previous=w1, captured=False, provisional=True).finish()
+        r1 = self.scenario('R1').finish()
+        for s in (zero, r1):
+            with self.subTest(window=s.window):
+                record = self.record(s)
+                self.assertIsNone(record.source('unpack_receipt', json_value=False))
+                self.assertTrue(record.is_final())
+        self.assertIsNone(self.record(r1).finalized_manifest_sha256)
+        self.assertFalse(self.record(zero).has_final_sources())
+
+        wrong = zero.unpack_receipt(zero.record['finalized_manifest'], window='C2')
+        zero.record['sources']['unpack_receipt'] = zero.write('w-C1/evidence/unpack_receipt.json', wrong)
+        zero.write(zero.record_path, zero.record)
+        zero.record_commit = zero.commit()
+        record = self.record(zero)
+        self.assertIn('another window', record.final_evidence())
+        self.assertEqual(record.eligibility(allow_provisional=True)['status'], 'provisional')
 
 
 if __name__ == '__main__':

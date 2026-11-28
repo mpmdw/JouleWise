@@ -3,12 +3,13 @@
 
 MBP, at finalize:      finalize-manifest --session-root S --out M.json (commit M.json's sha256 with the record)
 MBP, after finalize:   pack    --session-root S --out O --finalized-manifest M.json (the window's one pack; zstd -3 -T4)
-Air, during cool-down: unpack  --offload O --finalized-manifest M.json --finalized-sha256 H (same path, record-bound)
+Air, during cool-down: unpack  --offload O --finalized-manifest M.json --finalized-sha256 H
+                               --window-id W --receipt-out U.json (same path, record-bound)
 The record binding is REQUIRED on pack and unpack (R17 review F2): without it they refuse.
                        triage  --session-root S --window-id W (light: thermal_escalation, member_eligibility)
 Air, next window:      desk    --session-root S --workers auto|N (unchanged harvest + full desk, timed)
                        sweep   --session-root S --out D       (harvest at 2/4/6/8/10 workers: wall, peak RSS)
-                       final   --session-root S --window-id W (final eligibility row from the desk's PILOT.json)
+                       final   --session-root S --window-id W --unpack-receipt U.json --finalized-sha256 H
                        reduce  --session-root S --out R --workers N (reduce-once columnar PM files, digest-bound)
 
 Every subcommand prints one JSON line. Exit 0 on success, 1 on refusal.
@@ -18,6 +19,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -150,18 +152,41 @@ def _require(args, *names):
                                              + ' (R17 review F2: no unbound transfer on the production route)')
 
 
+DESK_ARTIFACTS = frozenset({'archive', 'PILOT.json', 'desk.json'})
+
+
+def _require_pre_desk_tree(session):
+    if any(os.path.lexists(session / name) for name in DESK_ARTIFACTS):
+        raise harvest_offload.OffloadRefused('offload requires a pre-desk tree (archive/, PILOT.json, desk.json)')
+
+
+def _pack_inputs(finalized):
+    harvest_offload._validate_finalized(finalized)
+    external = tuple(harvest_offload.byte_bound_inputs(finalized))
+    directories = harvest_offload.bound_directories(finalized)
+    resolved_inputs = (harvest_offload._bound_real(finalized, path) for path in external)
+    desk_names = {name.casefold() for name in DESK_ARTIFACTS}
+    if any(part.casefold() in desk_names
+           for path in (*finalized['entries'], *external, *resolved_inputs, *directories)
+           for part in Path(path).parts):
+        raise harvest_offload.OffloadRefused('offload cannot carry archive/, PILOT.json or desk.json (RL-168)')
+    return external
+
+
 def cmd_pack(args, run=subprocess.run):
     _require(args, 'finalized-manifest')
     session, state, plan = _session(args.session_root)
+    _require_pre_desk_tree(session)
     if not (Path(plan['custody_root']) / 'night/result.json').is_file():
         raise harvest_offload.OffloadRefused('terminal record absent; pack only a finalized window')
     finalized = _read(args.finalized_manifest)
+    external = _pack_inputs(finalized)
     identity = checkout_identity(_mirror_root(state), run=run)
     started = time.time()
     # Air-offload S1-04 (lead ruling): carry EVERY byte-bound closure input (the ledger, external terminal
     # evidence, any byte-bound link target), so the Air copy restores without the MBP.
     manifest = harvest_offload.pack(session.absolute(), args.out, level=args.level, threads=args.threads,
-                                    external=tuple(harvest_offload.byte_bound_inputs(finalized)),
+                                    external=external,
                                     finalized=finalized, mirror_identity=identity)
     return {'packed': manifest['source_root'], 'files': manifest['files'], 'bytes': manifest['bytes'],
             'payload_bytes': manifest['payload']['size'], 'payload_sha256': manifest['payload']['sha256'],
@@ -173,7 +198,21 @@ def cmd_pack(args, run=subprocess.run):
 def cmd_unpack(args, run=subprocess.run):
     _require(args, 'finalized-manifest', 'finalized-sha256')
     offload = Path(args.offload)
-    finalized = _read(args.finalized_manifest)
+    raw = Path(args.finalized_manifest).read_bytes()
+    finalized = json.loads(raw)
+    if raw != harvest_offload._canonical_bytes(finalized):
+        raise harvest_offload.OffloadRefused('finalized record manifest is not canonical JSON')
+    if hashlib.sha256(raw).hexdigest() != args.finalized_sha256:
+        raise harvest_offload.OffloadRefused('finalized record manifest does not match the committed digest')
+    _pack_inputs(finalized)
+    source = Path(finalized['source_root'])
+    receipt_out = args.receipt_out.resolve()
+    if receipt_out.is_relative_to(source.resolve()):
+        raise harvest_offload.OffloadRefused('unpack receipt must be outside the finalized source root')
+    if os.path.lexists(args.receipt_out):
+        raise harvest_offload.OffloadRefused('unpack receipt destination already exists')
+    if not args.window_id:
+        raise harvest_offload.OffloadRefused('unpack receipt needs a window id')
     mirror = ((finalized.get('closure') or {}).get('mirror') if isinstance(finalized, dict) else None)
     if not isinstance(mirror, dict) or not isinstance(mirror.get('root'), str):
         raise harvest_offload.OffloadRefused('finalized record manifest binds no measurement checkout mirror')
@@ -184,6 +223,21 @@ def cmd_unpack(args, run=subprocess.run):
     started = time.time()
     manifest = harvest_offload.unpack(offload, finalized=finalized, finalized_sha256=args.finalized_sha256,
                                       mirror_identity=here)
+    # Now the root exists, also refuse alternate spellings on a case-insensitive volume.
+    if any(parent.exists() and parent.samefile(source) for parent in receipt_out.resolve().parents):
+        raise harvest_offload.OffloadRefused('unpack receipt must be outside the finalized source root')
+    plan_id = _read(source / 'session.json')['session_id']
+    if not isinstance(plan_id, str) or not plan_id:
+        raise harvest_offload.OffloadRefused('unpack receipt needs a restored session_id')
+    receipt = {'schema': light_triage.UNPACK_RECEIPT_SCHEMA, 'window': args.window_id,
+               'plan_id': plan_id, 'finalized_manifest_sha256': args.finalized_sha256}
+    output = receipt_out.open('xb')
+    try:
+        with output:
+            output.write(harvest_offload._canonical_bytes(receipt))
+    except OSError:
+        receipt_out.unlink(missing_ok=True)
+        raise
     return {'restored': manifest['source_root'], 'files': manifest['files'], 'bytes': manifest['bytes'],
             'elapsed_s': round(time.time() - started, 3)}
 
@@ -206,17 +260,27 @@ def cmd_triage(args, run=subprocess.run):
         raise ValueError('light triage refused: ' + str(report.get('registration_error')))
     rows = _plan_rows(state)
     captured = {row['run_id'] for row in rows if (runs_root / row['run_id']).is_dir()}
-    eligibility = light_triage.member_eligibility(report['thermal']['members'], rows, captured=captured, final=False)
+    # Desk release guard (protocol B0/B2/B9/R27; RL-149 section 3, RL-151 section 4): the triage's record source
+    # carries the same thermal and meter sections the sealed desk records (the allowlist the packet builder
+    # reads), never member energy, and its verdicts are computed from that sealed section, so an exclusion's
+    # suffix text never reaches the eligibility reasons (RL-151 C1(a)).
+    from joulewise.align.apple import v4_desk_seal
+    scope = v4_desk_seal.sealed_scope(state)
+    thermal, meter = report['thermal'], report.get('km003c')
+    if scope is not None:
+        sealed = v4_desk_seal.seal_extra({'thermal': thermal, 'km003c': meter}, rows, scope)
+        thermal, meter = sealed['thermal'], sealed['km003c']
+    eligibility = light_triage.member_eligibility(thermal['members'], rows, captured=captured, final=False)
     result = {'schema': light_triage.SCHEMA, 'window': args.window_id,
-              'thermal_escalation': light_triage.thermal_escalation(report['thermal'],
+              'thermal_escalation': light_triage.thermal_escalation(thermal,
                                                                      ladder_recorded=args.ladder_recorded),
               'member_eligibility': eligibility,
               'calibration_row': light_triage.calibration_row(args.window_id, rows, eligibility),
               'series_desk_row': report.get('series_desk_row'),
               # The desk's own checks without harvest codes (v4_B_bar for the arm's battery_window row)
               # and its SECONDARY meter tabulation, both read by the packet builder (R17).
-              'checks': checks, 'km003c': report.get('km003c'),
-              'thermal': report['thermal']}
+              'checks': checks, 'km003c': meter,
+              'thermal': thermal}
     if args.out:
         # The record source the arm's packet builder reads for the provisional adjudication (R17).
         from joulewise.align.apple.pilot_analysis import finite_json
@@ -235,7 +299,8 @@ def cmd_final(args, run=subprocess.run):
 
     Refuses unless ``light_triage.final_adjudication_error`` passes: a completed harvest (or, with no
     capture at all, no harvest needed), a completed desk adjudication, both of this session's plan,
-    and agreeing exclusions. The packet builder applies the same predicate to the committed sources.
+    and agreeing exclusions. RL-183b also requires the receipt of a captured window after R1.
+    The packet builder applies both predicates to the committed sources.
     """
     session, state, plan = _session(args.session_root)
     pilot = _read(args.pilot or session / 'PILOT.json')
@@ -246,17 +311,29 @@ def cmd_final(args, run=subprocess.run):
     exclusions_path = session / 'archive/derived/exclusions.json'
     exclusions = (_read(exclusions_path) if exclusions_path.is_file() else
                   {'members_excluded': desk.get('members_excluded', pilot.get('members_excluded', []))})
-    error = light_triage.final_adjudication_error(desk, pilot, exclusions, state.get('session_id'),
-                                                  captured=bool(captured))
+    plan_id = state['session_id']
+    error = light_triage.final_adjudication_error(desk, pilot, exclusions, plan_id, captured=bool(captured))
     if error is not None:
         raise ValueError('final eligibility refused: ' + error)
+    unpack_receipt = None
+    if args.window_id != 'R1':
+        if args.unpack_receipt is not None:
+            try:
+                unpack_receipt = args.unpack_receipt.read_bytes()
+            except OSError as exc:
+                raise ValueError('final eligibility refused: unpack receipt unreadable') from exc
+        error = light_triage.unpack_receipt_error(unpack_receipt, window=args.window_id, plan_id=plan_id,
+                                                 finalized_sha256=args.finalized_sha256, captured=bool(captured))
+        if error is not None:
+            raise ValueError('final eligibility refused: ' + error)
     thermal = pilot['extra_checks']['thermal']
     eligibility = light_triage.member_eligibility(thermal['members'], rows, captured=captured, final=True)
     return {'thermal_escalation': light_triage.thermal_escalation(thermal),
             'member_eligibility': eligibility,
             'calibration_row': light_triage.calibration_row(args.window_id, rows, eligibility),
             'pilot_status': pilot.get('status'), 'harvest_status': desk.get('harvest_status'),
-            'pilot_sha256': hashlib.sha256((Path(args.pilot or session / 'PILOT.json')).read_bytes()).hexdigest()}
+            'pilot_sha256': hashlib.sha256((Path(args.pilot or session / 'PILOT.json')).read_bytes()).hexdigest(),
+            'unpack_receipt_sha256': hashlib.sha256(unpack_receipt).hexdigest() if unpack_receipt is not None else None}
 
 
 def cmd_desk(args, run=subprocess.run):
@@ -327,8 +404,9 @@ def auto_workers(*, peak_bytes=None, session_root=None, memory=None, cores=None,
     by_memory = (memory - reserve_bytes) // peak_bytes
     workers = int(min(cores, by_memory))
     if workers < 1:
-        raise ValueError(f'postpone the desk: no harvest worker fits (free {memory} B - reserve {reserve_bytes} B '
-                         f'< one worker peak {peak_bytes} B, basis {basis})')
+        # PR #774 final seat F5: free memory minus the reserve bounds the withheld peak, so neither prints.
+        raise ValueError(f'postpone the desk: no harvest worker fits (basis {basis}; the byte counts are withheld, '
+                         'PR #774 N6/F5)')
     return {'workers': workers, 'free_cores': cores, 'free_memory_bytes': memory,
             'peak_bytes_per_worker': peak_bytes, 'peak_basis': basis, 'reserve_bytes': reserve_bytes}
 
@@ -344,10 +422,12 @@ def _sweep_peak(path):
         raise ValueError('sweep receipt has no runs')
     for row in rows:
         if not isinstance(row, dict) or row.get('exit') != 0:
-            raise ValueError(f'sweep run failed ({row!r}); a failed run is not a measured worker peak')
+            # M6: name the run, never its peak (a size over the window's members, PR #774 N6)
+            shown = {k: row.get(k) for k in ('workers', 'exit')} if isinstance(row, dict) else type(row).__name__
+            raise ValueError(f'sweep run failed ({shown}); a failed run is not a measured worker peak')
         peak = row.get('peak_child_rss_bytes')
         if type(peak) is not int or peak <= 0:
-            raise ValueError(f'sweep run has a nonpositive or missing peak ({peak!r})')
+            raise ValueError(f'sweep run has a nonpositive or missing peak ({type(peak).__name__})')
     return max(row['peak_child_rss_bytes'] for row in rows)
 
 
@@ -410,6 +490,9 @@ def cmd_sweep(args, run=subprocess.run):
     """Harvest the restored window at each worker count into separate archives (R17 knee)."""
     session, state, plan = _session(args.session_root)
     out = Path(args.out)
+    # PR #774 exec seat E3: the sweep runs the real harvest with a non-claim export and full archives into --out,
+    # so an unreleased v4 session sweeps only into its withheld archive (the M4 rule, reused).
+    reduce_target_check(session, state, out, command='sweep')
     out.mkdir(parents=True, exist_ok=False)
     measurement = Path(state['measurement_root'])
     largest = largest_plist_bytes(args.session_root)
@@ -433,7 +516,10 @@ def cmd_sweep(args, run=subprocess.run):
 
 
 def cmd_finalize_manifest(args, run=subprocess.run):
+    from joulewise.align.apple import v4_desk_seal
+
     session, state, plan = _session(args.session_root)
+    _require_pre_desk_tree(session)
     if not (Path(plan['custody_root']) / 'night/result.json').is_file():
         raise harvest_offload.OffloadRefused('terminal record absent; finalize only a terminal window')
     # The external closure (R17 review F1): links into the measurement checkout are bound by its
@@ -457,12 +543,27 @@ def cmd_finalize_manifest(args, run=subprocess.run):
         inputs += [path for path in consumed if path not in inputs]
     manifest = harvest_offload.finalized_manifest(session.absolute(), mirror={'root': mirror, 'identity': identity},
                                                   inputs=tuple(inputs), ignored_policy=policy)
+    _pack_inputs(manifest)
     # Canonical bytes, so the file's own SHA-256 (the record's raw_evidence descriptor) IS the
     # digest unpack checks (manifest_sha256): one number in the record, not two.
     with Path(args.out).open('xb') as sink:
         sink.write(json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode())
-    return {'finalized_manifest': str(args.out), 'sha256': harvest_offload.manifest_sha256(manifest),
-            'entries': len(manifest)}
+    digest = {'sha256': harvest_offload.manifest_sha256(manifest)}
+    if v4_desk_seal.is_v4_session(state):
+        return digest
+    return {'finalized_manifest': str(args.out), **digest, 'entries': len(manifest)}
+
+
+def reduce_target_check(session, state, out, *, command='reduce'):
+    """PR #774 Mythos re-attack 2 M4 (RL-162 section 3: reduce keeps no identity check, its cover is the restricted
+    output): before release, a v4 session's per-member energy tables are written only under the session's
+    ``archive/withheld/``, so the cover holds after the merge and whatever ``--out`` an operator names."""
+    from joulewise.align.apple import v4_desk_seal
+    if v4_desk_seal.is_v4_session(state) and not v4_desk_seal.released(state):
+        allowed = (Path(session) / 'archive/withheld').resolve()
+        if not Path(out).resolve().is_relative_to(allowed):
+            raise ValueError(f'{command}: a v4 session writes its outputs only under {allowed} before the series '
+                             'release (PR #774 M4, E3)')
 
 
 def cmd_reduce(args, run=subprocess.run):
@@ -471,6 +572,7 @@ def cmd_reduce(args, run=subprocess.run):
     session, state, plan = _session(args.session_root)
     runs_root = _runs_root(state)
     out = Path(args.out)
+    reduce_target_check(session, state, out)
     out.mkdir(parents=True, exist_ok=False)
     tasks = [{'run_id': row['run_id'], 'bundle_path': str(runs_root / row['run_id']), 'out_dir': str(out),
               'turn_table': True}
@@ -493,6 +595,34 @@ def _runs_root(state):
     return Path(claim)
 
 
+# PR #774 Mythos N6: byte sizes of a window's raw plists, reduced files and harvest peaks encode member sample
+# counts (elapsed time), and the largest is a maximum over a set holding non-benign members (RL-149 3(c)). The
+# printed records keep the worker count and the sizing basis; the sizes stay in the files the runbook restricts
+# like withheld/ (SWEEP.json, reduced/MANIFEST.json).
+SIZE_WITHHELD = 'withheld (sizes encode member sample counts; PR #774 N6): see the restricted receipt'
+
+
+def printed(command, result):
+    """What a command prints: ``result`` without member-derived sizes (the functions return them whole)."""
+    if not isinstance(result, dict):
+        return result
+    if command == 'desk' and isinstance(result.get('sizing'), dict):
+        sizing = result['sizing']
+        # Mythos re-attack 2 M6: workers with free memory and the reserve bracket the peak (so the largest plist)
+        # when memory binds; print the worker count and the basis only.
+        keep = {k: sizing[k] for k in ('workers', 'peak_basis') if k in sizing}
+        if isinstance(sizing.get('sweep'), dict):
+            keep['sweep'] = {k: sizing['sweep'][k] for k in ('reason', 'path') if k in sizing['sweep']}
+        return {**result, 'sizing': {**keep, 'sizes': SIZE_WITHHELD}}
+    if command == 'sweep':
+        return {'schema': result.get('schema'), 'session_id': result.get('session_id'),
+                'runs': [{'workers': r.get('workers'), 'exit': r.get('exit')} for r in result.get('runs') or ()],
+                'sizes': SIZE_WITHHELD}
+    if command == 'reduce':
+        return {k: v for k, v in result.items() if k not in ('raw_bytes', 'reduced_bytes')} | {'sizes': SIZE_WITHHELD}
+    return result
+
+
 def main(argv=None, run=subprocess.run):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
@@ -508,6 +638,8 @@ def main(argv=None, run=subprocess.run):
     p.add_argument('--offload', type=Path, required=True)
     p.add_argument('--finalized-manifest', type=Path)
     p.add_argument('--finalized-sha256')
+    p.add_argument('--window-id', required=True)
+    p.add_argument('--receipt-out', type=Path, required=True)
     p = sub.add_parser('finalize-manifest')
     p.add_argument('--session-root', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
@@ -522,6 +654,8 @@ def main(argv=None, run=subprocess.run):
     sub.choices['triage'].add_argument('--ladder-recorded', action='store_true')
     sub.choices['triage'].add_argument('--out', type=Path, help='write the light-triage record source (new file)')
     sub.choices['final'].add_argument('--pilot', type=Path)
+    sub.choices['final'].add_argument('--unpack-receipt', type=Path)
+    sub.choices['final'].add_argument('--finalized-sha256')
     p = sub.add_parser('reduce')
     p.add_argument('--session-root', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
@@ -535,7 +669,7 @@ def main(argv=None, run=subprocess.run):
                'desk': cmd_desk, 'reduce': cmd_reduce, 'sweep': cmd_sweep,
                'finalize-manifest': cmd_finalize_manifest}[args.command]
     try:
-        print(json.dumps(handler(args, run=run), sort_keys=True))
+        print(json.dumps(printed(args.command, handler(args, run=run)), sort_keys=True))
     except (OSError, ValueError, KeyError) as exc:
         print('align_v4_harvest_off: ' + f'{type(exc).__name__}: {exc}', file=sys.stderr)
         return 1

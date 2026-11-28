@@ -62,6 +62,34 @@ class ProtocolV4DocTests(unittest.TestCase):
                        'no multiplier', '5 and 17', 'sealed and\nunscored'):
             self.assertIn(phrase, section)
 
+    def test_option_c_disclosure_is_separate_from_k(self):
+        contract = self._section("## Claim contract (option B, RUN_STATE 252)")
+        b1 = contract[contract.index("**B1."):contract.index("**B2.")]
+        b8 = contract[contract.index("**B8."):contract.index("**B9.")]
+        disclosure = (
+            "The physical positive control is reported separately "
+            "(B10: ‹PC word or `k_positive_control_pending`›)."
+        )
+        self.assertEqual(b1.count(disclosure), 2)
+        self.assertNotIn("No physical positive control was run in v4.", b1)
+        self.assertIn("engine prints `k_positive_control_pending`", b8)
+        self.assertIn("If no P window is admitted the code is `k_positive_control_not_run`", b8)
+
+    def test_option_c_windows_follow_b9_and_stay_outside_the_series(self):
+        contract = self._section("## Claim contract (option B, RUN_STATE 252)")
+        b10_start = contract.index("**B10. Physical positive control")
+        self.assertGreater(b10_start, contract.index("**B9. Supersessions**"))
+        b10 = contract[b10_start:]
+        for clause in (
+            "P1-P4, with reserve P5",
+            "after the last admitted T window",
+            "they enter no threshold, m, K population, S stratum, curve or B7 print",
+            "the U3 roster stays N = 24",
+            "No K or S word, threshold, population or alpha depends on it.",
+        ):
+            with self.subTest(clause=clause):
+                self.assertIn(clause, b10)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -24,13 +24,16 @@ class CloseDeferralTests(unittest.TestCase):
         # JOULEWISE_HOST_STATE_DIR; it runs just one unittest, with no backend.
         child = subprocess.Popen(
             [sys.executable, '-B', '-m', 'unittest',
-             f'{__name__}.CloseSignalChild.test_close'],
+             'tests.align.test_r1_round7_close_deferral.CloseSignalChild.test_close'],
             cwd=REPO, env=dict(os.environ, **{CHILD_CASE: case}),
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
             readable, _, _ = select.select([child.stdout], [], [], 10)
             self.assertTrue(readable, 'child did not start its close')
-            self.assertEqual(child.stdout.readline().strip(), 'close-started')
+            line = child.stdout.readline().strip()
+            if line != 'close-started':
+                _stdout, stderr = child.communicate(timeout=10)
+                self.fail(f'child did not start its close: {line!r}; {stderr}')
             sent = time.monotonic()
             child.send_signal(signal.SIGTERM)
             # The quick close returns only after this line arrives, so the

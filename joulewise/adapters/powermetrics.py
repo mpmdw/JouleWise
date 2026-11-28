@@ -8,14 +8,11 @@ in milliwatts; JouleWise emits watts.
 
 from __future__ import annotations
 
-import contextlib
-import contextvars
 import getpass
 import hashlib
 import json
 import math
 import os
-import pickle
 import plistlib
 import statistics
 import subprocess
@@ -2056,44 +2053,7 @@ def duration_weighted_mean_and_sample_variance(
     return mean, variance
 
 
-# Opt-in, scoped dedupe of the plist document parse (HARVEST-OFF-opus). The
-# harvest's per-member assessment parses the same raw bytes about 18 times
-# (strict validation, re-reduction, anchor, admission, idle, rich telemetry).
-# Inside ``document_memo()`` a successful parse is kept as a pickle keyed by the
-# SHA-256 of the exact input bytes, and every hit returns freshly unpickled
-# objects, so no caller can see another caller's mutations. A failed parse is
-# never kept: each call re-parses and raises its own error. Off by default:
-# capture, reduction and every other caller outside the scope are unchanged.
-_DOCUMENT_MEMO: "contextvars.ContextVar[dict[str, bytes] | None]" = contextvars.ContextVar(
-    "joulewise_powermetrics_document_memo", default=None)
-
-
-@contextlib.contextmanager
-def document_memo():
-    """Scope within which identical plist bytes are parsed once."""
-    token = _DOCUMENT_MEMO.set({})
-    try:
-        yield
-    finally:
-        _DOCUMENT_MEMO.reset(token)
-
-
 def _powermetrics_documents(
-    data: bytes,
-) -> tuple[list[dict[str, Any]], _DroppedFrameDiagnostic | None]:
-    memo = _DOCUMENT_MEMO.get()
-    if memo is None:
-        return _parse_powermetrics_documents(data)
-    key = hashlib.sha256(data).hexdigest()
-    stored = memo.get(key)
-    if stored is not None:
-        return pickle.loads(stored)
-    result = _parse_powermetrics_documents(data)
-    memo[key] = pickle.dumps(result, protocol=pickle.HIGHEST_PROTOCOL)
-    return result
-
-
-def _parse_powermetrics_documents(
     data: bytes,
 ) -> tuple[list[dict[str, Any]], _DroppedFrameDiagnostic | None]:
     documents: list[dict[str, Any]] = []

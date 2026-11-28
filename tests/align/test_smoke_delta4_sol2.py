@@ -88,6 +88,8 @@ class PrepareBudget(Fixture):
         # prepare callback, after imports but before host/model/plan work.
         source = textwrap.dedent('''
             import functools, json, subprocess
+            from unittest import mock
+            from joulewise import t0_rehearsal
             from joulewise.align import w1_smoke as smoke
             from tests.align.test_smoke_delta4_sol2 import Fixture
             from tests.align import test_w1_smoke as fixtures
@@ -110,8 +112,11 @@ class PrepareBudget(Fixture):
                     if not FAIL:
                         raise
                 from scripts import align_v4_session as v4, align_pilot_session as pilot
-                callbacks = [v4._probe_meter_live.__kwdefaults__['runner'],
-                             pilot.desk.__kwdefaults__['run']]
+                # 454d78142: the meter's None default dispatches dynamically
+                # through observed_run; calling that sentinel is a harness bug.
+                defaults_restored = [v4._probe_meter_live.__kwdefaults__['runner'] is None,
+                                     pilot.desk.__kwdefaults__['run'] is original]
+                callbacks = [t0_rehearsal.observed_run, pilot.desk.__kwdefaults__['run']]
                 runner.deadline = runner.clock() - 1
                 later = []
                 for callback in callbacks:
@@ -126,15 +131,21 @@ class PrepareBudget(Fixture):
                 scripts = runner.clone / 'scripts'
                 scripts.mkdir()
                 (scripts / 'km003c_monitor.py').write_text('raise SystemExit(0)\\n')
+                later_uses_current_runner = False
                 try:
-                    v4._probe_meter_live(runner.clone, seconds=.01)
+                    # Prove the real consumer resolves the CURRENT runner,
+                    # after cold import and after the smoke budget has expired.
+                    with mock.patch.object(subprocess, 'run', wraps=original) as later_run:
+                        v4._probe_meter_live(runner.clone, seconds=.01)
+                        later_uses_current_runner = later_run.call_count == 1
                 except smoke.BudgetExpired:
                     later_meter = 'stale smoke budget'
                 else:
                     later_meter = 'ordinary subprocess'
                 print(json.dumps({'global_restored': subprocess.run is original,
-                                  'defaults_restored': [cb is original for cb in callbacks],
-                                  'later_calls': later, 'later_meter_probe': later_meter}))
+                                  'defaults_restored': defaults_restored,
+                                  'later_calls': later, 'later_meter_probe': later_meter,
+                                  'later_uses_current_runner': later_uses_current_runner}))
             finally:
                 case.doCleanups()
         ''').replace('FAIL', repr(fail))
@@ -146,6 +157,7 @@ class PrepareBudget(Fixture):
         self.assertEqual(observed['defaults_restored'], [True, True], observed)
         self.assertEqual(observed['later_calls'], ['ordinary subprocess'] * 2, observed)
         self.assertEqual(observed['later_meter_probe'], 'ordinary subprocess', observed)
+        self.assertTrue(observed['later_uses_current_runner'], observed)
 
     def test_cold_production_import_defaults_restore_after_success(self):
         self.cold_import(False)

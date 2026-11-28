@@ -62,6 +62,19 @@ def file_list_sha256(root: Path) -> str:
     return hashlib.sha256(manifest).hexdigest()
 
 
+def exported_file_list_sha256(roots, root: Path) -> str:
+    """Compute the existing SHADE manifest over a verified offline export."""
+    entries = []
+    for name, mode, path in roots.walk(root):
+        if mode == '040000':
+            continue
+        raw = path.read_bytes()
+        oid = hashlib.sha1(f"blob {len(raw)}\0".encode() + raw).hexdigest()
+        entries.append((name.encode(), oid.encode()))
+    return hashlib.sha256(b"".join(name + b"\0" + oid + b"\n"
+                                   for name, oid in sorted(entries))).hexdigest()
+
+
 class PinnedUpstream:
     """A verified runtime cache. Pin/digest overrides support offline fixtures.
 
@@ -76,7 +89,8 @@ class PinnedUpstream:
         default = Path(os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))) / "joulewise/shade"
         self.cache_dir = Path(cache_dir) if cache_dir is not None else default
         self.commit, self.file_sha256 = commit, file_sha256
-        self.allow_fetch, self.source_timeout_s = allow_fetch, source_timeout_s
+        self.allow_fetch = allow_fetch and not os.environ.get("JOULEWISE_C1_INPUTS")
+        self.source_timeout_s = source_timeout_s
         self.flags: list[str] = []
         self._modules: dict[str, ModuleType] = {}
         self._verified: tuple[int, str, str, Path] | None = None
@@ -103,6 +117,15 @@ class PinnedUpstream:
 
     def _prepare(self, key: tuple[int, str, str, Path]) -> Path | None:
         try:
+            from joulewise.align.apple.v4_registration import Roots, runtime_input_context
+
+            if context := runtime_input_context():
+                roots = Roots(context["repo"], context["stage"])
+                if exported_file_list_sha256(roots, roots.path(self.root.absolute())) != self.file_sha256:
+                    self.flags.append("upstream_manifest_mismatch")
+                    return None
+                self._verified = key
+                return self.root
             if not self.root.exists():
                 if not self.allow_fetch:
                     self.flags.append("upstream_cache_missing")
